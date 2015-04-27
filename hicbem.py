@@ -17,7 +17,9 @@ Runs hierarchical clustering algorithms on the synthetic networks and real-word 
 
 import sys
 import time
-from subprocess import call
+import subprocess
+from subprocess import PIPE
+from functools import wraps
 
 
 def parseParams(args):
@@ -37,8 +39,8 @@ def parseParams(args):
 	timemul = 1  # Time multiplier, sec by default
 	for arg in args:
 		# Validate input format
-		if (arg[0] != '-') != sparam or (len(arg) < 2 if arg[0] == '-' else arg in '..'):
-			raise ValueError('Unexpected argument: ' + arg)
+		if (arg[0] != '-') != bool(sparam) or (len(arg) < 2 if arg[0] == '-' else arg in '..'):
+			raise ValueError(''.join(('Unexpected argument', ', file/dir name is expected: ' if sparam else ': ', arg)))
 		
 		if arg[0] == '-':
 			if arg[1] == 'd' or arg[1] == 'f':
@@ -72,8 +74,98 @@ def parseParams(args):
 	return udatas, wdatas, timeout
 
 
+def secondsToHms(seconds):
+	"""Convert seconds to hours, mins, secs
+	
+	seconds  - seconds to be converted
+	
+	return hours, mins, secs
+	"""
+	hours = int(seconds / 3600)
+	mins = int((seconds - hours * 3600) / 60)
+	secs = seconds - hours * 3600 - mins * 60
+	return hours, mins, secs
+	
+
+def controlTime(proc, algname, exectime, timeout):
+	"""Conterol the time of the executing process
+	
+	Evaluates execution time and kills the process after the specified timeout
+	
+	proc  - active executing process
+	algname  - name of the executing algorithm
+	exectime  - start time of the execution
+	timeout  - execution timeout, 0 means infinity
+	"""
+	while proc.poll() is None:
+		time.sleep(1)
+		if timeout and time.clock() - exectime > timeout:
+			exectime = time.clock() - exectime
+			proc.terminate()
+			# Wait 10 sec for the successful process termitaion before killing it
+			i = 0
+			while proc.poll() is None and i < 10:
+				i += 1
+				time.sleep(1)
+			if proc.poll() is None:
+				proc.kill()
+			print('{} is terminated by the timeout ({} sec): {} secs ({} h {} m {} s)'
+				.format(algname, timeout, exectime, *secondsToHms(exectime)))
+
+
+def execAlgorithm(algname, workdir, args, timeout, trace=True):
+	"""Execute specified algorithm
+	
+	algname  - algorithm name (id)
+	workdir  - working directory
+	args  - execution arguments including the executable itself
+	timeout  - execution timeout
+	trace  - whether to trace execution steps
+	"""
+	assert algname and workdir and args, ""
+	
+	# Execution block
+	if trace:
+		print(algname + ' is starting...')
+	try:
+		exectime = time.clock()
+		proc = subprocess.Popen(args, cwd=workdir)  # bufsize=-1 - use system default IO buffer size
+	except StandardError as err:  # Should not occur: subprocess.CalledProcessError
+		print('ERROR on {} execution occurred: {}'.format(algname, err))
+	else:
+		controlTime(proc, algname, exectime, timeout)
+	if trace:
+		print(algname + ' is finished.\n\n\n')
+
+
+def execLouvain(udatas, wdatas, timeout):
+	algname = 'Louvain'
+	workdir = 'LouvainUpd'
+
+	# Preparation block
+	#...
+
+	args = ['../exectime', 'ls']
+	execAlgorithm(algname, workdir, args, timeout)
+
+	# Postprocessing block
+	#...
+
+
+def execHirecs(udatas, wdatas, timeout):
+	algname = 'HiReCS'
+	workdir = '.'
+	args = ['./hirecs']
+	execAlgorithm(algname, workdir, args, timeout)
+
+
+def execOslom2(udatas, wdatas, timeout):
+	pass
+
+
 def execGanxis(udatas, wdatas, timeout):
-	call(["ls", "-l"])
+	pass
+
 
 def benchmark(*args):
 	""" Execute the benchmark:
@@ -84,19 +176,17 @@ def benchmark(*args):
 	print("Parsed params:\n\tudatas: {}, \n\twdatas: {}\n\ttimeout: {}"
 		.format(', '.join(udatas), ', '.join(wdatas), timeout))
 	
+	algors = (execLouvain, execHirecs, execOslom2, execGanxis)
 	try:
 		#algtime = time.clock()
-		execGanxis(udatas, wdatas, timeout)
-		#algtime = time.clock() - algtime
+		for alg in algors:
+			alg(udatas, wdatas, timeout)
 	except StandardError as err:
-		print('The benchmark is interrupted by the exception:' + err)
+		print('The benchmark is interrupted by the exception: {}'.format(err))
 	else:
 		exectime = time.clock() - exectime
-		hours = int(exectime / 3600)
-		mins = int((exectime - hours * 3600) / 60)
-		secs = exectime - hours * 3600 - mins * 60
 		print('The benchmark execution is successfully comleted on {} sec ({} h {} m {} s)'
-			, exectime, hours, mins, secs)
+			.format(exectime, *secondsToHms(exectime)))
 
 
 if __name__ == '__main__':

@@ -15,12 +15,12 @@ Runs hierarchical clustering algorithms on the synthetic networks and real-word 
 \date: 2015-04
 """
 
+from __future__ import print_function
 import sys
 import time
 import subprocess
 from subprocess import PIPE
 from functools import wraps
-
 
 def parseParams(args):
 	"""Parse user-specified parameters
@@ -87,10 +87,11 @@ def secondsToHms(seconds):
 	return hours, mins, secs
 	
 
-def controlTime(proc, algname, exectime, timeout):
-	"""Conterol the time of the executing process
+def controlExecTime(proc, algname, exectime, timeout):
+	"""Conterol the time of the process execution
 	
-	Evaluates execution time and kills the process after the specified timeout
+	Evaluate execution time and kills the process after the specified timeout
+	if required.
 	
 	proc  - active executing process
 	algname  - name of the executing algorithm
@@ -109,7 +110,7 @@ def controlTime(proc, algname, exectime, timeout):
 				time.sleep(1)
 			if proc.poll() is None:
 				proc.kill()
-			print('{} is terminated by the timeout ({} sec): {} secs ({} h {} m {} s)'
+			print('{} is terminated by the timeout ({} sec): {} sec ({} h {} m {} s)'
 				.format(algname, timeout, exectime, *secondsToHms(exectime)))
 
 
@@ -125,20 +126,28 @@ def execAlgorithm(algname, workdir, args, timeout, trace=True):
 	assert algname and workdir and args, ""
 	
 	# Execution block
+	print(algname + ' is starting...', file=sys.stderr)
 	if trace:
 		print(algname + ' is starting...')
+
+	exectime = time.clock()
 	try:
-		exectime = time.clock()
 		proc = subprocess.Popen(args, cwd=workdir)  # bufsize=-1 - use system default IO buffer size
 	except StandardError as err:  # Should not occur: subprocess.CalledProcessError
 		print('ERROR on {} execution occurred: {}'.format(algname, err))
 	else:
-		controlTime(proc, algname, exectime, timeout)
-	if trace:
-		print(algname + ' is finished.\n\n\n')
+		controlExecTime(proc, algname, exectime, timeout)
 
+	exectime = time.clock() - exectime
+	print('{} is finished on {} sec ({} h {} m {} s).\n\n\n'
+		.format(algname, exectime, *secondsToHms(exectime)), file=sys.stderr)
+	if trace:
+		print('{} is finished on {} sec ({} h {} m {} s).\n\n\n'
+			.format(algname, exectime, *secondsToHms(exectime)))
+		 
 
 def execLouvain(udatas, wdatas, timeout):
+	# TODO: add URL to the alg src
 	algname = 'Louvain'
 	workdir = 'LouvainUpd'
 
@@ -153,6 +162,7 @@ def execLouvain(udatas, wdatas, timeout):
 
 
 def execHirecs(udatas, wdatas, timeout):
+	# TODO: add URL to the alg src
 	algname = 'HiReCS'
 	workdir = '.'
 	args = ['./hirecs']
@@ -182,7 +192,8 @@ def benchmark(*args):
 		for alg in algors:
 			alg(udatas, wdatas, timeout)
 	except StandardError as err:
-		print('The benchmark is interrupted by the exception: {}'.format(err))
+		print('The benchmark is interrupted by the exception: {} on {} sec ({} h {} m {} s)'
+			.format(err, exectime, *secondsToHms(exectime)))
 	else:
 		exectime = time.clock() - exectime
 		print('The benchmark execution is successfully comleted on {} sec ({} h {} m {} s)'

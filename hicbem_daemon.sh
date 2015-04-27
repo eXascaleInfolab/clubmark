@@ -9,5 +9,11 @@ else
 	PYTHON="python"
 fi
 
-echo 'Running the benchmark: $ nohup '$PYTHON' hicbem.py &'
-nohup $PYTHON hicbem.py snap   1> hichbem.log 2> hichbem.err &
+TIMEOUT=36
+TIMEOUT_UNIT=h
+DATASETS=snap
+EXECLOG=hichbem.log  # Log for the execution status
+EXECERR=hichbem.err  # Log for execution errors
+
+echo 'Starting the benchmark: $ nohup '$PYTHON" hicbem.py -d ${DATASETS} -t$TIMEOUT_UNIT $TIMEOUT  1> ${EXECLOG}  2> ${EXECERR}"' &'
+nohup $PYTHON hicbem.py -d ${DATASETS} -t$TIMEOUT_UNIT $TIMEOUT  1> ${EXECLOG} 2> ${EXECERR} &

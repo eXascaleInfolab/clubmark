@@ -98,14 +98,15 @@ def controlExecTime(proc, algname, exectime, timeout):
 	exectime  - start time of the execution
 	timeout  - execution timeout, 0 means infinity
 	"""
+	print('controlExecTime started, timeout: ' + str(timeout))
 	while proc.poll() is None:
 		time.sleep(1)
-		if timeout and time.clock() - exectime > timeout:
-			exectime = time.clock() - exectime
+		if timeout and time.time() - exectime > timeout:
+			exectime = time.time() - exectime
 			proc.terminate()
-			# Wait 10 sec for the successful process termitaion before killing it
+			# Wait a few sec for the successful process termitaion before killing it
 			i = 0
-			while proc.poll() is None and i < 10:
+			while proc.poll() is None and i < 5:
 				i += 1
 				time.sleep(1)
 			if proc.poll() is None:
@@ -130,7 +131,7 @@ def execAlgorithm(algname, workdir, args, timeout, trace=True):
 	if trace:
 		print(algname + ' is starting...')
 
-	exectime = time.clock()
+	exectime = time.time()
 	try:
 		proc = subprocess.Popen(args, cwd=workdir)  # bufsize=-1 - use system default IO buffer size
 	except StandardError as err:  # Should not occur: subprocess.CalledProcessError
@@ -138,7 +139,7 @@ def execAlgorithm(algname, workdir, args, timeout, trace=True):
 	else:
 		controlExecTime(proc, algname, exectime, timeout)
 
-	exectime = time.clock() - exectime
+	exectime = time.time() - exectime
 	print('{} is finished on {} sec ({} h {} m {} s).\n\n\n'
 		.format(algname, exectime, *secondsToHms(exectime)), file=sys.stderr)
 	if trace:
@@ -165,7 +166,8 @@ def execHirecs(udatas, wdatas, timeout):
 	# TODO: add URL to the alg src
 	algname = 'HiReCS'
 	workdir = '.'
-	args = ['./hirecs']
+	args = ['./exectime', 'top']
+	timeout = 3
 	execAlgorithm(algname, workdir, args, timeout)
 
 
@@ -181,21 +183,21 @@ def benchmark(*args):
 	""" Execute the benchmark:
 	Run the algorithms on the specified datasets respecting the parameters
 	"""
-	exectime = time.clock()
+	exectime = time.time()
 	udatas, wdatas, timeout = parseParams(args)
 	print("Parsed params:\n\tudatas: {}, \n\twdatas: {}\n\ttimeout: {}"
 		.format(', '.join(udatas), ', '.join(wdatas), timeout))
 	
 	algors = (execLouvain, execHirecs, execOslom2, execGanxis)
 	try:
-		#algtime = time.clock()
+		#algtime = time.time()
 		for alg in algors:
 			alg(udatas, wdatas, timeout)
 	except StandardError as err:
 		print('The benchmark is interrupted by the exception: {} on {} sec ({} h {} m {} s)'
 			.format(err, exectime, *secondsToHms(exectime)))
 	else:
-		exectime = time.clock() - exectime
+		exectime = time.time() - exectime
 		print('The benchmark execution is successfully comleted on {} sec ({} h {} m {} s)'
 			.format(exectime, *secondsToHms(exectime)))
 

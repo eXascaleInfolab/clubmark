@@ -56,9 +56,9 @@ def parseParams(args):
 					if arg[2] not in 'smh' or len(arg) > 3:
 						raise ValueError('Unexpected argument: ' + arg)
 					if arg[2] == 'm':
-						multiplier = 60  # Minutes
+						timemul = 60  # Minutes
 					elif arg[2] == 'h':
-						multiplier = 3600  # Hours
+						timemul = 3600  # Hours
 			else:
 				raise ValueError('Unexpected argument: ' + arg)
 		else:
@@ -140,14 +140,15 @@ def execAlgorithm(algname, workdir, args, timeout, trace=True):
 		controlExecTime(proc, algname, exectime, timeout)
 
 	exectime = time.time() - exectime
-	print('{} is finished on {} sec ({} h {} m {} s).\n\n\n'
+	print('{} is finished on {} sec ({} h {} m {} s).\n'
 		.format(algname, exectime, *secondsToHms(exectime)), file=sys.stderr)
 	if trace:
-		print('{} is finished on {} sec ({} h {} m {} s).\n\n\n'
+		print('{} is finished on {} sec ({} h {} m {} s).\n\n'
 			.format(algname, exectime, *secondsToHms(exectime)))
 		 
 
 def execLouvain(udatas, wdatas, timeout):
+	return
 	# TODO: add URL to the alg src
 	algname = 'Louvain'
 	workdir = 'LouvainUpd'
@@ -163,6 +164,7 @@ def execLouvain(udatas, wdatas, timeout):
 
 
 def execHirecs(udatas, wdatas, timeout):
+	return
 	# TODO: add URL to the alg src
 	algname = 'HiReCS'
 	workdir = '.'
@@ -172,11 +174,27 @@ def execHirecs(udatas, wdatas, timeout):
 
 
 def execOslom2(udatas, wdatas, timeout):
-	pass
+	algname = 'OSLOM2'
+	workdir = 'OSLOM2'
+	for udata in udatas:
+		fname = udata
+		ifn = fname.rfind('/')
+		if ifn != -1:
+			fname = fname[ifn + 1:]
+		args = ['../exectime', ''.join(('-o=', fname, '_', algname.lower(), '.rst')), './oslom_undir', '-f', udata, '-uw']
+		execAlgorithm(algname, workdir, args, timeout)
 
 
 def execGanxis(udatas, wdatas, timeout):
-	pass
+	algname = 'GANXiS'
+	workdir = 'GANXiS_v3.0.2'
+	for udata in udatas:
+		fname = udata
+		ifn = fname.rfind('/')
+		if ifn != -1:
+			fname = fname[ifn + 1:]
+		args = ['../exectime', ''.join(('-o=', fname, '_', algname.lower(), '.rst')), 'java', '-jar', './GANXiSw.jar', '-i', udata, '-Sym 1']
+		execAlgorithm(algname, workdir, args, timeout)
 
 
 def benchmark(*args):
@@ -188,6 +206,7 @@ def benchmark(*args):
 	print("Parsed params:\n\tudatas: {}, \n\twdatas: {}\n\ttimeout: {}"
 		.format(', '.join(udatas), ', '.join(wdatas), timeout))
 	
+	udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']
 	algors = (execLouvain, execHirecs, execOslom2, execGanxis)
 	try:
 		#algtime = time.time()

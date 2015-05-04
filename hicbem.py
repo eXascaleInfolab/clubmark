@@ -193,7 +193,7 @@ def generateNets(overwrite=False):
 	evalmaxc = lambda genopts: int(genopts['N'] / 3)
 	evalon = lambda genopts: int(genopts['N'] * genopts['mut']**2)
 	# Template of the generating options files
-	genopts = {'mut': 0.275, 'beta': 1.35, 't1': 1.65, 't2': 1.3, 'om': 2, 'cnd': 1}
+	genopts = {'mut': 0.275, 'beta': 1.35, 't1': 1.65, 't2': 1.3, 'om': 2, 'cnl': 1}
 	
 	# Generate options for the networks generation using chosen variations of params
 	varNmul = (1, 2, 5, 10, 25, 50)  # *N0
@@ -202,14 +202,15 @@ def generateNets(overwrite=False):
 	for nm in varNmul:
 		N = nm * N0
 		for k in vark:
-			fname = ''.join((str(nm), 'K', str(k), '.ngp'))
-			if not overwrite and os.path.exists(fname):
+			fname = 'K'.join((str(nm), str(k)))
+			fnamex = fname.join((paramsDirFull, '.ngp'))
+			if not overwrite and os.path.exists(fnamex):
 				continue
-			print('Generating {} parameters file...'.format(fname))
-			with open(paramsDirFull + fname, 'w') as fout:
+			print('Generating {} parameters file...'.format(fnamex))
+			with open(fnamex, 'w') as fout:
 				genopts.update({'N': N, 'k': k})
 				genopts.update({'maxk': evalmaxk(genopts), 'muw': evalmuw(genopts), 'minc': evalminc(genopts)
-					, 'maxc': evalmaxc(genopts), 'on': evalon(genopts)})
+					, 'maxc': evalmaxc(genopts), 'on': evalon(genopts), 'name': fname})
 				for opt in genopts.items():
 					fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
 	print('Parameters files generation is completed')

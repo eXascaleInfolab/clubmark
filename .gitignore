@@ -58,3 +58,6 @@ target/
 
 .hg/
 .hgignore
+
+# Project related ignore
+syntnets/params/

@@ -3,4 +3,5 @@ Executes set of algorithms on the specified datasets in interactive or daemon mo
 
 
 ## External tools which are used as binaries
-* https://bitbucket.org/lumais/exectime/  - tiny execution profiler to evaluate resources consumption
+* [Extended LFR Benchmark](3dparty/lfrbench_weight-undir-ovp) for undirected weighted networks with overlaps, origins: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files
+* [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption: https://bitbucket.org/lumais/exectime/

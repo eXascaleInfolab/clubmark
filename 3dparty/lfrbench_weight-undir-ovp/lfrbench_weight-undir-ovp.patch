@@ -1,9 +1,18 @@
+Only in weighted_networks/: 2K5.cnl
+Only in weighted_networks/: 2K5.gpn
+Only in weighted_networks/: 2K5.nsa
+Only in weighted_networks/: 2K5.nst
+Only in weighted_networks/: 50K5.cnl
+Only in weighted_networks/: 50K5.gpn
+Only in weighted_networks/: 50K5.nsa
+Only in weighted_networks/: 50K5.nst
 Only in weighted_networks/: benchmark
 Only in weighted_networks/: benchmark.orig
 Only in weighted_networks/: _community.dat
 Only in weighted_networks/: community.dat
-diff -ur tmp/weighted_networks/flags.dat weighted_networks/flags.dat
---- tmp/weighted_networks/flags.dat	2010-11-26 11:11:55.000000000 +0100
+Only in weighted_networks/: .DS_Store
+diff -ru orig/flags.dat weighted_networks/flags.dat
+--- orig/flags.dat	2010-11-26 11:11:55.000000000 +0100
 +++ weighted_networks/flags.dat	2015-05-01 17:39:04.517724134 +0200
 @@ -1,12 +1,12 @@
  -N 1000
@@ -35,9 +44,10 @@ Only in weighted_networks/: gennet.nsa
 Only in weighted_networks/: gennet.nst
 Only in weighted_networks/: lfrbench_uwovp
 Only in weighted_networks/: lfrbench_uwovp_v1
+Only in weighted_networks/: lfrbench_uwovp_v2
 Only in weighted_networks/: network.dat
-diff -ur tmp/weighted_networks/Sources/benchm.cpp weighted_networks/Sources/benchm.cpp
---- tmp/weighted_networks/Sources/benchm.cpp	2014-01-03 14:03:47.000000000 +0100
+diff -ru orig/Sources/benchm.cpp weighted_networks/Sources/benchm.cpp
+--- orig/Sources/benchm.cpp	2014-01-03 14:03:47.000000000 +0100
 +++ weighted_networks/Sources/benchm.cpp	2015-05-04 18:41:15.027031791 +0200
 @@ -28,6 +28,14 @@
   *	Project: Benchmarking community detection programs                           *
@@ -162,8 +172,43 @@ diff -ur tmp/weighted_networks/Sources/benchm.cpp weighted_networks/Sources/benc
  		
  	return 0;
  	
-diff -ur tmp/weighted_networks/Sources/set_parameters.cpp weighted_networks/Sources/set_parameters.cpp
---- tmp/weighted_networks/Sources/set_parameters.cpp	2009-10-30 10:43:20.000000000 +0100
+diff -ru orig/Sources/binary_benchm.cpp weighted_networks/Sources/binary_benchm.cpp
+--- orig/Sources/binary_benchm.cpp	2014-01-03 14:05:31.000000000 +0100
++++ weighted_networks/Sources/binary_benchm.cpp	2015-05-05 22:31:22.648904712 +0200
+@@ -62,12 +62,30 @@
+ 
+ 
+ //bisection method to find the inferior limit, in order to have the expected average degree
+-double solve_dmin(const double& dmax, const double &dmed, const double &gamma) {
++double solve_dmin(int& dmax, const double &dmed, const double &gamma) {
+ 	
+ 	double dmin_l=1;
+ 	double dmin_r=dmax;
+ 	double average_k1=average_degree(dmin_r, dmin_l, gamma);
+ 	double average_k2=dmin_r;
++
++	if (average_k1-dmed>0) {
++		// Try to automatically reduce dmax
++		cout << "k1: " << average_k1 << ", dmed: " << dmed << ", k2: " << average_k2 << endl;
++		double tdmax = int(pow(dmed, log(dmax) / log(average_k1)) * (1 - log(1 + average_k1-dmed)/10));
++		double taverage_k1=average_degree(tdmax, dmin_l, gamma);
++		double taverage_k2=tdmax;
++		cout << "WARNING: trying to decrease the maximum degree from "
++			 << dmax << " to " << tdmax << " to converge\n";
++		cout << "k1: " << taverage_k1 << ", dmed: " << dmed << ", k2: " << taverage_k2 << endl;
++		if (!(taverage_k1-dmed>0 || taverage_k2-dmed<0)) {
++			dmax = dmin_r = tdmax;
++			average_k1 = taverage_k1;
++			average_k2 = taverage_k2;
++			cout << "\nWARNING: maximum degree is automatically decreased to "
++				 << dmax << " to converge\n" << endl;
++		}
++	}
+ 	
+ 	
+ 	if ((average_k1-dmed>0) || (average_k2-dmed<0)) {
+diff -ru orig/Sources/set_parameters.cpp weighted_networks/Sources/set_parameters.cpp
+--- orig/Sources/set_parameters.cpp	2009-10-30 10:43:20.000000000 +0100
 +++ weighted_networks/Sources/set_parameters.cpp	2015-05-04 18:46:46.015026054 +0200
 @@ -30,6 +30,12 @@
  		bool defect;

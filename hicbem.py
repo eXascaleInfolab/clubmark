@@ -19,8 +19,12 @@ from __future__ import print_function
 import sys
 import time
 import subprocess
+#import multiprocessing as mp
+from multiprocessing import cpu_count
+import collections
 #from functools import wraps
 import os
+from shutil import copy2 as copyfile
 from math import sqrt
 
 
@@ -104,74 +108,209 @@ def secondsToHms(seconds):
 	mins = int((seconds - hours * 3600) / 60)
 	secs = seconds - hours * 3600 - mins * 60
 	return hours, mins, secs
-	
 
-def controlExecTime(proc, algname, exectime, timeout):
-	"""Conterol the time of the process execution
+
+class Job:
+#class Job(collections.namedtuple('Job', ('name', 'workdir', 'args', 'timeout', 'ontimeout', 'onstart', 'ondone', 'tstart'))):  # , 'tracelev'
+	#Job = collections.namedtuple('Job', ('name', 'workdir', 'args', 'timeout', 'ontimeout', 'onstart', 'ondone', 'tstart'))
+	#tracelev  - tracing detalizationg level:
+	#	0  - no tracing
+	#	1  - trace to stdout only
+	#	2  - trace to stderr only. Default
+	#	3  - trace to both stdout and stderr
+	#def __new__(cls, name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None):
+	#	assert name, "Job parameters must be defined"  #  and job.workdir and job.args
+	#	return super(Job, cls).__new__(cls, name, workdir, args, timeout, ontimeout, onstart, ondone, tstart)
+	def __init__(self, name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None):
+		"""The job to be executed
+		
+		name  - job name
+		workdir  - working directory for the corresponding process
+		args  - execution arguments including the executable itself for the process
+		timeout  - execution timeout. Default: 0, means infinity
+		ontimeout  - action on timeout:
+			0  - terminate the job. Default
+			1  - restart the job
+		onstart  - callback which is executed on the job starting in the CONTEXT OF
+			THE CALLER (main process) with the single argument, the job. Default: None
+		ondone  - callback which is executed on successful completion of the job in the
+			CONTEXT OF THE CALLER (main process) with the single argument, the job. Default: None
+			
+		tstart  - start time is filled automatically on the execution start. Default: None
+		"""
+		assert name, "Job parameters must be defined"  #  and job.workdir and job.args
+		self.name = name
+		self.workdir = workdir
+		self.args = args
+		self.timeout = timeout
+		self.ontimeout = ontimeout
+		self.onstart = onstart
+		self.ondone = ondone
+		self.tstart = tstart
+
+
+class ExecPool:
+	'''Execution Pool of workers for jobs
 	
-	Evaluate execution time and kills the process after the specified timeout
-	if required.
+	A worker in the pool executes only the one job, a new worker is created for
+	each subsequent job.
+	'''
 	
-	proc  - active executing process
-	algname  - name of the executing algorithm
-	exectime  - start time of the execution
-	timeout  - execution timeout, 0 means infinity
-	"""
-	_jobs
-	print('controlExecTime started, timeout: ' + str(timeout))
-	while proc.poll() is None:
-		time.sleep(1)
-		if timeout and time.time() - exectime > timeout:
-			exectime = time.time() - exectime
+	def __init__(self, workers=cpu_count()):
+		assert workers >= 1, 'At least one worker should be managed by the pool'
+		
+		self._workersLim = workers  # Max number of workers
+		self._workers = {}  # Current workers: 'jname': <proc>; <proc>: timeout
+		self._jobs = collections.deque()  # Scheduled jobs: 'jname': **args
+		self._tstart = None  # Start time of the execution of the first task
+		#self._jid = 0  # Subsequent job id
+
+
+	def __del__(self):
+		self.__terminate()
+		
+		
+	def __terminate(self):
+		"""Force termination of the pool"""
+		
+		print('Terminating the workers pool ...')
+		for job in self._jobs:
+			print('Scheduled "{}" is removed'.format(job.name))
+		self._jobs.clear()
+		while self._workers:
+			procs = self._workers.keys()
+			for proc in procs:
+				print('Terminating "{}" #{} ...'.format(self._workers[proc].name, proc.pid), file=sys.stderr)
+				proc.terminate()
+			# Wait a few sec for the successful process termitaion before killing it
+			i = 0
+			active = True
+			while active and i < 3:
+				active = False
+				for proc in procs:
+					if proc.poll() is None:
+						active = True
+						break
+				time.sleep(1)
+			# Kill nonterminated processes
+			if active:
+				for proc in procs:
+					if proc.poll() is None:
+						print('Killing the worker #{} ...'.format(proc.pid), file=sys.stderr)
+						proc.kill()
+			self._workers.clear()
+			
+			
+	def __startJob(self, job):
+		"""Start the specified job by one of workers
+		
+		job  - the job to be executed, instance of Job
+		"""
+		assert isinstance(job, Job), 'job must be a valid entity'
+		if len(self._workers) > self._workersLim:
+			raise AssertionError('Free workers must be available ({} busy workers of {})'
+				.format(len(self._workers), self._workersLim))
+		
+		print('Starting "{}"...'.format(job.name), file=sys.stderr)
+		job.tstart = time.time()
+		if job.onstart:
+			try:
+				job.onstart(job)
+			except Exception as err:
+				print('ERROR in onstart callback of "{}": {}'.format(job.name, err), file=sys.stderr)
+		try:
+			proc = subprocess.Popen(job.args, cwd=job.workdir)  # bufsize=-1 - use system default IO buffer size
+		except StandardError as err:  # Should not occur: subprocess.CalledProcessError
+			print('ERROR on "{}" execution occurred: {}, skipping the job'.format(job.name, err), file=sys.stderr)
+		else:
+			self._workers[proc] = job
+
+
+	def __reviseWorkers(self):
+		"""Rewise the workers
+		
+		Check for the comleted jobs and their timeous and update corresponding
+		workers
+		"""
+		completed = []  # Completed workers
+		for proc, job in self._workers.items():
+			if proc.poll() is not None:
+				completed.append((proc, job))
+				continue
+			exectime = time.time() - job.tstart
+			if not job.timeout or exectime < job.timeout:
+				continue
+			# Terminate the worker
 			proc.terminate()
 			# Wait a few sec for the successful process termitaion before killing it
 			i = 0
-			while proc.poll() is None and i < 5:
+			while proc.poll() is None and i < 3:
 				i += 1
 				time.sleep(1)
 			if proc.poll() is None:
 				proc.kill()
-			print('{} is terminated by the timeout ({} sec): {} sec ({} h {} m {} s)'
-				.format(algname, timeout, exectime, *secondsToHms(exectime)))
+			del self._workers[proc]
+			print('"{}" #{} is terminated by the timeout ({} sec): {} sec ({} h {} m {} s)'
+				.format(job.name, proc.pid, job.timeout, exectime, *secondsToHms(exectime)), file=sys.stderr)
+			# Restart the job if required
+			if job.ontimeout:
+				self.__startJob(job)
+
+		# Process completed jobs: execute callbacks and remove the workers
+		for proc, job in completed:
+			if job.ondone:
+				try:
+					job.ondone(job)
+				except Exception as err:
+					print('ERROR in ondone callback of "{}": {}'.format(job.name, err), file=sys.stderr)
+			del self._workers[proc]
+			print('"{}" #{} is completed'.format(job.name, proc.pid, file=sys.stderr))
 
 
-def execJob(jname, workdir, args, timeout, tracelev=2):
-	"""Execute specified job
-	
-	jname  - job name (id)
-	workdir  - working directory
-	args  - execution arguments including the executable itself
-	timeout  - execution timeout
-	tracelev  - tracing detalizationg level:
-		0  - no tracing
-		1  - trace to stdout only
-		2  - trace to stderr only. Default
-		3  - trace to both stdout and stderr
-	"""
-	assert jname and workdir and args, ""
-	
-	# Execution block
-	if tracelev & 2:
-		print(jname + ' is starting...', file=sys.stderr)
-	if tracelev & 1:
-		print(jname + ' is starting...')
+	def execute(self, job):
+		"""Schecule the job for the execution
+		
+		job  - the job to be executed, instance of Job
+		"""
+		assert isinstance(job, Job), 'job must be a valid entity'
+		assert len(self._workers) <= self._workersLim, 'Number of workers exceeds the limit'
+		assert job.name, "Job parameters must be defined"  #  and job.workdir and job.args
+		
+		print('Scheduling the job "{}" with timeout {}'.format(job.name, job.timeout))
+		# Start the execution timer
+		if self._tstart is None:
+			self._tstart = time.time()
+		# Schedule the job
+		self.__reviseWorkers()
+		if len(self._workers) < self._workersLim:
+			self.__startJob(job)
+		else:
+			self._jobs.append(job)
 
-	exectime = time.time()
-	try:
-		proc = subprocess.Popen(args, cwd=workdir)  # bufsize=-1 - use system default IO buffer size
-	except StandardError as err:  # Should not occur: subprocess.CalledProcessError
-		print('ERROR on {} execution occurred: {}'.format(jname, err))
-	else:
-		controlExecTime(proc, jname, exectime, timeout)
 
-	exectime = time.time() - exectime
-	if tracelev & 2:
-		print('{} is finished on {} sec ({} h {} m {} s).\n'
-			.format(jname, exectime, *secondsToHms(exectime)), file=sys.stderr)
-	if tracelev & 1:
-		print('{} is finished on {} sec ({} h {} m {} s).\n\n'
-			.format(jname, exectime, *secondsToHms(exectime)))
-		 
+	def join(self, exectime=0):
+		"""Execution cycle
+		
+		exectime  - execution timeout in seconds before the workers termination.
+			The time is measured SINCE the first job was scheduled UNTIL the
+			completion of all scheduled jobs and then is resetted.
+		"""
+		if self._tstart is None:
+			assert not self.__jobs and not self._workers, \
+				'Start time should be defined for the present jobs'
+			return
+		
+		self.__reviseWorkers()
+		while self._jobs or self._workers:
+			# Start subsequent job if it is required
+			while self._jobs and len(self._workers) <  self._workersLim:
+				self.__startJob(self._jobs.popleft())
+			if exectime and time.time() - self._tstart > exectime:
+				self.__terminate()
+			time.sleep(1)
+			self.__reviseWorkers()
+		self._tstart = None
+
 
 def generateNets(overwrite=False):
 	"""Generate synthetic networks with ground-truth communities and save generation params
@@ -187,7 +326,7 @@ def generateNets(overwrite=False):
 	# Initial options for the networks generation
 	N0 = 1000;  # Satrting number of nodes
 	
-	evalmaxk = lambda genopts: round(sqrt(genopts['N']))
+	evalmaxk = lambda genopts: int(round(sqrt(genopts['N'])))
 	evalmuw = lambda genopts: genopts['mut'] * 2/3
 	evalminc = lambda genopts: 5 + int(genopts['N'] / N0)
 	evalmaxc = lambda genopts: int(genopts['N'] / 3)
@@ -199,26 +338,36 @@ def generateNets(overwrite=False):
 	varNmul = (1, 2, 5, 10, 25, 50)  # *N0
 	vark = (5, 10, 20)
 	
+	epl = ExecPool(max(cpu_count() - 1, 1))
+	netgenTimeout = 5 * 60  # 5 min
 	for nm in varNmul:
 		N = nm * N0
 		for k in vark:
-			fname = 'K'.join((str(nm), str(k)))
-			fnamex = fname.join((paramsDirFull, '.ngp'))
+			name = 'K'.join((str(nm), str(k)))
+			ext = '.ngp'  # Network generation parameters
+			fnamex = name.join((paramsDirFull, ext))
 			if not overwrite and os.path.exists(fnamex):
+				assert os.path.isfile(fnamex), '{} should be a file'.format(fnamex)
 				continue
 			print('Generating {} parameters file...'.format(fnamex))
 			with open(fnamex, 'w') as fout:
 				genopts.update({'N': N, 'k': k})
 				genopts.update({'maxk': evalmaxk(genopts), 'muw': evalmuw(genopts), 'minc': evalminc(genopts)
-					, 'maxc': evalmaxc(genopts), 'on': evalon(genopts), 'name': fname})
+					, 'maxc': evalmaxc(genopts), 'on': evalon(genopts), 'name': name})
 				for opt in genopts.items():
 					fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
-	print('Parameters files generation is completed')
+			if os.path.isfile(fnamex):
+				args = ('../exectime', './lfrbench_uwovp', '-f', name.join((paramsdir, ext)))
+				epl.execute(Job(name=name, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=1,
+					onstart=lambda job: copyfile(_syntdir + 'time_seed.dat', name.join((_syntdir, '.ngs')))))  # Network generation seed
+	#Job = collections.namedtuple('Job', ('name', 'workdir', 'args', 'timeout', 'ontimeout', 'onstart', 'ondone', ''tstart'))
+	print('Parameter files generation is completed')
+	epl.join(2 * 60*60)  # 2 hours
+	print('Synthetic networks files generation is completed')
 	
-	# Generate the networks with ground truth
-	#_jobsLimit = 4
-	#_workers
-	
+
+def execJob(*args):
+	raise NotImplemented('The execution should be implemented via ExecPool')
 
 
 def execLouvain(udatas, wdatas, timeout):
@@ -272,8 +421,9 @@ def execGanxis(udatas, wdatas, timeout):
 
 
 def benchmark(*args):
-	""" Execute the benchmark:
-	Run the algorithms on the specified datasets respecting the parameters
+	""" Execute the benchmark
+	
+	Run the algorithms on the specified datasets respecting the parameters.
 	"""
 	exectime = time.time()
 	gensynt, udatas, wdatas, timeout = parseParams(args)

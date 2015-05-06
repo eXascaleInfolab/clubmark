@@ -56,7 +56,7 @@ def parseParams(args):
 	convnets = False
 	udatas = []
 	wdatas = []
-	timeout = 0
+	timeout = 36 * 60*60  # 36 hours
 	sparam = False  # Additional string parameter
 	weighted = False
 	timemul = 1  # Time multiplier, sec by default
@@ -130,7 +130,7 @@ class Job:
 	#def __new__(cls, name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None):
 	#	assert name, "Job parameters must be defined"  #  and job.workdir and job.args
 	#	return super(Job, cls).__new__(cls, name, workdir, args, timeout, ontimeout, onstart, ondone, tstart)
-	def __init__(self, name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None):
+	def __init__(self, name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None):
 		"""The job to be executed
 		
 		name  - job name
@@ -155,6 +155,8 @@ class Job:
 		self.ontimeout = ontimeout
 		self.onstart = onstart
 		self.ondone = ondone
+		self.stdout = stdout
+		self.stderr = stderr
 		self.tstart = tstart
 
 
@@ -228,9 +230,25 @@ class ExecPool:
 				job.onstart(job)
 			except Exception as err:
 				print('ERROR in onstart callback of "{}": {}'.format(job.name, err), file=sys.stderr)
+		fstdout = None
+		fstderr = None
 		try:
-			proc = subprocess.Popen(job.args, cwd=job.workdir)  # bufsize=-1 - use system default IO buffer size
+			if job.stdout:
+				basedir = os.path.split(job.stdout)[0]
+				if not os.path.exists(basedir):
+					os.makedirs(basedir)
+				fstdout = open(job.stdout, 'w')
+			if job.stderr:
+				basedir = os.path.split(job.stderr)[0]
+				if not os.path.exists(basedir):
+					os.makedirs(basedir)
+				fstderr = open(job.stderr, 'w')
+			proc = subprocess.Popen(job.args, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
 		except StandardError as err:  # Should not occur: subprocess.CalledProcessError
+			if fstdout:
+				fstdout.close()
+			if fstderr:
+				fstderr.close()
 			print('ERROR on "{}" execution occurred: {}, skipping the job'.format(job.name, err), file=sys.stderr)
 		else:
 			self._workers[proc] = job
@@ -260,7 +278,7 @@ class ExecPool:
 			if proc.poll() is None:
 				proc.kill()
 			del self._workers[proc]
-			print('"{}" #{} is terminated by the timeout ({} sec): {} sec ({} h {} m {} s)'
+			print('"{}" #{} is terminated by the timeout ({:.4f} sec): {:.4f} sec ({} h {} m {:.4f} s)'
 				.format(job.name, proc.pid, job.timeout, exectime, *secondsToHms(exectime)), file=sys.stderr)
 			# Restart the job if required
 			if job.ontimeout:
@@ -413,11 +431,16 @@ def execHirecs(execpool, netfile, timeout):
 	netfile += '.hig'  # Use network in the required format
 	
 	algname = 'hirecs'
+	## Check path existance for the logs
+	#outpdir = ''.join((_algsdir, algname, 'outp'))
+	#if not os.path.exists(outpdir):
+	#	os.m(outpdir)
 	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
-		, './hirecs', '-oc', ''.join(('-cls=./', algname, '/', task, '/', task, '_', algname, _extclnodes))
+		, './hirecs', '-oc', ''.join(('-cls=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
-	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
-	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout))
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
+		, timeout=timeout, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
 
 
 def execOslom2(execpool, netfile, timeout):
@@ -426,6 +449,9 @@ def execOslom2(execpool, netfile, timeout):
 	assert task, 'The network name should exists'
 	
 	algname = 'oslom2'
+	# Check path existance for the logs
+	if not os.path.exists(algname):
+		os.mkdir(algname)
 	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
 		, './oslom_undir', '-f', '../' + netfile, '-w')
 	# Copy results to the required dir on postprocessing
@@ -437,7 +463,9 @@ def execOslom2(execpool, netfile, timeout):
 			fscopy(fname, outpdir)
 		
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
-	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec))
+	logsdir = ''.join((_algsdir, algname, 'outp/'))
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
+		, stdout=''.join((logsdir, task, '.log')), stderr=''.join((logsdir, task, '.err'))))
 
 
 def execGanxis(execpool, netfile, timeout):
@@ -446,11 +474,15 @@ def execGanxis(execpool, netfile, timeout):
 	assert task, 'The network name should exists'
 
 	algname = 'ganxis'
+	# Check path existance for the logs
+	if not os.path.exists(algname):
+		os.mkdir(algname)
 	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
-		, 'java', '-jar', './GANXiSw.jar', '-i', '../' + netfile
-		, '-d', ''.join(('-cls=./', algname, '/', task, '/')))
+		, 'java', '-jar', './GANXiSw.jar', '-i', '../' + netfile, '-d', algname + 'outp/')
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
-	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout))
+	logsdir = ''.join((_algsdir, algname, 'outp/'))
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout
+		, stdout=''.join((logsdir, task, '.log')), stderr=''.join((logsdir, task, '.err'))))
 
 
 def benchmark(*args):
@@ -482,14 +514,16 @@ def benchmark(*args):
 			try:
 				alg(epl, net, timeout)
 			except StandardError as err:
-				print('The {} is interrupted by the exception: {} on {} sec ({} h {} m {} s)'
-					.format(alg.__name__, err, exectime, *secondsToHms(exectime)))
+				errexectime = time.time() - exectime
+				print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
+					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
 	epl.join(timeout * netsnum)
 	exectime = time.time() - exectime
-	print('The benchmark execution is successfully comleted on {} sec ({} h {} m {} s)'
+	print('The benchmark execution is successfully comleted on {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(exectime, *secondsToHms(exectime)))
 	
-	## Measure NMI
+	### Measure NMI
+	#evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis)
 	#epl = ExecPool(max(cpu_count() - 1, 1))
 	#
 	#epl.join(max(exectime * 2, 60 * netsnum))  # Twice the time of algorithms execution

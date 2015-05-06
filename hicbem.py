@@ -24,15 +24,18 @@ from multiprocessing import cpu_count
 import collections
 #from functools import wraps
 import os
-from shutil import copy2 as copyfile
+from shutil import copy2 as fscopy
 from math import sqrt
+import glob
+import pajek_hig  # TODO: rename into the tohig.py or etc.
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exists and distinguish it from the file
-_syntdir = './syntnets/'  # Default directory for the synthetic generated datasets
-
-_jobs = []  # Executing jobs
-_jobsLimit = 1  # Max number of concurently executing jobs
+_syntdir = 'syntnets/'  # Default directory for the synthetic generated datasets
+_algsdir = 'algorithms/'  # Default directory of the benchmarking algorithms
+_extnetfile = '.nsa'  # Extension of the network files to be executed by the algorithms
+_extexectime = '.rcp'  # Resource Consumption Profile
+_extclnodes = '.cnl'  # Clusters (Communities) Nodes Lists
 
 
 def parseParams(args):
@@ -43,12 +46,14 @@ def parseParams(args):
 			0 - do not generate
 			1 - generate only if this network is not exists
 			2 - force geration (overwrite all)
+		convnets  - convert existing networks into the .hig format
 		udatas  - list of unweighted datasets to be run
 		wdatas  - list of weighted datasets to be run
 		timeout  - execution timeout in sec per each algorithm
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
 	gensynt = 0
+	convnets = False
 	udatas = []
 	wdatas = []
 	timeout = 0
@@ -66,6 +71,10 @@ def parseParams(args):
 				if arg not in '-gf':
 					raise ValueError('Unexpected argument: ' + arg)
 				gensynt = len(arg) - 1  # '-gf'  - forced generation (overwrite)
+			elif arg[1] == 'c':
+				if arg != '-c':
+					raise ValueError('Unexpected argument: ' + arg)
+				convnets = True
 			elif arg[1] == 'd' or arg[1] == 'f':
 				weighted = False
 				sparam = 'd'  # Dataset
@@ -94,7 +103,7 @@ def parseParams(args):
 				raise RuntimeError('Unexpected value of sparam: ' + sparam)
 			sparam = False
 	
-	return gensynt, udatas, wdatas, timeout
+	return gensynt, convnets, udatas, wdatas, timeout
 
 
 def secondsToHms(seconds):
@@ -163,7 +172,6 @@ class ExecPool:
 		self._workers = {}  # Current workers: 'jname': <proc>; <proc>: timeout
 		self._jobs = collections.deque()  # Scheduled jobs: 'jname': **args
 		self._tstart = None  # Start time of the execution of the first task
-		#self._jid = 0  # Subsequent job id
 
 
 	def __del__(self):
@@ -172,6 +180,8 @@ class ExecPool:
 		
 	def __terminate(self):
 		"""Force termination of the pool"""
+		if not self._jobs and not self._workers:
+			return
 		
 		print('Terminating the workers pool ...')
 		for job in self._jobs:
@@ -339,7 +349,7 @@ def generateNets(overwrite=False):
 	vark = (5, 10, 20)
 	
 	epl = ExecPool(max(cpu_count() - 1, 1))
-	netgenTimeout = 5 * 60  # 5 min
+	netgenTimeout = 10 * 60  # 10 min
 	for nm in varNmul:
 		N = nm * N0
 		for k in vark:
@@ -357,67 +367,90 @@ def generateNets(overwrite=False):
 				for opt in genopts.items():
 					fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
 			if os.path.isfile(fnamex):
-				args = ('../exectime', './lfrbench_uwovp', '-f', name.join((paramsdir, ext)))
-				epl.execute(Job(name=name, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=1,
-					onstart=lambda job: copyfile(_syntdir + 'time_seed.dat', name.join((_syntdir, '.ngs')))))  # Network generation seed
-	#Job = collections.namedtuple('Job', ('name', 'workdir', 'args', 'timeout', 'ontimeout', 'onstart', 'ondone', ''tstart'))
+				args = ('../exectime', '-n=' + name, ''.join(('-o=', paramsdir, 'lfrbench_uwovp', _extexectime))
+					, './lfrbench_uwovp', '-f', name.join((paramsdir, ext)))
+				#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
+				epl.execute(Job(name=name, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=1
+					, onstart=lambda job: fscopy(_syntdir + 'time_seed.dat', name.join((_syntdir, '.ngs')))))  # Network generation seed
 	print('Parameter files generation is completed')
 	epl.join(2 * 60*60)  # 2 hours
 	print('Synthetic networks files generation is completed')
 	
 
-def execJob(*args):
-	raise NotImplemented('The execution should be implemented via ExecPool')
+def convertNets():
+	print('Starting conversion into .hig format...')
+	# Convert network files into .hig format
+	for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
+		try:
+			pajek_hig.pajekToHgc(net, '-f', 'tsa')
+		except StandardError as err:
+			print('ERROR on "{}" conversion, the network is skipped: {}'.format(net), err, file=sys.stderr)
+	print('Conversion to .hig is completed')
+	
 
-
-def execLouvain(udatas, wdatas, timeout):
+def execLouvain(execpool, netfile, timeout):
 	return
-	# TODO: add URL to the alg src
-	algname = 'Louvain'
-	workdir = 'LouvainUpd'
-
-	# Preparation block
-	#...
-
-	args = ['../exectime', 'ls']
-	execJob(algname, workdir, args, timeout)
-
-	# Postprocessing block
-	#...
-
-
-def execHirecs(udatas, wdatas, timeout):
-	return
-	# TODO: add URL to the alg src
-	algname = 'HiReCS'
-	workdir = '.'
-	args = ['./exectime', 'top']
-	timeout = 3
-	execJob(algname, workdir, args, timeout)
+	## TODO: add URL to the alg src
+	#algname = 'Louvain'
+	#workdir = 'LouvainUpd'
+	#
+	## Preparation block
+	##...
+	#
+	#args = ['../exectime', 'ls']
+	#
+	##execJob(algname, workdir, args, timeout)
+	#
+	## Postprocessing block
+	##...
 
 
-def execOslom2(udatas, wdatas, timeout):
-	algname = 'OSLOM2'
-	workdir = 'OSLOM2'
-	for udata in udatas:
-		fname = udata
-		ifn = fname.rfind('/')
-		if ifn != -1:
-			fname = fname[ifn + 1:]
-		args = ['../exectime', ''.join(('-o=', fname, '_', algname.lower(), '.rst')), './oslom_undir', '-f', udata, '-uw']
-		execJob(algname, workdir, args, timeout)
+def execHirecs(execpool, netfile, timeout):
+	# Fetch the task name and chose correct network filename
+	netfile = os.path.splitext(netfile)[0]  # Remove the extension
+	task = os.path.split(netfile)[1]  # Base name of the network
+	assert task, 'The network name should exists'
+	netfile += '.hig'  # Use network in the required format
+	
+	algname = 'hirecs'
+	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+		, './hirecs', '-oc', ''.join(('-cls=./', algname, '/', task, '/', task, '_', algname, _extclnodes))
+		, '../' + netfile)
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout))
 
 
-def execGanxis(udatas, wdatas, timeout):
-	algname = 'GANXiS'
-	workdir = 'GANXiS_v3.0.2'
-	for udata in udatas:
-		fname = udata
-		ifn = fname.rfind('/')
-		if ifn != -1:
-			fname = fname[ifn + 1:]
-		args = ['../exectime', ''.join(('-o=', fname, '_', algname.lower(), '.rst')), 'java', '-jar', './GANXiSw.jar', '-i', udata, '-Sym 1']
-		execJob(algname, workdir, args, timeout)
+def execOslom2(execpool, netfile, timeout):
+	# Fetch the task name
+	task = os.path.split(os.path.splitext(netfile)[0])[1]  # Base name of the network
+	assert task, 'The network name should exists'
+	
+	algname = 'oslom2'
+	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+		, './oslom_undir', '-f', '../' + netfile, '-w')
+	# Copy results to the required dir on postprocessing
+	def postexec(job):
+		outpdir = ''.join(('-cls=./', algname, '/', task, '/'))
+		if not os.path.exists(outpdir):
+			os.os.makedirs(outpdir)
+		for fname in glob.iglob(''.join(('../', _syntdir, task, '.nsa', '_oslo_files/tp*'))):
+			fscopy(fname, outpdir)
+		
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec))
+
+
+def execGanxis(execpool, netfile, timeout):
+	# Fetch the task name
+	task = os.path.split(os.path.splitext(netfile)[0])[1]  # Base name of the network
+	assert task, 'The network name should exists'
+
+	algname = 'ganxis'
+	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+		, 'java', '-jar', './GANXiSw.jar', '-i', '../' + netfile
+		, '-d', ''.join(('-cls=./', algname, '/', task, '/')))
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout))
 
 
 def benchmark(*args):
@@ -426,28 +459,40 @@ def benchmark(*args):
 	Run the algorithms on the specified datasets respecting the parameters.
 	"""
 	exectime = time.time()
-	gensynt, udatas, wdatas, timeout = parseParams(args)
+	gensynt, convnets, udatas, wdatas, timeout = parseParams(args)
+	print("Parsed params:\n\tgensynt: {}\n\tconvnets: {}\n\tudatas: {}, \n\twdatas: {}\n\ttimeout: {}"
+		.format(gensynt, convnets, ', '.join(udatas), ', '.join(wdatas), timeout))
+	
 	if gensynt:
 		generateNets(gensynt == 2)
-	
-	raise RuntimeError('Stop')
 		
-	print("Parsed params:\n\tudatas: {}, \n\twdatas: {}\n\ttimeout: {}"
-		.format(', '.join(udatas), ', '.join(wdatas), timeout))
+	if convnets:
+		convertNets()
 	
-	udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']
-	algors = (execLouvain, execHirecs, execOslom2, execGanxis)
-	try:
-		#algtime = time.time()
-		for alg in algors:
-			alg(udatas, wdatas, timeout)
-	except StandardError as err:
-		print('The benchmark is interrupted by the exception: {} on {} sec ({} h {} m {} s)'
-			.format(err, exectime, *secondsToHms(exectime)))
-	else:
-		exectime = time.time() - exectime
-		print('The benchmark execution is successfully comleted on {} sec ({} h {} m {} s)'
-			.format(exectime, *secondsToHms(exectime)))
+	# Execute the algorithms
+	#udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']
+	algorithms = (execLouvain, execHirecs, execOslom2, execGanxis)
+	wdatas = glob.iglob('*'.join((_syntdir, _extnetfile)))
+
+	epl = ExecPool(max(min(4, cpu_count() - 1), 1))
+	netsnum = 0
+	for net in wdatas:
+		netsnum += 1
+		for alg in algorithms:
+			try:
+				alg(epl, net, timeout)
+			except StandardError as err:
+				print('The {} is interrupted by the exception: {} on {} sec ({} h {} m {} s)'
+					.format(alg.__name__, err, exectime, *secondsToHms(exectime)))
+	epl.join(timeout * netsnum)
+	exectime = time.time() - exectime
+	print('The benchmark execution is successfully comleted on {} sec ({} h {} m {} s)'
+		.format(exectime, *secondsToHms(exectime)))
+	
+	## Measure NMI
+	#epl = ExecPool(max(cpu_count() - 1, 1))
+	#
+	#epl.join(max(exectime * 2, 60 * netsnum))  # Twice the time of algorithms execution
 
 
 if __name__ == '__main__':
@@ -456,6 +501,7 @@ if __name__ == '__main__':
 	else:
 		print('\n'.join(('Usage: {0} [-g[f] | [-d{{u,w}} <datasets_dir>] [-f{{u,w}} <dataset>] [-t[{{s,m,h}}] <timeout>]',
 			'  -g[f]  - generate synthetic daatasets in the {syntdir}',
+			'  -c  - convert existing networks into the .hig format',
 			'    Xf  - force the generation even when the data is already exists',
 			'  -d[X] <datasets_dir>  - directory of the datasets',
 			'  -f[X] <dataset>  - dataset file name',

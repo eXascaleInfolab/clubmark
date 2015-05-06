@@ -24,7 +24,7 @@ from multiprocessing import cpu_count
 import collections
 #from functools import wraps
 import os
-from shutil import copy2 as fscopy
+import shutil
 from math import sqrt
 import glob
 import pajek_hig  # TODO: rename into the tohig.py or etc.
@@ -36,6 +36,7 @@ _algsdir = 'algorithms/'  # Default directory of the benchmarking algorithms
 _extnetfile = '.nsa'  # Extension of the network files to be executed by the algorithms
 _extexectime = '.rcp'  # Resource Consumption Profile
 _extclnodes = '.cnl'  # Clusters (Communities) Nodes Lists
+_nmibin = './gecmi'  # BInary for NMI evaluation
 
 
 def parseParams(args):
@@ -389,7 +390,7 @@ def generateNets(overwrite=False):
 					, './lfrbench_uwovp', '-f', name.join((paramsdir, ext)))
 				#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
 				epl.execute(Job(name=name, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=1
-					, onstart=lambda job: fscopy(_syntdir + 'time_seed.dat', name.join((_syntdir, '.ngs')))))  # Network generation seed
+					, onstart=lambda job: shutil.copy2(_syntdir + 'time_seed.dat', name.join((_syntdir, '.ngs')))))  # Network generation seed
 	print('Parameter files generation is completed')
 	epl.join(2 * 60*60)  # 2 hours
 	print('Synthetic networks files generation is completed')
@@ -424,7 +425,6 @@ def execLouvain(execpool, netfile, timeout):
 
 
 def execHirecs(execpool, netfile, timeout):
-	return
 	# Fetch the task name and chose correct network filename
 	netfile = os.path.splitext(netfile)[0]  # Remove the extension
 	task = os.path.split(netfile)[1]  # Base name of the network
@@ -455,7 +455,7 @@ def execOslom2(execpool, netfile, timeout):
 		if not os.path.exists(outpdir):
 			os.makedirs(outpdir)
 		for fname in glob.iglob(''.join((_syntdir, task, '.nsa', '_oslo_files/tp*'))):
-			fscopy(fname, outpdir)
+			shutil.copy2(fname, outpdir)
 		
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
@@ -463,7 +463,6 @@ def execOslom2(execpool, netfile, timeout):
 
 
 def execGanxis(execpool, netfile, timeout):
-	return
 	# Fetch the task name
 	task = os.path.split(os.path.splitext(netfile)[0])[1]  # Base name of the network
 	assert task, 'The network name should exists'
@@ -473,9 +472,59 @@ def execGanxis(execpool, netfile, timeout):
 		, 'java', '-jar', './GANXiSw.jar', '-i', '../' + netfile, '-d', algname + 'outp/')
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
 	logsdir = ''.join((_algsdir, algname, 'outp/'))
-	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout
+	def postexec(job):
+		outpdir = ''.join((logsdir, task, '/'))
+		if not os.path.exists(outpdir):
+			os.mkdir(outpdir)
+		for fname in glob.iglob(''.join((logsdir, 'SLPAw_', task, '_run*.icpm'))):
+			shutil.move(fname, outpdir)
+		
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
 		, stdout=''.join((logsdir, task, '.log')), stderr=''.join((logsdir, task, '.err'))))
+	
 
+def evalLouvain(execpool, cnlfile, timeout):
+	return
+
+
+def evalHirecs(execpool, cnlfile, timeout):
+	# Fetch the task name and chose correct network filename
+	task = os.path.split(os.path.splitext(cnlfile)[0])[1]  # Base name of the network
+	assert task, 'The network name should exists'
+	
+	algname = 'hirecs'
+	args = ('../exectime', '-o=./nmi' +_extexectime, ''.join(('-n=', task, '_', algname))
+		, './nmi.sh', _nmibin, '../' + cnlfile, ''.join((algname, 'outp/', task)), algname)
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
+	execpool.execute(Job(name='_'.join(('nmi', task, algname)), workdir=_algsdir, args=args
+		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/nmi_', task, '.log')), stderr=os.devnull))
+
+
+def evalOslom2(execpool, cnlfile, timeout):
+	# Fetch the task name and chose correct network filename
+	task = os.path.split(os.path.splitext(cnlfile)[0])[1]  # Base name of the network
+	assert task, 'The network name should exists'
+	
+	algname = 'oslom2'
+	args = ('../exectime', '-o=./nmi' +_extexectime, ''.join(('-n=', task, '_', algname))
+		, './nmi.sh', _nmibin, '../' + cnlfile, ''.join((algname, 'outp/', task)), algname)
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
+	execpool.execute(Job(name='_'.join(('nmi', task, algname)), workdir=_algsdir, args=args
+		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/nmi_', task, '.log')), stderr=os.devnull))
+
+
+def evalGanxis(execpool, cnlfile, timeout):
+	# Fetch the task name and chose correct network filename
+	task = os.path.split(os.path.splitext(cnlfile)[0])[1]  # Base name of the network
+	assert task, 'The network name should exists'
+	
+	algname = 'ganxis'
+	args = ('../exectime', '-o=./nmi' +_extexectime, ''.join(('-n=', task, '_', algname))
+		, './nmi.sh', _nmibin, '../' + cnlfile, ''.join((algname, 'outp/', task)), algname)
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
+	execpool.execute(Job(name='_'.join(('nmi', task, algname)), workdir=_algsdir, args=args
+		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/nmi_', task, '.log')), stderr=os.devnull))
+	
 
 def benchmark(*args):
 	""" Execute the benchmark
@@ -501,7 +550,6 @@ def benchmark(*args):
 	epl = ExecPool(max(min(4, cpu_count() - 1), 1))
 	netsnum = 0
 	for net in wdatas:
-		netsnum += 1
 		for alg in algorithms:
 			try:
 				alg(epl, net, timeout)
@@ -509,16 +557,30 @@ def benchmark(*args):
 				errexectime = time.time() - exectime
 				print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
 					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
+			else:
+				netsnum += 1
 	epl.join(timeout * netsnum)
 	exectime = time.time() - exectime
 	print('The benchmark execution is successfully comleted on {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(exectime, *secondsToHms(exectime)))
 	
-	### Measure NMI
-	#evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis)
-	#epl = ExecPool(max(cpu_count() - 1, 1))
-	#
-	#epl.join(max(exectime * 2, 60 * netsnum))  # Twice the time of algorithms execution
+	## Evaluate NMI
+	print('Starting NMI evaluation...')
+	evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis)
+	epl = ExecPool(max(cpu_count() - 1, 1))
+	netsnum = 0
+	timeout = 20 *60*60  # 20 hours
+	for cndfile in glob.iglob('*'.join((_syntdir, _extclnodes))):
+		for elg in evalalgs:
+			try:
+				elg(epl, cndfile, timeout)
+			except StandardError as err:
+				print('The {} is interrupted by the exception: {}'
+					.format(epl.__name__, err))
+			else:
+				netsnum += 1
+	epl.join(max(exectime * 2, 60 * netsnum))  # Twice the time of algorithms execution
+	print('NMI evaluation is completed')
 
 
 if __name__ == '__main__':

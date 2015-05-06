@@ -325,7 +325,7 @@ class ExecPool:
 			completion of all scheduled jobs and then is resetted.
 		"""
 		if self._tstart is None:
-			assert not self.__jobs and not self._workers, \
+			assert not self._jobs and not self._workers, \
 				'Start time should be defined for the present jobs'
 			return
 		

@@ -424,6 +424,7 @@ def execLouvain(execpool, netfile, timeout):
 
 
 def execHirecs(execpool, netfile, timeout):
+	return
 	# Fetch the task name and chose correct network filename
 	netfile = os.path.splitext(netfile)[0]  # Remove the extension
 	task = os.path.split(netfile)[1]  # Base name of the network
@@ -431,10 +432,6 @@ def execHirecs(execpool, netfile, timeout):
 	netfile += '.hig'  # Use network in the required format
 	
 	algname = 'hirecs'
-	## Check path existance for the logs
-	#outpdir = ''.join((_algsdir, algname, 'outp'))
-	#if not os.path.exists(outpdir):
-	#	os.m(outpdir)
 	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', ''.join(('-cls=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
@@ -449,34 +446,29 @@ def execOslom2(execpool, netfile, timeout):
 	assert task, 'The network name should exists'
 	
 	algname = 'oslom2'
-	# Check path existance for the logs
-	if not os.path.exists(algname):
-		os.mkdir(algname)
 	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
 		, './oslom_undir', '-f', '../' + netfile, '-w')
 	# Copy results to the required dir on postprocessing
+	logsdir = ''.join((_algsdir, algname, 'outp/'))
 	def postexec(job):
-		outpdir = ''.join(('-cls=./', algname, '/', task, '/'))
+		outpdir = ''.join((logsdir, task, '/'))
 		if not os.path.exists(outpdir):
-			os.os.makedirs(outpdir)
-		for fname in glob.iglob(''.join(('../', _syntdir, task, '.nsa', '_oslo_files/tp*'))):
+			os.makedirs(outpdir)
+		for fname in glob.iglob(''.join((_syntdir, task, '.nsa', '_oslo_files/tp*'))):
 			fscopy(fname, outpdir)
 		
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
-	logsdir = ''.join((_algsdir, algname, 'outp/'))
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
 		, stdout=''.join((logsdir, task, '.log')), stderr=''.join((logsdir, task, '.err'))))
 
 
 def execGanxis(execpool, netfile, timeout):
+	return
 	# Fetch the task name
 	task = os.path.split(os.path.splitext(netfile)[0])[1]  # Base name of the network
 	assert task, 'The network name should exists'
 
 	algname = 'ganxis'
-	# Check path existance for the logs
-	if not os.path.exists(algname):
-		os.mkdir(algname)
 	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
 		, 'java', '-jar', './GANXiSw.jar', '-i', '../' + netfile, '-d', algname + 'outp/')
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)

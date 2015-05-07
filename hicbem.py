@@ -19,15 +19,14 @@ from __future__ import print_function
 import sys
 import time
 import subprocess
-#import multiprocessing as mp
 from multiprocessing import cpu_count
 import collections
-#from functools import wraps
 import os
 import shutil
 from math import sqrt
 import glob
 import pajek_hig  # TODO: rename into the tohig.py or etc.
+#from functools import wraps
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exists and distinguish it from the file
@@ -231,6 +230,7 @@ class ExecPool:
 				job.onstart(job)
 			except Exception as err:
 				print('ERROR in onstart callback of "{}": {}'.format(job.name, err), file=sys.stderr)
+		# Consider custom output channels for the job
 		fstdout = None
 		fstderr = None
 		try:
@@ -238,12 +238,23 @@ class ExecPool:
 				basedir = os.path.split(job.stdout)[0]
 				if not os.path.exists(basedir):
 					os.makedirs(basedir)
-				fstdout = open(job.stdout, 'w')
+				try:
+					fstdout = open(job.stdout, 'w')
+				except IOError as err:
+					print('ERROR on opening custom stdout "{}" for "{}": {}. Default stdout is used.'.format(
+						job.stdout, job.name, err), file=sys.stderr)
 			if job.stderr:
 				basedir = os.path.split(job.stderr)[0]
 				if not os.path.exists(basedir):
 					os.makedirs(basedir)
-				fstderr = open(job.stderr, 'w')
+				try:
+					fstderr = open(job.stderr, 'w')
+				except IOError as err:
+					print('ERROR on opening custom stderr "{}" for "{}": {}. Default stderr is used.'.format(
+						job.stderr, job.name, err), file=sys.stderr)
+			if fstdout or fstderr:
+				print('"{}" uses custom output channels:\n\tstdout: {}\n\tstderr: {}'.format(job.name
+					, job.stdout if fstdout else '<default>', job.stderr if fstderr else '<default>'))
 			proc = subprocess.Popen(job.args, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
 		except StandardError as err:  # Should not occur: subprocess.CalledProcessError
 			if fstdout:
@@ -397,31 +408,46 @@ def generateNets(overwrite=False):
 	
 
 def convertNets():
-	print('Starting conversion into .hig format...')
-	# Convert network files into .hig format
+	print('Starting networks conversion into required formats (.hig, .lig, etc.)...')
+	# Convert network files into .hig format and .lig (Louvain Input Format)
 	for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
 		try:
 			pajek_hig.pajekToHgc(net, '-f', 'tsa')
 		except StandardError as err:
-			print('ERROR on "{}" conversion, the network is skipped: {}'.format(net), err, file=sys.stderr)
-	print('Conversion to .hig is completed')
+			print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(net), err, file=sys.stderr)
+		netnoext = os.path.splitext(net)[0]  # Remove the extension
+		try:
+			# ./convert [-r] -i graph.txt -o graph.bin -w graph.weights
+			# r  - renumber nodes
+			subprocess.call([_algsdir + 'convert', '-i', net, '-o', netnoext + '.lig'
+				, '-w', netnoext + '.liw'])
+		except StandardError as err:
+			print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
+	print('Networks conversion is completed')
 	
-
-def execLouvain(execpool, netfile, timeout):
-	return
-	## TODO: add URL to the alg src
-	#algname = 'Louvain'
-	#workdir = 'LouvainUpd'
-	#
-	## Preparation block
-	##...
-	#
-	#args = ['../exectime', 'ls']
-	#
-	##execJob(algname, workdir, args, timeout)
-	#
-	## Postprocessing block
-	##...
+	
+def execLouvain(execpool, netfile, timeout, tasknum=0):
+	"""Execute Louvain
+	Results are not stable => multiple execution is desirable.
+	
+	tasknum  - index of the execution on the same dataset
+	"""
+	# Fetch the task name and chose correct network filename
+	netfile = os.path.splitext(netfile)[0]  # Remove the extension
+	task = os.path.split(netfile)[1]  # Base name of the network
+	assert task, 'The network name should exists'
+	if tasknum:
+		task = '-'.join((task, str(tasknum)))
+	netfile = '../' + netfile  # Use network in the required format
+	
+	algname = 'louvain'
+	# ./community graph.bin -l -1 -w graph.weights > graph.tree
+	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
+		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', task, '.loc'))
+		, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
 
 
 def execHirecs(execpool, netfile, timeout):
@@ -481,49 +507,79 @@ def execGanxis(execpool, netfile, timeout):
 		
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
 		, stdout=''.join((logsdir, task, '.log')), stderr=''.join((logsdir, task, '.err'))))
+
+
+def execHirecsNounwrap(execpool, netfile, timeout):
+	"""Hirecs which performs the clustering, but does not unwrappes the wierarchy into levels,
+	just outputs the folded hierarchy"""
+	# Fetch the task name and chose correct network filename
+	netfile = os.path.splitext(netfile)[0]  # Remove the extension
+	task = os.path.split(netfile)[1]  # Base name of the network
+	assert task, 'The network name should exists'
+	netfile += '.hig'  # Use network in the required format
 	
+	algname = 'hirecshfold'
+	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+		, './hirecs', '-oc', ''.join(('-cls=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
+		, '../' + netfile)
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
+		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', task, '.hoc'))
+		, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
+	
+
+def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname='nmi', stderr=os.devnull):
+	"""Evaluate the algorithm by the specified measure
+	
+	execpool  - execution pool of worker processes
+	cnlfile  - file name of clusters for each of which nodes are listed (clsuters nodes lists file)
+	timeout  - execution timeout, 0 - infinity
+	algname  - the algorithm name that is evaluated
+	evalbin  - file name of the evaluation binary
+	evalname  - name of the evaluation measure
+	stderr  - optional redifinition of the stderr channel: None - use default, os.devnull - skip
+	"""
+	assert execpool and cnlfile and algname and evalbin and evalname, "Parameters must be defined"
+	# Fetch the task name and chose correct network filename
+	task = os.path.split(os.path.splitext(cnlfile)[0])[1]  # Base name of the network
+	assert task, 'The network name should exists'
+	
+	args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', task, '_', algname))
+		, './eval.sh', evalbin, '../' + cnlfile, ''.join((algname, 'outp/', task)), algname)
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
+	execpool.execute(Job(name='_'.join((evalname, task, algname)), workdir=_algsdir, args=args
+		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', evalname, '_', task, '.log')), stderr=stderr))
+
 
 def evalLouvain(execpool, cnlfile, timeout):
 	return
 
 
 def evalHirecs(execpool, cnlfile, timeout):
-	# Fetch the task name and chose correct network filename
-	task = os.path.split(os.path.splitext(cnlfile)[0])[1]  # Base name of the network
-	assert task, 'The network name should exists'
-	
-	algname = 'hirecs'
-	args = ('../exectime', '-o=./nmi' +_extexectime, ''.join(('-n=', task, '_', algname))
-		, './nmi.sh', _nmibin, '../' + cnlfile, ''.join((algname, 'outp/', task)), algname)
-	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
-	execpool.execute(Job(name='_'.join(('nmi', task, algname)), workdir=_algsdir, args=args
-		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/nmi_', task, '.log')), stderr=os.devnull))
+	evalAlgorithm(execpool, cnlfile, timeout, 'hirecs')
 
 
 def evalOslom2(execpool, cnlfile, timeout):
-	# Fetch the task name and chose correct network filename
-	task = os.path.split(os.path.splitext(cnlfile)[0])[1]  # Base name of the network
-	assert task, 'The network name should exists'
-	
-	algname = 'oslom2'
-	args = ('../exectime', '-o=./nmi' +_extexectime, ''.join(('-n=', task, '_', algname))
-		, './nmi.sh', _nmibin, '../' + cnlfile, ''.join((algname, 'outp/', task)), algname)
-	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
-	execpool.execute(Job(name='_'.join(('nmi', task, algname)), workdir=_algsdir, args=args
-		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/nmi_', task, '.log')), stderr=os.devnull))
+	evalAlgorithm(execpool, cnlfile, timeout, 'oslom2')
 
 
 def evalGanxis(execpool, cnlfile, timeout):
-	# Fetch the task name and chose correct network filename
-	task = os.path.split(os.path.splitext(cnlfile)[0])[1]  # Base name of the network
-	assert task, 'The network name should exists'
-	
-	algname = 'ganxis'
-	args = ('../exectime', '-o=./nmi' +_extexectime, ''.join(('-n=', task, '_', algname))
-		, './nmi.sh', _nmibin, '../' + cnlfile, ''.join((algname, 'outp/', task)), algname)
-	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
-	execpool.execute(Job(name='_'.join(('nmi', task, algname)), workdir=_algsdir, args=args
-		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/nmi_', task, '.log')), stderr=os.devnull))
+	evalAlgorithm(execpool, cnlfile, timeout, 'ganxis')
+
+
+def evalHirecsNS(execpool, cnlfile, timeout):
+	"""Evaluate Hirecs by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
+	evalAlgorithm(execpool, cnlfile, timeout, 'hirecs', evalbin='./onmi_sum', evalname='nmi-s')
+
+
+def evalOslom2NS(execpool, cnlfile, timeout):
+	"""Evaluate Oslom2 by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
+	evalAlgorithm(execpool, cnlfile, timeout, 'oslom2', evalbin='./onmi_sum', evalname='nmi-s')
+
+
+def evalGanxisNS(execpool, cnlfile, timeout):
+	"""Evaluate Ganxis by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
+	evalAlgorithm(execpool, cnlfile, timeout, 'ganxis', evalbin='./onmi_sum', evalname='nmi-s')
 	
 
 def benchmark(*args):
@@ -544,11 +600,11 @@ def benchmark(*args):
 	
 	# Execute the algorithms
 	#udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']
-	algorithms = (execLouvain, execHirecs, execOslom2, execGanxis)
 	wdatas = glob.iglob('*'.join((_syntdir, _extnetfile)))
-
 	epl = ExecPool(max(min(4, cpu_count() - 1), 1))
-	netsnum = 0
+	netsnum = 1
+
+	algorithms = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
 	for net in wdatas:
 		for alg in algorithms:
 			try:
@@ -559,6 +615,18 @@ def benchmark(*args):
 					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
 			else:
 				netsnum += 1
+	
+	# Additionally execute Louvain multiple times
+	alg = execLouvain
+	for net in wdatas:
+		for execnum in range(1, 10):
+			try:
+				alg(epl, net, timeout, execnum)
+			except StandardError as err:
+				errexectime = time.time() - exectime
+				print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
+					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
+				
 	epl.join(timeout * netsnum)
 	exectime = time.time() - exectime
 	print('The benchmark execution is successfully comleted on {:.4f} sec ({} h {} m {:.4f} s)'
@@ -566,7 +634,8 @@ def benchmark(*args):
 	
 	## Evaluate NMI
 	print('Starting NMI evaluation...')
-	evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis)
+	evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
+					, evalHirecsNS, evalOslom2NS, evalGanxisNS)
 	epl = ExecPool(max(cpu_count() - 1, 1))
 	netsnum = 0
 	timeout = 20 *60*60  # 20 hours

@@ -631,6 +631,7 @@ def benchmark(*args):
 					netsnum += 1
 		
 		# Additionally execute Louvain multiple times
+		wdatas = glob.iglob('*'.join((_syntdir, _extnetfile)))
 		alg = execLouvain
 		for net in wdatas:
 			for execnum in range(1, 10):

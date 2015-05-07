@@ -269,8 +269,8 @@ class ExecPool:
 	def __reviseWorkers(self):
 		"""Rewise the workers
 		
-		Check for the comleted jobs and their timeous and update corresponding
-		workers
+		Check for the comleted jobs and their timeous, update corresponding
+		workers and start the jobs if possible
 		"""
 		completed = []  # Completed workers
 		for proc, job in self._workers.items():
@@ -305,6 +305,10 @@ class ExecPool:
 					print('ERROR in ondone callback of "{}": {}'.format(job.name, err), file=sys.stderr)
 			del self._workers[proc]
 			print('"{}" #{} is completed'.format(job.name, proc.pid, file=sys.stderr))
+			
+		# Start subsequent job if it is required
+		while self._jobs and len(self._workers) <  self._workersLim:
+			self.__startJob(self._jobs.popleft())
 
 
 	def execute(self, job):
@@ -321,11 +325,12 @@ class ExecPool:
 		if self._tstart is None:
 			self._tstart = time.time()
 		# Schedule the job
-		self.__reviseWorkers()
-		if len(self._workers) < self._workersLim:
-			self.__startJob(job)
-		else:
+		if self._jobs or len(self._workers) >= self._workersLim:
 			self._jobs.append(job)
+			#self.__reviseWorkers()  # Anyway the workers are revised if exist in the working cycle
+		else:
+			self.__startJob(job)
+
 
 
 	def join(self, exectime=0):
@@ -342,9 +347,6 @@ class ExecPool:
 		
 		self.__reviseWorkers()
 		while self._jobs or self._workers:
-			# Start subsequent job if it is required
-			while self._jobs and len(self._workers) <  self._workersLim:
-				self.__startJob(self._jobs.popleft())
 			if exectime and time.time() - self._tstart > exectime:
 				self.__terminate()
 			time.sleep(1)

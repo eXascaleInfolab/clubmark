@@ -613,13 +613,13 @@ def benchmark(*args):
 	
 	# Run the algorithms and measure their resource consumption
 	if runalgs:
+		# Run algs on synthetic datasets
 		#udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']
-		wdatas = glob.iglob('*'.join((_syntdir, _extnetfile)))
 		epl = ExecPool(max(min(4, cpu_count() - 1), 1))
 		netsnum = 1
 	
 		algorithms = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
-		for net in wdatas:
+		for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
 			for alg in algorithms:
 				try:
 					alg(epl, net, timeout)
@@ -631,9 +631,8 @@ def benchmark(*args):
 					netsnum += 1
 		
 		# Additionally execute Louvain multiple times
-		wdatas = glob.iglob('*'.join((_syntdir, _extnetfile)))
 		alg = execLouvain
-		for net in wdatas:
+		for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
 			for execnum in range(1, 10):
 				try:
 					alg(epl, net, timeout, execnum)
@@ -641,7 +640,17 @@ def benchmark(*args):
 					errexectime = time.time() - exectime
 					print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
 						.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
-					
+		
+		# TODO: Implement execution on custom datasets considering whether they weighted / unweighted			
+		## Run algs on the specified datasets if required
+		## Unweighted networks
+		#for udat in udatas:
+		#	if not os.path.exists(udat):
+		#		print('WARNING, "{}" does not exist, skipped', file=sys.stderr)
+		#	#if os.path.isdir(udat):
+		#	#	fnames = glob.iglob('*'.join((_syntdir, _extnetfile))):
+
+
 		epl.join(timeout * netsnum)
 		exectime = time.time() - exectime
 		print('The benchmark execution is successfully comleted on {:.4f} sec ({} h {} m {:.4f} s)'

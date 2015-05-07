@@ -547,7 +547,7 @@ def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname
 	assert task, 'The network name should exists'
 	
 	args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', task, '_', algname))
-		, './eval.sh', evalbin, '../' + cnlfile, ''.join((algname, 'outp/', task)), algname)
+		, './eval.sh', evalbin, '../' + cnlfile, ''.join((algname, 'outp/', task)), algname, evalname)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((evalname, task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', evalname, '_', task, '.log')), stderr=stderr))

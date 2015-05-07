@@ -532,8 +532,7 @@ def execHirecsNounwrap(execpool, netfile, timeout):
 	
 	algname = 'hirecshfold'
 	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
-		, './hirecs', '-oc', ''.join(('-cls=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
-		, '../' + netfile)
+		, './hirecs', '-oc', '../' + netfile)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', task, '.hoc'))

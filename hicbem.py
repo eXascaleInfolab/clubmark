@@ -54,6 +54,8 @@ def parseParams(args):
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
 	gensynt = 0
 	convnets = False
+	runalgs = False
+	evalres = False
 	udatas = []
 	wdatas = []
 	timeout = 36 * 60*60  # 36 hours
@@ -75,6 +77,14 @@ def parseParams(args):
 				if arg != '-c':
 					raise ValueError('Unexpected argument: ' + arg)
 				convnets = True
+			elif arg[1] == 'r':
+				if arg != '-r':
+					raise ValueError('Unexpected argument: ' + arg)
+				runalgs = True
+			elif arg[1] == 'e':
+				if arg != '-e':
+					raise ValueError('Unexpected argument: ' + arg)
+				evalres = True
 			elif arg[1] == 'd' or arg[1] == 'f':
 				weighted = False
 				sparam = 'd'  # Dataset
@@ -103,7 +113,7 @@ def parseParams(args):
 				raise RuntimeError('Unexpected value of sparam: ' + sparam)
 			sparam = False
 	
-	return gensynt, convnets, udatas, wdatas, timeout
+	return gensynt, convnets, runalgs, evalres, udatas, wdatas, timeout
 
 
 def secondsToHms(seconds):
@@ -590,9 +600,10 @@ def benchmark(*args):
 	Run the algorithms on the specified datasets respecting the parameters.
 	"""
 	exectime = time.time()
-	gensynt, convnets, udatas, wdatas, timeout = parseParams(args)
-	print("Parsed params:\n\tgensynt: {}\n\tconvnets: {}\n\tudatas: {}, \n\twdatas: {}\n\ttimeout: {}"
-		.format(gensynt, convnets, ', '.join(udatas), ', '.join(wdatas), timeout))
+	gensynt, convnets, runalgs, evalres, udatas, wdatas, timeout = parseParams(args)
+	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tconvnets: {}'
+		'\n\trunalgs: {}\n\tevalres: {}\n\tudatas: {}, \n\twdatas: {}\n\ttimeout: {}'
+		.format(gensynt, convnets, runalgs, evalres, ', '.join(udatas), ', '.join(wdatas), timeout))
 	
 	if gensynt:
 		generateNets(gensynt == 2)
@@ -600,68 +611,73 @@ def benchmark(*args):
 	if convnets:
 		convertNets()
 	
-	# Execute the algorithms
-	#udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']
-	wdatas = glob.iglob('*'.join((_syntdir, _extnetfile)))
-	epl = ExecPool(max(min(4, cpu_count() - 1), 1))
-	netsnum = 1
-
-	algorithms = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
-	for net in wdatas:
-		for alg in algorithms:
-			try:
-				alg(epl, net, timeout)
-			except StandardError as err:
-				errexectime = time.time() - exectime
-				print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
-					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
-			else:
-				netsnum += 1
+	# Run the algorithms and measure their resource consumption
+	if runalgs:
+		#udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']
+		wdatas = glob.iglob('*'.join((_syntdir, _extnetfile)))
+		epl = ExecPool(max(min(4, cpu_count() - 1), 1))
+		netsnum = 1
 	
-	# Additionally execute Louvain multiple times
-	alg = execLouvain
-	for net in wdatas:
-		for execnum in range(1, 10):
-			try:
-				alg(epl, net, timeout, execnum)
-			except StandardError as err:
-				errexectime = time.time() - exectime
-				print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
-					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
-				
-	epl.join(timeout * netsnum)
-	exectime = time.time() - exectime
-	print('The benchmark execution is successfully comleted on {:.4f} sec ({} h {} m {:.4f} s)'
-		.format(exectime, *secondsToHms(exectime)))
+		algorithms = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
+		for net in wdatas:
+			for alg in algorithms:
+				try:
+					alg(epl, net, timeout)
+				except StandardError as err:
+					errexectime = time.time() - exectime
+					print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
+						.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
+				else:
+					netsnum += 1
+		
+		# Additionally execute Louvain multiple times
+		alg = execLouvain
+		for net in wdatas:
+			for execnum in range(1, 10):
+				try:
+					alg(epl, net, timeout, execnum)
+				except StandardError as err:
+					errexectime = time.time() - exectime
+					print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
+						.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
+					
+		epl.join(timeout * netsnum)
+		exectime = time.time() - exectime
+		print('The benchmark execution is successfully comleted on {:.4f} sec ({} h {} m {:.4f} s)'
+			.format(exectime, *secondsToHms(exectime)))
 	
-	## Evaluate NMI
-	print('Starting NMI evaluation...')
-	evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
-					, evalHirecsNS, evalOslom2NS, evalGanxisNS)
-	epl = ExecPool(max(cpu_count() - 1, 1))
-	netsnum = 0
-	timeout = 20 *60*60  # 20 hours
-	for cndfile in glob.iglob('*'.join((_syntdir, _extclnodes))):
-		for elg in evalalgs:
-			try:
-				elg(epl, cndfile, timeout)
-			except StandardError as err:
-				print('The {} is interrupted by the exception: {}'
-					.format(epl.__name__, err))
-			else:
-				netsnum += 1
-	epl.join(max(exectime * 2, 60 * netsnum))  # Twice the time of algorithms execution
-	print('NMI evaluation is completed')
+	# Evaluate results (NMI)
+	if evalres:
+		print('Starting NMI evaluation...')
+		evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
+						, evalHirecsNS, evalOslom2NS, evalGanxisNS)
+		epl = ExecPool(max(cpu_count() - 1, 1))
+		netsnum = 0
+		timeout = 20 *60*60  # 20 hours
+		for cndfile in glob.iglob('*'.join((_syntdir, _extclnodes))):
+			for elg in evalalgs:
+				try:
+					elg(epl, cndfile, timeout)
+				except StandardError as err:
+					print('The {} is interrupted by the exception: {}'
+						.format(epl.__name__, err))
+				else:
+					netsnum += 1
+		epl.join(max(exectime * 2, 60 * netsnum))  # Twice the time of algorithms execution
+		print('NMI evaluation is completed')
+	print('The benchmark is completed')
 
 
 if __name__ == '__main__':
 	if len(sys.argv) > 1:
 		benchmark(*sys.argv[1:])
 	else:
-		print('\n'.join(('Usage: {0} [-g[f] | [-d{{u,w}} <datasets_dir>] [-f{{u,w}} <dataset>] [-t[{{s,m,h}}] <timeout>]',
+		print('\n'.join(('Usage: {0} [-g[f] [-c] [-r] [-e] [-d{{u,w}} <datasets_dir>] [-f{{u,w}} <dataset>] [-t[{{s,m,h}}] <timeout>]',
 			'  -g[f]  - generate synthetic daatasets in the {syntdir}',
-			'  -c  - convert existing networks into the .hig format',
 			'    Xf  - force the generation even when the data is already exists',
+			'  -c  - convert existing networks into the .hig format',
+			'  -r  - run the applications on the prepared data',
+			'  -e  - evaluate the results through measurements',
 			'  -d[X] <datasets_dir>  - directory of the datasets',
 			'  -f[X] <dataset>  - dataset file name',
 			'    Xu  - the dataset is unweighted. Default option',
@@ -669,7 +685,7 @@ if __name__ == '__main__':
 			'    Notes:',
 			'    - multiple directories and files can be specified',
 			'    - datasets should have the following format: <node_src> <node_dest> [<weight>]',
-			'  -t[X] <number>  - specifies timeout per an algorithm in sec, min or hours. Default: 0 sec',
+			'  -t[X] <number>  - specifies timeout per each benchmarking application in sec, min or hours. Default: 0 sec',
 			'    Xs  - time in seconds. Default option',
 			'    Xm  - time in minutes',
 			'    Xh  - time in hours',

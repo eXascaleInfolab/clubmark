@@ -15,5 +15,5 @@ DATASETS=syntnets
 EXECLOG=hicbem.log  # Log for the execution status
 EXECERR=hicbem.err  # Log for execution errors
 
-echo 'Starting the benchmark: $ nohup '$PYTHON" hicbem.py -g -c -d ${DATASETS} -t$TIMEOUT_UNIT $TIMEOUT  1> ${EXECLOG}  2> ${EXECERR}"' &'
-nohup $PYTHON hicbem.py -g -c -d ${DATASETS} -t$TIMEOUT_UNIT $TIMEOUT  1> ${EXECLOG} 2> ${EXECERR} &
+echo 'Starting the benchmark in daemom mode ...'
+nohup $PYTHON hicbem.py -gf -c -r -e -d ${DATASETS} -t$TIMEOUT_UNIT $TIMEOUT  1> ${EXECLOG} 2> ${EXECERR} &

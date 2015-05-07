@@ -32,10 +32,10 @@ BESTVAL=`sort -g -r $FOUTP | head -n 1`
 echo "Best value for $3: $BESTVAL"
 
 #echo "DestDir: $3"
-BASEDIR=`echo $3 | sed 's/\(.*\)\/\w*/\1/'`
+BASEDIR=`echo $3 | sed 's/\(.*\)\/\.*/\1/'`
 #echo  "BASEDIR: $BASEDIR"
 
-TASK=`echo $3 | sed "s/\(.*\)\/\(\w*\)/\2/"`
+TASK=`echo $3 | sed "s/\(.*\)\/\(\.*\)/\2/"`
 FINFILE=`echo "$BASEDIR/$4.$EVALNAME"`
 #echo "TASK: $TASK,  FINFILE:  $FINFILE"
 echo $BESTVAL | sed "s/\(.*\)/$TASK\t\1/" >> $FINFILE

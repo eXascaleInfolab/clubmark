@@ -8,9 +8,8 @@
 # "Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti 1 and Santo Fortunato
 
 Runs hierarchical clustering algorithms on the synthetic networks and real-word datasets
-
-(c) 
-\author: Artem Lutov <artem@exascale.info>
+ 
+\author: (c) Artem Lutov <artem@exascale.info>
 \organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
 \date: 2015-04
 """
@@ -522,7 +521,7 @@ def execGanxis(execpool, netfile, timeout):
 
 
 def execHirecsNounwrap(execpool, netfile, timeout):
-	"""Hirecs which performs the clustering, but does not unwrappes the wierarchy into levels,
+	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	# Fetch the task name and chose correct network filename
 	netfile = os.path.splitext(netfile)[0]  # Remove the extension
@@ -672,11 +671,13 @@ def benchmark(*args):
 						.format(epl.__name__, err))
 				else:
 					netsnum += 1
-		epl.join(max(exectime * 2, 60 * netsnum))  # Twice the time of algorithms execution
+		epl.join(max(exectime * 2, timeout + 60 * netsnum))  # Twice the time of algorithms execution
 		print('NMI evaluation is completed')
 	print('The benchmark is completed')
 
 
+# TODO: Implement killing of the running tasks on the main process termination:
+# https://nattster.wordpress.com/2013/06/05/catch-kill-signal-in-python/
 if __name__ == '__main__':
 	if len(sys.argv) > 1:
 		benchmark(*sys.argv[1:])

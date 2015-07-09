@@ -49,6 +49,7 @@ def parseParams(args):
 		udatas  - list of unweighted datasets to be run
 		wdatas  - list of weighted datasets to be run
 		timeout  - execution timeout in sec per each algorithm
+		algorithms  - algorithms to be executed
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
 	gensynt = 0
@@ -61,6 +62,8 @@ def parseParams(args):
 	sparam = False  # Additional string parameter
 	weighted = False
 	timemul = 1  # Time multiplier, sec by default
+	algorithms = None
+	
 	for arg in args:
 		# Validate input format
 		if (arg[0] != '-') != bool(sparam) or (len(arg) < 2 if arg[0] == '-' else arg in '..'):
@@ -77,8 +80,10 @@ def parseParams(args):
 					raise ValueError('Unexpected argument: ' + arg)
 				convnets = True
 			elif arg[1] == 'r':
-				if arg != '-r':
+				if arg != '-r' or not (arg[0:3] == '-r=' and len(arg) >= 4):
 					raise ValueError('Unexpected argument: ' + arg)
+				if len(arg) >= 4:
+					algorithms = [getattr(sys.modules[__name__], alg) for alg in arg[3:].split()]
 				runalgs = True
 			elif arg[1] == 'e':
 				if arg != '-e':
@@ -111,8 +116,8 @@ def parseParams(args):
 			else:
 				raise RuntimeError('Unexpected value of sparam: ' + sparam)
 			sparam = False
-	
-	return gensynt, convnets, runalgs, evalres, udatas, wdatas, timeout
+			
+	return gensynt, convnets, runalgs, evalres, udatas, wdatas, timeout, algorithms
 
 
 def secondsToHms(seconds):
@@ -520,6 +525,42 @@ def execGanxis(execpool, netfile, timeout):
 		, stdout=''.join((logsdir, task, '.log')), stderr=''.join((logsdir, task, '.err'))))
 
 
+def execHirecsOtl(execpool, netfile, timeout):
+	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
+	just outputs the folded hierarchy"""
+	# Fetch the task name and chose correct network filename
+	netfile = os.path.splitext(netfile)[0]  # Remove the extension
+	task = os.path.split(netfile)[1]  # Base name of the network
+	assert task, 'The network name should exists'
+	netfile += '.hig'  # Use network in the required format
+	
+	algname = 'hirecsotl'
+	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+		, './hirecs', '-oc', ''.join(('-cols=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
+		, '../' + netfile)
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
+		, timeout=timeout, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
+
+
+def execHirecsAhOtl(execpool, netfile, timeout):
+	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
+	just outputs the folded hierarchy"""
+	# Fetch the task name and chose correct network filename
+	netfile = os.path.splitext(netfile)[0]  # Remove the extension
+	task = os.path.split(netfile)[1]  # Base name of the network
+	assert task, 'The network name should exists'
+	netfile += '.hig'  # Use network in the required format
+	
+	algname = 'hirecsahotl'
+	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+		, './hirecs', '-oc', ''.join(('-coas=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
+		, '../' + netfile)
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
+		, timeout=timeout, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
+	
+
 def execHirecsNounwrap(execpool, netfile, timeout):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
@@ -568,6 +609,12 @@ def evalLouvain(execpool, cnlfile, timeout):
 def evalHirecs(execpool, cnlfile, timeout):
 	evalAlgorithm(execpool, cnlfile, timeout, 'hirecs')
 
+def evalHirecsOtl(execpool, cnlfile, timeout):
+	evalAlgorithm(execpool, cnlfile, timeout, 'hirecsotl')
+
+def evalHirecsAhOtl(execpool, cnlfile, timeout):
+	evalAlgorithm(execpool, cnlfile, timeout, 'hirecsahotl')
+
 
 def evalOslom2(execpool, cnlfile, timeout):
 	evalAlgorithm(execpool, cnlfile, timeout, 'oslom2')
@@ -580,6 +627,14 @@ def evalGanxis(execpool, cnlfile, timeout):
 def evalHirecsNS(execpool, cnlfile, timeout):
 	"""Evaluate Hirecs by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
 	evalAlgorithm(execpool, cnlfile, timeout, 'hirecs', evalbin='./onmi_sum', evalname='nmi-s')
+
+def evalHirecsOtlNS(execpool, cnlfile, timeout):
+	"""Evaluate Hirecs by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
+	evalAlgorithm(execpool, cnlfile, timeout, 'hirecsotl', evalbin='./onmi_sum', evalname='nmi-s')
+
+def evalHirecsAhOtlNS(execpool, cnlfile, timeout):
+	"""Evaluate Hirecs by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
+	evalAlgorithm(execpool, cnlfile, timeout, 'hirecsahotl', evalbin='./onmi_sum', evalname='nmi-s')
 
 
 def evalOslom2NS(execpool, cnlfile, timeout):
@@ -598,7 +653,7 @@ def benchmark(*args):
 	Run the algorithms on the specified datasets respecting the parameters.
 	"""
 	exectime = time.time()
-	gensynt, convnets, runalgs, evalres, udatas, wdatas, timeout = parseParams(args)
+	gensynt, convnets, runalgs, evalres, udatas, wdatas, timeout, algorithms = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tconvnets: {}'
 		'\n\trunalgs: {}\n\tevalres: {}\n\tudatas: {}, \n\twdatas: {}\n\ttimeout: {}'
 		.format(gensynt, convnets, runalgs, evalres, ', '.join(udatas), ', '.join(wdatas), timeout))
@@ -616,7 +671,10 @@ def benchmark(*args):
 		epl = ExecPool(max(min(4, cpu_count() - 1), 1))
 		netsnum = 1
 	
-		algorithms = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
+		if not algorithms:
+			algorithms = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
+		#algorithms = (execHirecsNounwrap,)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
+		# , execHirecsOtl, execHirecsAhOtl, execHirecsNounwrap)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
 		for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
 			for alg in algorithms:
 				try:
@@ -630,14 +688,15 @@ def benchmark(*args):
 		
 		# Additionally execute Louvain multiple times
 		alg = execLouvain
-		for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
-			for execnum in range(1, 10):
-				try:
-					alg(epl, net, timeout, execnum)
-				except StandardError as err:
-					errexectime = time.time() - exectime
-					print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
-						.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
+		if alg in algorithms:
+			for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
+				for execnum in range(1, 10):
+					try:
+						alg(epl, net, timeout, execnum)
+					except StandardError as err:
+						errexectime = time.time() - exectime
+						print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
+							.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
 		
 		# TODO: Implement execution on custom datasets considering whether they weighted / unweighted			
 		## Run algs on the specified datasets if required
@@ -659,6 +718,8 @@ def benchmark(*args):
 		print('Starting NMI evaluation...')
 		evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
 						, evalHirecsNS, evalOslom2NS, evalGanxisNS)
+		#evalalgs = (evalHirecs, evalHirecsOtl, evalHirecsAhOtl
+		#				, evalHirecsNS, evalHirecsOtlNS, evalHirecsAhOtlNS)
 		epl = ExecPool(max(cpu_count() - 1, 1))
 		netsnum = 0
 		timeout = 20 *60*60  # 20 hours
@@ -671,7 +732,7 @@ def benchmark(*args):
 						.format(epl.__name__, err))
 				else:
 					netsnum += 1
-		epl.join(max(exectime * 2, timeout + 60 * netsnum))  # Twice the time of algorithms execution
+		epl.join(max(max(timeout, exectime * 2), timeout + 60 * netsnum))  # Twice the time of algorithms execution
 		print('NMI evaluation is completed')
 	print('The benchmark is completed')
 
@@ -686,7 +747,7 @@ if __name__ == '__main__':
 			'  -g[f]  - generate synthetic daatasets in the {syntdir}',
 			'    Xf  - force the generation even when the data is already exists',
 			'  -c  - convert existing networks into the .hig format',
-			'  -r  - run the applications on the prepared data',
+			'  -r[="app1 app2 ..."]  - run the applications on the prepared data',
 			'  -e  - evaluate the results through measurements',
 			'  -d[X] <datasets_dir>  - directory of the datasets',
 			'  -f[X] <dataset>  - dataset file name',

@@ -22,6 +22,7 @@ from multiprocessing import cpu_count
 import collections
 import os
 import shutil
+import signal  # Intercept kill signals
 from math import sqrt
 import glob
 import pajek_hig  # TODO: rename into the tohig.py or etc.
@@ -35,6 +36,21 @@ _extnetfile = '.nsa'  # Extension of the network files to be executed by the alg
 _extexectime = '.rcp'  # Resource Consumption Profile
 _extclnodes = '.cnl'  # Clusters (Communities) Nodes Lists
 _nmibin = './gecmi'  # BInary for NMI evaluation
+_execpool = None  # Active execution pool
+
+
+def terminationHandler(signal, frame):
+	"""Signal termination handler"""
+	global _execpool
+	
+	#if signal == signal.SIGABRT:
+	#	os.killpg(os.getpgrp(), signal)
+	#	os.kill(os.getpid(), signal)
+	
+	if _execpool:
+		del _execpool
+		_execpool = None
+	sys.exit(0)
 
 
 def parseParams(args):
@@ -192,6 +208,10 @@ class ExecPool:
 
 	def __del__(self):
 		self.__terminate()
+	
+		
+	def __finalize__(self):
+		self.__del__()
 		
 		
 	def __terminate(self):
@@ -393,8 +413,9 @@ def generateNets(overwrite=False):
 	# Generate options for the networks generation using chosen variations of params
 	varNmul = (1, 2, 5, 10, 25, 50)  # *N0
 	vark = (5, 10, 20)
+	global _execpool
 	
-	epl = ExecPool(max(cpu_count() - 1, 1))
+	_execpool = ExecPool(max(cpu_count() - 1, 1))
 	netgenTimeout = 10 * 60  # 10 min
 	for nm in varNmul:
 		N = nm * N0
@@ -416,10 +437,12 @@ def generateNets(overwrite=False):
 				args = ('../exectime', '-n=' + name, ''.join(('-o=', paramsdir, 'lfrbench_uwovp', _extexectime))
 					, './lfrbench_uwovp', '-f', name.join((paramsdir, ext)))
 				#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
-				epl.execute(Job(name=name, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=1
-					, onstart=lambda job: shutil.copy2(_syntdir + 'time_seed.dat', name.join((_syntdir, '.ngs')))))  # Network generation seed
+				if _execpool:
+					_execpool.execute(Job(name=name, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=1
+						, onstart=lambda job: shutil.copy2(_syntdir + 'time_seed.dat', name.join((_syntdir, '.ngs')))))  # Network generation seed
 	print('Parameter files generation is completed')
-	epl.join(2 * 60*60)  # 2 hours
+	if _execpool:
+		_execpool.join(2 * 60*60)  # 2 hours
 	print('Synthetic networks files generation is completed')
 	
 
@@ -663,12 +686,14 @@ def benchmark(*args):
 		
 	if convnets:
 		convertNets()
+		
+	global _execpool
 	
 	# Run the algorithms and measure their resource consumption
 	if runalgs:
 		# Run algs on synthetic datasets
 		#udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']
-		epl = ExecPool(max(min(4, cpu_count() - 1), 1))
+		_execpool = ExecPool(max(min(4, cpu_count() - 1), 1))
 		netsnum = 1
 	
 		if not algorithms:
@@ -678,7 +703,7 @@ def benchmark(*args):
 		for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
 			for alg in algorithms:
 				try:
-					alg(epl, net, timeout)
+					alg(_execpool, net, timeout)
 				except StandardError as err:
 					errexectime = time.time() - exectime
 					print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
@@ -692,7 +717,7 @@ def benchmark(*args):
 			for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
 				for execnum in range(1, 10):
 					try:
-						alg(epl, net, timeout, execnum)
+						alg(_execpool, net, timeout, execnum)
 					except StandardError as err:
 						errexectime = time.time() - exectime
 						print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
@@ -708,7 +733,8 @@ def benchmark(*args):
 		#	#	fnames = glob.iglob('*'.join((_syntdir, _extnetfile))):
 
 
-		epl.join(timeout * netsnum)
+		if _execpool:
+			_execpool.join(timeout * netsnum)
 		exectime = time.time() - exectime
 		print('The benchmark execution is successfully comleted on {:.4f} sec ({} h {} m {:.4f} s)'
 			.format(exectime, *secondsToHms(exectime)))
@@ -720,27 +746,32 @@ def benchmark(*args):
 						, evalHirecsNS, evalOslom2NS, evalGanxisNS)
 		#evalalgs = (evalHirecs, evalHirecsOtl, evalHirecsAhOtl
 		#				, evalHirecsNS, evalHirecsOtlNS, evalHirecsAhOtlNS)
-		epl = ExecPool(max(cpu_count() - 1, 1))
+		_execpool = ExecPool(max(cpu_count() - 1, 1))
 		netsnum = 0
 		timeout = 20 *60*60  # 20 hours
 		for cndfile in glob.iglob('*'.join((_syntdir, _extclnodes))):
 			for elg in evalalgs:
 				try:
-					elg(epl, cndfile, timeout)
+					elg(_execpool, cndfile, timeout)
 				except StandardError as err:
 					print('The {} is interrupted by the exception: {}'
-						.format(epl.__name__, err))
+						.format(_execpool.__name__, err))
 				else:
 					netsnum += 1
-		epl.join(max(max(timeout, exectime * 2), timeout + 60 * netsnum))  # Twice the time of algorithms execution
+		if _execpool:
+			_execpool.join(max(max(timeout, exectime * 2), timeout + 60 * netsnum))  # Twice the time of algorithms execution
 		print('NMI evaluation is completed')
 	print('The benchmark is completed')
 
 
-# TODO: Implement killing of the running tasks on the main process termination:
-# https://nattster.wordpress.com/2013/06/05/catch-kill-signal-in-python/
 if __name__ == '__main__':
 	if len(sys.argv) > 1:
+		# Set handlers of external signals
+		signal.signal(signal.SIGTERM, terminationHandler)
+		signal.signal(signal.SIGHUP, terminationHandler)
+		signal.signal(signal.SIGINT, terminationHandler)
+		signal.signal(signal.SIGQUIT, terminationHandler)
+		signal.signal(signal.SIGABRT, terminationHandler)
 		benchmark(*sys.argv[1:])
 	else:
 		print('\n'.join(('Usage: {0} [-g[f] [-c] [-r] [-e] [-d{{u,w}} <datasets_dir>] [-f{{u,w}} <dataset>] [-t[{{s,m,h}}] <timeout>]',

@@ -526,13 +526,11 @@ def benchmark(*args):
 	
 		if not algorithms:
 			#algs = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
+			#algs = (execHirecsNounwrap,)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
+			# , execHirecsOtl, execHirecsAhOtl, execHirecsNounwrap)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
 			algs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith('exec')]
 		else:
 			algs = [getattr(appsmodule, 'exec' + alg.capitalize(), unknownApp('exec' + alg.capitalize())) for alg in algorithms]
-		#algs = (execHirecsNounwrap,)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
-		# , execHirecsOtl, execHirecsAhOtl, execHirecsNounwrap)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
-		print(algs)
-		return
 
 		for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
 			for alg in algs:
@@ -580,17 +578,13 @@ def benchmark(*args):
 		if not algorithms:
 			#evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
 			#				, evalHirecsNS, evalOslom2NS, evalGanxisNS)
+			#evalalgs = (evalHirecs, evalHirecsOtl, evalHirecsAhOtl
+			#				, evalHirecsNS, evalHirecsOtlNS, evalHirecsAhOtlNS)
 			evalalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith('eval')]
 		else:
 			evalalgs = chain(*[(getattr(appsmodule, 'eval' + alg.capitalize(), unknownApp('eval' + alg.capitalize())),
 				getattr(appsmodule, ''.join(('eval', alg.capitalize(), 'NS')), unknownApp(''.join(('eval', alg.capitalize(), 'NS')))))
 				for alg in algorithms])
-		#evalalgs = (evalHirecs, evalHirecsOtl, evalHirecsAhOtl
-		#				, evalHirecsNS, evalHirecsOtlNS, evalHirecsAhOtlNS)
-		for alg in evalalgs:
-			print(alg, ' ')
-		#print([alg for alg in evalalgs])
-		return
 
 		assert not _execpool, '_execpool should be clear on algs evaluation'
 		_execpool = ExecPool(max(cpu_count() - 1, 1))

@@ -99,46 +99,45 @@ def parseParams(args):
 		if arg[0] != '-':
 			raise ValueError('Unexpected argument: ' + arg)
 		
-		if arg[0] == '-':
-			if arg[1] == 'g':
-				if arg not in '-gf':
-					raise ValueError('Unexpected argument: ' + arg)
-				gensynt = len(arg) - 1  # '-gf'  - forced generation (overwrite)
-			elif arg[1] == 'a':
-				if not (arg[0:3] == '-a=' and len(arg) >= 4):
-					raise ValueError('Unexpected argument: ' + arg)
-				algorithms = arg[3:].split()
-			elif arg[1] == 'c':
-				if arg != '-c':
-					raise ValueError('Unexpected argument: ' + arg)
-				convnets = True
-			elif arg[1] == 'r':
-				if arg != '-r':
-					raise ValueError('Unexpected argument: ' + arg)
-				runalgs = True
-			elif arg[1] == 'e':
-				if arg != '-e':
-					raise ValueError('Unexpected argument: ' + arg)
-				evalres = True
-			elif arg[1] == 'd' or arg[1] == 'f':
-				pos = arg.find('=', 2)
-				if pos == -1 or arg[2] not in 'uw=' or len(arg) == pos + 1:
-					raise ValueError('Unexpected argument: ' + arg)
-				pos += 1
-				# Extend weighted / unweighted dataset, default is unweighted
-				(wdatas if arg[2] == 'w' else udatas).append(arg[pos+1:])
-			elif arg[1] == 't':
-				pos = arg.find('=', 2)
-				if pos == -1 or arg[2] not in 'smh=' or len(arg) == pos + 1:
-					raise ValueError('Unexpected argument: ' + arg)
-				pos += 1
-				if arg[2] == 'm':
-					timemul = 60  # Minutes
-				elif arg[2] == 'h':
-					timemul = 3600  # Hours
-				timeout = int(arg[pos:]) * timemul
-			else:
+		if arg[1] == 'g':
+			if arg not in '-gf':
 				raise ValueError('Unexpected argument: ' + arg)
+			gensynt = len(arg) - 1  # '-gf'  - forced generation (overwrite)
+		elif arg[1] == 'a':
+			if not (arg[0:3] == '-a=' and len(arg) >= 4):
+				raise ValueError('Unexpected argument: ' + arg)
+			algorithms = arg[3:].split()
+		elif arg[1] == 'c':
+			if arg != '-c':
+				raise ValueError('Unexpected argument: ' + arg)
+			convnets = True
+		elif arg[1] == 'r':
+			if arg != '-r':
+				raise ValueError('Unexpected argument: ' + arg)
+			runalgs = True
+		elif arg[1] == 'e':
+			if arg != '-e':
+				raise ValueError('Unexpected argument: ' + arg)
+			evalres = True
+		elif arg[1] == 'd' or arg[1] == 'f':
+			pos = arg.find('=', 2)
+			if pos == -1 or arg[2] not in 'uw=' or len(arg) == pos + 1:
+				raise ValueError('Unexpected argument: ' + arg)
+			pos += 1
+			# Extend weighted / unweighted dataset, default is unweighted
+			(wdatas if arg[2] == 'w' else udatas).append(arg[pos+1:])
+		elif arg[1] == 't':
+			pos = arg.find('=', 2)
+			if pos == -1 or arg[2] not in 'smh=' or len(arg) == pos + 1:
+				raise ValueError('Unexpected argument: ' + arg)
+			pos += 1
+			if arg[2] == 'm':
+				timemul = 60  # Minutes
+			elif arg[2] == 'h':
+				timemul = 3600  # Hours
+			timeout = int(arg[pos:]) * timemul
+		else:
+			raise ValueError('Unexpected argument: ' + arg)
 			
 	return gensynt, convnets, runalgs, evalres, udatas, wdatas, timeout, algorithms
 

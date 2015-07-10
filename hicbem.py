@@ -25,6 +25,7 @@ import shutil
 import signal  # Intercept kill signals
 from math import sqrt
 import glob
+from itertools import chain
 import pajek_hig  # TODO: rename into the tohig.py or etc.
 #from functools import wraps
 
@@ -65,7 +66,7 @@ def parseParams(args):
 		udatas  - list of unweighted datasets to be run
 		wdatas  - list of weighted datasets to be run
 		timeout  - execution timeout in sec per each algorithm
-		algorithms  - algorithms to be executed
+		algorithms  - algorithms to be executed (just names as in the code)
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
 	gensynt = 0
@@ -91,15 +92,17 @@ def parseParams(args):
 				if arg not in '-gf':
 					raise ValueError('Unexpected argument: ' + arg)
 				gensynt = len(arg) - 1  # '-gf'  - forced generation (overwrite)
+			elif arg[1] == 'a':
+				if not (arg[0:3] == '-a=' and len(arg) >= 4):
+					raise ValueError('Unexpected argument: ' + arg)
+				algorithms = arg[3:].split()
 			elif arg[1] == 'c':
 				if arg != '-c':
 					raise ValueError('Unexpected argument: ' + arg)
 				convnets = True
 			elif arg[1] == 'r':
-				if arg != '-r' or not (arg[0:3] == '-r=' and len(arg) >= 4):
+				if arg != '-r':
 					raise ValueError('Unexpected argument: ' + arg)
-				if len(arg) >= 4:
-					algorithms = [getattr(sys.modules[__name__], alg) for alg in arg[3:].split()]
 				runalgs = True
 			elif arg[1] == 'e':
 				if arg != '-e':
@@ -458,6 +461,7 @@ def convertNets():
 		try:
 			# ./convert [-r] -i graph.txt -o graph.bin -w graph.weights
 			# r  - renumber nodes
+			# ATTENTION: original Louvain implementation processes incorrectly weighted networks with uniform weights (=1) if supplied as unweighted
 			subprocess.call([_algsdir + 'convert', '-i', net, '-o', netnoext + '.lig'
 				, '-w', netnoext + '.liw'])
 		except StandardError as err:
@@ -668,7 +672,12 @@ def evalOslom2NS(execpool, cnlfile, timeout):
 def evalGanxisNS(execpool, cnlfile, timeout):
 	"""Evaluate Ganxis by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
 	evalAlgorithm(execpool, cnlfile, timeout, 'ganxis', evalbin='./onmi_sum', evalname='nmi-s')
-	
+
+
+def nonimplemented(name):
+	def stub(*args):
+		print(' '.join(('ERROR: ', name, 'function is not implemented, the call is skipped.')), file=sys.stderr)
+
 
 def benchmark(*args):
 	""" Execute the benchmark
@@ -697,11 +706,13 @@ def benchmark(*args):
 		netsnum = 1
 	
 		if not algorithms:
-			algorithms = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
+			algs = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
+		else:
+			algs = [getattr(sys.modules[__name__], 'exec' + alg.capitalize(), nonimplemented('exec' + alg.capitalize())) for alg in algorithms]
 		#algorithms = (execHirecsNounwrap,)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
 		# , execHirecsOtl, execHirecsAhOtl, execHirecsNounwrap)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
 		for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
-			for alg in algorithms:
+			for alg in algs:
 				try:
 					alg(_execpool, net, timeout)
 				except StandardError as err:
@@ -713,7 +724,7 @@ def benchmark(*args):
 		
 		# Additionally execute Louvain multiple times
 		alg = execLouvain
-		if alg in algorithms:
+		if alg in algs:
 			for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
 				for execnum in range(1, 10):
 					try:
@@ -742,8 +753,13 @@ def benchmark(*args):
 	# Evaluate results (NMI)
 	if evalres:
 		print('Starting NMI evaluation...')
-		evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
-						, evalHirecsNS, evalOslom2NS, evalGanxisNS)
+		if not algorithms:
+			evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
+							, evalHirecsNS, evalOslom2NS, evalGanxisNS)
+		else:
+			evalalgs = chain(*[(getattr(sys.modules[__name__], 'eval' + alg.capitalize(), nonimplemented('eval' + alg.capitalize())),
+				getattr(sys.modules[__name__], ''.join(('eval', alg.capitalize(), 'NS')), nonimplemented(''.join(('eval', alg.capitalize(), 'NS')))))
+				for alg in algorithms])
 		#evalalgs = (evalHirecs, evalHirecsOtl, evalHirecsAhOtl
 		#				, evalHirecsNS, evalHirecsOtlNS, evalHirecsAhOtlNS)
 		_execpool = ExecPool(max(cpu_count() - 1, 1))
@@ -777,8 +793,10 @@ if __name__ == '__main__':
 		print('\n'.join(('Usage: {0} [-g[f] [-c] [-r] [-e] [-d{{u,w}} <datasets_dir>] [-f{{u,w}} <dataset>] [-t[{{s,m,h}}] <timeout>]',
 			'  -g[f]  - generate synthetic daatasets in the {syntdir}',
 			'    Xf  - force the generation even when the data is already exists',
-			'  -c  - convert existing networks into the .hig format',
-			'  -r[="app1 app2 ..."]  - run the applications on the prepared data',
+			'  -a[="app1 app2 ..."]  - apps to benchmark among the implemented.'
+			' Impacts -{c, r, e} options. Optional, all apps are executed by default.',
+			'  -c  - convert existing networks into the .hig, .lig, etc. formats',
+			'  -r  - run the applications on the prepared data',
 			'  -e  - evaluate the results through measurements',
 			'  -d[X] <datasets_dir>  - directory of the datasets',
 			'  -f[X] <dataset>  - dataset file name',

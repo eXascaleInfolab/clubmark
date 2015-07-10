@@ -29,7 +29,7 @@
 \date: 2015-04
 """
 
-from __future__ import print_function
+from __future__ import print_function  # Required for stderr output, must be the first import
 import sys
 import time
 import subprocess
@@ -618,7 +618,7 @@ if __name__ == '__main__':
 			'    Xu  - the dataset is unweighted. Default option',
 			'    Xw  - the dataset is weighted',
 			'    Notes:',
-			'    - multiple directories and files can be specified',
+			'    - multiple directories and files can be specified via multiple -d/f options (one per the item)',
 			'    - datasets should have the following format: <node_src> <node_dest> [<weight>]',
 			'  -t[X]=<number>  - specifies timeout per each benchmarking application in sec, min or hours. Default: 0 sec',
 			'    Xs  - time in seconds. Default option',

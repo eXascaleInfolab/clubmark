@@ -83,16 +83,14 @@ def louvain(*args):
 	if outdir and not os.path.exists(outdir):
 		os.makedirs(outdir)
 
-	i = 0
-	for lev in hier:
+	for i, lev in enumerate(hier):
 		# Output statistics to the stderr
-		print('Q: {:.6f}. {}.'.format(hier[i].q, hier[i].summary()), file=sys.stderr)
+		print('Q: {:.6f}, lev: {}. {}.'.format(hier[i].q, i, hier[i].summary()), file=sys.stderr)
 		if perlev:
 			with open('{}_{}{}'.format(outpcoms, i, outpext), 'w') as fout:
 				for cl in lev:
 					fout.write(' '.join([str(nid) for nid in cl]))
 					fout.write('\n')
-				i += 1
 		else:
 			# Merge all hier levels excluding identical communities, use idNums comparison (len, sum, sum2)
 			for cl in lev:

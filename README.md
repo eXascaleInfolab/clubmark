@@ -49,7 +49,7 @@ Basically the framework executes a set of algorithms on the specified datasets i
 - `./benchmark.py`  - run the benchmark in the terminal (interactive mode)
 - `./benchmark_daemon.sh`  - run the benchmark in background (daemon mode)
 
-*Note: Execution of the benchmark was verified only on Linux Ubuntu 14.04 x64, but should work on any platform*
+*Note: Execution of the benchmark was verified only on Linux Ubuntu 14.04 x64, but it should work on any platform if corresponding external executables (algorithms, nmi evaluation apps, etc.) are provided for the required platforms.*
 
 To see possible input parameters just run the benchmark without arguments:
 ```

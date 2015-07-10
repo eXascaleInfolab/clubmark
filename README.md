@@ -1,7 +1,6 @@
 # HiCBeM - Generic Benchmarking Framework with customization for evaluation of <br />Hierarchical Clustering Algorithms with Overlaps
 \author: (c) [Artem Lutov](artem@exascale.info)  
 \organizations: [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
-\date: 2015  
 
 ## Generic Benchmarking Framework
 - optionally generates or preprocesses datasets using specified executable(s)
@@ -14,7 +13,7 @@ Traces are saved even in case of internal / external interruptions and crashes.
 ## Overlapping Hierarhical Clusterig Benchmark
 The benchmark is implemented as customization of the Generic Benchmarking Framework with:
 - synthetic datasets are generated using extended [LFR Framework](https://sites.google.com/site/santofortunato/inthepress2) ("Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti 1 and Santo Fortunato)
-- executes [HiReCS](www.lumais.com/hirecs) (www.lumais.com/hirecs), [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm) and [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only") clustering algorithms on the generated synthetic networks
+- executes [HiReCS](http://www.lumais.com/hirecs) (www.lumais.com/hirecs), [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm) and [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only") clustering algorithms on the generated synthetic networks
 - evaluates results using NMI for overlapping communities, extended versions of:
   * gecmi (https://bitbucket.org/dsign/gecmi/wiki/Home, "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall)
   * onmi (https://github.com/aaronmcdaid/Overlapping-NMI, "Normalized Mutual Information to evaluate overlapping community finding algorithms" by  Aaron F. McDaid, Derek Greene, Neil Hurley)
@@ -35,7 +34,7 @@ Basically the framework executes a set of algorithms on the specified datasets i
 ### External tools that are used as executables
 * [Extended LFR Benchmark](3dparty/lfrbench_weight-undir-ovp) for undirected weighted networks with overlaps, origins: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files
 * [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption: https://bitbucket.org/lumais/exectime/
-* Clustering algorithms, used in the benchmarking: [HiReCS](www.lumais.com/hirecs), [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm) and [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/)
+* Clustering algorithms, used in the benchmarking: [HiReCS](http://www.lumais.com/hirecs), [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm) and [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/)
  
 ## Usage
 - `./install_depends.sh`  - install dependencies

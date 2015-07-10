@@ -1,4 +1,4 @@
-# HiCBeM - Generic Benchmarking Framework with customization for evaluation of <br />Hierarchical Clustering Algorithms with Overlaps
+# HiCBeM - Generic Benchmarking Framework with customization for the evaluation of <br />Hierarchical Clustering Algorithms with Overlaps
 \author: (c) [Artem Lutov](artem@exascale.info)  
 \organizations: [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
 

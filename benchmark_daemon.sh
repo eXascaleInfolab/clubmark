@@ -16,4 +16,4 @@ EXECLOG=hicbem.log  # Log for the execution status
 EXECERR=hicbem.err  # Log for execution errors
 
 echo 'Starting the benchmark in daemom mode ...'
-nohup $PYTHON benchmark.py -gf -c -r -e -d ${DATASETS} -t$TIMEOUT_UNIT $TIMEOUT  1> ${EXECLOG} 2> ${EXECERR} &
+nohup $PYTHON benchmark.py -gf -c -r -e -d=${DATASETS} -t$TIMEOUT_UNIT=$TIMEOUT  1> ${EXECLOG} 2> ${EXECERR} &

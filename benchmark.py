@@ -91,16 +91,13 @@ def parseParams(args):
 	udatas = []
 	wdatas = []
 	timeout = 36 * 60*60  # 36 hours
-	sparam = False  # Additional string parameter
-	weighted = False
 	timemul = 1  # Time multiplier, sec by default
 	algorithms = None
 	
 	for arg in args:
 		# Validate input format
-		if (arg[0] != '-') != bool(sparam) or (len(arg) < 2 if arg[0] == '-' else arg in '..'):
-			raise ValueError(''.join(('Unexpected argument'
-				, ', file/dir name is expected: ' if sparam else ': ', arg)))
+		if arg[0] != '-':
+			raise ValueError('Unexpected argument: ' + arg)
 		
 		if arg[0] == '-':
 			if arg[1] == 'g':
@@ -124,32 +121,24 @@ def parseParams(args):
 					raise ValueError('Unexpected argument: ' + arg)
 				evalres = True
 			elif arg[1] == 'd' or arg[1] == 'f':
-				weighted = False
-				sparam = 'd'  # Dataset
-				if len(arg) >= 3:
-					if arg[2] not in 'uw' or len(arg) > 3:
-						raise ValueError('Unexpected argument: ' + arg)
-					weighted = arg[2] == 'w'
+				pos = arg.find('=', 2)
+				if pos == -1 or arg[2] not in 'uw=' or len(arg) == pos + 1:
+					raise ValueError('Unexpected argument: ' + arg)
+				pos += 1
+				# Extend weighted / unweighted dataset, default is unweighted
+				(wdatas if arg[2] == 'w' else udatas).append(arg[pos+1:])
 			elif arg[1] == 't':
-				sparam = 't'  # Time
-				if len(arg) >= 3:
-					if arg[2] not in 'smh' or len(arg) > 3:
-						raise ValueError('Unexpected argument: ' + arg)
-					if arg[2] == 'm':
-						timemul = 60  # Minutes
-					elif arg[2] == 'h':
-						timemul = 3600  # Hours
+				pos = arg.find('=', 2)
+				if pos == -1 or arg[2] not in 'smh=' or len(arg) == pos + 1:
+					raise ValueError('Unexpected argument: ' + arg)
+				pos += 1
+				if arg[2] == 'm':
+					timemul = 60  # Minutes
+				elif arg[2] == 'h':
+					timemul = 3600  # Hours
+				timeout = int(arg[pos:]) * timemul
 			else:
 				raise ValueError('Unexpected argument: ' + arg)
-		else:
-			assert sparam in 'dt', "sparam should be either dataset file/dir or time"
-			if sparam == 'd':
-				(wdatas if weighted else udatas).append(arg)
-			elif sparam == 't':
-				timeout = int(arg) * timemul
-			else:
-				raise RuntimeError('Unexpected value of sparam: ' + sparam)
-			sparam = False
 			
 	return gensynt, convnets, runalgs, evalres, udatas, wdatas, timeout, algorithms
 
@@ -616,7 +605,7 @@ if __name__ == '__main__':
 		signal.signal(signal.SIGABRT, terminationHandler)
 		benchmark(*sys.argv[1:])
 	else:
-		print('\n'.join(('Usage: {0} [-g[f] [-c] [-r] [-e] [-d{{u,w}} <datasets_dir>] [-f{{u,w}} <dataset>] [-t[{{s,m,h}}] <timeout>]',
+		print('\n'.join(('Usage: {0} [-g[f] [-c] [-r] [-e] [-d{{u,w}}=<datasets_dir>] [-f{{u,w}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
 			'  -g[f]  - generate synthetic daatasets in the {syntdir}',
 			'    Xf  - force the generation even when the data is already exists',
 			'  -a[="app1 app2 ..."]  - apps to benchmark among the implemented.'
@@ -624,16 +613,15 @@ if __name__ == '__main__':
 			'  -c  - convert existing networks into the .hig, .lig, etc. formats',
 			'  -r  - run the applications on the prepared data',
 			'  -e  - evaluate the results through measurements',
-			'  -d[X] <datasets_dir>  - directory of the datasets',
-			'  -f[X] <dataset>  - dataset file name',
+			'  -d[X]=<datasets_dir>  - directory of the datasets',
+			'  -f[X]=<dataset>  - dataset file name',
 			'    Xu  - the dataset is unweighted. Default option',
 			'    Xw  - the dataset is weighted',
 			'    Notes:',
 			'    - multiple directories and files can be specified',
 			'    - datasets should have the following format: <node_src> <node_dest> [<weight>]',
-			'  -t[X] <number>  - specifies timeout per each benchmarking application in sec, min or hours. Default: 0 sec',
+			'  -t[X]=<number>  - specifies timeout per each benchmarking application in sec, min or hours. Default: 0 sec',
 			'    Xs  - time in seconds. Default option',
 			'    Xm  - time in minutes',
 			'    Xh  - time in hours',
-			))
-			.format(sys.argv[0], syntdir=_syntdir))
+			)).format(sys.argv[0], syntdir=_syntdir))

@@ -1,4 +1,7 @@
 # HiCBeM - Generic Benchmarking Framework with customization for evaluation of <br />Hierarchical Clustering Algorithms with Overlaps
+\author: (c) [Artem Lutov](artem@exascale.info)  
+\organizations: [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
+\date: 2015  
 
 ## Generic Benchmarking Framework
 - optionally generates or preprocesses datasets using specified executable(s)
@@ -27,12 +30,42 @@ Basically the framework executes a set of algorithms on the specified datasets i
 
 ### Libraries
 
-* [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `pip install python-igraph`
+* [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`
 
 ### External tools that are used as executables
 * [Extended LFR Benchmark](3dparty/lfrbench_weight-undir-ovp) for undirected weighted networks with overlaps, origins: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files
 * [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption: https://bitbucket.org/lumais/exectime/
 * Clustering algorithms, used in the benchmarking: [HiReCS](www.lumais.com/hirecs), [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm) and [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/)
+ 
+## Usage
+- `./install_depends.sh`  - install dependencies
+- `./benchmark.py`  - run the benchmark in the interactive (terminal) mode
+- `./hicbem_daemon.sh`  - run the benchmark in background (daemon) mode
+
+*Note: Execution of the benchmark was verified only on Linux Ubuntu 14.04 x64, but should work on any platform*
+
+To see possible input parameters just run the benchmark without arguments:
+```
+$ ./benchmark.py 
+Usage: ./benchmark.py [-g[f] [-c] [-r] [-e] [-d{u,w} <datasets_dir>] [-f{u,w} <dataset>] [-t[{s,m,h}] <timeout>]
+  -g[f]  - generate synthetic daatasets in the syntnets/
+    Xf  - force the generation even when the data is already exists
+  -a[="app1 app2 ..."]  - apps to benchmark among the implemented. Impacts -{c, r, e} options. Optional, all apps are executed by default.
+  -c  - convert existing networks into the .hig, .lig, etc. formats
+  -r  - run the applications on the prepared data
+  -e  - evaluate the results through measurements
+  -d[X] <datasets_dir>  - directory of the datasets
+  -f[X] <dataset>  - dataset file name
+    Xu  - the dataset is unweighted. Default option
+    Xw  - the dataset is weighted
+    Notes:
+    - multiple directories and files can be specified
+    - datasets should have the following format: <node_src> <node_dest> [<weight>]
+  -t[X] <number>  - specifies timeout per each benchmarking application in sec, min or hours. Default: 0 sec
+    Xs  - time in seconds. Default option
+    Xm  - time in minutes
+    Xh  - time in hours
+```
 
 ## Related Projects
 * [HiReCS](https://github.com/XI-lab/hirecs) - High Resolution Hierarchical Clustering with Stable State: https://github.com/XI-lab/hirecs

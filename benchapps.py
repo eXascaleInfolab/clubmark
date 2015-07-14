@@ -43,6 +43,7 @@ def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname
 
 
 # Louvain
+# Original Louvain
 def execLouvain(execpool, netfile, timeout, tasknum=0):
 	"""Execute Louvain
 	Results are not stable => multiple execution is desirable.
@@ -71,7 +72,8 @@ def evalLouvain(execpool, cnlfile, timeout):
 	return
 
 
-def execLouvain_igraph(execpool, netfile, timeout, tasknum=0):
+# Igraph implementation of the Louvain
+def execLouvainIG(execpool, netfile, timeout, tasknum=0):
 	"""Execute Louvain
 	Results are not stable => multiple execution is desirable.
 	
@@ -97,7 +99,7 @@ def execLouvain_igraph(execpool, netfile, timeout, tasknum=0):
 		, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
 
 
-def evalLouvain_igraph(execpool, cnlfile, timeout):
+def evalLouvainIG(execpool, cnlfile, timeout):
 	return
 
 

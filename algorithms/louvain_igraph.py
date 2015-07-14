@@ -27,6 +27,7 @@ def parseParams(args):
 		outpext  - extension of the output file
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
+	network = None
 	dirnet = False
 	outpcoms, outpext = os.path.splitext(outpfile)
 
@@ -53,7 +54,7 @@ def parseParams(args):
 			raise ValueError('Unexpected argument: ' + arg)
 		
 	if not network:
-		raise ValueError('Input network filename must be specified')
+		raise ValueError('Input network file name must be specified')
 			
 	return network, dirnet, perlev, outpcoms, outpext
 
@@ -67,7 +68,7 @@ def louvain(*args):
 		'\n\tperlev output: {}, communities: {}'
 		.format('directed' if dirnet else 'undirected', network
 			, perlev, outpcoms + outpext))
-	## Load Data from simple real-world networks
+	# Load Data from simple real-world networks
 	graph = ig.Graph.Read_Ncol(network, directed=dirnet)  # , weights=False
 	hier = graph.community_multilevel(return_levels=True)
 	# Output levels
@@ -123,7 +124,7 @@ if __name__ == '__main__':
 	if len(sys.argv) > 1:
 		louvain(*sys.argv[1:])
 	else:
-		print('\n'.join(('Usage: {} -i[{{u,d}}]=<input_network> [-o[l]=<output_communities>]',
+		print('\n'.join(('Usage: {} -i[{{u, d}}]=<input_network> [-o[l]=<output_communities>]',
 			'  -i[X]=<input_network>  - file of the input network in the format: <src_id> <dst_id> [<weight>]',
 			'    Xu  - undirected input network (<src_id> <dst_id> implies also <dst_id> <src_id>). Default',
 			'    Xd  - directed input network (both <src_id> <dst_id> and <dst_id> <src_id> are specified)',

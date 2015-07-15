@@ -11,9 +11,10 @@ fi
 
 TIMEOUT=36
 TIMEOUT_UNIT=h
-DATASETS=syntnets
+#DATASETS=syntnets
 EXECLOG=hicbem.log  # Log for the execution status
 EXECERR=hicbem.err  # Log for execution errors
 
 echo 'Starting the benchmark in daemom mode ...'
-nohup $PYTHON benchmark.py -gf -c -r -e -d=${DATASETS} -t$TIMEOUT_UNIT=$TIMEOUT  1> ${EXECLOG} 2> ${EXECERR} &
+#  -dw=${DATASETS}
+nohup $PYTHON benchmark.py -gf -c -r -e -t$TIMEOUT_UNIT=$TIMEOUT  1> ${EXECLOG} 2> ${EXECERR} &

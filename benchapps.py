@@ -15,6 +15,12 @@
 
 import os
 
+# Add algorithms modules
+import sys
+sys.path.insert(0, 'algorithms')
+from louvain_igraph import louvain
+from randcommuns import randcommuns
+
 
 _nmibin = './gecmi'  # Binary for NMI evaluation
 
@@ -43,36 +49,55 @@ def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname
 
 
 # Louvain
-# Original Louvain
-def execLouvain(execpool, netfile, timeout, tasknum=0):
-	"""Execute Louvain
-	Results are not stable => multiple execution is desirable.
-	
-	tasknum  - index of the execution on the same dataset
-	"""
-	# Fetch the task name and chose correct network filename
-	netfile = os.path.splitext(netfile)[0]  # Remove the extension
-	task = os.path.split(netfile)[1]  # Base name of the network
-	assert task, 'The network name should exists'
-	if tasknum:
-		task = '-'.join((task, str(tasknum)))
-	netfile = '../' + netfile  # Use network in the required format
-	
-	algname = 'louvain'
-	# ./community graph.bin -l -1 -w graph.weights > graph.tree
-	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
-		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
-	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
-	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
-		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', task, '.loc'))
-		, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
-
-
-def evalLouvain(execpool, cnlfile, timeout):
-	return
+## Original Louvain
+#def execLouvain(execpool, netfile, timeout, tasknum=0):
+#	"""Execute Louvain
+#	Results are not stable => multiple execution is desirable.
+#	
+#	tasknum  - index of the execution on the same dataset
+#	"""
+#	# Fetch the task name and chose correct network filename
+#	netfile = os.path.splitext(netfile)[0]  # Remove the extension
+#	task = os.path.split(netfile)[1]  # Base name of the network
+#	assert task, 'The network name should exists'
+#	if tasknum:
+#		task = '-'.join((task, str(tasknum)))
+#	netfile = '../' + netfile  # Use network in the required format
+#	
+#	algname = 'louvain'
+#	# ./community graph.bin -l -1 -w graph.weights > graph.tree
+#	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+#		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
+#	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
+#	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
+#		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', task, '.loc'))
+#		, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
+#
+#
+#def evalLouvain(execpool, cnlfile, timeout):
+#	return
 
 
 # Igraph implementation of the Louvain
+	# Fetch the task name
+	task = os.path.split(os.path.splitext(netfile)[0])[1]  # Base name of the network
+	assert task, 'The network name should exists'
+	
+	algname = 'oslom2'
+	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+		, './oslom_undir', '-f', '../' + netfile, '-w')
+	# Copy results to the required dir on postprocessing
+	logsdir = ''.join((_algsdir, algname, 'outp/'))
+	def postexec(job):
+		outpdir = ''.join((logsdir, task, '/'))
+		if not os.path.exists(outpdir):
+			os.makedirs(outpdir)
+		for fname in glob.iglob(''.join((_syntdir, task, '.nsa', '_oslo_files/tp*'))):
+			shutil.copy2(fname, outpdir)
+		
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
+		, stdout=''.join((logsdir, task, '.log')), stderr=''.join((logsdir, task, '.err'))))
 def execLouvainIG(execpool, netfile, timeout, tasknum=0):
 	"""Execute Louvain
 	Results are not stable => multiple execution is desirable.
@@ -84,7 +109,7 @@ def execLouvainIG(execpool, netfile, timeout, tasknum=0):
 	task = os.path.split(netfile)[1]  # Base name of the network
 	assert task, 'The network name should exists'
 	if tasknum:
-		task = '-'.join((task, str(tasknum)))
+		task = '_'.join((task, str(tasknum)))
 	netfile = '../' + netfile  # Use network in the required format
 	
 	algname = 'louvain_igraph'
@@ -101,6 +126,10 @@ def execLouvainIG(execpool, netfile, timeout, tasknum=0):
 
 def evalLouvainIG(execpool, cnlfile, timeout):
 	return
+
+
+# Random Disjoing Clustering
+
 
 
 # HiReCS

@@ -1,1 +1,0 @@
-3dparty/pajek_hig.py

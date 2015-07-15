@@ -42,17 +42,22 @@ from math import sqrt
 import glob
 from itertools import chain
 import benchapps  # Benchmarking apps (clustering algs)
-import pajek_hig  # TODO: rename into the tohig.py or etc.
+
+# Add 3dparty modules
+sys.path.insert(0, '3dparty')
+from tohig import tohig
 #from functools import wraps
 
 
-# Note: '/' is required in the end of the dir to evaluate whether it is already exists and distinguish it from the file
+# Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 _syntdir = 'syntnets/'  # Default directory for the synthetic generated datasets
 _algsdir = 'algorithms/'  # Default directory of the benchmarking algorithms
-_extnetfile = '.nsa'  # Extension of the network files to be executed by the algorithms
+_extnetfile = '.nsa'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated arcs
 _extexectime = '.rcp'  # Resource Consumption Profile
 _extclnodes = '.cnl'  # Clusters (Communities) Nodes Lists
 _execpool = None  # Active execution pool
+_netshuffles = 9  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
+#_algseeds = 9  # TODO: Implement
 
 
 def terminationHandler(signal, frame):
@@ -75,9 +80,12 @@ def parseParams(args):
 	return
 		gensynt  - generate synthetic networks:
 			0 - do not generate
-			1 - generate only if this network is not exists
+			1 - generate only if this network is not exist
 			2 - force geration (overwrite all)
 		convnets  - convert existing networks into the .hig format
+			0 - do not convert
+			1 - convert only if this network is not exist
+			2 - force conversion (overwrite all)
 		udatas  - list of unweighted datasets to be run
 		wdatas  - list of weighted datasets to be run
 		timeout  - execution timeout in sec per each algorithm
@@ -85,7 +93,7 @@ def parseParams(args):
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
 	gensynt = 0
-	convnets = False
+	convnets = 0
 	runalgs = False
 	evalres = False
 	udatas = []
@@ -108,9 +116,9 @@ def parseParams(args):
 				raise ValueError('Unexpected argument: ' + arg)
 			algorithms = arg[3:].split()
 		elif arg[1] == 'c':
-			if arg != '-c':
+			if arg not in '-cf':
 				raise ValueError('Unexpected argument: ' + arg)
-			convnets = True
+			convnets = len(arg) - 1  # '-cf'  - forced conversion (overwrite)
 		elif arg[1] == 'r':
 			if arg != '-r':
 				raise ValueError('Unexpected argument: ' + arg)
@@ -453,23 +461,48 @@ def generateNets(overwrite=False):
 	print('Synthetic networks files generation is completed')
 	
 
-def convertNets():
-	print('Starting networks conversion into required formats (.hig, .lig, etc.)...')
+def convertNets(datadir, overwrite=False):
+	"""Gonvert input networks to another formats
+	
+		datadir  - directory of the networks to be converted
+		overwrite  - whether to overwrite existing networks or use them
+	"""
+	print('Converting networks from {} into the required formats (.hig, .lig, etc.)...'
+		.format(datadir))
 	# Convert network files into .hig format and .lig (Louvain Input Format)
-	for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
+	for net in glob.iglob('*'.join((datadir, _extnetfile))):
 		try:
-			pajek_hig.pajekToHgc(net, '-f', 'tsa')
+			# Convert to .hig format
+			tohig(net, ('-f=tsa'))  # Network in the tab separated weighted arcs format
 		except StandardError as err:
-			print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(net), err, file=sys.stderr)
+			print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(net, err), file=sys.stderr)
+		
 		netnoext = os.path.splitext(net)[0]  # Remove the extension
-		try:
-			# ./convert [-r] -i graph.txt -o graph.bin -w graph.weights
-			# r  - renumber nodes
-			# ATTENTION: original Louvain implementation processes incorrectly weighted networks with uniform weights (=1) if supplied as unweighted
-			subprocess.call([_algsdir + 'convert', '-i', net, '-o', netnoext + '.lig'
-				, '-w', netnoext + '.liw'])
-		except StandardError as err:
-			print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
+
+		## Confert to Louvain binaty input format
+		#try:
+		#	# ./convert [-r] -i graph.txt -o graph.bin -w graph.weights
+		#	# r  - renumber nodes
+		#	# ATTENTION: original Louvain implementation processes incorrectly weighted networks with uniform weights (=1) if supplied as unweighted
+		#	subprocess.call([_algsdir + 'convert', '-i', net, '-o', netnoext + '.lig'
+		#		, '-w', netnoext + '.liw'])
+		#except StandardError as err:
+		#	print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
+		
+		# Make shuffled copies of the input networks for the Louvain_igraph
+		#if not os.path.exists(netnoext) or overwrite:
+		print('Shuffling {} into {} {} times...'.format(net, netnoext, _netshuffles))
+		if not os.path.exists(netnoext):
+			os.makedirs(netnoext)
+		netname = os.path.split(netnoext)[1]
+		assert netname, 'netname should be defined'
+		for i in range(_netshuffles):
+			# sort -R pgp_udir.net -o pgp_udir_rand3.net
+			subprocess.call(['sort', '-R', net, '-o', os.path.join(netnoext,
+				''.join((netname, '_', str(i), _extnetfile)))])
+		#else:
+		#	print('The shuffling is skipped: {} is already exist'.format(netnoext))
+				
 	print('Networks conversion is completed')
 
 
@@ -494,15 +527,16 @@ def benchmark(*args):
 	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tconvnets: {}'
 		'\n\trunalgs: {}\n\tevalres: {}\n\tudatas: {}, \n\twdatas: {}\n\ttimeout: {}'
 		.format(gensynt, convnets, runalgs, evalres, ', '.join(udatas), ', '.join(wdatas), timeout))
+	# TODO: Implement consideration of udata, wdata (or just datadir - for some algs weighted/unweighted are defined from the file)
 	
 	if gensynt:
-		generateNets(gensynt == 2)
+		generateNets(gensynt == 2)  # 0 - do not generate, 1 - only if not exists, 2 - forced generation
 		
 	if convnets:
-		convertNets()
+		convertNets(_syntdir, convnets == 2)  # 0 - do not convert, 1 - only if not exists, 2 - forced conversion
 		
 	global _execpool
-	appsmodule = benchapps  # sys.modules[__name__]
+	appsmodule = benchapps  # Module with algorithms definitions to be run; sys.modules[__name__]
 	
 	# Run the algorithms and measure their resource consumption
 	if runalgs:
@@ -604,14 +638,15 @@ if __name__ == '__main__':
 		signal.signal(signal.SIGABRT, terminationHandler)
 		benchmark(*sys.argv[1:])
 	else:
-		print('\n'.join(('Usage: {0} [-g[f] [-c] [-r] [-e] [-d{{u,w}}=<datasets_dir>] [-f{{u,w}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
-			'  -g[f]  - generate synthetic daatasets in the {syntdir}',
-			'    Xf  - force the generation even when the data is already exists',
+		print('\n'.join(('Usage: {0} [-g[f] [-c[f]] [-r] [-e] [-d{{u,w}}=<datasets_dir>] [-f{{u,w}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
+			'  -g[f]  - generate synthetic datasets in the {syntdir}',
+			'    Xf  - force the generation even when the data is already exist',
 			'  -a[="app1 app2 ..."]  - apps to benchmark among the implemented.'
-			' Impacts -{{c, r, e}} options. Optional, all apps are executed by default.',
-			'  -c  - convert existing networks into the .hig, .lig, etc. formats',
-			'  -r  - run the applications on the prepared data',
-			'  -e  - evaluate the results through measurements',
+			' Impacts -{{c, r, e}} options. Optional, all apps are executed by default',
+			'  -c[f]  - convert existing networks into the .hig, .lig, etc. formats',
+			'    Xf  - force the conversion even when the data is already exist',
+			'  -r  - run the benchmarking apps on the prepared data',
+			'  -e  - evaluate the results through the measurements',
 			'  -d[X]=<datasets_dir>  - directory of the datasets',
 			'  -f[X]=<dataset>  - dataset file name',
 			'    Xu  - the dataset is unweighted. Default option',

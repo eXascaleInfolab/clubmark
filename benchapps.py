@@ -141,6 +141,9 @@ def execLouvain_ig(execpool, netfile, timeout, selfexec=False):
 	logsbase = ''.join((_algsdir, algname, 'outp/', task))
 	resext = '.las'  # Louvain accum statistics
 	if not selfexec:
+		outpdir = ''.join((_algsdir, algname, 'outp/'))
+		if not os.path.exists(outpdir):
+			os.makedirs(outpdir)
 		# Just erase the file of the accum results
 		with open(logsbase + resext, 'w') as accres:
 			accres.write('# Accumulated final results\n')
@@ -203,7 +206,7 @@ def execRandcommuns(execpool, netfile, timeout, selfexec=False):
 			
 
 def evalRandcommuns(execpool, cnlfile, timeout):
-	print('Applying {} to {}'.format('randcommuns', cnlfile))
+	#print('Applying {} to {}'.format('randcommuns', cnlfile))
 	evalAlgorithm(execpool, cnlfile, timeout, 'randcommuns')
 			
 

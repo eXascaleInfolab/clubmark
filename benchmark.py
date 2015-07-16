@@ -364,11 +364,10 @@ def benchmark(*args):
 		for cndfile in glob.iglob('*'.join((_syntdir, _extclnodes))):
 			for elg in evalalgs:
 				try:
-					print('Starting ' + str(elg))
 					elg(_execpool, cndfile, timeout)
 				except StandardError as err:
 					print('The {} is interrupted by the exception: {}'
-						.format(_execpool.__name__, err))
+						.format(elg.__name__, err))
 				else:
 					netsnum += 1
 		if _execpool:

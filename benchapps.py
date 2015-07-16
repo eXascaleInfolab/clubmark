@@ -14,14 +14,25 @@
 """
 
 import os
+import shutil
+import glob
+import subprocess
 
 # Add algorithms modules
 import sys
 sys.path.insert(0, 'algorithms')
 from louvain_igraph import louvain
 from randcommuns import randcommuns
+from benchcore import Job
+
+from benchcore import _syntdir
+from benchcore import _extexectime
+from benchcore import _extclnodes
 
 
+# Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
+_algsdir = 'algorithms/'  # Default directory of the benchmarking algorithms
+_logext = '.log'
 _nmibin = './gecmi'  # Binary for NMI evaluation
 
 
@@ -45,7 +56,19 @@ def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname
 		, './eval.sh', evalbin, '../' + cnlfile, ''.join((algname, 'outp/', task)), algname, evalname)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((evalname, task, algname)), workdir=_algsdir, args=args
-		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', evalname, '_', task, '.log')), stderr=stderr))
+		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', evalname, '_', task, _logext)), stderr=stderr))
+	
+	# Evaluate also shuffled networks if exists
+	i = 0
+	taskex = ''.join((task, '_', str(i)))
+	while os.path.exists(''.join((_algsdir, algname, 'outp/', taskex))):
+		args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', taskex, '_', algname))
+			, './eval.sh', evalbin, '../' + cnlfile, ''.join((algname, 'outp/', taskex)), algname, evalname)
+		#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
+		execpool.execute(Job(name='_'.join((evalname, taskex, algname)), workdir=_algsdir, args=args
+			, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', evalname, '_', taskex, _logext)), stderr=stderr))
+		i += 1
+		taskex = ''.join((task, '_', str(i)))
 
 
 # Louvain
@@ -71,61 +94,85 @@ def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname
 #	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 #	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 #		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', task, '.loc'))
-#		, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
+#		, stderr=''.join((_algsdir, algname, 'outp/', task, _logext))))
 #
 #
 #def evalLouvain(execpool, cnlfile, timeout):
 #	return
 
 
-# Igraph implementation of the Louvain
-	# Fetch the task name
-	task = os.path.split(os.path.splitext(netfile)[0])[1]  # Base name of the network
-	assert task, 'The network name should exists'
-	
-	algname = 'oslom2'
-	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
-		, './oslom_undir', '-f', '../' + netfile, '-w')
-	# Copy results to the required dir on postprocessing
-	logsdir = ''.join((_algsdir, algname, 'outp/'))
-	def postexec(job):
-		outpdir = ''.join((logsdir, task, '/'))
-		if not os.path.exists(outpdir):
-			os.makedirs(outpdir)
-		for fname in glob.iglob(''.join((_syntdir, task, '.nsa', '_oslo_files/tp*'))):
-			shutil.copy2(fname, outpdir)
-		
-	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
-	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
-		, stdout=''.join((logsdir, task, '.log')), stderr=''.join((logsdir, task, '.err'))))
-def execLouvainIG(execpool, netfile, timeout, tasknum=0):
+## Igraph implementation of the Louvain
+#	# Fetch the task name
+#	task = os.path.split(os.path.splitext(netfile)[0])[1]  # Base name of the network
+#	assert task, 'The network name should exists'
+#	
+#	algname = 'oslom2'
+#	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+#		, './oslom_undir', '-f', '../' + netfile, '-w')
+#	# Copy results to the required dir on postprocessing
+#	logsdir = ''.join((_algsdir, algname, 'outp/'))
+#	def postexec(job):
+#		outpdir = ''.join((logsdir, task, '/'))
+#		if not os.path.exists(outpdir):
+#			os.makedirs(outpdir)
+#		for fname in glob.iglob(''.join((_syntdir, task, '.nsa', '_oslo_files/tp*'))):
+#			shutil.copy2(fname, outpdir)
+#		
+#	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
+#	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
+#		, stdout=''.join((logsdir, task, _logext)), stderr=''.join((logsdir, task, '.err'))))
+def execLouvain_ig(execpool, netfile, timeout, selfexec=False):
 	"""Execute Louvain
 	Results are not stable => multiple execution is desirable.
-	
-	tasknum  - index of the execution on the same dataset
 	"""
 	# Fetch the task name and chose correct network filename
-	netfile = os.path.splitext(netfile)[0]  # Remove the extension
+	netfile, netext = os.path.splitext(netfile)  # Remove the extension
 	task = os.path.split(netfile)[1]  # Base name of the network
 	assert task, 'The network name should exists'
-	if tasknum:
-		task = '_'.join((task, str(tasknum)))
-	netfile = '../' + netfile  # Use network in the required format
+	#if tasknum:
+	#	task = '_'.join((task, str(tasknum)))
 	
 	algname = 'louvain_igraph'
-	# ./community graph.bin -l -1 -w graph.weights > graph.tree
-	with open(os.devnull, 'w') as fotmp:
-		pyexec = 'pypy' if subprocess.call(['which', 'pypy'], stdout=fotmp) == 0 else 'python'
+	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -ol=louvain_igoutp/1K5/1K5.cnl
+	pyexec = 'python'
+	#with open(os.devnull, 'w') as fotmp:
+	#	pyexec = 'pypy' if subprocess.call(['which', 'pypy'], stdout=fotmp) == 0 else 'python'
+	
+	logsbase = ''.join((_algsdir, algname, 'outp/', task))
+	resext = '.las'  # Louvain accum statistics
+	if not selfexec:
+		# Just erase the file of the accum results
+		with open(logsbase + resext, 'w') as accres:
+			accres.write('# Accumulated final results\n')
+
+	def postexec(job):
+		"""Copy final modularity output to the separate file"""
+		# File name of the accumulated result
+		accname = (logsbase[:logsbase.rfind('_')] if selfexec else logsbase) + resext
+		with open(accname, 'a') as accres:  # Append to the end
+			subprocess.call(['tail', '-n 1', logsbase + _logext], stdout=accres)
+
 	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
-		, ''.join((pyexec, ' ./', algname, '.py')), netfile)
+		, pyexec, ''.join(('./', algname, '.py')), ''.join(('-i=../', netfile, netext))
+		, ''.join(('-ol=', algname, 'outp/', task, _extclnodes)))
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
-	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
-		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', task, '.loc'))
-		, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout
+		, ondone=postexec, stdout=os.devnull, stderr=''.join((logsbase, _logext))))
+	
+	# Run again for all shuffled nets
+	if not selfexec:
+		selfexec = True
+		for netfile in glob.iglob(''.join((_syntdir, task, '/*', netext))):
+			execLouvain_ig(execpool, netfile, timeout, selfexec)
+			
 
+def evalLouvain_ig(execpool, cnlfile, timeout):
+	evalAlgorithm(execpool, cnlfile, timeout, 'louvain_igraph')
+			
 
-def evalLouvainIG(execpool, cnlfile, timeout):
-	return
+def evalLouvain_igNS(execpool, cnlfile, timeout):
+	"""Evaluate Louvain_igraph by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
+	evalAlgorithm(execpool, cnlfile, timeout, 'louvain_igraph', evalbin='./onmi_sum', evalname='nmi-s')
 
 
 # Random Disjoing Clustering
@@ -146,7 +193,7 @@ def execHirecs(execpool, netfile, timeout):
 		, '../' + netfile)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
-		, timeout=timeout, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
+		, timeout=timeout, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, _logext))))
 
 
 def evalHirecs(execpool, cnlfile, timeout):
@@ -173,7 +220,7 @@ def execHirecsOtl(execpool, netfile, timeout):
 		, '../' + netfile)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
-		, timeout=timeout, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
+		, timeout=timeout, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, _logext))))
 
 
 def evalHirecsOtl(execpool, cnlfile, timeout):
@@ -200,7 +247,7 @@ def execHirecsAhOtl(execpool, netfile, timeout):
 		, '../' + netfile)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
-		, timeout=timeout, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
+		, timeout=timeout, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, _logext))))
 
 
 def evalHirecsAhOtl(execpool, cnlfile, timeout):
@@ -227,13 +274,14 @@ def execHirecsNounwrap(execpool, netfile, timeout):
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', task, '.hoc'))
-		, stderr=''.join((_algsdir, algname, 'outp/', task, '.log'))))
+		, stderr=''.join((_algsdir, algname, 'outp/', task, _logext))))
 
 
 # Oslom2
 def execOslom2(execpool, netfile, timeout):
 	# Fetch the task name
-	task = os.path.split(os.path.splitext(netfile)[0])[1]  # Base name of the network
+	task, netext = os.path.splitext(netfile)
+	task = os.path.split(task)[1]  # Base name of the network
 	assert task, 'The network name should exists'
 	
 	algname = 'oslom2'
@@ -242,15 +290,22 @@ def execOslom2(execpool, netfile, timeout):
 	# Copy results to the required dir on postprocessing
 	logsdir = ''.join((_algsdir, algname, 'outp/'))
 	def postexec(job):
+		# Copy communities output
 		outpdir = ''.join((logsdir, task, '/'))
 		if not os.path.exists(outpdir):
 			os.makedirs(outpdir)
-		for fname in glob.iglob(''.join((_syntdir, task, '.nsa', '_oslo_files/tp*'))):
+		for fname in glob.iglob(''.join((_syntdir, task, netext, '_oslo_files/tp*'))):
 			shutil.copy2(fname, outpdir)
+		# Move dir
+		outpdire = ''.join((logsdir, 'extra/'))
+		if not os.path.exists(outpdire):
+			os.makedirs(outpdire)
+		for dname in glob.iglob(''.join((_syntdir, task, netext, '_oslo_files/'))):
+			shutil.move(dname, outpdire)
 		
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
-		, stdout=''.join((logsdir, task, '.log')), stderr=''.join((logsdir, task, '.err'))))
+		, stdout=''.join((logsdir, task, _logext)), stderr=''.join((logsdir, task, '.err'))))
 
 
 def evalOslom2(execpool, cnlfile, timeout):
@@ -281,7 +336,7 @@ def execGanxis(execpool, netfile, timeout):
 			shutil.move(fname, outpdir)
 		
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
-		, stdout=''.join((logsdir, task, '.log')), stderr=''.join((logsdir, task, '.err'))))
+		, stdout=''.join((logsdir, task, _logext)), stderr=''.join((logsdir, task, '.err'))))
 
 
 def evalGanxis(execpool, cnlfile, timeout):

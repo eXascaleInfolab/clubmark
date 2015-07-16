@@ -50,6 +50,12 @@ def parseParams(args):
 			pos += 1
 			perlev = arg[2] == 'l'
 			outpcoms, outpext = os.path.splitext(arg[pos:])
+			# Create files in the folder if required
+			if perlev:
+				netname = os.path.split(outpcoms)[1]
+				if not netname:
+					raise ValueError('Unexpected argument: ' + arg)
+				outpcoms = os.path.join(outpcoms, netname)
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
 		
@@ -129,5 +135,5 @@ if __name__ == '__main__':
 			'    Xu  - undirected input network (<src_id> <dst_id> implies also <dst_id> <src_id>). Default',
 			'    Xd  - directed input network (both <src_id> <dst_id> and <dst_id> <src_id> are specified)',
 			'  -o[l]=<output_communities>  - output all distinct communities of the hierarchy to the <output_communities>. Default: {}',
-			'    ol  - output all communities in each hier level to the seaparate file <output_communities>_<lev_num>'
+			'    ol  - output all communities in each hier level to the seaparate file <output_communities>/<output_communities>_<lev_num>'
 		)).format(sys.argv[0], outpfile))

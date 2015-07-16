@@ -52,7 +52,7 @@ def topcommuns(communs, *args):
 	comsnum, resname, unique = parseParams(args)
 	if not resname:
 		resname, resext = os.path.splitext(communs)
-		resname = ''.join((resname, '_top', str(comsnum), resext))
+		resname = ''.join((resname, '_top', str(comsnum), '-u' if unique else '', resext))
 	print('Starting topcommuns:'
 		'\n\tcommuns: {}'
 		'\n\tcomsnum: {}'

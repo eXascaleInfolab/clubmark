@@ -28,6 +28,7 @@ from benchcore import Job
 from benchcore import _syntdir
 from benchcore import _extexectime
 from benchcore import _extclnodes
+from benchcore import _netshuffles
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
@@ -137,7 +138,6 @@ def execLouvain_ig(execpool, netfile, timeout, selfexec=False):
 	pyexec = 'python'
 	#with open(os.devnull, 'w') as fotmp:
 	#	pyexec = 'pypy' if subprocess.call(['which', 'pypy'], stdout=fotmp) == 0 else 'python'
-	
 	logsbase = ''.join((_algsdir, algname, 'outp/', task))
 	resext = '.las'  # Louvain accum statistics
 	if not selfexec:
@@ -176,7 +176,38 @@ def evalLouvain_igNS(execpool, cnlfile, timeout):
 
 
 # Random Disjoing Clustering
+def execRandcommuns(execpool, netfile, timeout, selfexec=False):
+	"""Execute Randcommuns
+	Results are not stable => multiple execution is desirable.
+	"""
+	# Fetch the task name and chose correct network filename
+	netfile, netext = os.path.splitext(netfile)  # Remove the extension
+	task = os.path.split(netfile)[1]  # Base name of the network
+	assert task, 'The network name should exists'
+	#if tasknum:
+	#	task = '_'.join((task, str(tasknum)))
+	
+	algname = 'randcommuns'
+	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
+	pyexec = 'python'
+	#with open(os.devnull, 'w') as fotmp:
+	#	pyexec = 'pypy' if subprocess.call(['which', 'pypy'], stdout=fotmp) == 0 else 'python'
+	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+		, pyexec, ''.join(('./', algname, '.py')), ''.join(('-g=../', netfile, _extclnodes))
+		, ''.join(('-i=../', netfile, netext)), ''.join(('-o=', algname, 'outp/', task))
+		, ''.join(('-n=', str(_netshuffles + 1))))
+	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout
+		, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, _logext))))
+			
 
+def evalRandcommuns(execpool, cnlfile, timeout):
+	evalAlgorithm(execpool, cnlfile, timeout, 'randcommuns')
+			
+
+def evalRandcommunsNS(execpool, cnlfile, timeout):
+	"""Evaluate Randcommuns by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
+	evalAlgorithm(execpool, cnlfile, timeout, 'randcommuns', evalbin='./onmi_sum', evalname='nmi-s')
 
 
 # HiReCS

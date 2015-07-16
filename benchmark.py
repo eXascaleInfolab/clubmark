@@ -52,10 +52,10 @@ from benchcore import _syntdir
 from benchcore import _extexectime
 from benchcore import _extclnodes
 from benchcore import _execpool
+from benchcore import _netshuffles
 
 
 _extnetfile = '.nsa'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated arcs
-_netshuffles = 9  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
 #_algseeds = 9  # TODO: Implement
 
 

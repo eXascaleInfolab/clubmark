@@ -27,8 +27,9 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 	* [HiReCS](http://www.lumais.com/hirecs) (www.lumais.com/hirecs),
 	* [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations),
 	* [Oslom2](http://www.oslom.org/software.htm) and
-	* [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*)  
-clustering algorithms on the generated synthetic networks. Output results (clusters, hierarchy, modularty, etc.) of the clustering algorithms are stored in the corresponding files.
+	* [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*)
+
+	clustering algorithms on the generated synthetic networks. Output results (clusters, hierarchy, modularty, etc.) of the clustering algorithms are stored in the corresponding files.
 - evaluates results using NMI for overlapping communities, extended versions (to have uniform input / output formats) of:
   * gecmi (https://bitbucket.org/dsign/gecmi/wiki/Home, "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall)
   * onmi (https://github.com/aaronmcdaid/Overlapping-NMI, "Normalized Mutual Information to evaluate overlapping community finding algorithms" by Aaron F. McDaid, Derek Greene, Neil Hurley)
@@ -36,7 +37,7 @@ clustering algorithms on the generated synthetic networks. Output results (clust
 
 All results and traces are stored into the corresponding files even in case of internal (crash) / external termination of the benchmarking applications or the whole framework.
 
-*Note: valuable extensions of the employed external applications are uploaded into ./3dparty/*
+ > Note: valuable extensions of the employed external applications are uploaded into ./3dparty/
 
 Basically the framework executes a set of algorithms on the specified datasets in interactive or daemon mode, logging the resources consumption, output and exceptions, providing workflow management (termination by timeout, resistance to exceptions, etc.).
 
@@ -46,8 +47,13 @@ Basically the framework executes a set of algorithms on the specified datasets i
 
 ### Libraries
 * [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`  
-*Note: `python-igraph` depends on `libz` and `libxml2`, which are installed on Linux Ubuntu in a such way:  
-`$ sudo apt-get install lib32z1-dev libxml2-dev`*
+
+> Note:
+- `python-igraph` depends on `libz` and `libxml2`, which are installed on Linux Ubuntu in a such way:  
+`$ sudo apt-get install lib32z1-dev libxml2-dev`
+- `gecmi`, which is used for the NMI_ovp evaluation depends on:
+	* `libboost_program_options.so.1.54.0`, to install execute: `$ sudo apt-get install libboost-program-options1.54.0`
+	* `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
 
 ### External tools that are used as executables
 - [Extended LFR Benchmark](3dparty/lfrbench_weight-undir-ovp) for the undirected weighted networks with overlaps (origins are here: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files)
@@ -59,7 +65,7 @@ Basically the framework executes a set of algorithms on the specified datasets i
 - `./benchmark.py`  - run the benchmark in the terminal (interactive mode)
 - `./benchmark_daemon.sh`  - run the benchmark in background (daemon mode)
 
-*Note: Execution of the benchmark was verified only on Linux Ubuntu 14.04 x64, but it should work on any platform if corresponding external executables (algorithms, nmi evaluation apps, etc.) are provided for the required platforms.*
+> Note: Execution of the benchmark was verified only on Linux Ubuntu 14.04 x64, but it should work on any platform if corresponding external executables (algorithms, nmi evaluation apps, etc.) are provided for the required platforms.
 
 To see possible input parameters just run the benchmark without the arguments: `$ ./benchmark.py`.
 

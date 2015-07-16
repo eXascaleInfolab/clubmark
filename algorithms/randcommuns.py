@@ -1,7 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-\descr: Produces rand disjoint communities (clusters) for the given network with sizes similar in the ground truth
+\descr: Produces rand disjoint communities (clusters) for the given network with sizes similar in the ground truth.
+	Takes number of the resulting communities and their sizes from the specified groundtruth (actually any sample
+	of the community structure, the real ground truth is not required) and fills stubs of the clusters with
+	randomly selected nodes from the input network with all their neighbors.
+	Note: Produced result is a random disjoint partitioning, so if the 'ground truth' had overlapping clusters, then
+	the number of nodes in the last cluster will be less than in the sample.
+
 \author: Artem Lutov <luart@ya.ru>
 \organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
 \date: 2015-07
@@ -38,13 +44,11 @@ def parseParams(args):
 
 	for arg in args:
 		# Validate input format
-		if arg[0] != '-':
+		preflen = 3
+		if arg[0] != '-' or len(arg) <= preflen:
 			raise ValueError('Unexpected argument: ' + arg)
 			
-		preflen = 3
 		if arg[1] == 'g':
-			if len(arg) <= preflen or arg[:preflen] != '-g=':
-				raise ValueError('Unexpected argument: ' + arg)
 			groundtruth = arg[preflen:]
 			outext = os.path.splitext(groundtruth)[1]
 		elif arg[1] == 'i':
@@ -58,17 +62,11 @@ def parseParams(args):
 			if not outname:
 				raise ValueError('Invalid network name (is a directory): ' + network)
 		elif arg[1] == 'n':
-			if len(arg) <= preflen or arg[:preflen] != '-n=':
-				raise ValueError('Unexpected argument: ' + arg)
 			outnum = int(arg[preflen:])
 			assert outnum >= 1, "outnum must be a natural number" 
 		elif arg[1] == 'r':
-			if len(arg) <= preflen or arg[:preflen] != '-r=':
-				raise ValueError('Unexpected argument: ' + arg)
 			randseed = arg[preflen:]
 		elif arg[1] == 'o':
-			if len(arg) <= preflen or arg[:preflen] != '-o=':
-				raise ValueError('Unexpected argument: ' + arg)
 			outdir = arg[preflen:]
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
@@ -89,7 +87,7 @@ def parseParams(args):
 def randcommuns(*args):
 	"""Generate random clusterings for the specified network"""
 	groundtruth, network, dirnet, outnum, randseed, outdir, outname, outext = parseParams(args)
-	print('Starting randcommuns) clustering:'
+	print('Starting randcommuns clustering:'
 		'\n\tgroundtruth: {}'
 		'\n\t{} network: {}'
 		'\n\t{} {} in {} with randseed: {}'
@@ -157,7 +155,8 @@ if __name__ == '__main__':
 	if len(sys.argv) > 2:
 		randcommuns(*sys.argv[1:])
 	else:
-		print('\n'.join(('Usage: {} -g=<ground_truth> -i[{{u, d}}]=<input_network> [-n=<res_num>] [-r=<rand_seed>] [-o=<outp_dir>]',
+		print('\n'.join(('Produces random disjoint partitioning (clusters are formed with rand nodes and their neighbors)\n',
+			'Usage: {} -g=<ground_truth> -i[{{u, d}}]=<input_network> [-n=<res_num>] [-r=<rand_seed>] [-o=<outp_dir>]',
 			'  -g=<ground_truth>  - ground truth clustering as a template for sizes of the resulting communities',
 			'  -i[X]=<input_network>  - file of the input network in the format: <src_id> <dst_id> [<weight>]',
 			'    Xu  - undirected input network (<src_id> <dst_id> implies also <dst_id> <src_id>). Default',

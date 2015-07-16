@@ -49,11 +49,13 @@ Basically the framework executes a set of algorithms on the specified datasets i
 * [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`  
 
 > Note:
-- `python-igraph` depends on `libz` and `libxml2`, which are installed on Linux Ubuntu in a such way:  
+- `python-igraph` depends on `libz` and `libxml2`, which are installed in Linux Ubuntu executing:  
 `$ sudo apt-get install lib32z1-dev libxml2-dev`
 - `gecmi`, which is used for the NMI_ovp evaluation depends on:
 	* `libboost_program_options.so.1.54.0`, to install execute: `$ sudo apt-get install libboost-program-options1.54.0`
 	* `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
+>	
+>	This dependencies are uploaded to `./algorithms/gecmi_deps/`.
 
 ### External tools that are used as executables
 - [Extended LFR Benchmark](3dparty/lfrbench_weight-undir-ovp) for the undirected weighted networks with overlaps (origins are here: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files)

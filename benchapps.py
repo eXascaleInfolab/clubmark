@@ -167,6 +167,7 @@ def execLouvain_ig(execpool, netfile, timeout, selfexec=False):
 			
 
 def evalLouvain_ig(execpool, cnlfile, timeout):
+	#print('Applying {} to {}'.format('louvain_igraph', cnlfile))
 	evalAlgorithm(execpool, cnlfile, timeout, 'louvain_igraph')
 			
 
@@ -202,6 +203,7 @@ def execRandcommuns(execpool, netfile, timeout, selfexec=False):
 			
 
 def evalRandcommuns(execpool, cnlfile, timeout):
+	print('Applying {} to {}'.format('randcommuns', cnlfile))
 	evalAlgorithm(execpool, cnlfile, timeout, 'randcommuns')
 			
 

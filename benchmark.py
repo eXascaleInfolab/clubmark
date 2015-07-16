@@ -272,8 +272,8 @@ def benchmark(*args):
 	exectime = time.time()
 	gensynt, convnets, runalgs, evalres, udatas, wdatas, timeout, algorithms = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tconvnets: {}'
-		'\n\trunalgs: {}\n\tevalres: {}\n\tudatas: {}\n\twdatas: {}\n\ttimeout: {}'
-		.format(gensynt, convnets, runalgs, evalres, ', '.join(udatas), ', '.join(wdatas), timeout))
+		'\n\trunalgs: {}\n\tevalres: {}\n\tudatas: {}\n\twdatas: {}\n\ttimeout: {}\n\talgorithms: {}'
+		.format(gensynt, convnets, runalgs, evalres, ', '.join(udatas), ', '.join(wdatas), timeout, algorithms))
 	# TODO: Implement consideration of udata, wdata (or just datadir - for some algs weighted/unweighted are defined from the file)
 	
 	if gensynt:
@@ -300,6 +300,7 @@ def benchmark(*args):
 			algs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith('exec')]
 		else:
 			algs = [getattr(appsmodule, 'exec' + alg.capitalize(), unknownApp('exec' + alg.capitalize())) for alg in algorithms]
+		algs = tuple(algs)
 
 		for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
 			for alg in algs:
@@ -354,6 +355,7 @@ def benchmark(*args):
 			evalalgs = chain(*[(getattr(appsmodule, 'eval' + alg.capitalize(), unknownApp('eval' + alg.capitalize())),
 				getattr(appsmodule, ''.join(('eval', alg.capitalize(), 'NS')), unknownApp(''.join(('eval', alg.capitalize(), 'NS')))))
 				for alg in algorithms])
+		evalalgs = tuple(evalalgs)
 
 		assert not _execpool, '_execpool should be clear on algs evaluation'
 		_execpool = ExecPool(max(cpu_count() - 1, 1))
@@ -362,6 +364,7 @@ def benchmark(*args):
 		for cndfile in glob.iglob('*'.join((_syntdir, _extclnodes))):
 			for elg in evalalgs:
 				try:
+					print('Starting ' + str(elg))
 					elg(_execpool, cndfile, timeout)
 				except StandardError as err:
 					print('The {} is interrupted by the exception: {}'

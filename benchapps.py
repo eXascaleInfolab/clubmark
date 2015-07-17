@@ -25,7 +25,6 @@ from louvain_igraph import louvain
 from randcommuns import randcommuns
 from benchcore import Job
 
-from benchcore import _syntdir
 from benchcore import _extexectime
 from benchcore import _extclnodes
 from benchcore import _netshuffles
@@ -165,7 +164,11 @@ def execLouvain_ig(execpool, netfile, timeout, selfexec=False):
 	# Run again for all shuffled nets
 	if not selfexec:
 		selfexec = True
-		for netfile in glob.iglob(''.join((_syntdir, task, '/*', netext))):
+		netdir = os.path.split(netfile)[0]
+		if not netdir.endswith('/'):
+			netdir += '/'
+		print('Netdir: ', netdir)
+		for netfile in glob.iglob(''.join((netdir, task, '/*', netext))):
 			execLouvain_ig(execpool, netfile, timeout, selfexec)
 			
 
@@ -325,18 +328,21 @@ def execOslom2(execpool, netfile, timeout):
 		, './oslom_undir', '-f', '../' + netfile, '-w')
 	# Copy results to the required dir on postprocessing
 	logsdir = ''.join((_algsdir, algname, 'outp/'))
+	netdir = os.path.split(netfile)[0]
+	if not netdir.endswith('/'):
+		netdir += '/'
 	def postexec(job):
 		# Copy communities output
 		outpdir = ''.join((logsdir, task, '/'))
 		if not os.path.exists(outpdir):
 			os.makedirs(outpdir)
-		for fname in glob.iglob(''.join((_syntdir, task, netext, '_oslo_files/tp*'))):
+		for fname in glob.iglob(''.join((netdir, task, netext, '_oslo_files/tp*'))):
 			shutil.copy2(fname, outpdir)
 		# Move dir
 		outpdire = ''.join((logsdir, 'extra/'))
 		if not os.path.exists(outpdire):
 			os.makedirs(outpdire)
-		for dname in glob.iglob(''.join((_syntdir, task, netext, '_oslo_files/'))):
+		for dname in glob.iglob(''.join((netdir, task, netext, '_oslo_files/'))):
 			shutil.move(dname, outpdire)
 		
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)

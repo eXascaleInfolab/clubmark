@@ -48,13 +48,14 @@ sys.path.insert(0, '3dparty')
 from tohig import tohig
 #from functools import wraps
 
-from benchcore import _syntdir
 from benchcore import _extexectime
 from benchcore import _extclnodes
 from benchcore import _execpool
 from benchcore import _netshuffles
 
 
+# Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
+_syntdir = 'syntnets/'  # Default directory for the synthetic generated datasets
 _extnetfile = '.nsa'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated arcs
 #_algseeds = 9  # TODO: Implement
 
@@ -116,7 +117,6 @@ def parseParams(args):
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'uw=' or len(arg) == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
-			pos += 1
 			# Extend weighted / unweighted dataset, default is unweighted
 			(wdatas if arg[2] == 'w' else udatas).append(arg[pos+1:])
 		elif arg[1] == 't':
@@ -275,12 +275,19 @@ def benchmark(*args):
 		'\n\trunalgs: {}\n\tevalres: {}\n\tudatas: {}\n\twdatas: {}\n\ttimeout: {}\n\talgorithms: {}'
 		.format(gensynt, convnets, runalgs, evalres, ', '.join(udatas), ', '.join(wdatas), timeout, algorithms))
 	# TODO: Implement consideration of udata, wdata (or just datadir - for some algs weighted/unweighted are defined from the file)
+	# TODO: implement files and filters support, not only directories
+	datadirs = [ddir if ddir.endswith('/') else ddir + '/' for ddir in udatas if os.path.isdir(ddir)]
+	datadirs.extend([ddir if ddir.endswith('/') else ddir + '/' for ddir in wdatas if os.path.isdir(ddir)])
+	if not datadirs:
+		datadirs = [_syntdir]
+	print('Datadirs: ', datadirs)
 	
 	if gensynt:
 		generateNets(gensynt == 2)  # 0 - do not generate, 1 - only if not exists, 2 - forced generation
 		
 	if convnets:
-		convertNets(_syntdir, convnets == 2)  # 0 - do not convert, 1 - only if not exists, 2 - forced conversion
+		for ddir in datadirs:
+			convertNets(ddir, convnets == 2)  # 0 - do not convert, 1 - only if not exists, 2 - forced conversion
 		
 	global _execpool
 	appsmodule = benchapps  # Module with algorithms definitions to be run; sys.modules[__name__]
@@ -302,16 +309,17 @@ def benchmark(*args):
 			algs = [getattr(appsmodule, 'exec' + alg.capitalize(), unknownApp('exec' + alg.capitalize())) for alg in algorithms]
 		algs = tuple(algs)
 
-		for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
-			for alg in algs:
-				try:
-					alg(_execpool, net, timeout)
-				except StandardError as err:
-					errexectime = time.time() - exectime
-					print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
-						.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
-				else:
-					netsnum += 1
+		for ddir in datadirs:
+			for net in glob.iglob('*'.join((ddir, _extnetfile))):
+				for alg in algs:
+					try:
+						alg(_execpool, net, timeout)
+					except StandardError as err:
+						errexectime = time.time() - exectime
+						print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
+							.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
+					else:
+						netsnum += 1
 		
 		## Additionally execute Louvain multiple times
 		#alg = execLouvain
@@ -361,15 +369,16 @@ def benchmark(*args):
 		_execpool = ExecPool(max(cpu_count() - 1, 1))
 		netsnum = 0
 		timeout = 20 *60*60  # 20 hours
-		for cndfile in glob.iglob('*'.join((_syntdir, _extclnodes))):
-			for elg in evalalgs:
-				try:
-					elg(_execpool, cndfile, timeout)
-				except StandardError as err:
-					print('The {} is interrupted by the exception: {}'
-						.format(elg.__name__, err))
-				else:
-					netsnum += 1
+		for ddir in datadirs:
+			for cndfile in glob.iglob('*'.join((ddir, _extclnodes))):
+				for elg in evalalgs:
+					try:
+						elg(_execpool, cndfile, timeout)
+					except StandardError as err:
+						print('The {} is interrupted by the exception: {}'
+							.format(elg.__name__, err))
+					else:
+						netsnum += 1
 		if _execpool:
 			_execpool.join(max(max(timeout, exectime * 2), timeout + 60 * netsnum))  # Twice the time of algorithms execution
 			_execpool = None
@@ -396,6 +405,7 @@ if __name__ == '__main__':
 			'    Xf  - force the conversion even when the data is already exist',
 			'  -r  - run the benchmarking apps on the prepared data',
 			'  -e  - evaluate the results through the measurements',
+			# TODO: customize extension of the network files (implement filters)
 			'  -d[X]=<datasets_dir>  - directory of the datasets',
 			'  -f[X]=<dataset>  - dataset file name',
 			'    Xu  - the dataset is unweighted. Default option',

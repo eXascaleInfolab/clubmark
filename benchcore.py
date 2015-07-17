@@ -23,8 +23,6 @@ import collections
 import os
 
 
-# Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
-_syntdir = 'syntnets/'  # Default directory for the synthetic generated datasets
 _extexectime = '.rcp'  # Resource Consumption Profile
 _extclnodes = '.cnl'  # Clusters (Communities) Nodes Lists
 _execpool = None  # Active execution pool

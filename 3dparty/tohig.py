@@ -31,9 +31,9 @@ def formGraphHeader(fout, args):
 	"""Parse command line arguments and write Graph header section"""
 	weighted = True
 	resdub = False  # Resolve duplications
+	custfmt = False
 	if args:
 		assert isinstance(args, (tuple, list))
-		custfmt = False
 		# Parce args
 		for arg in args:
 			if arg[0] != '-':
@@ -222,7 +222,7 @@ def tohig(finpName, *args):
 								vertNum = int(ln[1])
 							except (ValueError, IndexError):
 								raise SyntaxError('Number of vertices must be specified')
-							saveNodes(fout, vertNum)
+							saveNodes(fout, vertNum, None)
 						elif sectName == 'edges':
 							fout.write('\n/Edges\n')
 							sect = SECT_EDGS
@@ -258,7 +258,7 @@ if __name__ == '__main__':
 		print('\n'.join(('Usage: {0} <network> [-ru] [-f={{{1}, {2}}}]',
 			'  -r  - resolve duplicated links from the .pjk',
 			'  -u  - force links to be unweighted even for the weighted input graph',
-			'  -f=<format>  - custom non pajek input format (default: pajek):',
+			'  -f=<format>  - custom non-pajek input format (default: pajek):',
 			'    {1}  - SNAP format: space/tab separated unweighted edges with Nodes header (#)',
 			'    {2}  - space/tab separated weighted arcs, used in LFR generated graphs',
 			))

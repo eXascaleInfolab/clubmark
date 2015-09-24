@@ -13,6 +13,7 @@ import os  # Pathes processing
 import igraph as ig
 
 
+inpfmt = 'ncol'  # NCOL input format
 outpfile = "clusters.cnl"  # Default file for the communities output
 
 
@@ -28,6 +29,7 @@ def parseParams(args):
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
 	network = None
+	netfmt = inpfmt
 	dirnet = False
 	outpcoms, outpext = os.path.splitext(outpfile)
 
@@ -43,6 +45,17 @@ def parseParams(args):
 			pos += 1
 			dirnet = arg[2] == 'd'
 			network = arg[pos:]
+			ext = os.path.splitext(network)[1]
+			if ext and ext[1:] in ('pjk', 'pajek'):
+				netfmt = 'pajek'
+		elif arg[1] == 'f':
+			pos = arg.find('=', 2)
+			if pos == -1 or arg[2] != '=' or len(arg) == pos + 1:
+				raise ValueError('Unexpected argument: ' + arg)
+			pos += 1
+			netfmt = arg[pos:]
+			if netfmt not in ('ncol', 'pajek'):
+				raise ValueError('Unknown network format: ' + netfmt)
 		elif arg[1] == 'o':
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'l=' or len(arg) == pos + 1:
@@ -62,20 +75,28 @@ def parseParams(args):
 	if not network:
 		raise ValueError('Input network file name must be specified')
 			
-	return network, dirnet, perlev, outpcoms, outpext
+	return network, netfmt, dirnet, perlev, outpcoms, outpext
 
 
 def louvain(*args):
 	"""Execute Louvain algorithm on the specified network and output resulting communities to the specified file"""
-	network, dirnet, perlev, outpcoms, outpext = parseParams(args)
+	network, netfmt, dirnet, perlev, outpcoms, outpext = parseParams(args)
 	
 	print('Starting Louvain (igraph) clustering:'
 		'\n\t{} network: {}'
+		'\n\tnetwork format: {}'
 		'\n\tperlev output: {}, communities: {}'
-		.format('directed' if dirnet else 'undirected', network
+		.format('directed' if dirnet else 'undirected', network, netfmt
 			, perlev, outpcoms + outpext))
 	# Load Data from simple real-world networks
-	graph = ig.Graph.Read_Ncol(network, directed=dirnet)  # , weights=False
+	graph = None
+	if netfmt == 'ncol':
+		graph = ig.Graph.Read_Ncol(network, directed=dirnet)  # , weights=False
+	elif netfmt == 'pajek':
+		graph = ig.Graph.Read_Pajek(network)
+	else:
+		raise ValueError('Unknown network format: ' + netfmt)
+		
 	hier = graph.community_multilevel(return_levels=True)
 	# Output levels
 	#fname = 'level'
@@ -130,10 +151,13 @@ if __name__ == '__main__':
 	if len(sys.argv) > 1:
 		louvain(*sys.argv[1:])
 	else:
-		print('\n'.join(('Usage: {} -i[{{u, d}}]=<input_network> [-o[l]=<output_communities>]',
+		print('\n'.join(('Usage: {} -i[{{u, d}}]=<input_network> [-f={{ncol, pajek}}] [-o[l]=<output_communities>]',
 			'  -i[X]=<input_network>  - file of the input network in the format: <src_id> <dst_id> [<weight>]',
 			'    Xu  - undirected input network (<src_id> <dst_id> implies also <dst_id> <src_id>). Default',
 			'    Xd  - directed input network (both <src_id> <dst_id> and <dst_id> <src_id> are specified)',
+			'  -f=<file_format>  - file format of the input network. Default: {}',
+			'    ncol  - ncol format: <src_id> <dst_id> [<weight>]',
+			'    pajek  - pajek format',
 			'  -o[l]=<output_communities>  - output all distinct communities of the hierarchy to the <output_communities>. Default: {}',
 			'    ol  - output all communities in each hier level to the seaparate file <output_communities>/<output_communities>_<lev_num>'
-		)).format(sys.argv[0], outpfile))
+		)).format(sys.argv[0], inpfmt, outpfile))

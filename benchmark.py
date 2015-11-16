@@ -4,15 +4,15 @@
 \descr: The benchmark, winch optionally generates or preprocesses datasets using specified executable,
 	optionally executes specified apps with the specified params on the specified datasets,
 	and optionally evaluates results of the execution using specified executable(s).
-	
+
 	All executions are traced and logged also as resources consumption: CPU (user, kernel, etc.) and memory (RSS RAM).
 	Traces are saved even in case of internal / external interruptions and crashes.
-	
-	
+
+
 	Using this generic benchmarking framework,
 	= Overlapping Hierarchical Clustering Benchmark =
 	is implemented:
-	- synthetic datasets are generated using extended LFR Framework (origin: https://sites.google.com/site/santofortunato/inthepress2, 
+	- synthetic datasets are generated using extended LFR Framework (origin: https://sites.google.com/site/santofortunato/inthepress2,
 		which is "Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities"
 		by Andrea Lancichinetti 1 and Santo Fortunato)
 	- executes HiReCS (www.lumais.com/hirecs), Louvain (original https://sites.google.com/site/findcommunities/ and igraph implementations),
@@ -62,7 +62,7 @@ _extnetfile = '.nsa'  # Extension of the network files to be executed by the alg
 
 def parseParams(args):
 	"""Parse user-specified parameters
-	
+
 	return
 		gensynt  - generate synthetic networks:
 			0 - do not generate
@@ -81,18 +81,18 @@ def parseParams(args):
 	gensynt = 0
 	convnets = 0
 	runalgs = False
-	evalres = False
+	evalres = 0  # 1 - NMIs, 2 - Q, 3 - all measures
 	udatas = []
 	wdatas = []
 	timeout = 36 * 60*60  # 36 hours
 	timemul = 1  # Time multiplier, sec by default
 	algorithms = None
-	
+
 	for arg in args:
 		# Validate input format
 		if arg[0] != '-':
 			raise ValueError('Unexpected argument: ' + arg)
-		
+
 		if arg[1] == 'g':
 			if arg not in '-gf':
 				raise ValueError('Unexpected argument: ' + arg)
@@ -110,9 +110,16 @@ def parseParams(args):
 				raise ValueError('Unexpected argument: ' + arg)
 			runalgs = True
 		elif arg[1] == 'e':
-			if arg != '-e':
+			if len(arg) > 2 and (arg[2] not in 'nm'):
 				raise ValueError('Unexpected argument: ' + arg)
-			evalres = True
+			if len(arg) == 2 or (len(arg) == 4 and arg[2] != arg[3]):
+				if len(arg) > 2 and arg[3] not in 'nm':
+					raise ValueError('Unexpected argument: ' + arg)
+				evalres = 3  # all
+			elif arg[2] == 'n':
+				evalres = 1  # NMIs
+			else:
+				evalres = 2  # Q
 		elif arg[1] == 'd' or arg[1] == 'f':
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'uw=' or len(arg) == pos + 1:
@@ -131,24 +138,24 @@ def parseParams(args):
 			timeout = int(arg[pos:]) * timemul
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
-			
+
 	return gensynt, convnets, runalgs, evalres, udatas, wdatas, timeout, algorithms
 
 
 def generateNets(overwrite=False):
 	"""Generate synthetic networks with ground-truth communities and save generation params
-	
+
 	overwrite  - whether to overwrite existing networks or use them
 	"""
 	paramsdir = 'params/'
-	
+
 	assert _syntdir[-1] == '/' and paramsdir[-1] == '/', "Directory name must have valid terminator"
 	paramsDirFull = _syntdir + paramsdir
 	if not os.path.exists(paramsDirFull):
 		os.makedirs(paramsDirFull)
 	# Initial options for the networks generation
 	N0 = 1000;  # Satrting number of nodes
-	
+
 	evalmaxk = lambda genopts: int(round(sqrt(genopts['N'])))
 	evalmuw = lambda genopts: genopts['mut'] * 2/3
 	evalminc = lambda genopts: 5 + int(genopts['N'] / N0)
@@ -156,12 +163,12 @@ def generateNets(overwrite=False):
 	evalon = lambda genopts: int(genopts['N'] * genopts['mut']**2)
 	# Template of the generating options files
 	genopts = {'mut': 0.275, 'beta': 1.35, 't1': 1.65, 't2': 1.3, 'om': 2, 'cnl': 1}
-	
+
 	# Generate options for the networks generation using chosen variations of params
 	varNmul = (1, 2, 5, 10, 25, 50)  # *N0
 	vark = (5, 10, 20)
 	global _execpool
-	
+
 	_execpool = ExecPool(max(cpu_count() - 1, 1))
 	netgenTimeout = 10 * 60  # 10 min
 	for nm in varNmul:
@@ -192,11 +199,11 @@ def generateNets(overwrite=False):
 		_execpool.join(2 * 60*60)  # 2 hours
 		_execpool = None
 	print('Synthetic networks files generation is completed')
-	
+
 
 def convertNets(datadir, overwrite=False):
 	"""Gonvert input networks to another formats
-	
+
 		datadir  - directory of the networks to be converted
 		overwrite  - whether to overwrite existing networks or use them
 	"""
@@ -209,7 +216,7 @@ def convertNets(datadir, overwrite=False):
 			tohig(net, ('-f=tsa'))  # Network in the tab separated weighted arcs format
 		except StandardError as err:
 			print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(net, err), file=sys.stderr)
-		
+
 		netnoext = os.path.splitext(net)[0]  # Remove the extension
 
 		## Confert to Louvain binaty input format
@@ -221,7 +228,7 @@ def convertNets(datadir, overwrite=False):
 		#		, '-w', netnoext + '.liw'])
 		#except StandardError as err:
 		#	print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
-		
+
 		# Make shuffled copies of the input networks for the Louvain_igraph
 		#if not os.path.exists(netnoext) or overwrite:
 		print('Shuffling {} into {} {} times...'.format(net, netnoext, _netshuffles))
@@ -235,13 +242,13 @@ def convertNets(datadir, overwrite=False):
 				, ''.join((netnoext, '/', netname, '_', str(i), _extnetfile))])
 		#else:
 		#	print('The shuffling is skipped: {} is already exist'.format(netnoext))
-				
+
 	print('Networks conversion is completed')
 
 
 def unknownApp(name):
 	"""A stub for the unknown / not implemented apps (algorithms) to be benchmaked
-	
+
 	name  - name of the funciton to be called (traced and skipped)
 	"""
 	def stub(*args):
@@ -253,11 +260,11 @@ def unknownApp(name):
 def terminationHandler(signal, frame):
 	"""Signal termination handler"""
 	global _execpool
-	
+
 	#if signal == signal.SIGABRT:
 	#	os.killpg(os.getpgrp(), signal)
 	#	os.kill(os.getpid(), signal)
-	
+
 	if _execpool:
 		del _execpool
 		_execpool = None
@@ -266,7 +273,7 @@ def terminationHandler(signal, frame):
 
 def benchmark(*args):
 	""" Execute the benchmark
-	
+
 	Run the algorithms on the specified datasets respecting the parameters.
 	"""
 	exectime = time.time()
@@ -281,17 +288,17 @@ def benchmark(*args):
 	if not datadirs:
 		datadirs = [_syntdir]
 	print('Datadirs: ', datadirs)
-	
+
 	if gensynt:
 		generateNets(gensynt == 2)  # 0 - do not generate, 1 - only if not exists, 2 - forced generation
-		
+
 	if convnets:
 		for ddir in datadirs:
 			convertNets(ddir, convnets == 2)  # 0 - do not convert, 1 - only if not exists, 2 - forced conversion
-		
+
 	global _execpool
 	appsmodule = benchapps  # Module with algorithms definitions to be run; sys.modules[__name__]
-	
+
 	# Run the algorithms and measure their resource consumption
 	if runalgs:
 		# Run algs on synthetic datasets
@@ -299,7 +306,7 @@ def benchmark(*args):
 		assert not _execpool, '_execpool should be clear on algs execution'
 		_execpool = ExecPool(max(min(4, cpu_count() - 1), 1))
 		netsnum = 1
-	
+
 		if not algorithms:
 			#algs = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
 			#algs = (execHirecsNounwrap,)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
@@ -320,7 +327,7 @@ def benchmark(*args):
 							.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
 					else:
 						netsnum += 1
-		
+
 		## Additionally execute Louvain multiple times
 		#alg = execLouvain
 		#if alg in algs:
@@ -332,8 +339,8 @@ def benchmark(*args):
 		#				errexectime = time.time() - exectime
 		#				print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
 		#					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
-		
-		# TODO: Implement execution on custom datasets considering whether they weighted / unweighted			
+
+		# TODO: Implement execution on custom datasets considering whether they weighted / unweighted
 		## Run algs on the specified datasets if required
 		## Unweighted networks
 		#for udat in udatas:
@@ -349,40 +356,53 @@ def benchmark(*args):
 		exectime = time.time() - exectime
 		print('The benchmark execution is successfully comleted on {:.4f} sec ({} h {} m {:.4f} s)'
 			.format(exectime, *secondsToHms(exectime)))
-	
-	# Evaluate results (NMI)
-	if evalres:
-		print('Starting NMI evaluation...')
-		if not algorithms:
-			#evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
-			#				, evalHirecsNS, evalOslom2NS, evalGanxisNS)
-			#evalalgs = (evalHirecs, evalHirecsOtl, evalHirecsAhOtl
-			#				, evalHirecsNS, evalHirecsOtlNS, evalHirecsAhOtlNS)
-			evalalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith('eval')]
-		else:
-			evalalgs = chain(*[(getattr(appsmodule, 'eval' + alg.capitalize(), unknownApp('eval' + alg.capitalize())),
-				getattr(appsmodule, ''.join(('eval', alg.capitalize(), 'NS')), unknownApp(''.join(('eval', alg.capitalize(), 'NS')))))
-				for alg in algorithms])
-		evalalgs = tuple(evalalgs)
 
-		assert not _execpool, '_execpool should be clear on algs evaluation'
-		_execpool = ExecPool(max(cpu_count() - 1, 1))
-		netsnum = 0
-		timeout = 20 *60*60  # 20 hours
-		for ddir in datadirs:
-			for cndfile in glob.iglob('*'.join((ddir, _extclnodes))):
-				for elg in evalalgs:
-					try:
-						elg(_execpool, cndfile, timeout)
-					except StandardError as err:
-						print('The {} is interrupted by the exception: {}'
-							.format(elg.__name__, err))
-					else:
-						netsnum += 1
-		if _execpool:
-			_execpool.join(max(max(timeout, exectime * 2), timeout + 60 * netsnum))  # Twice the time of algorithms execution
-			_execpool = None
-		print('NMI evaluation is completed')
+	# Evaluate results
+	if evalres:
+		measures = {1: 'NMI', 2: 'Q'}
+		for im in measures:
+			# Evaluate only required measures
+			if evalres & im != im:
+				continue
+
+			evalpref = 'eval' if im == 1 else 'mod'  # Evaluation prefix
+			if not algorithms:
+				#evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
+				#				, evalHirecsNS, evalOslom2NS, evalGanxisNS)
+				#evalalgs = (evalHirecs, evalHirecsOtl, evalHirecsAhOtl
+				#				, evalHirecsNS, evalHirecsOtlNS, evalHirecsAhOtlNS)
+				evalalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(evalpref)]
+			else:
+				if im == 1:
+					assert evalpref == 'eval', 'Evaluation prefix is invalid'
+					evalalgs = chain(*[(getattr(appsmodule, evalpref + alg.capitalize(), unknownApp(evalpref + alg.capitalize())),
+						getattr(appsmodule, ''.join((evalpref, alg.capitalize(), 'NS')), unknownApp(''.join((evalpref, alg.capitalize(), 'NS')))))
+						for alg in algorithms])
+				else:
+					evalalgs = [getattr(appsmodule, 'eval' + alg.capitalize(), unknownApp('eval' + alg.capitalize()))
+						for alg in algorithms]
+			evalalgs = tuple(evalalgs)
+
+			print('Starting {} evaluation...'.format(measures[im]))
+			assert not _execpool, '_execpool should be clear on algs evaluation'
+			_execpool = ExecPool(max(cpu_count() - 1, 1))
+			netsnum = 0
+			timeout = 20 *60*60  # 20 hours
+			for ddir in datadirs:
+				# Read ground truth
+				for gtfile in glob.iglob('*'.join((ddir, _extclnodes if im == 1 else _extnetfile))):
+					for elg in evalalgs:
+						try:
+							elg(_execpool, gtfile, timeout)
+						except StandardError as err:
+							print('The {} is interrupted by the exception: {}'
+								.format(elg.__name__, err))
+						else:
+							netsnum += 1
+			if _execpool:
+				_execpool.join(max(max(timeout, exectime * 2), timeout + 60 * netsnum))  # Twice the time of algorithms execution
+				_execpool = None
+			print('{} evaluation is completed'.format(measures[im]))
 	print('The benchmark is completed')
 
 
@@ -396,7 +416,7 @@ if __name__ == '__main__':
 		signal.signal(signal.SIGABRT, terminationHandler)
 		benchmark(*sys.argv[1:])
 	else:
-		print('\n'.join(('Usage: {0} [-g[f] [-c[f]] [-r] [-e] [-d{{u,w}}=<datasets_dir>] [-f{{u,w}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
+		print('\n'.join(('Usage: {0} [-g[f] [-c[f]] [-r] [-e[nm]] [-d{{u,w}}=<datasets_dir>] [-f{{u,w}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
 			'  -g[f]  - generate synthetic datasets in the {syntdir}',
 			'    Xf  - force the generation even when the data is already exist',
 			'  -a[="app1 app2 ..."]  - apps to benchmark among the implemented.'
@@ -404,7 +424,9 @@ if __name__ == '__main__':
 			'  -c[f]  - convert existing networks into the .hig, .lig, etc. formats',
 			'    Xf  - force the conversion even when the data is already exist',
 			'  -r  - run the benchmarking apps on the prepared data',
-			'  -e  - evaluate the results through the measurements',
+			'  -e[X]  - evaluate quality of the results. Default: apply all measurements',
+			'    Xn  - evaluate results accuracy using NMI measures for overlapping communities',
+			'    Xm  - evaluate results quality by modularity',
 			# TODO: customize extension of the network files (implement filters)
 			'  -d[X]=<datasets_dir>  - directory of the datasets',
 			'  -f[X]=<dataset>  - dataset file name',

@@ -248,7 +248,7 @@ def tohig(finpName, *args):
 			if arcs:
 				fout.write('\n/Arcs\n')
 				saveLinks(fout, arcs, weighted)
-			print('The conversion is completed: {0}'.format(finpName))
+			print('{} -> {} conversion is completed'.format(finpName, foutName))
 
 
 if __name__ == '__main__':

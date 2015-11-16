@@ -1,0 +1,209 @@
+diff -Ewbur /home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/SCP/scp_0.1/k_clique.cpp ./k_clique.cpp
+--- /home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/SCP/scp_0.1/k_clique.cpp	2011-11-28 10:28:28.000000000 +0100
++++ ./k_clique.cpp	2015-11-09 10:05:27.215624635 +0100
+@@ -93,10 +93,13 @@
+             if (!line.empty())
+             {
+                 std::istringstream is(line);  // Extract data using a stringstream.
+-		if ((is >> source) && (is >> dest) && (is >> weight));
+-		else {
++        if((is >> source) && (is >> dest)) {
++			if(!(is >> weight))
++				weight = 1;
++		} else {
+ 		  std::cerr<<"Error reading line "<<numLinks << std::endl;
+-		  return false;}		
++			return false;
++		}		
+ 
+ 		linkList.push_back(Link(source,dest,weight));
+ 
+@@ -431,15 +434,25 @@
+     //std::cout << "largest: " << communities.getLargestComponentSize() << std::endl;
+ }
+ 
+-bool validateLinkList(std::list<Link> &linkList,size_t netSize,bool verbose){
++bool validateLinkList(std::list<Link> &linkList, size_t& numberOfLinks, size_t netSize, bool verbose){
+   if (verbose) std::cout << "Checking that the node labels are not sparce and there are no multiedges... ";
+   NetType tempNet;
+-  for (std::list<Link>::iterator linkIterator=linkList.begin() ; linkIterator != linkList.end(); linkIterator++ ){
+-    if (tempNet[linkIterator->source][linkIterator->dest]!=0){
+-      std::cerr <<"Error: The input file contains multi-edges."<<std::endl;
++  std::list<Link>::iterator linkIterator=linkList.begin();
++  while(linkIterator != linkList.end()) {
++    if(tempNet[linkIterator->source][linkIterator->dest] == 0)
++    {
++		tempNet[linkIterator->source][linkIterator->dest]=linkIterator->weight;
++		++linkIterator;
++	} else {
++		std::cerr <<"WARNING: The input file contains multi-edges: " << linkIterator->source << " " << linkIterator->dest << std::endl;
++		//return false;
++		linkIterator = linkList.erase(linkIterator);
++		if(numberOfLinks <= netSize) {
++			std::cerr <<"Error: numberOfLinks must be not less than netSize."<<std::endl;
+       return false;
+     }
+-    tempNet[linkIterator->source][linkIterator->dest]=linkIterator->weight;
++		--numberOfLinks;
++    }
+   }
+   if (tempNet.size()!=netSize){
+     std::cerr <<"Error: Node labels are sparse. Please name nodes from 0 to n-1."<<std::endl;
+@@ -462,7 +475,7 @@
+     if (verbose) std::cout<< "Number of nodes: " << netSize << "\nNumber of links: " <<numberOfLinks << "\n";
+ 
+     //Check that the edge list is valid, this will waste some time
+-    if (sanityCheck) if (!validateLinkList(linkList,netSize,verbose)) return EXIT_FAILURE;
++    if (sanityCheck) if (!validateLinkList(linkList,numberOfLinks,netSize,verbose)) return EXIT_FAILURE;
+ 
+     // Finally, proceed with the clique percolation
+     std::ifstream file(fileName);
+diff -Ewbur /home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/SCP/scp_0.1/kclique.py ./kclique.py
+--- /home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/SCP/scp_0.1/kclique.py	2015-10-20 17:50:11.089423000 +0200
++++ ./kclique.py	2015-11-16 18:01:41.544387287 +0100
+@@ -1,3 +1,5 @@
++#!/usr/bin/env python
++# -*- coding: utf-8 -*-
+ """
+ An agglomerative k-clique percolation algorithm.
+ This script is divided to parts as follows:
+@@ -11,6 +13,10 @@
+ 
+ Author: Mikko Kivela (mtkivela at lce.hut.fi)
+ Jorkki Hyvonen is the author of the classes Net, Node and SymmNet
++
++Changelog by Artem Lutov (luart@ya.ru):
++- Added processing of the unweighted networks
++- Added proceesing of the networks specified by the arcs becides the edges
+ """
+ import sys,array,math
+ from operator import mul
+@@ -218,11 +224,13 @@
+ 
+     for line in input:
+         fields=line.split(splitterChar)
+-        if len(fields)>2:            
++		if len(fields)>=2:
+             if numerical:
+                 fields[0]=int(fields[0])
+                 fields[1]=int(fields[1])
+             if fields[0]!=fields[1]:
++				if len(fields) == 2:
++					fields.append(1)
+                 if mutualEdges:
+                     if nodeMap.has_key( (fields[1], fields[0]) ):
+                         value = 0.5*( nodeMap[(fields[1], fields[0])] + float(fields[2]) )
+@@ -766,17 +774,18 @@
+ 
+ # ---- Main program and parsing arguments ----
+ 
+-helpstring="Incremental k-clique percolation algorithm.\n"
+-helpstring+="Usage: python kclique.py netname k [start end numberofevaluations] [weight]\n"
+-helpstring+="If only net name and k is specified, the components are returned. If start end and"
+-helpstring+=" number of evaluation are specified the community structure will be evaluated many times."
+-helpstring+=" The evaluations are made linearly between start and end. If no weigh is defined, the evaluations"
+-helpstring+=" are made with respect to edge weights and if intensity is specified as the weight, weighted k-clique "
+-helpstring+="percolation is used and the evaluation are made with respect to cliques.\n"
+-helpstring+="Example: python kclique.py mynet.edg 5 1000 5000 5 intensty\n"
+-helpstring+="This example returns nodes in 5-clique communities when 1000, 2000, 3000, 4000 and 5000 first 5-cliques are"
+-helpstring+=" added to the network after sorting them with respect to intensity.\n"
+-helpstring+="Output is given as a list of nodes separated by space and communities separated by line change."
++helpstring=("Incremental k-clique percolation algorithm.\n"
++		"Usage: python {0} netname k [start end numberofevaluations] [weight]\n"
++		"\n"
++		"If only net name and k is specified, the components are returned. If start end and"
++		" number of evaluation are specified the community structure will be evaluated many times."
++		" The evaluations are made linearly between start and end. If no weigh is defined, the evaluations"
++		" are made with respect to edge weights and if intensity is specified as the weight, weighted k-clique "
++		"percolation is used and the evaluation are made with respect to cliques.\n"
++		"Example: python kclique.py mynet.edg 5 1000 5000 5 intensty\n"
++		"This example returns nodes in 5-clique communities when 1000, 2000, 3000, 4000 and 5000 first 5-cliques are"
++		" added to the network after sorting them with respect to intensity.\n"
++		"Output is given as a list of nodes separated by space and communities separated by line change.")
+ 
+ if len(sys.argv)>2:
+    filename=sys.argv[1]
+@@ -794,14 +803,9 @@
+    cs=getKCliqueComponents(net,k)
+    print cs
+ elif len(sys.argv)==6 or len(sys.argv)==7:
+-   for cs in kcliquePercolator(net,k,start,stop,evaluations,weightFunction=weightFunction):
+-       print "At threshold: " + str(cs.threshold)
++	for i, cs in enumerate(kcliquePercolator(net,k,start,stop,evaluations,weightFunction=weightFunction)):
++		print "# Communities for the top {} heaviest {}-cliques at the threshold {}:".format(
++				start + (stop - start) * i / (evaluations - 1), k, cs.threshold)
+        print cs
+ else:
+-   print helpstring
+-
+-
+-
+-
+-
+-
++	print helpstring.format(sys.argv[0])
+diff -Ewbur /home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/SCP/scp_0.1/lcelib/containers/ArrayBase.H ./lcelib/containers/ArrayBase.H
+--- /home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/SCP/scp_0.1/lcelib/containers/ArrayBase.H	2011-11-28 10:28:29.000000000 +0100
++++ ./lcelib/containers/ArrayBase.H	2015-11-09 01:41:35.082980973 +0100
+@@ -456,6 +456,10 @@
+     return stub(*this, i);
+   }
+ 
++  inline const_reference operator[](const size_t i) const {
++    return constRefTo(i);
++  }
++
+   /** This returns plain bool */
+ 
+   const_reference constRefTo(const size_t loc) const {
+diff -Ewbur /home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/SCP/scp_0.1/lcelib/containers/indices/Vector.H ./lcelib/containers/indices/Vector.H
+--- /home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/SCP/scp_0.1/lcelib/containers/indices/Vector.H	2011-11-28 10:28:29.000000000 +0100
++++ ./lcelib/containers/indices/Vector.H	2015-11-09 01:47:43.918974581 +0100
+@@ -106,7 +106,7 @@
+   }
+ 
+   const_value_reference operator[](const KeyType & key) const {
+-    return constRefToVal(key);
++    return super::constRefToVal(key);
+   }
+ 
+   template<typename RandSource>
+diff -Ewbur /home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/SCP/scp_0.1/lcelib/Containers.H ./lcelib/Containers.H
+--- /home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/SCP/scp_0.1/lcelib/Containers.H	2011-11-28 10:28:29.000000000 +0100
++++ ./lcelib/Containers.H	2015-11-09 01:50:15.310971957 +0100
+@@ -279,7 +279,7 @@
+   size_t findAndInit(const KeyType & key) {
+     size_t loc = 0;
+     //std::cerr <<"\nFIND_AND_INIT, key:" << key;
+-    if (!forcedFind(key, loc)) {
++    if (!this->forcedFind(key, loc)) {
+       //std::cerr << ", was new\n";
+       //this->refToVal(loc)=ValueType();
+       /* FIXME: not always necessary */
+@@ -317,7 +317,7 @@
+   reference operator[](const KeyType & key) {
+     //std::cerr << "A reference from a map " << this << " with key: " << key 
+     //	      << "\n";
+-    return refToVal(findAndInit(key));
++    return this->refToVal(findAndInit(key));
+   }
+ 
+   /**
+@@ -331,7 +331,7 @@
+      
+   void setValue(const KeyType & key, const ValueType & value) {
+     size_t loc = 0;
+-    forcedFind(key, loc);
++    this->forcedFind(key, loc);
+     super::setValue(loc, value);
+   }
+ 
+@@ -665,7 +665,7 @@
+   ValueType operator[](const KeyType & key) const {
+     size_t loc;
+     //std::cerr << "In oper[]";
+-    if (findFirst(key, loc)) {
++    if (this->findFirst(key, loc)) {
+       return super::constRefToVal(loc);
+     } else {
+       //std::cerr << "Foobar";

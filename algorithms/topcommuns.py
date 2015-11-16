@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-\descr: Reduces produced communities to top N with optional syncronization in terms of cooccurances
+\descr: Reduces produced communities to top N with optional synchronization in terms of cooccurances
 
 \author: Artem Lutov <luart@ya.ru>
 \organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>

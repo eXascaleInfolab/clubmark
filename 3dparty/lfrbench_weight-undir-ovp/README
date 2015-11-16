@@ -15,7 +15,8 @@ nodes to be compatible with NMI evaluation input format
 - Parameters "-name" added to give custom name for the output files
 - maxk is automatically decreased if required for the network generation with the specified k
 (instead of the generation process termination)
-  
+
+To apply the patch use linux "patch" command
 
  = Another relevant benchmarks =
 https://sites.google.com/site/andrealancichinetti/files

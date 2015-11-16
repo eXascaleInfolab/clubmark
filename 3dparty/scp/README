@@ -1,0 +1,20 @@
+Sequential clique percolation algorithm
+by  J.M. Kumpula, M. Kivelä, K. Kaski,and J. Saramäki
+http://www.lce.hut.fi/research/mm/complex/software/
+http://www.lce.hut.fi/~mtkivela/kclique.html
+
+= Description of the Patch =
+by Artem Lutov <luart@ya.ru>
+
+To apply the patch:
+1. Unpack scp_0.1.tar.gz (from http://www.lce.hut.fi/research/mm/complex/software/)
+2. Copy kclique.py (from http://www.lce.hut.fi/~mtkivela/kclique.html) into the unpacked directory
+3. Apply the patch
+
+The patch includes:
+- Compilation fixes for GCC 4.9 for the C++ implementation
+- Support for the input networks defined by the arcs besides the edges
+- Support for the unweighted input networks
+- Refined formatting
+
+To apply the patch use linux "patch" command

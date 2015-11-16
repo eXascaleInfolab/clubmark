@@ -71,6 +71,19 @@ def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname
 		taskex = ''.join((task, '_', str(i)))
 
 
+def execAlgorithm(execpool, netfile, timeout, selfexec=False):
+	"""Execute the algorithm (stub)
+	
+	execpool  - execution pool to perform execution of current task
+	netfile  -  input network to be processed
+	timeout  - execution timeout for this task
+	selfexec=False  - current execution is the external or internal self call
+	
+	return  - number of executions
+	"""
+	return 0
+
+
 # Louvain
 ## Original Louvain
 #def execLouvain(execpool, netfile, timeout, tasknum=0):
@@ -95,6 +108,7 @@ def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname
 #	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 #		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', task, '.loc'))
 #		, stderr=''.join((_algsdir, algname, 'outp/', task, _logext))))
+#	return 1
 #
 #
 #def evalLouvain(execpool, cnlfile, timeout):
@@ -121,9 +135,12 @@ def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname
 #	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
 #	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
 #		, stdout=''.join((logsdir, task, _logext)), stderr=''.join((logsdir, task, '.err'))))
+#	return 1
 def execLouvain_ig(execpool, netfile, timeout, selfexec=False):
 	"""Execute Louvain
 	Results are not stable => multiple execution is desirable.
+	
+	returns number of executions or None
 	"""
 	# Fetch the task name and chose correct network filename
 	netfile, netext = os.path.splitext(netfile)  # Remove the extension
@@ -138,7 +155,7 @@ def execLouvain_ig(execpool, netfile, timeout, selfexec=False):
 	#with open(os.devnull, 'w') as fotmp:
 	#	pyexec = 'pypy' if subprocess.call(['which', 'pypy'], stdout=fotmp) == 0 else 'python'
 	logsbase = ''.join((_algsdir, algname, 'outp/', task))
-	resext = '.las'  # Louvain accum statistics
+	resext = '.acs'  # Louvain accum statistics
 	if not selfexec:
 		outpdir = ''.join((_algsdir, algname, 'outp/'))
 		if not os.path.exists(outpdir):
@@ -162,6 +179,7 @@ def execLouvain_ig(execpool, netfile, timeout, selfexec=False):
 		, ondone=postexec, stdout=os.devnull, stderr=''.join((logsbase, _logext))))
 	
 	# Run again for all shuffled nets
+	execnum = 0
 	if not selfexec:
 		selfexec = True
 		netdir = os.path.split(netfile)[0]
@@ -170,6 +188,8 @@ def execLouvain_ig(execpool, netfile, timeout, selfexec=False):
 		print('Netdir: ', netdir)
 		for netfile in glob.iglob(''.join((netdir, task, '/*', netext))):
 			execLouvain_ig(execpool, netfile, timeout, selfexec)
+			execnum += 1
+	return execnum
 			
 
 def evalLouvain_ig(execpool, cnlfile, timeout):
@@ -180,6 +200,40 @@ def evalLouvain_ig(execpool, cnlfile, timeout):
 def evalLouvain_igNS(execpool, cnlfile, timeout):
 	"""Evaluate Louvain_igraph by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
 	evalAlgorithm(execpool, cnlfile, timeout, 'louvain_igraph', evalbin='./onmi_sum', evalname='nmi-s')
+
+
+# SCP (Sequential algorithm for fast clique percolation)
+# TODO: ? execScpMod, or just another input dir ?
+def execScp(execpool, netfile, timeout):
+	# Fetch the task name
+	task, netext = os.path.splitext(netfile)
+	task = os.path.split(task)[1]  # Base name of the network
+	assert task, 'The network name should exists'
+	
+	algname = 'scp'
+	pyexec = 'pypy'
+	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+		, pyexec, ''.join(('./', algname, '.py')), '../' + netfile)  # ATTENTION: Last argument is k-clique size, specified later
+
+	# Run again for k E [3, 12]
+	resbase = ''.join((_algsdir, algname, 'outp/', task, '/', task, '_'))  # Base name of the result
+	for k in range(3, 13):
+		kstr = str(k)
+		kstrex = 'k' + kstr
+		#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
+		execpool.execute(Job(name='_'.join((task, algname, kstrex)), workdir=_algsdir, args=args + [kstr], timeout=timeout
+			, stdout=''.join((resbase, kstrex, _extclnodes))
+			, stderr=''.join((resbase, kstrex, _logext)) ))
+	return 13 - 3
+
+def evalScp(execpool, cnlfile, timeout):
+	#print('Applying {} to {}'.format('louvain_igraph', cnlfile))
+	evalAlgorithm(execpool, cnlfile, timeout, 'scp')
+			
+
+def evalScpNS(execpool, cnlfile, timeout):
+	"""Evaluate Louvain_igraph by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
+	evalAlgorithm(execpool, cnlfile, timeout, 'scp', evalbin='./onmi_sum', evalname='nmi-s')
 
 
 # Random Disjoing Clustering
@@ -206,6 +260,7 @@ def execRandcommuns(execpool, netfile, timeout, selfexec=False):
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout
 		, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, _logext))))
+	return 1
 			
 
 def evalRandcommuns(execpool, cnlfile, timeout):
@@ -233,6 +288,7 @@ def execHirecs(execpool, netfile, timeout):
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, _logext))))
+	return 1
 
 
 def evalHirecs(execpool, cnlfile, timeout):
@@ -260,6 +316,7 @@ def execHirecsOtl(execpool, netfile, timeout):
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, _logext))))
+	return 1
 
 
 def evalHirecsOtl(execpool, cnlfile, timeout):
@@ -287,6 +344,7 @@ def execHirecsAhOtl(execpool, netfile, timeout):
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=os.devnull, stderr=''.join((_algsdir, algname, 'outp/', task, _logext))))
+	return 1
 
 
 def evalHirecsAhOtl(execpool, cnlfile, timeout):
@@ -314,6 +372,7 @@ def execHirecsNounwrap(execpool, netfile, timeout):
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', task, '.hoc'))
 		, stderr=''.join((_algsdir, algname, 'outp/', task, _logext))))
+	return 1
 
 
 # Oslom2
@@ -348,6 +407,7 @@ def execOslom2(execpool, netfile, timeout):
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
 		, stdout=''.join((logsdir, task, _logext)), stderr=''.join((logsdir, task, '.err'))))
+	return 1
 
 
 def evalOslom2(execpool, cnlfile, timeout):
@@ -379,6 +439,7 @@ def execGanxis(execpool, netfile, timeout):
 		
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
 		, stdout=''.join((logsdir, task, _logext)), stderr=''.join((logsdir, task, '.err'))))
+	return 1
 
 
 def evalGanxis(execpool, cnlfile, timeout):

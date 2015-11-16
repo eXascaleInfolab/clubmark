@@ -800,9 +800,10 @@ if len(sys.argv)==3:
    cs=getKCliqueComponents(net,k)
    print cs
 elif len(sys.argv)==6 or len(sys.argv)==7:
-   for cs in kcliquePercolator(net,k,start,stop,evaluations,weightFunction=weightFunction):
-       print "At threshold: " + str(cs.threshold)
-       print cs
+   for i, cs in enumerate(kcliquePercolator(net,k,start,stop,evaluations,weightFunction=weightFunction)):
+      print "# Communities for the top {} heaviest {}-cliques at the threshold {}:".format(
+         start + (stop - start) * i / (evaluations - 1), k, cs.threshold)
+      print cs
 else:
    print helpstring
 

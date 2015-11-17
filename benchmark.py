@@ -320,14 +320,12 @@ def benchmark(*args):
 			for net in glob.iglob('*'.join((ddir, _extnetfile))):
 				for alg in algs:
 					try:
-						alg(_execpool, net, timeout)
+						netsnum += alg(_execpool, net, timeout)
 					except StandardError as err:
 						errexectime = time.time() - exectime
 						print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
 							.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
-					else:
-						netsnum += 1
-
+		
 		## Additionally execute Louvain multiple times
 		#alg = execLouvain
 		#if alg in algs:
@@ -339,8 +337,8 @@ def benchmark(*args):
 		#				errexectime = time.time() - exectime
 		#				print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
 		#					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
-
-		# TODO: Implement execution on custom datasets considering whether they weighted / unweighted
+		
+		# TODO: Implement execution on custom datasets considering whether they weighted / unweighted			
 		## Run algs on the specified datasets if required
 		## Unweighted networks
 		#for udat in udatas:

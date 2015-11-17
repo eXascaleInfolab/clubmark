@@ -73,24 +73,26 @@ def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname
 		taskex = ''.join((task, '_', str(i)))
 
 
-def modAlgorithm(execpool, nsafile, timeout, algname):
+def modAlgorithm(execpool, nsafile, timeout, algname, multirun=True):
 	"""Evaluate quality of the algorithm by modularity
 
 	execpool  - execution pool of worker processes
 	nsafile  - file name of the input network
 	timeout  - execution timeout, 0 - infinity
 	algname  - the algorithm name that is evaluated
+	multirun  - evaluate also on the shuffled networks (is required for non-deterministic algorithms only)
 	"""
 	assert execpool and nsafile and algname, "Parameters must be defined"
 	# Fetch the task name and chose correct network filename
 	task = os.path.split(os.path.splitext(cnlfile)[0])[1]  # Base name of the network
 	assert task, 'The network name should exists'
 
-	args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', task, '_', algname))
-		, './eval.sh', evalbin, '../' + cnlfile, ''.join((algname, 'outp/', task)), algname, evalname)
+	args = ('./hirecs', ''.join(('-e=./', evalname,_extexectime)), ''.join((algname, 'outp/', task)), algname, evalname)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((evalname, task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', evalname, '_', task, _logext)), stderr=stderr))
+	if not multirun:
+		return
 
 	# Evaluate also shuffled networks if exists
 	i = 0
@@ -245,8 +247,9 @@ def execScp(execpool, netfile, timeout):
 	assert task, 'The network name should exists'
 
 	algname = 'scp'
-	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
-		, _pyexec, ''.join(('./', algname, '.py')), '../' + netfile)  # ATTENTION: Last argument is k-clique size, specified later
+	# ATTENTION: a single argument is k-clique size, specified later
+	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), ''.join(('-n=', task, '_{}'))
+		, _pyexec, ''.join(('./', algname, '.py')), '../' + netfile, '{}')
 
 	# Run again for k E [3, 12]
 	resbase = ''.join((_algsdir, algname, 'outp/', task, '/', task, '_'))  # Base name of the result
@@ -256,7 +259,11 @@ def execScp(execpool, netfile, timeout):
 		kstr = str(k)
 		kstrex = 'k' + kstr
 		#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
-		execpool.execute(Job(name='_'.join((task, algname, kstrex)), workdir=_algsdir, args=args + [kstr], timeout=timeout
+		#print('> Starting job {} with args: {}'.format('_'.join((task, algname, kstrex)), args + [kstr]))
+		finargs = list(args)  # Copy args
+		finargs[2] = finargs[2].format(kstrex)
+		finargs[-1] = finargs[-1].format(kstr)
+		execpool.execute(Job(name='_'.join((task, algname, kstrex)), workdir=_algsdir, args=finargs, timeout=timeout
 			, stdout=''.join((resbase, kstrex, _extclnodes))
 			, stderr=''.join((resbase, kstrex, _logext)) ))
 	return kmax + 1 - kmin

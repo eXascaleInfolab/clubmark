@@ -231,6 +231,11 @@ class ExecPool:
 				except Exception as err:
 					print('ERROR in ondone callback of "{}": {}'.format(job.name, err), file=sys.stderr)
 			del self._workers[proc]
+			# Remove empty logs
+			if job.stdout and os.path.getsize(job.stdout) == 0:
+				os.remove(job.stdout)
+			if job.stderr and os.path.getsize(job.stderr) == 0:
+				os.remove(job.stderr)
 			print('"{}" #{} is completed'.format(job.name, proc.pid, file=sys.stderr))
 			
 		# Start subsequent job if it is required

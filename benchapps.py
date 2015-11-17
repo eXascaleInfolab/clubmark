@@ -13,6 +13,7 @@
 \date: 2015-07
 """
 
+from __future__ import print_function  # Required for stderr output, must be the first import
 import os
 import shutil
 import glob
@@ -20,11 +21,11 @@ import subprocess
 
 # Add algorithms modules
 import sys
-sys.path.insert(0, 'algorithms')
+#sys.path.insert(0, 'algorithms')  # Note: this operation might lead to ambiguity on paths resolving
 from sys import executable as _pyexec  # Full path to the current Python interpreter
 
-from louvain_igraph import louvain
-from randcommuns import randcommuns
+from algorithms.louvain_igraph import louvain
+from algorithms.randcommuns import randcommuns
 from benchcore import Job
 
 from benchcore import _extexectime
@@ -36,6 +37,7 @@ from benchcore import _netshuffles
 _algsdir = 'algorithms/'  # Default directory of the benchmarking algorithms
 _logext = '.log'
 _nmibin = './gecmi'  # Binary for NMI evaluation
+_modext = '.mod'
 
 
 def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname='nmi', stderr=os.devnull):
@@ -73,7 +75,7 @@ def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname
 		taskex = ''.join((task, '_', str(i)))
 
 
-def modAlgorithm(execpool, nsafile, timeout, algname, multirun=True):
+def modAlgorithm(execpool, nsafile, timeout, algname):  # , multirun=True
 	"""Evaluate quality of the algorithm by modularity
 
 	execpool  - execution pool of worker processes
@@ -84,27 +86,51 @@ def modAlgorithm(execpool, nsafile, timeout, algname, multirun=True):
 	"""
 	assert execpool and nsafile and algname, "Parameters must be defined"
 	# Fetch the task name and chose correct network filename
-	task = os.path.split(os.path.splitext(cnlfile)[0])[1]  # Base name of the network
+	task = os.path.split(os.path.splitext(nsafile)[0])[1]  # Base name of the network
 	assert task, 'The network name should exists'
-
-	args = ('./hirecs', ''.join(('-e=./', evalname,_extexectime)), ''.join((algname, 'outp/', task)), algname, evalname)
-	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
-	execpool.execute(Job(name='_'.join((evalname, task, algname)), workdir=_algsdir, args=args
-		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', evalname, '_', task, _logext)), stderr=stderr))
-	if not multirun:
+	
+	# Make dirs with mod logs
+	# Directory of resulting community structures (clusters) for each network
+	resdir = ''.join((_algsdir, algname, 'outp/'))
+	clsbase = resdir + task
+	if not os.path.exists(clsbase):
+		print('WARNING clsuters "{}" do not exist from "{}"'.format(task, algname), file=sys.stderr)
 		return
-
-	# Evaluate also shuffled networks if exists
-	i = 0
-	taskex = ''.join((task, '_', str(i)))
-	while os.path.exists(''.join((_algsdir, algname, 'outp/', taskex))):
-		args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', taskex, '_', algname))
-			, './eval.sh', evalbin, '../' + cnlfile, ''.join((algname, 'outp/', taskex)), algname, evalname)
+	
+	evalname = 'mod'
+	#clsdir =  ''.join((_algsdir, algname, 'outp/', task, '/'))
+	logsdir = ''.join((clsbase, '_', evalname, '/'))
+	if not os.path.exists(logsdir):
+		os.makedirs(logsdir)
+	
+	# Traverse over all resulting communities for each ground truth, log results
+	tmodname = ''.join((clsbase, '_', algname, _modext))  # Name of the file with accumulated modularity
+	for cfile in glob.iglob(clsbase + '/*'):
+		print('Checking ' + cfile)
+		taskex = os.path.split(os.path.splitext(cfile)[0])[1]  # Base name of the network
+		assert taskex, 'The clusters name should exists'
+		args = ('./hirecs', '-e=../' + cfile, '../' + nsafile)
 		#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
-		execpool.execute(Job(name='_'.join((evalname, taskex, algname)), workdir=_algsdir, args=args
-			, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', evalname, '_', taskex, _logext)), stderr=stderr))
-		i += 1
-		taskex = ''.join((task, '_', str(i)))
+		errcode = execpool.execute(Job(name='_'.join((evalname, taskex, algname)), workdir=_algsdir, args=args
+			, timeout=timeout, stdout=os.devnull, stderr=''.join((logsdir, taskex, _logext))), False)  # Async execution
+		if errcode != 0:
+			# Skip this task and logg the error
+			print('ERROR: modularity evalutation for "{}" by "{}", errcode: {}'.format(task, algname, errcode), file=sys.stderr)
+			continue
+		# Copy final modularity output to the separate file
+		with open(tmodname, 'a') as tmod:  # Append to the end
+			#subprocess.call('tail', '-n 1', ''.join((logsdir, taskex, _logext)), stdout=accres)
+			subprocess.call(''.join(('tail -n 1 ', logsdir, taskex, _logext, r" | sed 's/.* mod: \([^,]*\).*/\1/'")), stdout=tmod, shell=True)
+			
+	# Find the highest value of modularity from the accumulated one and store it in the
+	# acc file for all networks
+	# Sort the task acc mod file and accumulate the largest value to the totall acc mod file
+	amodname = ''.join((resdir, algname, _modext))  # Name of the file with accumulated modularity
+	if not os.path.exists(amodname):
+		with open(amodname, 'a') as amod:
+			amod.write('<net>\t<Q>\n')
+	with open(amodname, 'a') as amod:  # Append to the end
+		subprocess.call(''.join(('printf "', task, '\t `sort -g -r "', tmodname,'" | head -n 1`\n"')), stdout=amod, shell=True)
 
 
 def execAlgorithm(execpool, netfile, timeout, selfexec=False):
@@ -202,7 +228,7 @@ def execLouvain_ig(execpool, netfile, timeout, selfexec=False):
 		# File name of the accumulated result
 		accname = (logsbase[:logsbase.rfind('_')] if selfexec else logsbase) + resext
 		with open(accname, 'a') as accres:  # Append to the end
-			subprocess.call(['tail', '-n 1', logsbase + _logext], stdout=accres)
+			subprocess.call(('tail', '-n 1', logsbase + _logext), stdout=accres)
 
 	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
 		, _pyexec, ''.join(('./', algname, '.py')), ''.join(('-i=../', netfile, netext))

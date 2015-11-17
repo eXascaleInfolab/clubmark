@@ -140,17 +140,19 @@ class ExecPool:
 			self._workers.clear()
 			
 			
-	def __startJob(self, job):
+	def __startJob(self, job, async=True):
 		"""Start the specified job by one of workers
 		
 		job  - the job to be executed, instance of Job
+		async  - async execution or wait intill execution completed
+		return  - 0 on successful execution, proc.returncode otherwise
 		"""
 		assert isinstance(job, Job), 'job must be a valid entity'
-		if len(self._workers) > self._workersLim:
+		if async and len(self._workers) > self._workersLim:
 			raise AssertionError('Free workers must be available ({} busy workers of {})'
 				.format(len(self._workers), self._workersLim))
 		
-		print('Starting "{}"...'.format(job.name), file=sys.stderr)
+		print('Starting "{}"{}...'.format(job.name, '' if async else ' in sync mode'), file=sys.stderr)
 		job.tstart = time.time()
 		if job.onstart:
 			try:
@@ -182,7 +184,7 @@ class ExecPool:
 			if fstdout or fstderr:
 				print('"{}" uses custom output channels:\n\tstdout: {}\n\tstderr: {}'.format(job.name
 					, job.stdout if fstdout else '<default>', job.stderr if fstderr else '<default>'))
-			proc = subprocess.Popen(job.args, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
+			proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
 		except StandardError as err:  # Should not occur: subprocess.CalledProcessError
 			if fstdout:
 				fstdout.close()
@@ -190,7 +192,13 @@ class ExecPool:
 				fstderr.close()
 			print('ERROR on "{}" execution occurred: {}, skipping the job'.format(job.name, err), file=sys.stderr)
 		else:
-			self._workers[proc] = job
+			if async:
+				self._workers[proc] = job
+			else:
+				proc.wait()
+				print('"{}" #{} is completed: {}'.format(job.name, proc.pid, proc.returncode, file=sys.stderr))
+				return proc.returncode
+		return 0
 
 
 	def __reviseWorkers(self):
@@ -243,25 +251,32 @@ class ExecPool:
 			self.__startJob(self._jobs.popleft())
 
 
-	def execute(self, job):
+	def execute(self, job, async=True):
 		"""Schecule the job for the execution
 		
 		job  - the job to be executed, instance of Job
+		async  - async execution or wait intill execution completed
+		  NOTE: sync tasks are started at once
+		return  - 0 on successful execution, proc.returncode otherwise
 		"""
 		assert isinstance(job, Job), 'job must be a valid entity'
 		assert len(self._workers) <= self._workersLim, 'Number of workers exceeds the limit'
 		assert job.name, "Job parameters must be defined"  #  and job.workdir and job.args
 		
 		print('Scheduling the job "{}" with timeout {}'.format(job.name, job.timeout))
-		# Start the execution timer
-		if self._tstart is None:
-			self._tstart = time.time()
-		# Schedule the job
-		if self._jobs or len(self._workers) >= self._workersLim:
-			self._jobs.append(job)
-			#self.__reviseWorkers()  # Anyway the workers are revised if exist in the working cycle
+		if async:
+			# Start the execution timer
+			if self._tstart is None:
+				self._tstart = time.time()
+			# Schedule the job
+			if self._jobs or len(self._workers) >= self._workersLim:
+				self._jobs.append(job)
+				#self.__reviseWorkers()  # Anyway the workers are revised if exist in the working cycle
+			else:
+				self.__startJob(job)
 		else:
-			self.__startJob(job)
+			return self.__startJob(job, False)
+		return  0
 
 
 

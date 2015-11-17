@@ -44,8 +44,10 @@ import benchapps  # Benchmarking apps (clustering algs)
 from benchcore import *
 
 # Add 3dparty modules
-sys.path.insert(0, '3dparty')
-from tohig import tohig
+#sys.path.insert(0, '3dparty')
+tohig = __import__('3dparty.tohig')
+#tohig = sys.modules['3dparty.tohig']
+#from tohig import tohig
 #from functools import wraps
 
 from benchcore import _extexectime
@@ -224,8 +226,8 @@ def convertNets(datadir, overwrite=False):
 		#	# ./convert [-r] -i graph.txt -o graph.bin -w graph.weights
 		#	# r  - renumber nodes
 		#	# ATTENTION: original Louvain implementation processes incorrectly weighted networks with uniform weights (=1) if supplied as unweighted
-		#	subprocess.call([_algsdir + 'convert', '-i', net, '-o', netnoext + '.lig'
-		#		, '-w', netnoext + '.liw'])
+		#	subprocess.call((_algsdir + 'convert', '-i', net, '-o', netnoext + '.lig'
+		#		, '-w', netnoext + '.liw'))
 		#except StandardError as err:
 		#	print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
 
@@ -238,8 +240,8 @@ def convertNets(datadir, overwrite=False):
 		assert netname, 'netname should be defined'
 		for i in range(_netshuffles):
 			# sort -R pgp_udir.net -o pgp_udir_rand3.net
-			subprocess.call(['sort', '-R', net, '-o'
-				, ''.join((netnoext, '/', netname, '_', str(i), _extnetfile))])
+			subprocess.call(('sort', '-R', net, '-o'
+				, ''.join((netnoext, '/', netname, '_', str(i), _extnetfile))))
 		#else:
 		#	print('The shuffling is skipped: {} is already exist'.format(netnoext))
 
@@ -357,13 +359,14 @@ def benchmark(*args):
 
 	# Evaluate results
 	if evalres:
-		measures = {1: 'NMI', 2: 'Q'}
+		# measures is a mao with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
+		measures = {1: ['eval', _extclnodes, 'NMI'], 2: ['mod', '.hig', 'Q']}
 		for im in measures:
 			# Evaluate only required measures
 			if evalres & im != im:
 				continue
 
-			evalpref = 'eval' if im == 1 else 'mod'  # Evaluation prefix
+			evalpref = measures[im][0]  # Evaluation prefix
 			if not algorithms:
 				#evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
 				#				, evalHirecsNS, evalOslom2NS, evalGanxisNS)
@@ -377,18 +380,19 @@ def benchmark(*args):
 						getattr(appsmodule, ''.join((evalpref, alg.capitalize(), 'NS')), unknownApp(''.join((evalpref, alg.capitalize(), 'NS')))))
 						for alg in algorithms])
 				else:
-					evalalgs = [getattr(appsmodule, 'eval' + alg.capitalize(), unknownApp('eval' + alg.capitalize()))
+					assert evalpref == 'mod', 'Evaluation prefix is invalid'
+					evalalgs = [getattr(appsmodule, evalpref + alg.capitalize(), unknownApp(evalpref + alg.capitalize()))
 						for alg in algorithms]
 			evalalgs = tuple(evalalgs)
 
-			print('Starting {} evaluation...'.format(measures[im]))
+			print('Starting {} evaluation...'.format(measures[im][2]))
 			assert not _execpool, '_execpool should be clear on algs evaluation'
 			_execpool = ExecPool(max(cpu_count() - 1, 1))
 			netsnum = 0
 			timeout = 20 *60*60  # 20 hours
 			for ddir in datadirs:
 				# Read ground truth
-				for gtfile in glob.iglob('*'.join((ddir, _extclnodes if im == 1 else _extnetfile))):
+				for gtfile in glob.iglob('*'.join((ddir, measures[im][1]))):
 					for elg in evalalgs:
 						try:
 							elg(_execpool, gtfile, timeout)
@@ -400,7 +404,7 @@ def benchmark(*args):
 			if _execpool:
 				_execpool.join(max(max(timeout, exectime * 2), timeout + 60 * netsnum))  # Twice the time of algorithms execution
 				_execpool = None
-			print('{} evaluation is completed'.format(measures[im]))
+			print('{} evaluation is completed'.format(measures[im][2]))
 	print('The benchmark is completed')
 
 

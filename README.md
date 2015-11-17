@@ -1,4 +1,4 @@
-# PyCAB (former HiCBeM) - Python Benchmarking Framework for the Clustering Algorithms Evaluation
+# PyCABeM (former HiCBeM) - Python Benchmarking Framework for the Clustering Algorithms Evaluation
 \brief Uses extrinsic (NMIs) and intrinsic (Q) measures for the clusters quality evaluation considering overlaps (nodes membership in multiple clusters)  
 \author: (c) [Artem Lutov](artem@exascale.info)  
 \organizations: [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  

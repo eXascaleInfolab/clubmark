@@ -1,4 +1,5 @@
-# HiCBeM - Generic Benchmarking Framework with customization for the evaluation of <br />Hierarchical Overlapping Clustering Algorithms
+# PyCAB (former HiCBeM) - Python Benchmarking Framework for the Clustering Algorithms Evaluation
+\brief Uses extrinsic (NMIs) and intrinsic (Q) measures for the clusters quality evaluation considering overlaps (nodes membership in multiple clusters)  
 \author: (c) [Artem Lutov](artem@exascale.info)  
 \organizations: [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
 \keywords: overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework
@@ -13,9 +14,9 @@
 
 ## Functionality
 ### Generic Benchmarking Framework
-- optionally generates or preprocesses datasets using specified executable(s)
+- optionally generates or preprocesses datasets using specified executable(s) (by default uses LFR framework for overlapping weightted networks)
 - optionally executes specified apps with the specified params on the specified datasets
-- optionally evaluates results of the execution using specified executable(s)
+- optionally evaluates results of the execution using specified executable(s) (by default performs NMIs and Q evaluation)
 	
 All executions (stdout/err output) are logged also as resources consumption: CPU (user, kernel, etc.) and memory (RAM RSS).
 Logs are saved even in case of internal / external interruptions and crashes.

@@ -26,14 +26,16 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 - executes
 	* [HiReCS](http://www.lumais.com/hirecs) (www.lumais.com/hirecs),
 	* [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations),
-	* [Oslom2](http://www.oslom.org/software.htm) and
+	* [Oslom2](http://www.oslom.org/software.htm)
 	* [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*)
+	* [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) ([Sequential algorithm for fast clique percolation](http://www.lce.hut.fi/research/mm/complex/software/))
 
 	clustering algorithms on the generated synthetic networks. Output results (clusters, hierarchy, modularty, etc.) of the clustering algorithms are stored in the corresponding files.
 - evaluates results using NMI for overlapping communities, extended versions (to have uniform input / output formats) of:
   * gecmi (https://bitbucket.org/dsign/gecmi/wiki/Home, "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall)
   * onmi (https://github.com/aaronmcdaid/Overlapping-NMI, "Normalized Mutual Information to evaluate overlapping community finding algorithms" by Aaron F. McDaid, Derek Greene, Neil Hurley)
 - resources consumption is evaluated using exectime profiler (https://bitbucket.org/lumais/exectime/)
+- modularity of the clustering (compatible to the standard modularity value, but applicable for overlapping clusters) is evaluated by HiReCS (http://www.lumais.com/hirecs)
 
 All results and traces are stored into the corresponding files even in case of internal (crash) / external termination of the benchmarking applications or the whole framework.
 
@@ -46,9 +48,17 @@ Basically the framework executes a set of algorithms on the specified datasets i
 * Python (or [pypy](http://pypy.org/) for the fast execution)
 
 ### Libraries
+* [hirecs](http://www.lumais.com/hirecs/) for modularity evaluation of overlapping community structure with results compatible to the standard modularity
 * [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`  
 
 > Note:
+- `hirecs` depends on libstdc++.so.6: version GLIBCXX_3.4.20 (precompiled version for modularity evaluation). To install it on Ubuntu use: `sudo apt-get install libstdc++6` or
+```sh
+$ sudo add-apt-repository ppa:ubuntu-toolchain-r/test 
+$ sudo apt-get update
+$ sudo apt-get install libstdc++6
+```
+
 - `python-igraph` depends on `libz` and `libxml2`, which are installed in Linux Ubuntu executing:  
 `$ sudo apt-get install lib32z1-dev libxml2-dev`
 - `gecmi`, which is used for the NMI_ovp evaluation depends on:
@@ -113,8 +123,9 @@ Example of the `.nmi[-s]` format:
 
 ## Extension
 To add own apps / algorithms to be benchmarked just add corresponding functions for "myalgorithm" app:
-- `def execMyalgorithm(execpool, netfile, timeout, tasknum=0)`
-- `def evalMyalgorithm(execpool, cnlfile, timeout)`
+- `def execMyalgorithm(execpool, netfile, timeout, selfexec=False)`  - to execute the algorihm for the network
+- `def evalMyalgorithm(execpool, cnlfile, timeout)`  - to evaluate accuracy of the custering results (community structure) comparing to the specified ground truth using NMIs measures
+- `def modMyalgorithm(execpool, netfile, timeout)`  - to evaluate quality of the clsutering results (community structure) by the standard modularity measure (applicable for overlapping clusters)
 
 into the `benchapps.py`.
 

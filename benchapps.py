@@ -44,7 +44,7 @@ def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname
 	"""Evaluate the algorithm by the specified measure
 
 	execpool  - execution pool of worker processes
-	cnlfile  - file name of clusters for each of which nodes are listed (clsuters nodes lists file)
+	cnlfile  - file name of clusters for each of which nodes are listed (clusters nodes lists file)
 	timeout  - execution timeout, 0 - infinity
 	algname  - the algorithm name that is evaluated
 	evalbin  - file name of the evaluation binary
@@ -94,43 +94,55 @@ def modAlgorithm(execpool, nsafile, timeout, algname):  # , multirun=True
 	resdir = ''.join((_algsdir, algname, 'outp/'))
 	clsbase = resdir + task
 	if not os.path.exists(clsbase):
-		print('WARNING clsuters "{}" do not exist from "{}"'.format(task, algname), file=sys.stderr)
+		print('WARNING clusters "{}" do not exist from "{}"'.format(task, algname), file=sys.stderr)
 		return
 	
 	evalname = 'mod'
-	#clsdir =  ''.join((_algsdir, algname, 'outp/', task, '/'))
 	logsdir = ''.join((clsbase, '_', evalname, '/'))
 	if not os.path.exists(logsdir):
 		os.makedirs(logsdir)
 	
 	# Traverse over all resulting communities for each ground truth, log results
 	tmodname = ''.join((clsbase, '_', algname, _modext))  # Name of the file with accumulated modularity
+	jobsinfo = []
 	for cfile in glob.iglob(clsbase + '/*'):
 		print('Checking ' + cfile)
 		taskex = os.path.split(os.path.splitext(cfile)[0])[1]  # Base name of the network
 		assert taskex, 'The clusters name should exists'
 		args = ('./hirecs', '-e=../' + cfile, '../' + nsafile)
+
+		# Job postprocessing
+		def postexec(job):
+			"""Copy final modularity output to the separate file"""
+			with open(tmodname, 'a') as tmod:  # Append to the end
+				subprocess.call(''.join(('tail -n 1 "', job.stderr, '" ', r"| sed 's/.* mod: \([^,]*\).*/\1/'")), stdout=tmod, shell=True)
+			# Accuulate all results by the last task of the job ----------------
+			# Check number of completed jobs
+			processing = False
+			skip = False  # If more than one task is executed, skip accumulative statistics evaluation
+			for jobexec in jobsinfo:
+				if not jobexec.value:
+					if skip:
+						processing = True
+						break
+					skip = True
+			if processing:
+				return
+			# Find the highest value of modularity from the accumulated one and store it in the
+			# acc file for all networks
+			# Sort the task acc mod file and accumulate the largest value to the totall acc mod file
+			amodname = ''.join((resdir, algname, _modext))  # Name of the file with accumulated modularity
+			if not os.path.exists(amodname):
+				with open(amodname, 'a') as amod:
+					amod.write('<Network>\t<Q>\n')
+			with open(amodname, 'a') as amod:  # Append to the end
+				subprocess.call(''.join(('printf "', task, '\t `sort -g -r "', tmodname,'" | head -n 1`\n"')), stdout=amod, shell=True)
+
 		#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
-		errcode = execpool.execute(Job(name='_'.join((evalname, taskex, algname)), workdir=_algsdir, args=args
-			, timeout=timeout, stdout=os.devnull, stderr=''.join((logsdir, taskex, _logext))), False)  # Async execution
-		if errcode != 0:
-			# Skip this task and logg the error
-			print('ERROR: modularity evalutation for "{}" by "{}", errcode: {}'.format(task, algname, errcode), file=sys.stderr)
-			continue
-		# Copy final modularity output to the separate file
-		with open(tmodname, 'a') as tmod:  # Append to the end
-			#subprocess.call('tail', '-n 1', ''.join((logsdir, taskex, _logext)), stdout=accres)
-			subprocess.call(''.join(('tail -n 1 ', logsdir, taskex, _logext, r" | sed 's/.* mod: \([^,]*\).*/\1/'")), stdout=tmod, shell=True)
-			
-	# Find the highest value of modularity from the accumulated one and store it in the
-	# acc file for all networks
-	# Sort the task acc mod file and accumulate the largest value to the totall acc mod file
-	amodname = ''.join((resdir, algname, _modext))  # Name of the file with accumulated modularity
-	if not os.path.exists(amodname):
-		with open(amodname, 'a') as amod:
-			amod.write('<net>\t<Q>\n')
-	with open(amodname, 'a') as amod:  # Append to the end
-		subprocess.call(''.join(('printf "', task, '\t `sort -g -r "', tmodname,'" | head -n 1`\n"')), stdout=amod, shell=True)
+		job = Job(name='_'.join((evalname, taskex, algname)), workdir=_algsdir, args=args
+			, timeout=timeout, ondone=postexec, stdout=os.devnull, stderr=''.join((logsdir, taskex, _logext)))
+		jobsinfo.append(job.executed)
+		execpool.execute(job)
 
 
 def execAlgorithm(execpool, netfile, timeout, selfexec=False):
@@ -177,27 +189,6 @@ def execAlgorithm(execpool, netfile, timeout, selfexec=False):
 #	return
 
 
-## Igraph implementation of the Louvain
-#	# Fetch the task name
-#	task = os.path.split(os.path.splitext(netfile)[0])[1]  # Base name of the network
-#	assert task, 'The network name should exists'
-#
-#	algname = 'oslom2'
-#	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
-#		, './oslom_undir', '-f', '../' + netfile, '-w')
-#	# Copy results to the required dir on postprocessing
-#	logsdir = ''.join((_algsdir, algname, 'outp/'))
-#	def postexec(job):
-#		outpdir = ''.join((logsdir, task, '/'))
-#		if not os.path.exists(outpdir):
-#			os.makedirs(outpdir)
-#		for fname in glob.iglob(''.join((_syntdir, task, '.nsa', '_oslo_files/tp*'))):
-#			shutil.copy2(fname, outpdir)
-#
-#	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
-#	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
-#		, stdout=''.join((logsdir, task, _logext)), stderr=''.join((logsdir, task, '.err'))))
-#	return 1
 def execLouvain_ig(execpool, netfile, timeout, selfexec=False):
 	"""Execute Louvain
 	Results are not stable => multiple execution is desirable.
@@ -280,7 +271,7 @@ def execScp(execpool, netfile, timeout):
 	# Run again for k E [3, 12]
 	resbase = ''.join((_algsdir, algname, 'outp/', task, '/', task, '_'))  # Base name of the result
 	kmin = 3  # Min clique size to be used for the communities identificaiton
-	kmax = 12  # Max clique size
+	kmax = 8  # Max clique size
 	for k in range(kmin, kmax + 1):
 		kstr = str(k)
 		kstrex = 'k' + kstr
@@ -318,8 +309,6 @@ def execRandcommuns(execpool, netfile, timeout, selfexec=False):
 	netfile, netext = os.path.splitext(netfile)  # Remove the extension
 	task = os.path.split(netfile)[1]  # Base name of the network
 	assert task, 'The network name should exists'
-	#if tasknum:
-	#	task = '_'.join((task, str(tasknum)))
 
 	algname = 'randcommuns'
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10

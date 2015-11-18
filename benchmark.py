@@ -44,9 +44,9 @@ import benchapps  # Benchmarking apps (clustering algs)
 from benchcore import *
 
 # Add 3dparty modules
-#sys.path.insert(0, '3dparty')
-tohig = __import__('3dparty.tohig')
-#tohig = sys.modules['3dparty.tohig']
+#sys.path.insert(0, '3dparty')  # Note: this operation might lead to ambiguity on paths resolving
+thirdparty = __import__('3dparty.tohig')
+tohig = thirdparty.tohig.tohig  # ~ from 3dparty.tohig import tohig
 #from tohig import tohig
 #from functools import wraps
 
@@ -278,7 +278,7 @@ def benchmark(*args):
 
 	Run the algorithms on the specified datasets respecting the parameters.
 	"""
-	exectime = time.time()
+	exectime = time.time()  # Start of the executing time
 	gensynt, convnets, runalgs, evalres, udatas, wdatas, timeout, algorithms = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tconvnets: {}'
 		'\n\trunalgs: {}\n\tevalres: {}\n\tudatas: {}\n\twdatas: {}\n\ttimeout: {}\n\talgorithms: {}'
@@ -318,8 +318,10 @@ def benchmark(*args):
 			algs = [getattr(appsmodule, 'exec' + alg.capitalize(), unknownApp('exec' + alg.capitalize())) for alg in algorithms]
 		algs = tuple(algs)
 
+		netcount = 0  # Number of networks to be processed
 		for ddir in datadirs:
 			for net in glob.iglob('*'.join((ddir, _extnetfile))):
+				netcount += 1
 				for alg in algs:
 					try:
 						netsnum += alg(_execpool, net, timeout)
@@ -351,7 +353,10 @@ def benchmark(*args):
 
 
 		if _execpool:
-			_execpool.join(timeout * netsnum)
+			timelim = timeout * netsnum
+			print('Waiting for the algorithms execution on {} tasks from {} networks'
+				' with {} sec ({} h {} m {:.4f} s) timeout'.format(netsnum, netcount, timelim, *secondsToHms(timelim)))
+			_execpool.join(timelim)
 			_execpool = None
 		exectime = time.time() - exectime
 		print('The benchmark execution is successfully comleted on {:.4f} sec ({} h {} m {:.4f} s)'
@@ -396,6 +401,9 @@ def benchmark(*args):
 					for elg in evalalgs:
 						try:
 							elg(_execpool, gtfile, timeout)
+							# Run algs with some delay to avoid headers duplicaiton
+							# in the file of accumulated statistics
+							time.sleep(0.2)
 						except StandardError as err:
 							print('The {} is interrupted by the exception: {}'
 								.format(elg.__name__, err))
@@ -437,7 +445,8 @@ if __name__ == '__main__':
 			'    Notes:',
 			'    - multiple directories and files can be specified via multiple -d/f options (one per the item)',
 			'    - datasets should have the following format: <node_src> <node_dest> [<weight>]',
-			'  -t[X]=<number>  - specifies timeout per each benchmarking application in sec, min or hours. Default: 0 sec',
+			'  -t[X]=<number>  - specifies timeout for each benchmarking application per single evalution on each network'
+			' in sec, min or hours. Default: 0 sec  - no timeout',
 			'    Xs  - time in seconds. Default option',
 			'    Xm  - time in minutes',
 			'    Xh  - time in hours',

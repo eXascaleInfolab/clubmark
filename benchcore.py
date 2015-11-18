@@ -19,8 +19,10 @@ import sys
 import time
 import subprocess
 from multiprocessing import cpu_count
+from multiprocessing import Value
 import collections
 import os
+import ctypes  # Required for the multiprocessing Value definition
 
 
 _extexectime = '.rcp'  # Resource Consumption Profile
@@ -53,34 +55,51 @@ class Job:
 	#def __new__(cls, name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None):
 	#	assert name, "Job parameters must be defined"  #  and job.workdir and job.args
 	#	return super(Job, cls).__new__(cls, name, workdir, args, timeout, ontimeout, onstart, ondone, tstart)
-	def __init__(self, name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None):
+	# NOTE: keyword-only arguments are specified after the *, supported only since Python 3
+	def __init__(self, name, workdir, args, timeout=0, ontimeout=0, #*,
+	onstart=None, ondone=None, stdout=None, stderr=None, tstart=None):
 		"""The job to be executed
 		
 		name  - job name
 		workdir  - working directory for the corresponding process
 		args  - execution arguments including the executable itself for the process
+			NOTE: can be None to make make a stub process and execute the callbacks
 		timeout  - execution timeout. Default: 0, means infinity
 		ontimeout  - action on timeout:
 			0  - terminate the job. Default
 			1  - restart the job
 		onstart  - callback which is executed on the job starting in the CONTEXT OF
 			THE CALLER (main process) with the single argument, the job. Default: None
+			ATTENTION: must be lightweight
 		ondone  - callback which is executed on successful completion of the job in the
 			CONTEXT OF THE CALLER (main process) with the single argument, the job. Default: None
+			ATTENTION: must be lightweight
 			
 		tstart  - start time is filled automatically on the execution start. Default: None
 		"""
 		assert name, "Job parameters must be defined"  #  and job.workdir and job.args
+		#if not args:
+		#	args = ("false")  # Create an empty process to schedule it's execution
+		
+		# Properties specified by the input parameters -------------------------
 		self.name = name
 		self.workdir = workdir
 		self.args = args
 		self.timeout = timeout
 		self.ontimeout = ontimeout
+		# Callbacks ------------------------------------------------------------
 		self.onstart = onstart
 		self.ondone = ondone
+		# I/O redirection ------------------------------------------------------
 		self.stdout = stdout
 		self.stderr = stderr
+		# Internal properties --------------------------------------------------
 		self.tstart = tstart
+		# Whether the job is executed (including terminated). Initially False,
+		# The value is set after all callbacks are executed or on the termination
+		# NOTE: if the job is restarted on timeout then the value is set only on
+		# the last execution
+		self.executed = Value(ctypes.c_bool)
 
 
 class ExecPool:
@@ -114,9 +133,12 @@ class ExecPool:
 		
 		print('Terminating the workers pool ...')
 		for job in self._jobs:
+			job.executed.value = True
 			print('Scheduled "{}" is removed'.format(job.name))
 		self._jobs.clear()
 		while self._workers:
+			for job in self._workers.values():
+				job.executed.value = True
 			procs = self._workers.keys()
 			for proc in procs:
 				print('Terminating "{}" #{} ...'.format(self._workers[proc].name, proc.pid), file=sys.stderr)
@@ -147,7 +169,8 @@ class ExecPool:
 		async  - async execution or wait intill execution completed
 		return  - 0 on successful execution, proc.returncode otherwise
 		"""
-		assert isinstance(job, Job), 'job must be a valid entity'
+		assert isinstance(job, Job), 'Job must be a valid entity'
+		assert job.executed.value == False, 'Job must have executed attribute set only after the execution'
 		if async and len(self._workers) > self._workersLim:
 			raise AssertionError('Free workers must be available ({} busy workers of {})'
 				.format(len(self._workers), self._workersLim))
@@ -184,20 +207,33 @@ class ExecPool:
 			if fstdout or fstderr:
 				print('"{}" uses custom output channels:\n\tstdout: {}\n\tstderr: {}'.format(job.name
 					, job.stdout if fstdout else '<default>', job.stderr if fstderr else '<default>'))
-			proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
+			if(job.args):
+				proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
+			else:
+				proc = None
 		except StandardError as err:  # Should not occur: subprocess.CalledProcessError
 			if fstdout:
 				fstdout.close()
 			if fstderr:
 				fstderr.close()
+			job.executed.value = True
 			print('ERROR on "{}" execution occurred: {}, skipping the job'.format(job.name, err), file=sys.stderr)
 		else:
-			if async:
+			if async and proc is not None:
 				self._workers[proc] = job
 			else:
-				proc.wait()
-				print('"{}" #{} is completed: {}'.format(job.name, proc.pid, proc.returncode, file=sys.stderr))
-				return proc.returncode
+				if proc is not None:
+					proc.wait()
+				try:
+					job.ondone(job)
+				except Exception as err:
+					print('ERROR in ondone callback of "{}": {}'.format(job.name, err), file=sys.stderr)
+				job.executed.value = True
+				if proc is not None:
+					print('"{}" #{} is completed: {}'.format(job.name, proc.pid, proc.returncode), file=sys.stderr)
+					return proc.returncode
+				else:
+					print('"{}" is completed: the process was not created because of empty args'.format(job.name), file=sys.stderr)
 		return 0
 
 
@@ -230,6 +266,8 @@ class ExecPool:
 			# Restart the job if required
 			if job.ontimeout:
 				self.__startJob(job)
+			else:
+				job.executed.value = True
 
 		# Process completed jobs: execute callbacks and remove the workers
 		for proc, job in completed:
@@ -239,12 +277,13 @@ class ExecPool:
 				except Exception as err:
 					print('ERROR in ondone callback of "{}": {}'.format(job.name, err), file=sys.stderr)
 			del self._workers[proc]
-			# Remove empty logs
-			if job.stdout and os.path.getsize(job.stdout) == 0:
+			# Remove empty logs skipping the system devnull
+			if job.stdout and job.stdout != os.devnull and os.path.getsize(job.stdout) == 0:
 				os.remove(job.stdout)
-			if job.stderr and os.path.getsize(job.stderr) == 0:
+			if job.stderr and job.stderr != os.devnull and os.path.getsize(job.stderr) == 0:
 				os.remove(job.stderr)
-			print('"{}" #{} is completed'.format(job.name, proc.pid, file=sys.stderr))
+			job.executed.value = True
+			print('"{}" #{} is completed'.format(job.name, proc.pid), file=sys.stderr)
 			
 		# Start subsequent job if it is required
 		while self._jobs and len(self._workers) <  self._workersLim:

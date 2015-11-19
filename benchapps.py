@@ -145,22 +145,24 @@ def modAlgorithm(execpool, nsafile, timeout, algname):  # , multirun=True
 		execpool.execute(job)
 
 
-def execAlgorithm(execpool, netfile, timeout, selfexec=False):
+def execAlgorithm(execpool, netfile, asym, timeout, selfexec=False):
 	"""Execute the algorithm (stub)
 
 	execpool  - execution pool to perform execution of current task
 	netfile  -  input network to be processed
+	asym  - network links weights are assymetric (in/outbound weights can be different)
 	timeout  - execution timeout for this task
 	selfexec=False  - current execution is the external or internal self call
 
 	return  - number of executions
 	"""
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	return 0
 
 
 # Louvain
 ## Original Louvain
-#def execLouvain(execpool, netfile, timeout, tasknum=0):
+#def execLouvain(execpool, netfile, asym, timeout, tasknum=0):
 #	"""Execute Louvain
 #	Results are not stable => multiple execution is desirable.
 #
@@ -189,12 +191,13 @@ def execAlgorithm(execpool, netfile, timeout, selfexec=False):
 #	return
 
 
-def execLouvain_ig(execpool, netfile, timeout, selfexec=False):
+def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False):
 	"""Execute Louvain
 	Results are not stable => multiple execution is desirable.
 
 	returns number of executions or None
 	"""
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name and chose correct network filename
 	netfile, netext = os.path.splitext(netfile)  # Remove the extension
 	task = os.path.split(netfile)[1]  # Base name of the network
@@ -237,7 +240,7 @@ def execLouvain_ig(execpool, netfile, timeout, selfexec=False):
 			netdir += '/'
 		print('Netdir: ', netdir)
 		for netfile in glob.iglob(''.join((netdir, task, '/*', netext))):
-			execLouvain_ig(execpool, netfile, timeout, selfexec)
+			execLouvain_ig(execpool, netfile, asym, timeout, selfexec)
 			execnum += 1
 	return execnum
 
@@ -257,7 +260,8 @@ def modLouvain_ig(execpool, nsafile, timeout):
 
 
 # SCP (Sequential algorithm for fast clique percolation)
-def execScp(execpool, netfile, timeout):
+def execScp(execpool, netfile, asym, timeout):
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name
 	task, netext = os.path.splitext(netfile)
 	task = os.path.split(task)[1]  # Base name of the network
@@ -301,10 +305,11 @@ def modScp(execpool, nsafile, timeout):
 
 
 # Random Disjoing Clustering
-def execRandcommuns(execpool, netfile, timeout, selfexec=False):
+def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False):
 	"""Execute Randcommuns
 	Results are not stable => multiple execution is desirable.
 	"""
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name and chose correct network filename
 	netfile, netext = os.path.splitext(netfile)  # Remove the extension
 	task = os.path.split(netfile)[1]  # Base name of the network
@@ -337,7 +342,8 @@ def modRandcommuns(execpool, nsafile, timeout):
 
 
 # HiReCS
-def execHirecs(execpool, netfile, timeout):
+def execHirecs(execpool, netfile, asym, timeout):
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name and chose correct network filename
 	netfile = os.path.splitext(netfile)[0]  # Remove the extension
 	task = os.path.split(netfile)[1]  # Base name of the network
@@ -367,9 +373,10 @@ def evalHirecsNS(execpool, cnlfile, timeout):
 #	modAlgorithm(execpool, nsafile, timeout, 'hirecs')
 
 
-def execHirecsOtl(execpool, netfile, timeout):
+def execHirecsOtl(execpool, netfile, asym, timeout):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name and chose correct network filename
 	netfile = os.path.splitext(netfile)[0]  # Remove the extension
 	task = os.path.split(netfile)[1]  # Base name of the network
@@ -395,9 +402,10 @@ def evalHirecsOtlNS(execpool, cnlfile, timeout):
 	evalAlgorithm(execpool, cnlfile, timeout, 'hirecsotl', evalbin='./onmi_sum', evalname='nmi-s')
 
 
-def execHirecsAhOtl(execpool, netfile, timeout):
+def execHirecsAhOtl(execpool, netfile, asym, timeout):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name and chose correct network filename
 	netfile = os.path.splitext(netfile)[0]  # Remove the extension
 	task = os.path.split(netfile)[1]  # Base name of the network
@@ -423,9 +431,10 @@ def evalHirecsAhOtlNS(execpool, cnlfile, timeout):
 	evalAlgorithm(execpool, cnlfile, timeout, 'hirecsahotl', evalbin='./onmi_sum', evalname='nmi-s')
 
 
-def execHirecsNounwrap(execpool, netfile, timeout):
+def execHirecsNounwrap(execpool, netfile, asym, timeout):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name and chose correct network filename
 	netfile = os.path.splitext(netfile)[0]  # Remove the extension
 	task = os.path.split(netfile)[1]  # Base name of the network
@@ -443,7 +452,8 @@ def execHirecsNounwrap(execpool, netfile, timeout):
 
 
 # Oslom2
-def execOslom2(execpool, netfile, timeout):
+def execOslom2(execpool, netfile, asym, timeout):
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name
 	task, netext = os.path.splitext(netfile)
 	task = os.path.split(task)[1]  # Base name of the network
@@ -491,7 +501,10 @@ def modOslom2(execpool, nsafile, timeout):
 
 
 # Ganxis (SLPA)
-def execGanxis(execpool, netfile, timeout):
+def execGanxis(execpool, netfile, asym, timeout):
+	print('> exec params:\n\texecpool: {}\n\tnetfile: {}\n\tasym: {}\n\ttimeout: {}'
+		.format(execpool, netfile, asym, timeout))
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name
 	task = os.path.split(os.path.splitext(netfile)[0])[1]  # Base name of the network
 	assert task, 'The network name should exists'

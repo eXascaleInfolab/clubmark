@@ -74,8 +74,8 @@ def parseParams(args):
 			0 - do not convert
 			1 - convert only if this network is not exist
 			2 - force conversion (overwrite all)
-		udatas  - list of unweighted datasets to be run
-		wdatas  - list of weighted datasets to be run
+		datas  - list of datasets to be run with asym flag (asymmetric / symmetric links weights):
+			[(<asym>, <path>), ...] , where path is either dir or file
 		timeout  - execution timeout in sec per each algorithm
 		algorithms  - algorithms to be executed (just names as in the code)
 	"""
@@ -84,8 +84,8 @@ def parseParams(args):
 	convnets = 0
 	runalgs = False
 	evalres = 0  # 1 - NMIs, 2 - Q, 3 - all measures
-	udatas = []
-	wdatas = []
+	datas = []  # list of pairs: (<asym>, <path>), where path is either dir or file
+	#asym = None  # Asymmetric dataset, per dataset
 	timeout = 36 * 60*60  # 36 hours
 	timemul = 1  # Time multiplier, sec by default
 	algorithms = None
@@ -124,10 +124,15 @@ def parseParams(args):
 				evalres = 2  # Q
 		elif arg[1] == 'd' or arg[1] == 'f':
 			pos = arg.find('=', 2)
-			if pos == -1 or arg[2] not in 'uw=' or len(arg) == pos + 1:
+			if pos == -1 or arg[2] not in 'as=' or len(arg) == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
 			# Extend weighted / unweighted dataset, default is unweighted
-			(wdatas if arg[2] == 'w' else udatas).append(arg[pos+1:])
+			asym = None
+			if arg[2] == 'a':
+				asym = True
+			elif arg[2] == 's':
+				asym = False
+			datas.append((asym, arg[pos+1:]))
 		elif arg[1] == 't':
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'smh=' or len(arg) == pos + 1:
@@ -141,7 +146,7 @@ def parseParams(args):
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
 
-	return gensynt, convnets, runalgs, evalres, udatas, wdatas, timeout, algorithms
+	return gensynt, convnets, runalgs, evalres, datas, timeout, algorithms
 
 
 def generateNets(overwrite=False):
@@ -202,48 +207,58 @@ def generateNets(overwrite=False):
 		_execpool = None
 	print('Synthetic networks files generation is completed')
 
-
-def convertNets(datadir, overwrite=False):
+def convertNet(filename, asym, overwrite=False):
 	"""Gonvert input networks to another formats
 
-		datadir  - directory of the networks to be converted
-		overwrite  - whether to overwrite existing networks or use them
+	datadir  - directory of the networks to be converted
+	asym  - network has asymmetric links weights (in/outbound weights can be different)
+	overwrite  - whether to overwrite existing networks or use them
+	"""
+	try:
+		# Convert to .hig format
+		tohig(net, ('-f=ns' + ('a' if asym else 'e'), '-c' + ('f' if overwrite else 's')))  # Network in the tab separated weighted arcs format
+	except StandardError as err:
+		print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(net, err), file=sys.stderr)
+	netnoext = os.path.splitext(net)[0]  # Remove the extension
+
+	## Confert to Louvain binaty input format
+	#try:
+	#	# ./convert [-r] -i graph.txt -o graph.bin -w graph.weights
+	#	# r  - renumber nodes
+	#	# ATTENTION: original Louvain implementation processes incorrectly weighted networks with uniform weights (=1) if supplied as unweighted
+	#	subprocess.call((_algsdir + 'convert', '-i', net, '-o', netnoext + '.lig'
+	#		, '-w', netnoext + '.liw'))
+	#except StandardError as err:
+	#	print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
+
+	# Make shuffled copies of the input networks for the Louvain_igraph
+	#if not os.path.exists(netnoext) or overwrite:
+	print('Shuffling {} into {} {} times...'.format(net, netnoext, _netshuffles))
+	if not os.path.exists(netnoext):
+		os.makedirs(netnoext)
+	netname = os.path.split(netnoext)[1]
+	assert netname, 'netname should be defined'
+	for i in range(_netshuffles):
+		outpfile = ''.join((netnoext, '/', netname, '_', str(i), _extnetfile))
+		if overwrite or not sys.path.exists(outpfile):
+			# sort -R pgp_udir.net -o pgp_udir_rand3.net
+			subprocess.call(('sort', '-R', net, '-o', outpfile))
+	#else:
+	#	print('The shuffling is skipped: {} is already exist'.format(netnoext))
+
+
+def convertNets(datadir, asym, overwrite=False):
+	"""Gonvert input networks to another formats
+
+	datadir  - directory of the networks to be converted
+	asym  - network links weights are asymmetric (in/outbound weights can be different)
+	overwrite  - whether to overwrite existing networks or use them
 	"""
 	print('Converting networks from {} into the required formats (.hig, .lig, etc.)...'
 		.format(datadir))
 	# Convert network files into .hig format and .lig (Louvain Input Format)
 	for net in glob.iglob('*'.join((datadir, _extnetfile))):
-		try:
-			# Convert to .hig format
-			tohig(net, ('-f=tsa'))  # Network in the tab separated weighted arcs format
-		except StandardError as err:
-			print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(net, err), file=sys.stderr)
-
-		netnoext = os.path.splitext(net)[0]  # Remove the extension
-
-		## Confert to Louvain binaty input format
-		#try:
-		#	# ./convert [-r] -i graph.txt -o graph.bin -w graph.weights
-		#	# r  - renumber nodes
-		#	# ATTENTION: original Louvain implementation processes incorrectly weighted networks with uniform weights (=1) if supplied as unweighted
-		#	subprocess.call((_algsdir + 'convert', '-i', net, '-o', netnoext + '.lig'
-		#		, '-w', netnoext + '.liw'))
-		#except StandardError as err:
-		#	print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
-
-		# Make shuffled copies of the input networks for the Louvain_igraph
-		#if not os.path.exists(netnoext) or overwrite:
-		print('Shuffling {} into {} {} times...'.format(net, netnoext, _netshuffles))
-		if not os.path.exists(netnoext):
-			os.makedirs(netnoext)
-		netname = os.path.split(netnoext)[1]
-		assert netname, 'netname should be defined'
-		for i in range(_netshuffles):
-			# sort -R pgp_udir.net -o pgp_udir_rand3.net
-			subprocess.call(('sort', '-R', net, '-o'
-				, ''.join((netnoext, '/', netname, '_', str(i), _extnetfile))))
-		#else:
-		#	print('The shuffling is skipped: {} is already exist'.format(netnoext))
+		convertNet(net, asym, overwrite)
 
 	print('Networks conversion is completed')
 
@@ -279,24 +294,35 @@ def benchmark(*args):
 	Run the algorithms on the specified datasets respecting the parameters.
 	"""
 	exectime = time.time()  # Start of the executing time
-	gensynt, convnets, runalgs, evalres, udatas, wdatas, timeout, algorithms = parseParams(args)
+	gensynt, convnets, runalgs, evalres, datas, timeout, algorithms = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tconvnets: {}'
-		'\n\trunalgs: {}\n\tevalres: {}\n\tudatas: {}\n\twdatas: {}\n\ttimeout: {}\n\talgorithms: {}'
-		.format(gensynt, convnets, runalgs, evalres, ', '.join(udatas), ', '.join(wdatas), timeout, algorithms))
+		'\n\trunalgs: {}\n\tevalres: {}\n\tdatas: {}\n\ttimeout: {}\n\talgorithms: {}'
+		.format(gensynt, convnets
+			, runalgs, evalres
+			, ', '.join(['{}{}'.format('' if not asym else 'asym: ', path) for asym, path in datas])
+			, timeout, algorithms))
 	# TODO: Implement consideration of udata, wdata (or just datadir - for some algs weighted/unweighted are defined from the file)
 	# TODO: implement files and filters support, not only directories
-	datadirs = [ddir if ddir.endswith('/') else ddir + '/' for ddir in udatas if os.path.isdir(ddir)]
-	datadirs.extend([ddir if ddir.endswith('/') else ddir + '/' for ddir in wdatas if os.path.isdir(ddir)])
-	if not datadirs:
-		datadirs = [_syntdir]
-	print('Datadirs: ', datadirs)
+	datadirs = []
+	datafiles = []
+	for asym, path in datas:
+		if os.path.isdir(path):
+			datadirs.append((asym, path if path.endswith('/') else path + '/'))
+		else:
+			datafiles.append((asym, path))
+	datas = None
+	if not datadirs and not datafiles:
+		datadirs = [(False, _syntdir)]
+	#print('Datadirs: ', datadirs)
 
 	if gensynt:
 		generateNets(gensynt == 2)  # 0 - do not generate, 1 - only if not exists, 2 - forced generation
 
 	if convnets:
-		for ddir in datadirs:
-			convertNets(ddir, convnets == 2)  # 0 - do not convert, 1 - only if not exists, 2 - forced conversion
+		for asym, ddir in datadirs:
+			convertNets(ddir, asym, convnets==2)  # 0 - do not convert, 1 - only if not exists, 2 - forced conversion
+		for asym, dfile in datafiles:
+			convertNet(dfile, asym, convnets==2)
 
 	global _execpool
 	appsmodule = benchapps  # Module with algorithms definitions to be run; sys.modules[__name__]
@@ -307,7 +333,6 @@ def benchmark(*args):
 		#udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']
 		assert not _execpool, '_execpool should be clear on algs execution'
 		_execpool = ExecPool(max(min(4, cpu_count() - 1), 1))
-		netsnum = 1
 
 		if not algorithms:
 			#algs = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
@@ -318,17 +343,37 @@ def benchmark(*args):
 			algs = [getattr(appsmodule, 'exec' + alg.capitalize(), unknownApp('exec' + alg.capitalize())) for alg in algorithms]
 		algs = tuple(algs)
 
+		def execute(net, asym, taksnum):
+			"""Execute algorithms on the specified network counting number of ran tasks
+
+			net  - network to be processed
+			asym  - network links weights are asymmetric (in/outbound weights can be different)
+			taksnum  - accumulated number of scheduled tasks
+			
+			return
+				taksnum  - updated accumulated number of scheduled tasks
+			"""
+			for alg in algs:
+				try:
+					taksnum += alg(_execpool, net, asym, timeout)
+				except StandardError as err:
+					errexectime = time.time() - exectime
+					print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
+						.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
+			return taksnum
+
+		taksnum = 1  # Number of networks tasks to be processed (can be a few per each algorithm per each network)
 		netcount = 0  # Number of networks to be processed
-		for ddir in datadirs:
+		for asym, ddir in datadirs:
 			for net in glob.iglob('*'.join((ddir, _extnetfile))):
-				netcount += 1
-				for alg in algs:
-					try:
-						netsnum += alg(_execpool, net, timeout)
-					except StandardError as err:
-						errexectime = time.time() - exectime
-						print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
-							.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
+				tnum = execute(net, asym, taksnum)
+				taksnum += tnum
+				netcount += tnum != 0
+		for asym, net in datafiles:
+			tnum = execute(net, asym, taksnum)
+			taksnum += tnum
+			netcount += tnum != 0
+
 		
 		## Additionally execute Louvain multiple times
 		#alg = execLouvain
@@ -341,21 +386,11 @@ def benchmark(*args):
 		#				errexectime = time.time() - exectime
 		#				print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
 		#					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
-		
-		# TODO: Implement execution on custom datasets considering whether they weighted / unweighted			
-		## Run algs on the specified datasets if required
-		## Unweighted networks
-		#for udat in udatas:
-		#	if not os.path.exists(udat):
-		#		print('WARNING, "{}" does not exist, skipped', file=sys.stderr)
-		#	#if os.path.isdir(udat):
-		#	#	fnames = glob.iglob('*'.join((_syntdir, _extnetfile))):
-
 
 		if _execpool:
-			timelim = timeout * netsnum
+			timelim = timeout * taksnum
 			print('Waiting for the algorithms execution on {} tasks from {} networks'
-				' with {} sec ({} h {} m {:.4f} s) timeout'.format(netsnum, netcount, timelim, *secondsToHms(timelim)))
+				' with {} sec ({} h {} m {:.4f} s) timeout'.format(taksnum, netcount, timelim, *secondsToHms(timelim)))
 			_execpool.join(timelim)
 			_execpool = None
 		exectime = time.time() - exectime
@@ -389,28 +424,44 @@ def benchmark(*args):
 					evalalgs = [getattr(appsmodule, evalpref + alg.capitalize(), unknownApp(evalpref + alg.capitalize()))
 						for alg in algorithms]
 			evalalgs = tuple(evalalgs)
+			
+			def evaluate(gtres, asym, taksnum):
+				"""Evaluate algorithms on the specified network
+	
+				gtres  - ground truth results
+				asym  - network links weights are asymmetric (in/outbound weights can be different)
+				taksnum  - accumulated number of scheduled tasks
+				
+				return
+					taksnum  - updated accumulated number of scheduled tasks
+				"""
+				for elg in evalalgs:
+					try:
+						elg(_execpool, gtres, timeout)
+						# Run algs with some delay to avoid headers duplicaiton
+						# in the file of accumulated statistics
+						time.sleep(0.2)
+					except StandardError as err:
+						print('The {} is interrupted by the exception: {}'
+							.format(elg.__name__, err))
+					else:
+						taksnum += 1
+				return taksnum
+				
 
 			print('Starting {} evaluation...'.format(measures[im][2]))
 			assert not _execpool, '_execpool should be clear on algs evaluation'
 			_execpool = ExecPool(max(cpu_count() - 1, 1))
-			netsnum = 0
+			taksnum = 0
 			timeout = 20 *60*60  # 20 hours
-			for ddir in datadirs:
+			for asym, ddir in datadirs:
 				# Read ground truth
 				for gtfile in glob.iglob('*'.join((ddir, measures[im][1]))):
-					for elg in evalalgs:
-						try:
-							elg(_execpool, gtfile, timeout)
-							# Run algs with some delay to avoid headers duplicaiton
-							# in the file of accumulated statistics
-							time.sleep(0.2)
-						except StandardError as err:
-							print('The {} is interrupted by the exception: {}'
-								.format(elg.__name__, err))
-						else:
-							netsnum += 1
+					evaluate(gtfile, asym, taksnum)
+			for asym, gtres in datafiles:
+				evaluate(gtfile, asym, taksnum)
 			if _execpool:
-				_execpool.join(max(max(timeout, exectime * 2), timeout + 60 * netsnum))  # Twice the time of algorithms execution
+				_execpool.join(max(max(timeout, exectime * 2), timeout + 60 * taksnum))  # Twice the time of algorithms execution
 				_execpool = None
 			print('{} evaluation is completed'.format(measures[im][2]))
 	print('The benchmark is completed')
@@ -428,8 +479,9 @@ if __name__ == '__main__':
 	else:
 		print('\n'.join(('Usage: {0} [-g[f] [-c[f]] [-r] [-e[nm]] [-d{{u,w}}=<datasets_dir>] [-f{{u,w}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
 			'  -g[f]  - generate synthetic datasets in the {syntdir}',
-			'    Xf  - force the generation even when the data is already exist',
-			'  -a[="app1 app2 ..."]  - apps to benchmark among the implemented.'
+			'    Xf  - force the generation even when the data already exists',
+			'  -a[="app1 app2 ..."]  - apps (clusering algorithms) to benchmark among the implemented.'
+			' Available: scp louvain_ig randcommuns hirecs oslom2 ganxis'
 			' Impacts -{{c, r, e}} options. Optional, all apps are executed by default',
 			'  -c[f]  - convert existing networks into the .hig, .lig, etc. formats',
 			'    Xf  - force the conversion even when the data is already exist',
@@ -439,9 +491,9 @@ if __name__ == '__main__':
 			'    Xm  - evaluate results quality by modularity',
 			# TODO: customize extension of the network files (implement filters)
 			'  -d[X]=<datasets_dir>  - directory of the datasets',
-			'  -f[X]=<dataset>  - dataset file name',
-			'    Xu  - the dataset is unweighted. Default option',
-			'    Xw  - the dataset is weighted',
+			'  -f[X]=<dataset>  - dataset (network, graph) file name',
+			'    Xa  - the dataset has asymmetric links (inbound / outboud weights of the link migh differ)',
+			'    Xs  - the dataset has symmetric links, ambiguity of links weight resolving is up to the clsutering algorithm. Default option',
 			'    Notes:',
 			'    - multiple directories and files can be specified via multiple -d/f options (one per the item)',
 			'    - datasets should have the following format: <node_src> <node_dest> [<weight>]',

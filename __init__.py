@@ -1,1 +1,2 @@
-__all__ = ['algorithms', '3dparty']
+__all__ = ['algorithms', '3dparty',
+	'benchapps', 'benchcore', 'benchmark']

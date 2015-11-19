@@ -110,6 +110,7 @@ def modAlgorithm(execpool, nsafile, timeout, algname):  # , multirun=True
 		taskex = os.path.split(os.path.splitext(cfile)[0])[1]  # Base name of the network
 		assert taskex, 'The clusters name should exists'
 		args = ('./hirecs', '-e=../' + cfile, '../' + nsafile)
+		#print('> Executing: ' + ' '.join(args))
 
 		# Job postprocessing
 		def postexec(job):
@@ -502,8 +503,8 @@ def modOslom2(execpool, nsafile, timeout):
 
 # Ganxis (SLPA)
 def execGanxis(execpool, netfile, asym, timeout):
-	print('> exec params:\n\texecpool: {}\n\tnetfile: {}\n\tasym: {}\n\ttimeout: {}'
-		.format(execpool, netfile, asym, timeout))
+	#print('> exec params:\n\texecpool: {}\n\tnetfile: {}\n\tasym: {}\n\ttimeout: {}'
+	#	.format(execpool, netfile, asym, timeout))
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name
 	task = os.path.split(os.path.splitext(netfile)[0])[1]  # Base name of the network

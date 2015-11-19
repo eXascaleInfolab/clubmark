@@ -458,7 +458,9 @@ def benchmark(*args):
 				# Read ground truth
 				for gtfile in glob.iglob('*'.join((ddir, measures[im][1]))):
 					evaluate(gtfile, asym, taksnum)
-			for asym, gtres in datafiles:
+			for asym, gtfile in datafiles:
+				# Use files with required extension
+				gtfile = os.path.splitext(gtfile)[0] + measures[im][1]
 				evaluate(gtfile, asym, taksnum)
 			if _execpool:
 				_execpool.join(max(max(timeout, exectime * 2), timeout + 60 * taksnum))  # Twice the time of algorithms execution

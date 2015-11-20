@@ -27,13 +27,22 @@ Logs are saved even in case of internal / external interruptions and crashes.
 The benchmark is implemented as customization of the Generic Benchmarking Framework to evaluate *Hierarchical Overlapping  Clustering Algorithms*, which:
 - produces synthetic datasets, generating them by the extended [LFR Framework](https://sites.google.com/site/santofortunato/inthepress2) ("Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti and Santo Fortunato)
 - executes
-	* [HiReCS](http://www.lumais.com/hirecs) (www.lumais.com/hirecs),
-	* [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations),
-	* [Oslom2](http://www.oslom.org/software.htm)
-	* [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*)
+	* [HiReCS](http://www.lumais.com/hirecs) (www.lumais.com/hirecs)
 	* [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) ([Sequential algorithm for fast clique percolation](http://www.lce.hut.fi/research/mm/complex/software/))
+	* [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations)
+	* [Oslom2](http://www.oslom.org/software.htm)
+	* [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*, it is )
 
 	clustering algorithms on the generated synthetic networks (or on any specified directories and files). Output results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
+	
+	Features \ Algs | *HiReCS* | SCP | Louvain | Oslom2 | Ganxis
+	            --- | --- | --- | --- | --- | ---
+	Hierarchical    | + | + | + | + |
+	Multi-scale     | + | + | + | + | + 
+	Deterministic   | + | + | | | 
+	With Overlaps   | + | + | | + | +
+	Parameter-Free  | + | | + | | 
+
 - evaluates results using NMI for overlapping communities, extended versions (to have uniform input / output formats) of:
   * `gecmi` (https://bitbucket.org/dsign/gecmi/wiki/Home, "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall)
   * `onmi` (https://github.com/aaronmcdaid/Overlapping-NMI, "Normalized Mutual Information to evaluate overlapping community finding algorithms" by Aaron F. McDaid, Derek Greene, Neil Hurley)
@@ -48,11 +57,14 @@ Basically the framework executes a set of algorithms on the specified datasets i
 
 ## Dependencies
 ### Fundamental
-* Python (or [pypy](http://pypy.org/) for the fast execution)
+- Python (or [pypy](http://pypy.org/) for the fast execution)
 
 ### Libraries
-* [hirecs](http://www.lumais.com/hirecs/) for modularity evaluation of overlapping community structure with results compatible to the standard modularity
-* [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`  
+- [hirecs](http://www.lumais.com/hirecs/) for modularity evaluation of overlapping community structure with results compatible to the standard modularity
+
+  > Note: This functionality is in the dev version of the HiReCS 2 and is not yet pushed to the public hirecs repository. Please write me if you need it.
+
+- [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`  
 
 > Note:
 - `hirecs` depends on libstdc++.so.6: version GLIBCXX_3.4.20 (precompiled version for modularity evaluation). To install it on Ubuntu use: `sudo apt-get install libstdc++6` or
@@ -72,7 +84,7 @@ $ sudo apt-get install libstdc++6
 ### External tools that are used as executables
 - [Extended LFR Benchmark](3dparty/lfrbench_weight-undir-ovp) for the undirected weighted networks with overlaps (origins are here: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files)
 - [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption: https://bitbucket.org/lumais/exectime/
-- Clustering algorithms, used in the benchmarking: [HiReCS](http://www.lumais.com/hirecs), [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm) and [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/)
+- Clustering algorithms, used in the benchmarking: [HiReCS](http://www.lumais.com/hirecs) [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations) [Oslom2](http://www.oslom.org/software.htm) and [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/)
  
 ## Usage
 - `./install_depends.sh`  - install dependencies (using apt-get)
@@ -125,12 +137,12 @@ Example of the `.nmi[-s]` format:
 
 ## Extension
 To add own apps / algorithms to be benchmarked just add corresponding functions for "myalgorithm" app:
-- `def execMyalgorithm(execpool, netfile, timeout, selfexec=False)`  - to execute the algorithm for the network
-- `def evalMyalgorithm(execpool, cnlfile, timeout)`  - to evaluate accuracy of the clustering results (community structure) comparing to the specified ground truth using NMIs measures.
+- `def execMyalgorithm(execpool, netfile, asym, timeout, selfexec=False)`  - to execute the algorithm for the network
+- `def evalMyalgorithm(execpool, cnlfile, timeout)`  - to evaluate accuracy of the clustering results (community structure) comparing to the specified ground truth using NMIs measures
 
   > Note: default implementation is provided and should be called for NMIs evaluation.
 
-- `def modMyalgorithm(execpool, netfile, timeout)`  - to evaluate quality of the clustering results (community structure) by the standard modularity measure (applicable for overlapping clusters).  
+- `def modMyalgorithm(execpool, netfile, timeout)`  - to evaluate quality of the clustering results (community structure) by the standard modularity measure (applicable for overlapping clusters)  
 
   > Note: default implementation is provided and should be called.
 

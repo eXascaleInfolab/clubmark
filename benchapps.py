@@ -116,7 +116,8 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 		def postexec(job):
 			"""Copy final modularity output to the separate file"""
 			with open(tmodname, 'a') as tmod:  # Append to the end
-				subprocess.call(''.join(('tail -n 1 "', job.stderr, '" ', r"| sed 's/.* mod: \([^,]*\).*/\1/'")), stdout=tmod, shell=True)
+				subprocess.call(''.join(('tail -n 1 "', job.stderr, '" ', "| sed 's/.* mod: \\([^,]*\\).*/\\1\\t{}/'"
+					.format(job.name.lstrip(evalname + '_').rstrip('_' + algname).split('_', 1)[-1]))), stdout=tmod, shell=True)
 			# Accuulate all results by the last task of the job ----------------
 			# Check number of completed jobs
 			processing = False
@@ -277,6 +278,11 @@ def execScp(execpool, netfile, asym, timeout):
 
 	# Run again for k E [3, 12]
 	resbase = ''.join((_algsdir, algname, 'outp/', task, '/', task, '_'))  # Base name of the result
+	logbase = ''.join((_algsdir, algname, 'outp/', task, '_log/'))
+	# Create log dir if does not exists
+	if not os.path.exists(logbase):
+		os.mkdir(logbase)
+	logbase = ''.join((logbase, task, '_'))
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 8  # Max clique size
 	for k in range(kmin, kmax + 1):
@@ -289,7 +295,7 @@ def execScp(execpool, netfile, asym, timeout):
 		finargs[-1] = finargs[-1].format(kstr)
 		execpool.execute(Job(name='_'.join((task, algname, kstrex)), workdir=_algsdir, args=finargs, timeout=timeout
 			, stdout=''.join((resbase, kstrex, _extclnodes))
-			, stderr=''.join((resbase, kstrex, _logext)) ))
+			, stderr=''.join((logbase, kstrex, _logext)) ))
 	return kmax + 1 - kmin
 
 

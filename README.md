@@ -31,11 +31,11 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 	* [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) ([Sequential algorithm for fast clique percolation](http://www.lce.hut.fi/research/mm/complex/software/))
 	* [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations)
 	* [Oslom2](http://www.oslom.org/software.htm)
-	* [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*, it is )
+	* [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*; deterministic LabelRankT is a modification of GANXiS, but LabelRankT is not publicly available)
 
 	clustering algorithms on the generated synthetic networks (or on any specified directories and files). Output results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
 	
-	Features \ Algs | *HiReCS* | SCP | Louvain | Oslom2 | Ganxis
+	Features \ Algs | *HiReCS* | SCP | Louvain | Oslom2 | GANXiS
 	            --- | --- | --- | --- | --- | ---
 	Hierarchical    | + | + | + | + |
 	Multi-scale     | + | + | + | + | + 

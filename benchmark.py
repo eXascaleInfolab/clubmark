@@ -417,7 +417,7 @@ def benchmark(*args):
 	if evalres:
 		# Create dir for the final results
 		if not os.path.exists(_resdir):
-			os.makedirs(_resdir)
+			os.mkdir(_resdir)
 		# measures is a mao with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
 		measures = {1: ['eval', _extclnodes, 'NMI'], 2: ['mod', '.hig', 'Q']}
 		for im in measures:
@@ -519,7 +519,7 @@ if __name__ == '__main__':
 			'    Notes:',
 			'    - multiple directories and files can be specified via multiple -d/f options (one per the item)',
 			'    - datasets should have the following format: <node_src> <node_dest> [<weight>]',
-			'    - {{a, s}} is considered only if the network file has no corresponding metadata (formats like SNAP, ncol, nsa, ...)',
+			'    - {{a,s}} is considered only if the network file has no corresponding metadata (formats like SNAP, ncol, nsa, ...)',
 			'    - ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
 			' is up to the clustering algorithm',
 			'  -t[X]=<number>  - specifies timeout for each benchmarking application per single evalution on each network'

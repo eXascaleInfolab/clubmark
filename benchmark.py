@@ -226,7 +226,11 @@ def convertNet(filename, asym, overwrite=False, resdub=False):
 	"""
 	try:
 		# Convert to .hig format
-		tohig(net, ('-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's'), '-r' if resdub else ''))  # Network in the tab separated weighted arcs format
+		# Network in the tab separated weighted arcs format
+		args = ['-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
+		if resdub:
+			args.append('-r')
+		tohig(net, args)
 	except StandardError as err:
 		print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(net, err), file=sys.stderr)
 	netnoext = os.path.splitext(net)[0]  # Remove the extension

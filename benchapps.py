@@ -461,6 +461,8 @@ def execOslom2(execpool, netfile, asym, timeout):
 	assert task, 'The network name should exists'
 
 	algname = 'oslom2'
+	# Note: wighted networks (-w) stands for the used null model, not for the input file format.
+	# Link weight is set to 1 if not specified in the file for weighted network.
 	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
 		, './oslom_undir' if not asym else './oslom_dir', '-f', '../' + netfile, '-w')
 	# Copy results to the required dir on postprocessing
@@ -511,8 +513,10 @@ def execGanxis(execpool, netfile, asym, timeout):
 	assert task, 'The network name should exists'
 
 	algname = 'ganxis'
-	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
-		, 'java', '-jar', './GANXiSw.jar', '-i', '../' + netfile, '-d', algname + 'outp/')
+	args = ['../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+		, 'java', '-jar', './GANXiSw.jar', '-i', '../' + netfile, '-d', algname + 'outp/']
+	if not asym:
+		args.append('-Sym 1')  # Check existance of the back links and generate them if requried
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
 	logsdir = ''.join((_algsdir, algname, 'outp/'))
 	def postexec(job):

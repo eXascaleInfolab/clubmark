@@ -11,3 +11,6 @@ sudo pip install python-igraph
 #sudo add-apt-repository ppa:ubuntu-toolchain-r/test 
 #sudo apt-get update
 #sudo apt-get install libstdc++6
+
+# Install Java for GaNXIS
+#sudo apt-get install openjdk

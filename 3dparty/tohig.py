@@ -42,23 +42,26 @@ def parseArgs(args):
 		assert isinstance(args, (tuple, list))
 		# Parce args
 		for arg in args:
+			# Allow empty args
+			if not arg:
+				continue
 			if arg[0] != '-':
 				raise ValueError('Unexpected argument: ' + arg)
 			
 			if arg[1] == 'f':
 				preflen = 3
-				if len(arg) <= preflen or arg[preflen - 1] != '=' or arg[preflen:].lower() not in _inpfmts:
+				if len(arg) <= preflen or arg[preflen - 1] != '=' or arg[preflen:] not in _inpfmts:
 					raise ValueError('Unexpected argument: ' + arg)
-				custfmt = arg[preflen:].lower()
+				custfmt = arg[preflen:]
 			elif arg[1] == 'u':
 				weighted = False
 			elif arg[1] == 'r':
 				resdub = True
-			elif arg[1] == 'c':
+			elif arg[1] == 'o':
 				preflen = 2
-				if len(arg) <= preflen or arg[preflen].lower() not in 'frs':
+				if len(arg) <= preflen or arg[preflen] not in 'frs':
 					raise ValueError('Unexpected argument: ' + arg)
-				overwrite = arg[preflen].lower()
+				overwrite = arg[preflen]
 			else:
 				raise ValueError('Unexpected argument: ' + arg)
 	
@@ -242,8 +245,9 @@ def tohig(finpName, *args):
 						if sect == SECT_EDGS or sect == SECT_ARCS:
 							#print('links: ', links)
 							link = parseLink(ln[1], weighted)
-							# Always specify self weight via Arcs
+							# Process self links separately
 							if sect == SECT_ARCS or link[0] != ln[0]:
+								# Fetch or construct node links
 								ndlinks = links.get(node, [] if not resdub else {})
 								if not resdub:
 									if not ndlinks:
@@ -251,15 +255,13 @@ def tohig(finpName, *args):
 									ndlinks.append(link)
 								else:
 									# Check existance of the back link for Edges
-									if sect == SECT_EDGS:
-										dest = links.get(int(link[0]))
-									else:
-										dest = None
+									dest = None if sect != SECT_EDGS else links.get(int(link[0]))
 									if not dest or not dest.get(node):
 										if not ndlinks:
 											links[node] = ndlinks
 										ndlinks[link[0]] = link[1]
 							else:
+								# Always specify self weight via Arcs
 								arcs[node] = tuple(link)  # Make a tuple
 						elif sect == SECT_EDGL or sect == SECT_ARCL:
 							saveLinks(fout, {node: parseLinksList(ln[1], weighted, resdub)}, weighted)
@@ -330,13 +332,15 @@ if __name__ == '__main__':
 		tohig(*sys.argv[1:])
 	else:
 		print('\n'.join(('Usage: {0} <network> [-ru] [-f={{{1}, {2}}}]',
-			'  -r  - resolve duplicated links from the .pjk',
+			'  -r  - resolve (remove) duplicated links to be unique',
 			'  -u  - force links to be unweighted even for the weighted input graph.'
 			' Generates weighted links by default (only for the weighted graphs)',
 			'  -f=<format>  - custom non-pajek input format (default: pajek):',
-			'    {1}  - SNAP format: space/tab separated unweighted edges with Nodes header (#)',
-			'    {2}  - space/tab separated weighted arcs, used in LFR generated graphs',
-			'  -c[X]  - cases of the output file creation when such file already exists. Always warn the user. Default: overwrite',
+			'    {1}  - newline / space/tab separated possible weighted edges with optional Nodes header and comments (#).'
+			' It includes SNAP format',
+			'    {2}  - newline / space/tab separated possible weighted arcs with optional Nodes header and comments (#).'
+			' It is used in LFR generated graphs (but they are symmetric)',
+			'  -o[X]  - strategy of the output file creation when it already exists. Always warn the user. Default: overwrite',
 			'    Xf  - forced overwriting of the output file',
 			'    Xr  - rename the already existent output file and create the new one',
 			'    Xs  - skip processing if such output file already exists',

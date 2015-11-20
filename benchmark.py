@@ -72,8 +72,10 @@ def parseParams(args):
 			2 - force geration (overwrite all)
 		convnets  - convert existing networks into the .hig format
 			0 - do not convert
-			1 - convert only if this network is not exist
-			2 - force conversion (overwrite all)
+			0b001  - convert:
+				0b01 - convert only if this network is not exist
+				0b11 - force conversion (overwrite all)
+			0b100 - resolve duplicated links on conversion
 		datas  - list of datasets to be run with asym flag (asymmetric / symmetric links weights):
 			[(<asym>, <path>), ...] , where path is either dir or file
 		timeout  - execution timeout in sec per each algorithm
@@ -104,30 +106,36 @@ def parseParams(args):
 				raise ValueError('Unexpected argument: ' + arg)
 			algorithms = arg[3:].split()
 		elif arg[1] == 'c':
-			if arg not in '-cf':
-				raise ValueError('Unexpected argument: ' + arg)
-			convnets = len(arg) - 1  # '-cf'  - forced conversion (overwrite)
+			convnets = 1
+			for i in range(2,4):
+				if len(arg) > i and (arg[i] not in 'fr'):
+					raise ValueError('Unexpected argument: ' + arg)
+			arg = arg[2:]
+			if 'f' in arg:
+				convnets |= 0b10
+			if 'r' in arg:
+				convnets |= 0b100
 		elif arg[1] == 'r':
 			if arg != '-r':
 				raise ValueError('Unexpected argument: ' + arg)
 			runalgs = True
 		elif arg[1] == 'e':
-			if len(arg) > 2 and (arg[2] not in 'nm'):
-				raise ValueError('Unexpected argument: ' + arg)
-			if len(arg) == 2 or (len(arg) == 4 and arg[2] != arg[3]):
-				if len(arg) > 2 and arg[3] not in 'nm':
+			for i in range(2,4):
+				if len(arg) > i and (arg[i] not in 'nm'):
 					raise ValueError('Unexpected argument: ' + arg)
+			if len(arg) in (2, 4):
 				evalres = 3  # all
+			# Here len(arg) >= 3
 			elif arg[2] == 'n':
 				evalres = 1  # NMIs
 			else:
-				evalres = 2  # Q
+				evalres = 2  # Q (modularity)
 		elif arg[1] == 'd' or arg[1] == 'f':
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'as=' or len(arg) == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
 			# Extend weighted / unweighted dataset, default is unweighted
-			asym = None
+			asym = None  # Asym: None - not specified (symmetric is assumed), False - symmetric, True - asymmetric
 			if arg[2] == 'a':
 				asym = True
 			elif arg[2] == 's':
@@ -207,16 +215,17 @@ def generateNets(overwrite=False):
 		_execpool = None
 	print('Synthetic networks files generation is completed')
 
-def convertNet(filename, asym, overwrite=False):
+def convertNet(filename, asym, overwrite=False, resdub=False):
 	"""Gonvert input networks to another formats
 
 	datadir  - directory of the networks to be converted
 	asym  - network has asymmetric links weights (in/outbound weights can be different)
 	overwrite  - whether to overwrite existing networks or use them
+	resdub  - resolve duplicated links
 	"""
 	try:
 		# Convert to .hig format
-		tohig(net, ('-f=ns' + ('a' if asym else 'e'), '-c' + ('f' if overwrite else 's')))  # Network in the tab separated weighted arcs format
+		tohig(net, ('-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's'), '-r' if resdub else ''))  # Network in the tab separated weighted arcs format
 	except StandardError as err:
 		print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(net, err), file=sys.stderr)
 	netnoext = os.path.splitext(net)[0]  # Remove the extension
@@ -247,18 +256,19 @@ def convertNet(filename, asym, overwrite=False):
 	#	print('The shuffling is skipped: {} is already exist'.format(netnoext))
 
 
-def convertNets(datadir, asym, overwrite=False):
+def convertNets(datadir, asym, overwrite=False, resdub=False):
 	"""Gonvert input networks to another formats
 
 	datadir  - directory of the networks to be converted
 	asym  - network links weights are asymmetric (in/outbound weights can be different)
 	overwrite  - whether to overwrite existing networks or use them
+	resdub  - resolve duplicated links
 	"""
 	print('Converting networks from {} into the required formats (.hig, .lig, etc.)...'
 		.format(datadir))
 	# Convert network files into .hig format and .lig (Louvain Input Format)
 	for net in glob.iglob('*'.join((datadir, _extnetfile))):
-		convertNet(net, asym, overwrite)
+		convertNet(net, asym, overwrite, resdub)
 
 	print('Networks conversion is completed')
 
@@ -295,7 +305,7 @@ def benchmark(*args):
 	"""
 	exectime = time.time()  # Start of the executing time
 	gensynt, convnets, runalgs, evalres, datas, timeout, algorithms = parseParams(args)
-	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tconvnets: {}'
+	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tconvnets: {:b}'
 		'\n\trunalgs: {}\n\tevalres: {}\n\tdatas: {}\n\ttimeout: {}\n\talgorithms: {}'
 		.format(gensynt, convnets
 			, runalgs, evalres
@@ -318,11 +328,12 @@ def benchmark(*args):
 	if gensynt:
 		generateNets(gensynt == 2)  # 0 - do not generate, 1 - only if not exists, 2 - forced generation
 
+	# convnets: 0 - do not convert, 0b01 - only if not exists, 0b11 - forced conversion, 0b100 - resolve duplicated links
 	if convnets:
 		for asym, ddir in datadirs:
-			convertNets(ddir, asym, convnets==2)  # 0 - do not convert, 1 - only if not exists, 2 - forced conversion
+			convertNets(ddir, asym, convnets&0b11, convnets&0b100)
 		for asym, dfile in datafiles:
-			convertNet(dfile, asym, convnets==2)
+			convertNet(dfile, asym, convnets&0b11, convnets&0b100)
 
 	global _execpool
 	appsmodule = benchapps  # Module with algorithms definitions to be run; sys.modules[__name__]
@@ -479,14 +490,15 @@ if __name__ == '__main__':
 		signal.signal(signal.SIGABRT, terminationHandler)
 		benchmark(*sys.argv[1:])
 	else:
-		print('\n'.join(('Usage: {0} [-g[f] [-c[f]] [-r] [-e[nm]] [-d{{u,w}}=<datasets_dir>] [-f{{u,w}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
+		print('\n'.join(('Usage: {0} [-g[f] [-c[f][r]] [-r] [-e[n][m]] [-d{{a,s}}=<datasets_dir>] [-f{{a,s}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
 			'  -g[f]  - generate synthetic datasets in the {syntdir}',
 			'    Xf  - force the generation even when the data already exists',
 			'  -a[="app1 app2 ..."]  - apps (clusering algorithms) to benchmark among the implemented.'
 			' Available: scp louvain_ig randcommuns hirecs oslom2 ganxis'
 			' Impacts -{{c, r, e}} options. Optional, all apps are executed by default',
-			'  -c[f]  - convert existing networks into the .hig, .lig, etc. formats',
+			'  -c[X]  - convert existing networks into the .hig, .lig, etc. formats',
 			'    Xf  - force the conversion even when the data is already exist',
+			'    Xr  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used',
 			'  -r  - run the benchmarking apps on the prepared data',
 			'  -e[X]  - evaluate quality of the results. Default: apply all measurements',
 			'    Xn  - evaluate results accuracy using NMI measures for overlapping communities',
@@ -494,11 +506,12 @@ if __name__ == '__main__':
 			# TODO: customize extension of the network files (implement filters)
 			'  -d[X]=<datasets_dir>  - directory of the datasets',
 			'  -f[X]=<dataset>  - dataset (network, graph) file name',
-			'    Xa  - the dataset has asymmetric links (inbound / outboud weights of the link migh differ)',
-			'    Xs  - the dataset has symmetric links, ambiguity of links weight resolving is up to the clsutering algorithm. Default option',
+			'    Xa  - the dataset is specified by the asymmetric links (in/outbound weights of the link migh differ), arcs',
+			'    Xs  - the dataset is specified by symmetric links only in a single direction, edges. Default option',
 			'    Notes:',
 			'    - multiple directories and files can be specified via multiple -d/f options (one per the item)',
 			'    - datasets should have the following format: <node_src> <node_dest> [<weight>]',
+			'    - ambiguity of links weight resolution in case of duplicates is up to the clustering algorithm',
 			'  -t[X]=<number>  - specifies timeout for each benchmarking application per single evalution on each network'
 			' in sec, min or hours. Default: 0 sec  - no timeout',
 			'    Xs  - time in seconds. Default option',

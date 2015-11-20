@@ -179,7 +179,7 @@ def execAlgorithm(execpool, netfile, asym, timeout, selfexec=False):
 #
 #	algname = 'louvain'
 #	# ./community graph.bin -l -1 -w graph.weights > graph.tree
-#	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+#	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 #		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
 #	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 #	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
@@ -209,23 +209,25 @@ def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False):
 	algname = 'louvain_igraph'
 	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -ol=louvain_igoutp/1K5/1K5.cnl
 	logsbase = ''.join((_algsdir, algname, 'outp/', task))
-	resext = '.acs'  # Louvain accum statistics
+	# Louvain accumulated statistics over shuffled modification of the network or total statistics for all networks
+	resext = '.acs'
 	if not selfexec:
 		outpdir = ''.join((_algsdir, algname, 'outp/'))
 		if not os.path.exists(outpdir):
 			os.makedirs(outpdir)
 		# Just erase the file of the accum results
 		with open(logsbase + resext, 'w') as accres:
-			accres.write('# Accumulated final results\n')
+			accres.write('# Accumulated results for the shuffles\n')
 
 	def postexec(job):
 		"""Copy final modularity output to the separate file"""
 		# File name of the accumulated result
-		accname = (logsbase[:logsbase.rfind('_')] if selfexec else logsbase) + resext
+		accname = ''.join((_resdir, algname, resext))
 		with open(accname, 'a') as accres:  # Append to the end
+			# TODO: Evaluate the average
 			subprocess.call(('tail', '-n 1', logsbase + _logext), stdout=accres)
 
-	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, _pyexec, ''.join(('./', algname, '.py')), ''.join(('-i=../', netfile, netext))
 		, ''.join(('-ol=', algname, 'outp/', task, _extclnodes)))
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
@@ -270,7 +272,7 @@ def execScp(execpool, netfile, asym, timeout):
 
 	algname = 'scp'
 	# ATTENTION: a single argument is k-clique size, specified later
-	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), ''.join(('-n=', task, '_{}'))
+	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), ''.join(('-n=', task, '_{}'))
 		, _pyexec, ''.join(('./', algname, '.py')), '../' + netfile, '{}')
 
 	# Run again for k E [3, 12]
@@ -318,7 +320,7 @@ def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False):
 
 	algname = 'randcommuns'
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
-	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, _pyexec, ''.join(('./', algname, '.py')), ''.join(('-g=../', netfile, _extclnodes))
 		, ''.join(('-i=../', netfile, netext)), ''.join(('-o=', algname, 'outp/', task))
 		, ''.join(('-n=', str(_netshuffles + 1))))
@@ -352,7 +354,7 @@ def execHirecs(execpool, netfile, asym, timeout):
 	netfile += '.hig'  # Use network in the required format
 
 	algname = 'hirecs'
-	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', ''.join(('-cls=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
@@ -385,7 +387,7 @@ def execHirecsOtl(execpool, netfile, asym, timeout):
 	netfile += '.hig'  # Use network in the required format
 
 	algname = 'hirecsotl'
-	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', ''.join(('-cols=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
@@ -414,7 +416,7 @@ def execHirecsAhOtl(execpool, netfile, asym, timeout):
 	netfile += '.hig'  # Use network in the required format
 
 	algname = 'hirecsahotl'
-	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', ''.join(('-coas=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
@@ -443,7 +445,7 @@ def execHirecsNounwrap(execpool, netfile, asym, timeout):
 	netfile += '.hig'  # Use network in the required format
 
 	algname = 'hirecshfold'
-	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', '../' + netfile)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
@@ -463,7 +465,7 @@ def execOslom2(execpool, netfile, asym, timeout):
 	algname = 'oslom2'
 	# Note: wighted networks (-w) stands for the used null model, not for the input file format.
 	# Link weight is set to 1 if not specified in the file for weighted network.
-	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './oslom_undir' if not asym else './oslom_dir', '-f', '../' + netfile, '-w')
 	# Copy results to the required dir on postprocessing
 	logsdir = ''.join((_algsdir, algname, 'outp/'))
@@ -483,6 +485,10 @@ def execOslom2(execpool, netfile, asym, timeout):
 			os.makedirs(outpdire)
 		for dname in glob.iglob(''.join((netdir, task, netext, '_oslo_files/'))):
 			shutil.move(dname, outpdire)
+		# Note: oslom2 leaves ./tp file in the _algsdir, which should be deleted
+		fname = _algsdir + 'tp'
+		if os.path.exists(fname):
+			os.remove(fname)
 
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
@@ -513,7 +519,7 @@ def execGanxis(execpool, netfile, asym, timeout):
 	assert task, 'The network name should exists'
 
 	algname = 'ganxis'
-	args = ['../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
+	args = ['../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, 'java', '-jar', './GANXiSw.jar', '-i', '../' + netfile, '-d', algname + 'outp/']
 	if not asym:
 		args.append('-Sym 1')  # Check existance of the back links and generate them if requried

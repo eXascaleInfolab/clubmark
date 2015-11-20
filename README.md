@@ -134,7 +134,7 @@ Usage: ./benchmark.py [-g[f] [-c[f][r]] [-r] [-e[n][m]] [-d{a,s}=<datasets_dir>]
 		- `*.err`  -  `stderr` of the executed algorithm and benchmarking routings
 		- `*.cnl`  - resulting clusters unwrapped to nodes (community nodes list) for NMIs evaluation. `*.cnl` are generated either per each level of the resulting hierarchy of communities or for the whole hierarchy (parameterized inside the benchmark)
 		- `*.mod`  - resulting modularity value pear each hierarchical/scale level of each network
-	* ./algorithms/results/  - final accumulated results of the algorithm evaluation (located in `./algorithms/` in previous versions):
+	* ./algorithms/results/  - final accumulated results of the algorithm evaluation (previously located in ./algorithms/):
 		- `<algname>.rcp`  - resource consumption profile for all executions of the algorithm even in case of crashes / interruptions
 		- `<algname>.nmi[-s]`  - best NMI value for each network considering overlapping communities (and compatble with standard NMI), evaluated by `gecmi` and `onmi` (cf. above)
 		- `<algname>.mod`  - best Q (modularity) value for each network considering overlapping communities (and compatible with standard modularity value), evaluated by `hirecs` (in special evaluation mode without the clustering)

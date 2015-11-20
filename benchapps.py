@@ -35,6 +35,7 @@ from benchcore import _netshuffles
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 _algsdir = 'algorithms/'  # Default directory of the benchmarking algorithms
+_resdir = _algsdir + 'resutls/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm
 _logext = '.log'
 _nmibin = './gecmi'  # Binary for NMI evaluation
 _modext = '.mod'
@@ -75,24 +76,23 @@ def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname
 		taskex = ''.join((task, '_', str(i)))
 
 
-def modAlgorithm(execpool, nsafile, timeout, algname):  # , multirun=True
+def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 	"""Evaluate quality of the algorithm by modularity
 
 	execpool  - execution pool of worker processes
-	nsafile  - file name of the input network
+	netfile  - file name of the input network
 	timeout  - execution timeout, 0 - infinity
 	algname  - the algorithm name that is evaluated
 	multirun  - evaluate also on the shuffled networks (is required for non-deterministic algorithms only)
 	"""
-	assert execpool and nsafile and algname, "Parameters must be defined"
+	assert execpool and netfile and algname, "Parameters must be defined"
 	# Fetch the task name and chose correct network filename
-	task = os.path.split(os.path.splitext(nsafile)[0])[1]  # Base name of the network
+	task = os.path.split(os.path.splitext(netfile)[0])[1]  # Base name of the network
 	assert task, 'The network name should exists'
 	
 	# Make dirs with mod logs
 	# Directory of resulting community structures (clusters) for each network
-	resdir = ''.join((_algsdir, algname, 'outp/'))
-	clsbase = resdir + task
+	clsbase = ''.join((_algsdir, algname, 'outp/', task))
 	if not os.path.exists(clsbase):
 		print('WARNING clusters "{}" do not exist from "{}"'.format(task, algname), file=sys.stderr)
 		return
@@ -109,7 +109,7 @@ def modAlgorithm(execpool, nsafile, timeout, algname):  # , multirun=True
 		print('Checking ' + cfile)
 		taskex = os.path.split(os.path.splitext(cfile)[0])[1]  # Base name of the network
 		assert taskex, 'The clusters name should exists'
-		args = ('./hirecs', '-e=../' + cfile, '../' + nsafile)
+		args = ('./hirecs', '-e=../' + cfile, '../' + netfile)
 		#print('> Executing: ' + ' '.join(args))
 
 		# Job postprocessing
@@ -132,10 +132,10 @@ def modAlgorithm(execpool, nsafile, timeout, algname):  # , multirun=True
 			# Find the highest value of modularity from the accumulated one and store it in the
 			# acc file for all networks
 			# Sort the task acc mod file and accumulate the largest value to the totall acc mod file
-			amodname = ''.join((resdir, algname, _modext))  # Name of the file with accumulated modularity
+			amodname = ''.join((_resdir, algname, _modext))  # Name of the file with accumulated modularity
 			if not os.path.exists(amodname):
 				with open(amodname, 'a') as amod:
-					amod.write('<Network>\t<Q>\n')
+					amod.write('# Network\tQ\n')
 			with open(amodname, 'a') as amod:  # Append to the end
 				subprocess.call(''.join(('printf "', task, '\t `sort -g -r "', tmodname,'" | head -n 1`\n"')), stdout=amod, shell=True)
 
@@ -256,8 +256,8 @@ def evalLouvain_igNS(execpool, cnlfile, timeout):
 	evalAlgorithm(execpool, cnlfile, timeout, 'louvain_igraph', evalbin='./onmi_sum', evalname='nmi-s')
 
 
-def modLouvain_ig(execpool, nsafile, timeout):
-	modAlgorithm(execpool, nsafile, timeout, 'louvain_igraph')
+def modLouvain_ig(execpool, netfile, timeout):
+	modAlgorithm(execpool, netfile, timeout, 'louvain_igraph')
 
 
 # SCP (Sequential algorithm for fast clique percolation)
@@ -301,8 +301,8 @@ def evalScpNS(execpool, cnlfile, timeout):
 	evalAlgorithm(execpool, cnlfile, timeout, 'scp', evalbin='./onmi_sum', evalname='nmi-s')
 
 
-def modScp(execpool, nsafile, timeout):
-	modAlgorithm(execpool, nsafile, timeout, 'scp')
+def modScp(execpool, netfile, timeout):
+	modAlgorithm(execpool, netfile, timeout, 'scp')
 
 
 # Random Disjoing Clustering
@@ -338,8 +338,8 @@ def evalRandcommunsNS(execpool, cnlfile, timeout):
 	evalAlgorithm(execpool, cnlfile, timeout, 'randcommuns', evalbin='./onmi_sum', evalname='nmi-s')
 
 
-def modRandcommuns(execpool, nsafile, timeout):
-	modAlgorithm(execpool, nsafile, timeout, 'randcommuns')
+def modRandcommuns(execpool, netfile, timeout):
+	modAlgorithm(execpool, netfile, timeout, 'randcommuns')
 
 
 # HiReCS
@@ -370,8 +370,8 @@ def evalHirecsNS(execpool, cnlfile, timeout):
 	evalAlgorithm(execpool, cnlfile, timeout, 'hirecs', evalbin='./onmi_sum', evalname='nmi-s')
 
 
-#def modHirecs(execpool, nsafile, timeout):
-#	modAlgorithm(execpool, nsafile, timeout, 'hirecs')
+#def modHirecs(execpool, netfile, timeout):
+#	modAlgorithm(execpool, netfile, timeout, 'hirecs')
 
 
 def execHirecsOtl(execpool, netfile, asym, timeout):
@@ -462,7 +462,7 @@ def execOslom2(execpool, netfile, asym, timeout):
 
 	algname = 'oslom2'
 	args = ('../exectime', ''.join(('-o=./', algname, _extexectime)), '-n=' + task
-		, './oslom_undir', '-f', '../' + netfile, '-w')
+		, './oslom_undir' if not asym else './oslom_dir', '-f', '../' + netfile, '-w')
 	# Copy results to the required dir on postprocessing
 	logsdir = ''.join((_algsdir, algname, 'outp/'))
 	netdir = os.path.split(netfile)[0]
@@ -497,8 +497,8 @@ def evalOslom2NS(execpool, cnlfile, timeout):
 	evalAlgorithm(execpool, cnlfile, timeout, 'oslom2', evalbin='./onmi_sum', evalname='nmi-s')
 
 
-def modOslom2(execpool, nsafile, timeout):
-	modAlgorithm(execpool, nsafile, timeout, 'oslom2')
+def modOslom2(execpool, netfile, timeout):
+	modAlgorithm(execpool, netfile, timeout, 'oslom2')
 
 
 # Ganxis (SLPA)
@@ -536,5 +536,5 @@ def evalGanxisNS(execpool, cnlfile, timeout):
 	evalAlgorithm(execpool, cnlfile, timeout, 'ganxis', evalbin='./onmi_sum', evalname='nmi-s')
 
 
-def modGanxis(execpool, nsafile, timeout):
-	modAlgorithm(execpool, nsafile, timeout, 'ganxis')
+def modGanxis(execpool, netfile, timeout):
+	modAlgorithm(execpool, netfile, timeout, 'ganxis')

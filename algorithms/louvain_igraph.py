@@ -155,6 +155,7 @@ if __name__ == '__main__':
 			'  -i[X]=<input_network>  - file of the input network in the format: <src_id> <dst_id> [<weight>]',
 			'    Xu  - undirected input network (<src_id> <dst_id> implies also <dst_id> <src_id>). Default',
 			'    Xd  - directed input network (both <src_id> <dst_id> and <dst_id> <src_id> are specified)',
+			'    Note: {{u, d}} are used only if the network file has no corresponding metadata (ncol format)',
 			'  -f=<file_format>  - file format of the input network. Default: {}',
 			'    ncol  - ncol format: <src_id> <dst_id> [<weight>]',
 			'    pajek  - pajek format',

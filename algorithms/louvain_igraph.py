@@ -22,7 +22,8 @@ def parseParams(args):
 	
 	return
 		network  - input network
-		dirnet  - whether the input network is directed
+		dirnet  - whether the input network is directed (links are asymmetric,
+			i.e. can have different in/outbound weights)
 		perlev  - output communities per level instead of the solid hierarchy
 		outpcoms  - base name of the output file
 		outpext  - extension of the output file
@@ -30,7 +31,8 @@ def parseParams(args):
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
 	network = None
 	netfmt = inpfmt
-	dirnet = False
+	dirnet = False  # ~ Asymmetric links
+	perlev = None
 	outpcoms, outpext = os.path.splitext(outpfile)
 
 	for arg in args:
@@ -40,10 +42,10 @@ def parseParams(args):
 		
 		if arg[1] == 'i':
 			pos = arg.find('=', 2)
-			if pos == -1 or arg[2] not in 'ud=' or len(arg) == pos + 1:
+			if pos == -1 or arg[2] not in 'as=' or len(arg) == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
 			pos += 1
-			dirnet = arg[2] == 'd'
+			dirnet = arg[2] == 'a'
 			network = arg[pos:]
 			ext = os.path.splitext(network)[1]
 			if ext and ext[1:] in ('pjk', 'pajek'):
@@ -153,9 +155,11 @@ if __name__ == '__main__':
 	else:
 		print('\n'.join(('Usage: {} -i[{{u, d}}]=<input_network> [-f={{ncol, pajek}}] [-o[l]=<output_communities>]',
 			'  -i[X]=<input_network>  - file of the input network in the format: <src_id> <dst_id> [<weight>]',
-			'    Xu  - undirected input network (<src_id> <dst_id> implies also <dst_id> <src_id>). Default',
-			'    Xd  - directed input network (both <src_id> <dst_id> and <dst_id> <src_id> are specified)',
-			'    Note: {{u, d}} are used only if the network file has no corresponding metadata (ncol format)',
+			'    Xa  - asymmetric network links (in/outbound weights of the link migh differ), arcs',
+			'    Xs  - symmetric network links, edges (but both directions can be specified in the input file). Default option.',
+			'    Note:'
+			'      - {{a, s}} are used only if the network file has no corresponding metadata (ncol format)',
+			'      - Louvain igraph implementation does not support asymmetric clustering (directed network)',
 			'  -f=<file_format>  - file format of the input network. Default: {}',
 			'    ncol  - ncol format: <src_id> <dst_id> [<weight>]',
 			'    pajek  - pajek format',

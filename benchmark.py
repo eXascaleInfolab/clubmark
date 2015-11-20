@@ -515,7 +515,7 @@ if __name__ == '__main__':
 			'  -d[X]=<datasets_dir>  - directory of the datasets',
 			'  -f[X]=<dataset>  - dataset (network, graph) file name',
 			'    Xa  - the dataset is specified by asymmetric links (in/outbound weights of the link migh differ), arcs',
-			'    Xs  - the dataset is specified by symmetric links, edges. Default option',  #  only in a single direction
+			'    Xs  - the dataset is specified by symmetric links, edges. Default option',
 			'    Notes:',
 			'    - multiple directories and files can be specified via multiple -d/f options (one per the item)',
 			'    - datasets should have the following format: <node_src> <node_dest> [<weight>]',

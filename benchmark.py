@@ -40,8 +40,11 @@ import signal  # Intercept kill signals
 from math import sqrt
 import glob
 from itertools import chain
+
 import benchapps  # Benchmarking apps (clustering algs)
 from benchcore import *
+from benchutils import secondsToHms
+
 
 # Add 3dparty modules
 #sys.path.insert(0, '3dparty')  # Note: this operation might lead to ambiguity on paths resolving
@@ -253,7 +256,7 @@ def convertNet(filename, asym, overwrite=False, resdub=False):
 	netname = os.path.split(netnoext)[1]
 	assert netname, 'netname should be defined'
 	for i in range(_netshuffles):
-		outpfile = ''.join((netnoext, '/', netname, '_', str(i), _extnetfile))
+		outpfile = ''.join((netnoext, os.sep, netname, '_', str(i), _extnetfile))
 		if overwrite or not sys.path.exists(outpfile):
 			# sort -R pgp_udir.net -o pgp_udir_rand3.net
 			subprocess.call(('sort', '-R', net, '-o', outpfile))
@@ -322,7 +325,7 @@ def benchmark(*args):
 	datafiles = []
 	for asym, path in datas:
 		if os.path.isdir(path):
-			datadirs.append((asym, path if path.endswith('/') else path + '/'))
+			datadirs.append((asym, path if path.endswith(os.sep) else path + os.sep))
 		else:
 			datafiles.append((asym, path))
 	datas = None

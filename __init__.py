@@ -1,2 +1,2 @@
 __all__ = ['algorithms', '3dparty',
-	'benchapps', 'benchcore', 'benchmark']
+	'benchapps', 'benchcore', 'benchmark', 'benchutils.py']

@@ -24,24 +24,13 @@ import collections
 import os
 import ctypes  # Required for the multiprocessing Value definition
 
+from benchutils import secondsToHms
+
 
 _extexectime = '.rcp'  # Resource Consumption Profile
 _extclnodes = '.cnl'  # Clusters (Communities) Nodes Lists
 _execpool = None  # Active execution pool
 _netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
-
-
-def secondsToHms(seconds):
-	"""Convert seconds to hours, mins, secs
-	
-	seconds  - seconds to be converted
-	
-	return hours, mins, secs
-	"""
-	hours = int(seconds / 3600)
-	mins = int((seconds - hours * 3600) / 60)
-	secs = seconds - hours * 3600 - mins * 60
-	return hours, mins, secs
 
 
 class Job:

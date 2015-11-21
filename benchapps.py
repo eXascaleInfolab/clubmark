@@ -288,11 +288,7 @@ def execScp(execpool, netfile, asym, timeout):
 
 	# Run again for k E [3, 12]
 	resbase = ''.join((taskpath, os.sep, task, '_'))  # Base name of the result
-	logbase = ''.join((taskpath, '_log/'))
-	# Create log dir if does not exists
-	if not os.path.exists(logbase):
-		os.mkdir(logbase)
-	logbase = ''.join((logbase, task, '_'))
+	taskbase = ''.join((taskpath, '_log/', task, '_'))
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 8  # Max clique size
 	for k in range(kmin, kmax + 1):
@@ -305,7 +301,8 @@ def execScp(execpool, netfile, asym, timeout):
 		finargs[-1] = finargs[-1].format(kstr)
 		execpool.execute(Job(name='_'.join((task, algname, kstrex)), workdir=_algsdir, args=finargs, timeout=timeout
 			, stdout=''.join((resbase, kstrex, _extclnodes))
-			, stderr=''.join((logbase, kstrex, _logext)) ))
+			, stderr=''.join((taskbase, kstrex, _logext)) ))
+
 	return kmax + 1 - kmin
 
 

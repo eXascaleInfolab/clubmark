@@ -266,11 +266,24 @@ class ExecPool:
 				except Exception as err:
 					print('ERROR in ondone callback of "{}": {}'.format(job.name, err), file=sys.stderr)
 			del self._workers[proc]
+			# Clear up
 			# Remove empty logs skipping the system devnull
+			tpaths = []
 			if job.stdout and job.stdout != os.devnull and os.path.getsize(job.stdout) == 0:
+				tpaths.append(os.path.split(job.stdout)[0])
 				os.remove(job.stdout)
 			if job.stderr and job.stderr != os.devnull and os.path.getsize(job.stderr) == 0:
+				tpath = os.path.split(job.stderr)[0]
+				if not tpaths or tpath not in tpaths:
+					tpaths.append(tpath)
 				os.remove(job.stderr)
+			# Also remove the directory if it is empty
+			for tpath in tpaths:
+				try:
+					os.rmdir(tpath)
+				except OSError:
+					pass  # The dir is not empty, just skip it
+			# Updated execution status
 			job.executed.value = True
 			print('"{}" #{} is completed'.format(job.name, proc.pid), file=sys.stderr)
 			

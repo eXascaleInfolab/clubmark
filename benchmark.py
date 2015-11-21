@@ -57,6 +57,7 @@ from benchcore import _extexectime
 from benchcore import _extclnodes
 from benchcore import _execpool
 from benchcore import _netshuffles
+from benchapps import _algsdir
 from benchapps import _resdir
 
 
@@ -218,6 +219,7 @@ def generateNets(overwrite=False):
 		_execpool.join(2 * 60*60)  # 2 hours
 		_execpool = None
 	print('Synthetic networks files generation is completed')
+
 
 def convertNet(filename, asym, overwrite=False, resdub=False):
 	"""Gonvert input networks to another formats
@@ -393,19 +395,6 @@ def benchmark(*args):
 			taksnum += tnum
 			netcount += tnum != 0
 
-		
-		## Additionally execute Louvain multiple times
-		#alg = execLouvain
-		#if alg in algs:
-		#	for net in glob.iglob('*'.join((_syntdir, _extnetfile))):
-		#		for execnum in range(1, 10):
-		#			try:
-		#				alg(_execpool, net, timeout, execnum)
-		#			except StandardError as err:
-		#				errexectime = time.time() - exectime
-		#				print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
-		#					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
-
 		if _execpool:
 			timelim = timeout * taksnum
 			print('Waiting for the algorithms execution on {} tasks from {} networks'
@@ -419,8 +408,8 @@ def benchmark(*args):
 	# Evaluate results
 	if evalres:
 		# Create dir for the final results
-		if not os.path.exists(_resdir):
-			os.mkdir(_resdir)
+		if not os.path.exists(_algsdir + _resdir):
+			os.mkdir(_algsdir + _resdir)
 		# measures is a mao with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
 		measures = {1: ['eval', _extclnodes, 'NMI'], 2: ['mod', '.hig', 'Q']}
 		for im in measures:

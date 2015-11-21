@@ -36,31 +36,31 @@ from benchcore import _netshuffles
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 _algsdir = 'algorithms/'  # Default directory of the benchmarking algorithms
-_resdir = _algsdir + 'resutls/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm
+_resdir = 'resutls/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm, specified RELATIVE to _algsdir
 _logext = '.log'
 _errext = '.err'
 _nmibin = './gecmi'  # Binary for NMI evaluation
 _modext = '.mod'
 
 
-def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname='nmi', stderr=os.devnull):
+def evalAlgorithm(execpool, gtres, timeout, algname, evalbin=_nmibin, evalname='nmi', stderr=os.devnull):
 	"""Evaluate the algorithm by the specified measure
 
 	execpool  - execution pool of worker processes
-	cnlfile  - file name of clusters for each of which nodes are listed (clusters nodes lists file)
+	gtres  - ground truth result: file name of clusters for each of which nodes are listed (clusters nodes lists file)
 	timeout  - execution timeout, 0 - infinity
 	algname  - the algorithm name that is evaluated
 	evalbin  - file name of the evaluation binary
 	evalname  - name of the evaluation measure
 	stderr  - optional redifinition of the stderr channel: None - use default, os.devnull - skip
 	"""
-	assert execpool and cnlfile and algname and evalbin and evalname, "Parameters must be defined"
+	assert execpool and gtres and algname and evalbin and evalname, "Parameters must be defined"
 	# Fetch the task name and chose correct network filename
-	task = os.path.split(os.path.splitext(cnlfile)[0])[1]  # Base name of the network
+	task = os.path.split(os.path.splitext(gtres)[0])[1]  # Base name of the network
 	assert task, 'The network name should exists'
 
 	args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', task, '_', algname))
-		, './eval.sh', evalbin, '../' + cnlfile, ''.join((algname, 'outp/', task)), algname, evalname)
+		, './eval.sh', evalbin, '../' + gtres, ''.join((algname, 'outp/', task)), algname, evalname)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((evalname, task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', evalname, '_', task, _logext)), stderr=stderr))
@@ -70,7 +70,7 @@ def evalAlgorithm(execpool, cnlfile, timeout, algname, evalbin=_nmibin, evalname
 	taskex = ''.join((task, '_', str(i)))
 	while os.path.exists(''.join((_algsdir, algname, 'outp/', taskex))):
 		args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', taskex, '_', algname))
-			, './eval.sh', evalbin, '../' + cnlfile, ''.join((algname, 'outp/', taskex)), algname, evalname)
+			, './eval.sh', evalbin, '../' + gtres, ''.join((algname, 'outp/', taskex)), algname, evalname)
 		#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 		execpool.execute(Job(name='_'.join((evalname, taskex, algname)), workdir=_algsdir, args=args
 			, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', evalname, '_', taskex, _logext)), stderr=stderr))
@@ -136,7 +136,8 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 			# Find the highest value of modularity from the accumulated one and store it in the
 			# acc file for all networks
 			# Sort the task acc mod file and accumulate the largest value to the totall acc mod file
-			amodname = ''.join((_resdir, algname, _modext))  # Name of the file with accumulated modularity
+			# Note: here full path is required
+			amodname = ''.join((_algsdir, _resdir, algname, _modext))  # Name of the file with accumulated modularity
 			if not os.path.exists(amodname):
 				with open(amodname, 'a') as amod:
 					amod.write('# Network\tQ\tTask\n')
@@ -229,7 +230,8 @@ def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False):
 	def postexec(job):
 		"""Copy final modularity output to the separate file"""
 		# File name of the accumulated result
-		accname = ''.join((_resdir, algname, resext))
+		# Note: here full path is required
+		accname = ''.join((_algsdir, _resdir, algname, resext))
 		with open(accname, 'a') as accres:  # Append to the end
 			# TODO: Evaluate the average
 			subprocess.call(('tail', '-n 1', logsbase + _logext), stdout=accres)

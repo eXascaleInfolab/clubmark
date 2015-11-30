@@ -22,7 +22,6 @@ import subprocess
 # Add algorithms modules
 import sys
 #sys.path.insert(0, 'algorithms')  # Note: this operation might lead to ambiguity on paths resolving
-from sys import executable as _pyexec  # Full path to the current Python interpreter
 
 from algorithms.louvain_igraph import louvain
 from algorithms.randcommuns import randcommuns
@@ -32,6 +31,7 @@ from benchutils import backupFiles
 from benchcore import _extexectime
 from benchcore import _extclnodes
 from benchcore import _netshuffles
+from benchutils import  pyexec  # Full path to the current Python interpreter
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
@@ -237,7 +237,7 @@ def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False):
 			subprocess.call(('tail', '-n 1', logsbase + _logext), stdout=accres)
 
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
-		, _pyexec, ''.join(('./', algname, '.py')), ''.join(('-i=../', netfile, netext))
+		, pyexec, ''.join(('./', algname, '.py')), ''.join(('-i=../', netfile, netext))
 		, ''.join(('-ol=', algname, 'outp/', task, _extclnodes)))
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout
@@ -284,7 +284,7 @@ def execScp(execpool, netfile, asym, timeout):
 		backupPath(taskpath)
 	# ATTENTION: a single argument is k-clique size, specified later
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), ''.join(('-n=', task, '_{}'))
-		, _pyexec, ''.join(('./', algname, '.py')), '../' + netfile, '{}')
+		, pyexec, ''.join(('./', algname, '.py')), '../' + netfile, '{}')
 
 	# Run again for k E [3, 12]
 	resbase = ''.join((taskpath, '/', task, '_'))  # Base name of the result
@@ -338,7 +338,7 @@ def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False):
 		backupPath(taskpath)
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
-		, _pyexec, ''.join(('./', algname, '.py')), ''.join(('-g=../', netfile, _extclnodes))
+		, pyexec, ''.join(('./', algname, '.py')), ''.join(('-g=../', netfile, _extclnodes))
 		, ''.join(('-i=../', netfile, netext)), ''.join(('-o=', algname, 'outp/', task))
 		, ''.join(('-n=', str(_netshuffles + 1))))
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull

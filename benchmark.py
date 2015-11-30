@@ -43,7 +43,7 @@ from itertools import chain
 
 import benchapps  # Benchmarking apps (clustering algs)
 from benchcore import *
-from benchutils import secondsToHms
+from benchutils import *
 
 
 # Add 3dparty modules
@@ -59,11 +59,12 @@ from benchcore import _execpool
 from benchcore import _netshuffles
 from benchapps import _algsdir
 from benchapps import _resdir
-from benchapps import _pyexec
+from benchapps import pyexec
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
-_syntdir = 'syntnets/'  # Default directory for the synthetic generated datasets
+_syntdir = 'syntnets/'  # Default directory for the synthetic datasets
+_synetsnum = 8  # Default number of instances of each synthetic network
 _extnetfile = '.nsa'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated arcs
 #_algseeds = 9  # TODO: Implement
 
@@ -76,6 +77,8 @@ def parseParams(args):
 			0 - do not generate
 			1 - generate only if this network is not exist
 			2 - force geration (overwrite all)
+		netins  - number of network instances for each network type to be generated, >= 1
+		shfins  - number of shuffles of each network instance to be produced, >= 0
 		convnets  - convert existing networks into the .hig format
 			0 - do not convert
 			0b001  - convert:
@@ -89,6 +92,8 @@ def parseParams(args):
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
 	gensynt = 0
+	netins = _synetsnum  # Number of network instances to generate, >= 1
+	shfins = 0  # Number of shuffles for each network instance to be produced, >=0
 	convnets = 0
 	runalgs = False
 	evalres = 0  # 1 - NMIs, 2 - Q, 3 - all measures
@@ -104,9 +109,25 @@ def parseParams(args):
 			raise ValueError('Unexpected argument: ' + arg)
 
 		if arg[1] == 'g':
-			if arg not in '-gf':
+			alen = len(arg)
+			if alen == 2:
+				gensynt = 1  # Generate if not exists
+				continue
+			pos = arg.find('=', 2)
+			if arg[2] not in 'f=' or alen == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
-			gensynt = len(arg) - 1  # '-gf'  - forced generation (overwrite)
+			if pos == -1:
+				gensynt = 2  # Forced generation (overwrite)
+			else:
+				val = arg[pos+1:].split('.')
+				if len(val) > 2:
+					raise ValueError('Unexpected argument: ' + arg)
+				netins = int(val[0])
+				if len(arg) > 1:
+					shfins = int(val[1])
+				if netins <= 0 or shfins < 0:
+					raise ValueError('Value is out of range:  netins: {netins} >= 1, shfins: {shfins} >= 0'
+						.format(netins=netins, shfins=shfins))
 		elif arg[1] == 'a':
 			if not (arg[0:3] == '-a=' and len(arg) >= 4):
 				raise ValueError('Unexpected argument: ' + arg)
@@ -160,36 +181,41 @@ def parseParams(args):
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
 
-	return gensynt, convnets, runalgs, evalres, datas, timeout, algorithms
+	return gensynt, netins, shfins, convnets, runalgs, evalres, datas, timeout, algorithms
 
 
 def generateNets(overwrite=False, count=8, shufnum=0):
 	"""Generate synthetic networks with ground-truth communities and save generation params
 
 	overwrite  - whether to overwrite existing networks or use them
-	count  - number of insances of each network to be generated
-	shufnum  - number of shufflings for of each instance on the generated network
+	count  - number of insances of each network to be generated, >= 1
+	shufnum  - number of shufflings for of each instance on the generated network, >= 0
 	"""
-	# Store networks generation parameters in the params/ dir inside syntnets dir
-	paramsdir = 'params/'
+	paramsdir = 'params/'  # Contains networks generation parameters per each network type
+	seedsdir = 'seeds/'  # Contains network generation seeds per each network instance
+	netsdir = 'networks/'  # Contains subdirs, each contains all instances of each network and all shuffles of each instance
+	# Note: shuffles unlike ordinary networks have double extension: shuffling nimber and standard extension
 
-	# Store all instances of each network with generation parameters in the dedicated directory / single directory
+	# Store all instances of each network with generation parameters in the dedicated directory
 	assert count >= 1, 'Number of the network instances to be generated must be positive'
-	assert _syntdir[-1] == '/' and paramsdir[-1] == '/', "Directory name must have valid terminator"
+	assert shufnum >= 0, 'Number of shufflings must be non-negative'
+	assert _syntdir[-1] == '/' and paramsdir[-1] == '/' and seedsdir[-1] == '/' and netsdir[-1] == '/', "Directory name must have valid terminator"
+	
 	paramsdirfull = _syntdir + paramsdir
-	# Backup params dir on rewrite
-	if overwite and os.path.exists(paramsdirfull):
-		try:
-			glob.iglob(paramsdirfull + '*').next()
-		except StopIteration:
-			# Diretory is empty, continue processing skipping this exception
-			pass
-		else:
-			# Directory should be backuped
-			backupPath(paramsdirfull)
-	# Create params dir if required
-	if not os.path.exists(paramsdirfull):
-		os.makedirs(paramsdirfull)
+	seedsdirfull = _syntdir + seedsdir
+	netsdirfull = _syntdir + netsdir
+	# Backup params dirs on rewriting
+	if overwrite:
+		for dirname in (paramsdirfull, seedsdirfull, netsdirfull):
+			if os.path.exists(dirname) and not dirempty(dirname):
+				backupPath(dirname)
+				
+	# Create dirs if required
+	if not os.path.exists(_syntdir):
+		os.mkdir(_syntdir)
+	for dirname in (paramsdirfull, seedsdirfull, netsdirfull):
+		if not os.path.exists(dirname):
+			os.mkdir(dirname)
 		
 	# Initial options for the networks generation
 	N0 = 1000;  # Satrting number of nodes
@@ -206,8 +232,25 @@ def generateNets(overwrite=False, count=8, shufnum=0):
 	vark = (5, 10, 20)  # Average density of network links
 	global _execpool
 
+	def shuffling(job):
+		"""Shufling postprocessing"""
+		args = ''.join(pyexec, '-c',
+"""
+for i in range(1, {shufnum} + 1):
+	
+""".format(shufnum=shufnum))
+		subprocess.call(args)
+				
 	_execpool = ExecPool(max(cpu_count() - 1, 1))
 	netgenTimeout = 15 * 60  # 15 min
+	bmname = 'frbench_uwovp'  # Benchmark name
+	bmbin = './' + bmname  # Benchmark binary
+	timeseed = _syntdir + 'time_seed.dat'
+	# Check whether time seed exists and create it if required
+	if not os.path.exists(timeseed):
+		proc = subprocess.Popen((bmbin), bufsize=-1, cwd=timeseed)
+		proc.wait()
+		assert os.path.exists(timeseed), timeseed + ' must be created'
 	for nm in varNmul:
 		N = nm * N0
 		for k in vark:
@@ -223,16 +266,15 @@ def generateNets(overwrite=False, count=8, shufnum=0):
 						, 'maxc': evalmaxc(genopts), 'on': evalon(genopts), 'name': name})
 					for opt in genopts.items():
 						fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
-			if os.path.isfile(fnamex):
-				bmname = 'frbench_uwovp'  # Benchmark name
-				bmbin = './' + bmname  # Benchmark binary
+			netpath = name.join(netsdirfull, )
+			if os.path.isfile(fnamex) and not os.path.exists():  # TODO: target 
 				# Generate required number of network instances
-				args = ('../exectime', '-n=' + name, ''.join(('-o=', paramsdir, bmname, _extexectime))
-					, bmbin, '-f', name.join((paramsdir, ext)))  # TODO: perform multiple shuffling if required - ? use task of sequential jobs ?
+				args = ('../exectime', '-n=' + name, ''.join(('-o=', _syntdir, bmname, _extexectime))
+					, bmbin, '-f', name.join((paramsdir, ext)))
 				#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
 				if _execpool:
 					_execpool.execute(Job(name=name, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=1
-						, onstart=lambda job: shutil.copy2(_syntdir + 'time_seed.dat', name.join((_syntdir, '.ngs')))))  # Network generation seed
+						, onstart=lambda job: shutil.copy2(timeseed, name.join((seedsdirfull, '.ngs')))))  # Network generation seed
 				for i in range(1, count):
 					namext = ''.join((name, '_', str(i)))
 					args = ('../exectime', '-n=' + namext, ''.join(('-o=', _syntdir, bmname, _extexectime))
@@ -240,7 +282,10 @@ def generateNets(overwrite=False, count=8, shufnum=0):
 					#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
 					if _execpool:
 						_execpool.execute(Job(name=namext, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=1
-							, onstart=lambda job: shutil.copy2(_syntdir + 'time_seed.dat', namext.join((_syntdir, '.ngs')))))  # Network generation seed
+							, onstart=lambda job: shutil.copy2(timeseed, namext.join((seedsdirfull, '.ngs')))  # Network generation seed
+							, ondone=shuffling if shufnum > 0 else None))
+			else:
+				print('ERROR: network parameters file "{}" is not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')
 	if _execpool:
 		_execpool.join(2 * 60*60)  # 2 hours
@@ -341,7 +386,7 @@ def benchmark(*args):
 	Run the algorithms on the specified datasets respecting the parameters.
 	"""
 	exectime = time.time()  # Start of the executing time
-	gensynt, convnets, runalgs, evalres, datas, timeout, algorithms = parseParams(args)
+	gensynt, netins, shfins, convnets, runalgs, evalres, datas, timeout, algorithms = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tconvnets: {:b}'
 		'\n\trunalgs: {}\n\tevalres: {}\n\tdatas: {}\n\ttimeout: {}\n\talgorithms: {}'
 		.format(gensynt, convnets
@@ -518,8 +563,8 @@ if __name__ == '__main__':
 		benchmark(*sys.argv[1:])
 	else:
 		print('\n'.join(('Usage: {0} [-g[f][=[<number>][.<shuffles_number>]] [-c[f][r]] [-r] [-e[n][m]] [-d{{a,s}}=<datasets_dir>] [-f{{a,s}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
-			'  -g[f][=[<number>][.<shuffles_number>]]  - generate <number> (8 by default) synthetic datasets in the {syntdir},'
-			' shuffling each <shuffles_number> (0 by default) times.',
+			'  -g[f][=[<number>][.<shuffles_number>]]  - generate <number> ({synetsnum} by default) >= 1 synthetic datasets in the {syntdir},'
+			' shuffling each <shuffles_number> (0 by default) >= 0 times.',
 			'  NOTE: shuffled datasets have the following naming format <net_name>.<shuffle_index>.<net_extension>',
 			'    Xf  - force the generation even when the data already exists (existent .ngs are backed up)',
 			'  -a[="app1 app2 ..."]  - apps (clusering algorithms) to benchmark among the implemented.'
@@ -551,4 +596,4 @@ if __name__ == '__main__':
 			'    Xs  - time in seconds. Default option',
 			'    Xm  - time in minutes',
 			'    Xh  - time in hours',
-			)).format(sys.argv[0], syntdir=_syntdir))
+			)).format(sys.argv[0], syntdir=_syntdir, synetsnum=_synetsnum))

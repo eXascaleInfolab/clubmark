@@ -17,6 +17,8 @@ import shutil
 import time
 import tarfile
 
+from sys import executable as pyexec  # Full path to the current Python interpreter
+
 
 def secondsToHms(seconds):
 	"""Convert seconds to hours, mins, secs
@@ -29,6 +31,17 @@ def secondsToHms(seconds):
 	mins = int((seconds - hours * 3600) / 60)
 	secs = seconds - hours * 3600 - mins * 60
 	return hours, mins, secs
+
+
+def dirempty(dirpath):
+	"""Whether specified directory is empty"""
+	assert os.path.isdir(dirpath), 'Existent directory is expected'
+	try:
+		glob.iglob(dirpath + '*').next()
+	except StopIteration:
+		# Diretory is empty
+		return True
+	return False
 
 
 def nameVersion(path):

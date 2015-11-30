@@ -109,19 +109,18 @@ def parseParams(args):
 			raise ValueError('Unexpected argument: ' + arg)
 
 		if arg[1] == 'g':
+			gensynt = 1  # Generate if not exists
 			alen = len(arg)
 			if alen == 2:
-				gensynt = 1  # Generate if not exists
 				continue
 			pos = arg.find('=', 2)
 			if arg[2] not in 'f=' or alen == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
-			if pos == -1:
+			if arg[2] == 'f':
 				gensynt = 2  # Forced generation (overwrite)
-			else:
-				val = arg[pos+1:].split('.')
-				if len(val) > 2:
-					raise ValueError('Unexpected argument: ' + arg)
+			if pos != -1:
+				# Parse number of instances and shuffles:  <instances>.<shuffles>
+				val = arg[pos+1:].split('.', 1)
 				netins = int(val[0])
 				if len(arg) > 1:
 					shfins = int(val[1])

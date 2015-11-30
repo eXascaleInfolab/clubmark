@@ -100,7 +100,7 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 		return
 	
 	evalname = 'mod'
-	logsdir = ''.join((clsbase, '_', evalname, os.sep))
+	logsdir = ''.join((clsbase, '_', evalname, '/'))
 	if not os.path.exists(logsdir):
 		os.makedirs(logsdir)
 	
@@ -216,7 +216,7 @@ def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False):
 	logsbase = ''.join((_algsdir, algname, 'outp/', task))
 	# Backup previous results if exist
 	if os.path.exists(logsbase):
-		backupFiles(logsbase)
+		backupPath(logsbase)
 	# Louvain accumulated statistics over shuffled modification of the network or total statistics for all networks
 	resext = '.acs'
 	if not selfexec:
@@ -247,7 +247,7 @@ def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False):
 	execnum = 0
 	if not selfexec:
 		selfexec = True
-		netdir = os.path.split(netfile)[0] + os.sep
+		netdir = os.path.split(netfile)[0] + '/'
 		#print('Netdir: ', netdir)
 		for netfile in glob.iglob(''.join((netdir, task, '/*', netext))):
 			execLouvain_ig(execpool, netfile, asym, timeout, selfexec)
@@ -281,13 +281,13 @@ def execScp(execpool, netfile, asym, timeout):
 	# Backup previous results if exist
 	taskpath = ''.join((_algsdir, algname, 'outp/', task))
 	if os.path.exists(taskpath):
-		backupFiles(taskpath)
+		backupPath(taskpath)
 	# ATTENTION: a single argument is k-clique size, specified later
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), ''.join(('-n=', task, '_{}'))
 		, _pyexec, ''.join(('./', algname, '.py')), '../' + netfile, '{}')
 
 	# Run again for k E [3, 12]
-	resbase = ''.join((taskpath, os.sep, task, '_'))  # Base name of the result
+	resbase = ''.join((taskpath, '/', task, '_'))  # Base name of the result
 	taskbase = ''.join((taskpath, '_log/', task, '_'))
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 8  # Max clique size
@@ -335,7 +335,7 @@ def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False):
 	# Backup previous results if exist
 	taskpath = ''.join((_algsdir, algname, 'outp/', task))
 	if os.path.exists(taskpath):
-		backupFiles(taskpath)
+		backupPath(taskpath)
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, _pyexec, ''.join(('./', algname, '.py')), ''.join(('-g=../', netfile, _extclnodes))
@@ -374,9 +374,9 @@ def execHirecs(execpool, netfile, asym, timeout):
 	# Backup previous results if exist
 	taskpath = ''.join((_algsdir, algname, 'outp/', task))
 	if os.path.exists(taskpath):
-		backupFiles(taskpath)
+		backupPath(taskpath)
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
-		, './hirecs', '-oc', ''.join(('-cls=./', algname, 'outp/', task, os.sep, task, '_', algname, _extclnodes))
+		, './hirecs', '-oc', ''.join(('-cls=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
@@ -411,9 +411,9 @@ def execHirecsOtl(execpool, netfile, asym, timeout):
 	# Backup previous results if exist
 	taskpath = ''.join((_algsdir, algname, 'outp/', task))
 	if os.path.exists(taskpath):
-		backupFiles(taskpath)
+		backupPath(taskpath)
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
-		, './hirecs', '-oc', ''.join(('-cols=./', algname, 'outp/', task, os.sep, task, '_', algname, _extclnodes))
+		, './hirecs', '-oc', ''.join(('-cols=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
@@ -444,9 +444,9 @@ def execHirecsAhOtl(execpool, netfile, asym, timeout):
 	# Backup previous results if exist
 	taskpath = ''.join((_algsdir, algname, 'outp/', task))
 	if os.path.exists(taskpath):
-		backupFiles(taskpath)
+		backupPath(taskpath)
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
-		, './hirecs', '-oc', ''.join(('-coas=./', algname, 'outp/', task, os.sep, task, '_', algname, _extclnodes))
+		, './hirecs', '-oc', ''.join(('-coas=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
@@ -477,7 +477,7 @@ def execHirecsNounwrap(execpool, netfile, asym, timeout):
 	# Backup previous results if exist
 	taskpath = ''.join((_algsdir, algname, 'outp/', task))
 	if os.path.exists(taskpath):
-		backupFiles(taskpath)
+		backupPath(taskpath)
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', '../' + netfile)
 	#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
@@ -505,20 +505,22 @@ def execOslom2(execpool, netfile, asym, timeout):
 	# Backup previous results if exist
 	taskpath = logsdir +  task
 	if os.path.exists(taskpath):
-		backupFiles(taskpath)
-	netdir = os.path.split(netfile)[0] + os.sep
+		backupPath(taskpath)
+	netdir = os.path.split(netfile)[0] + '/'
 	def postexec(job):
 		# Copy communities output
 		if not os.path.exists(taskpath):
 			os.makedirs(taskpath)
 		for fname in glob.iglob(''.join((netdir, task, netext, '_oslo_files/tp*'))):
 			shutil.copy2(fname, taskpath)
-		# Move dir
-		outpdire = ''.join((logsdir, 'extra/'))
-		if not os.path.exists(outpdire):
-			os.makedirs(outpdire)
-		for dname in glob.iglob(''.join((netdir, task, netext, '_oslo_files/'))):
-			shutil.move(dname, outpdire)
+		# Move whole dir as extra task output to the logsdir
+		outpdire = taskpath + '_extra/'
+		#if not os.path.exists(outpdire):
+		#	os.makedirs(outpdire)
+		# If dest dir already exists, remove it to avoid exception on rename
+		if os.path.exists(outpdire):
+			shutil.rmtree(outpdire)
+		os.rename(''.join((netdir, task, netext, '_oslo_files/')), outpdire)
 		# Note: oslom2 leaves ./tp file in the _algsdir, which should be deleted
 		fname = _algsdir + 'tp'
 		if os.path.exists(fname):
@@ -562,17 +564,18 @@ def execGanxis(execpool, netfile, asym, timeout):
 	# Backup previous results if exist
 	taskpath = logsdir +  task
 	if os.path.exists(taskpath):
-		backupFiles(taskpath)
+		backupPath(taskpath)
 	def postexec(job):
-		outpdir = ''.join((logsdir, task, os.sep))
+		outpdir = ''.join((logsdir, task, '/'))
 		if not os.path.exists(outpdir):
 			os.mkdir(outpdir)
 		for fname in glob.iglob(''.join((logsdir, 'SLPAw_', task, '_run*.icpm'))):
-			shutil.move(fname, outpdir)
+			os.rename(fname, outpdir + os.path.split(fname)[1])
 		# Note: GANXiS leaves empty ./output dir in the _algsdir, which should be deleted
 		tmp = _algsdir + 'output/'
 		if os.path.exists(tmp):
-			os.rmdir(tmp)
+			#os.rmdir(tmp)
+			shutil.rmtree(tmp)
 
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
 		, stdout=taskpath + _logext, stderr=taskpath + _errext))

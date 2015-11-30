@@ -41,7 +41,7 @@ def nameVersion(path):
 	return name + mtime
 	
 	
-def backupFiles(basepath, compress=True):  # basedir, name
+def backupPath(basepath, compress=True):  # basedir, name
 	"""Backup all files and dirs started from the specified name in the specified path
 	into backup/ dir inside the specified path
 	
@@ -62,8 +62,25 @@ def backupFiles(basepath, compress=True):  # basedir, name
 	if not os.path.exists(basedir):
 		os.mkdir(basedir)
 	# Backup files
+	rennmarg = 10  # Max number of renaming attempts
 	if compress:
 		archname = ''.join((basedir, nameVersion(basepath), '.tar.gz'))
+		# Rename already existent archive if required
+		if os.path.exists(archname):
+			nametmpl = ''.join((basedir, nameVersion(basepath), '-{}', '.tar.gz'))
+			for i in range(rennmarg):
+				bckname = nametmpl.format(i)
+				if not os.path.exists(bckname):
+					break
+			else:
+				print('WARNING: backup file "{}" is being rewritten'.format(bckname), file=sys.stderr)
+			try:
+				os.rename(archname, bckname)
+			except StandardError as err:
+				print('WARNING: removing backup file "{}", as its renaming failed: {}'
+					.format(archname, err), file=sys.stderr)
+				os.remove(archname)
+		# Move data to the archive
 		with tarfile.open(archname, 'w:gz', bufsize=64*1024, compresslevel=6) as tar:
 			for path in glob.iglob(basepath + '*'):
 				tar.add(path, arcname=os.path.split(path)[1])
@@ -73,7 +90,24 @@ def backupFiles(basepath, compress=True):  # basedir, name
 				else:
 					os.remove(path)
 	else:
-		basedir = ''.join((basedir, nameVersion(basepath), os.sep))
+		basedir = ''.join((basedir, nameVersion(basepath), '/'))
+		# Rename already existent backup if required
+		if os.path.exists(basedir):
+			nametmpl = basedir + '-{}'
+			for i in range(rennmarg):
+				bckname = nametmpl.format(i)
+				if not os.path.exists(bckname):
+					break
+			else:
+				print('WARNING: backup dir "{}" is being rewritten'.format(bckname), file=sys.stderr)
+				shutil.rmtree(bckname)
+			try:
+				os.rename(basedir, bckname)
+			except StandardError as err:
+				print('WARNING: removing backup dir "{}", as its renaming failed: {}'
+					.format(basedir, err), file=sys.stderr)
+				shutil.rmtree(basedir)
+		# Move data to the backup
 		if not os.path.exists(basedir):
 			os.mkdir(basedir)
 		for path in glob.iglob(basepath + '*'):

@@ -59,6 +59,7 @@ from benchcore import _execpool
 from benchcore import _netshuffles
 from benchapps import _algsdir
 from benchapps import _resdir
+from benchapps import _pyexec
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
@@ -155,27 +156,43 @@ def parseParams(args):
 				timemul = 60  # Minutes
 			elif arg[2] == 'h':
 				timemul = 3600  # Hours
-			timeout = int(arg[pos:]) * timemul
+			timeout = float(arg[pos:]) * timemul
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
 
 	return gensynt, convnets, runalgs, evalres, datas, timeout, algorithms
 
 
-def generateNets(overwrite=False):
+def generateNets(overwrite=False, count=8, shufnum=0):
 	"""Generate synthetic networks with ground-truth communities and save generation params
 
 	overwrite  - whether to overwrite existing networks or use them
+	count  - number of insances of each network to be generated
+	shufnum  - number of shufflings for of each instance on the generated network
 	"""
+	# Store networks generation parameters in the params/ dir inside syntnets dir
 	paramsdir = 'params/'
 
+	# Store all instances of each network with generation parameters in the dedicated directory / single directory
+	assert count >= 1, 'Number of the network instances to be generated must be positive'
 	assert _syntdir[-1] == '/' and paramsdir[-1] == '/', "Directory name must have valid terminator"
-	paramsDirFull = _syntdir + paramsdir
-	if not os.path.exists(paramsDirFull):
-		os.makedirs(paramsDirFull)
+	paramsdirfull = _syntdir + paramsdir
+	# Backup params dir on rewrite
+	if overwite and os.path.exists(paramsdirfull):
+		try:
+			glob.iglob(paramsdirfull + '*').next()
+		except StopIteration:
+			# Diretory is empty, continue processing skipping this exception
+			pass
+		else:
+			# Directory should be backuped
+			backupPath(paramsdirfull)
+	# Create params dir if required
+	if not os.path.exists(paramsdirfull):
+		os.makedirs(paramsdirfull)
+		
 	# Initial options for the networks generation
 	N0 = 1000;  # Satrting number of nodes
-
 	evalmaxk = lambda genopts: int(round(sqrt(genopts['N'])))
 	evalmuw = lambda genopts: genopts['mut'] * 2/3
 	evalminc = lambda genopts: 5 + int(genopts['N'] / N0)
@@ -185,35 +202,45 @@ def generateNets(overwrite=False):
 	genopts = {'mut': 0.275, 'beta': 1.35, 't1': 1.65, 't2': 1.3, 'om': 2, 'cnl': 1}
 
 	# Generate options for the networks generation using chosen variations of params
-	varNmul = (1, 2, 5, 10, 25, 50)  # *N0
-	vark = (5, 10, 20)
+	varNmul = (1, 2, 5, 10, 25, 50)  # *N0 - sizes of the generating networks
+	vark = (5, 10, 20)  # Average density of network links
 	global _execpool
 
 	_execpool = ExecPool(max(cpu_count() - 1, 1))
-	netgenTimeout = 10 * 60  # 10 min
+	netgenTimeout = 15 * 60  # 15 min
 	for nm in varNmul:
 		N = nm * N0
 		for k in vark:
 			name = 'K'.join((str(nm), str(k)))
 			ext = '.ngp'  # Network generation parameters
-			fnamex = name.join((paramsDirFull, ext))
-			if not overwrite and os.path.exists(fnamex):
-				assert os.path.isfile(fnamex), '{} should be a file'.format(fnamex)
-				continue
-			print('Generating {} parameters file...'.format(fnamex))
-			with open(fnamex, 'w') as fout:
-				genopts.update({'N': N, 'k': k})
-				genopts.update({'maxk': evalmaxk(genopts), 'muw': evalmuw(genopts), 'minc': evalminc(genopts)
-					, 'maxc': evalmaxc(genopts), 'on': evalon(genopts), 'name': name})
-				for opt in genopts.items():
-					fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
+			fnamex = name.join((paramsdirfull, ext))
+			assert os.path.isfile(fnamex), '{} should be a file'.format(fnamex)
+			if overwrite or not os.path.exists(fnamex):
+				print('Generating {} parameters file...'.format(fnamex))
+				with open(fnamex, 'w') as fout:
+					genopts.update({'N': N, 'k': k})
+					genopts.update({'maxk': evalmaxk(genopts), 'muw': evalmuw(genopts), 'minc': evalminc(genopts)
+						, 'maxc': evalmaxc(genopts), 'on': evalon(genopts), 'name': name})
+					for opt in genopts.items():
+						fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
 			if os.path.isfile(fnamex):
-				args = ('../exectime', '-n=' + name, ''.join(('-o=', paramsdir, 'lfrbench_uwovp', _extexectime))
-					, './lfrbench_uwovp', '-f', name.join((paramsdir, ext)))
+				bmname = 'frbench_uwovp'  # Benchmark name
+				bmbin = './' + bmname  # Benchmark binary
+				# Generate required number of network instances
+				args = ('../exectime', '-n=' + name, ''.join(('-o=', paramsdir, bmname, _extexectime))
+					, bmbin, '-f', name.join((paramsdir, ext)))  # TODO: perform multiple shuffling if required - ? use task of sequential jobs ?
 				#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
 				if _execpool:
 					_execpool.execute(Job(name=name, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=1
 						, onstart=lambda job: shutil.copy2(_syntdir + 'time_seed.dat', name.join((_syntdir, '.ngs')))))  # Network generation seed
+				for i in range(1, count):
+					namext = ''.join((name, '_', str(i)))
+					args = ('../exectime', '-n=' + namext, ''.join(('-o=', _syntdir, bmname, _extexectime))
+						, bmbin, '-f', name.join((paramsdir, ext)), '-name', namext)
+					#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
+					if _execpool:
+						_execpool.execute(Job(name=namext, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=1
+							, onstart=lambda job: shutil.copy2(_syntdir + 'time_seed.dat', namext.join((_syntdir, '.ngs')))))  # Network generation seed
 	print('Parameter files generation is completed')
 	if _execpool:
 		_execpool.join(2 * 60*60)  # 2 hours
@@ -258,7 +285,7 @@ def convertNet(filename, asym, overwrite=False, resdub=False):
 	netname = os.path.split(netnoext)[1]
 	assert netname, 'netname should be defined'
 	for i in range(_netshuffles):
-		outpfile = ''.join((netnoext, os.sep, netname, '_', str(i), _extnetfile))
+		outpfile = ''.join((netnoext, '/', netname, '_', str(i), _extnetfile))
 		if overwrite or not sys.path.exists(outpfile):
 			# sort -R pgp_udir.net -o pgp_udir_rand3.net
 			subprocess.call(('sort', '-R', net, '-o', outpfile))
@@ -327,7 +354,10 @@ def benchmark(*args):
 	datafiles = []
 	for asym, path in datas:
 		if os.path.isdir(path):
-			datadirs.append((asym, path if path.endswith(os.sep) else path + os.sep))
+			# Use the same path separator on all OSs
+			if not path.endswith('/'):
+				path += '/'
+			datadirs.append((asym, path))
 		else:
 			datafiles.append((asym, path))
 	datas = None
@@ -449,9 +479,6 @@ def benchmark(*args):
 				for elg in evalalgs:
 					try:
 						elg(_execpool, gtres, timeout)
-						# Run algs with some delay to avoid headers duplicaiton
-						# in the file of accumulated statistics
-						time.sleep(0.2)
 					except StandardError as err:
 						print('The {} is interrupted by the exception: {}'
 							.format(elg.__name__, err))
@@ -490,12 +517,15 @@ if __name__ == '__main__':
 		signal.signal(signal.SIGABRT, terminationHandler)
 		benchmark(*sys.argv[1:])
 	else:
-		print('\n'.join(('Usage: {0} [-g[f] [-c[f][r]] [-r] [-e[n][m]] [-d{{a,s}}=<datasets_dir>] [-f{{a,s}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
-			'  -g[f]  - generate synthetic datasets in the {syntdir}',
-			'    Xf  - force the generation even when the data already exists',
+		print('\n'.join(('Usage: {0} [-g[f][=[<number>][.<shuffles_number>]] [-c[f][r]] [-r] [-e[n][m]] [-d{{a,s}}=<datasets_dir>] [-f{{a,s}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
+			'  -g[f][=[<number>][.<shuffles_number>]]  - generate <number> (8 by default) synthetic datasets in the {syntdir},'
+			' shuffling each <shuffles_number> (0 by default) times.',
+			'  NOTE: shuffled datasets have the following naming format <net_name>.<shuffle_index>.<net_extension>',
+			'    Xf  - force the generation even when the data already exists (existent .ngs are backed up)',
 			'  -a[="app1 app2 ..."]  - apps (clusering algorithms) to benchmark among the implemented.'
-			' Available: scp louvain_ig randcommuns hirecs oslom2 ganxis'
-			' Impacts -{{c, r, e}} options. Optional, all apps are executed by default',
+			' Available: scp louvain_ig randcommuns hirecs oslom2 ganxis.'
+			' Impacts -{{c, r, e}} options. Optional, all apps are executed by default.',
+			'  NOTE: output results are stored in the "algorithms/<algname>outp/" directory',
 			'  -c[X]  - convert existing networks into the .hig, .lig, etc. formats',
 			'    Xf  - force the conversion even when the data is already exist',
 			'    Xr  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used',
@@ -504,8 +534,10 @@ if __name__ == '__main__':
 			'    Xn  - evaluate results accuracy using NMI measures for overlapping communities',
 			'    Xm  - evaluate results quality by modularity',
 			# TODO: customize extension of the network files (implement filters)
-			'  -d[X]=<datasets_dir>  - directory of the datasets',
-			'  -f[X]=<dataset>  - dataset (network, graph) file name',
+			'  -d[X]=<datasets_dir>  - directory of the datasets.',
+			'  -f[X]=<dataset>  - dataset (network, graph) file name.',
+			'  NOTE: datasets file names must not contain "." (besides the extension),'
+			' because it is used as indicator of the shuffled datasets',
 			'    Xa  - the dataset is specified by asymmetric links (in/outbound weights of the link migh differ), arcs',
 			'    Xs  - the dataset is specified by symmetric links, edges. Default option',
 			'    Notes:',
@@ -514,7 +546,7 @@ if __name__ == '__main__':
 			'    - {{a,s}} is considered only if the network file has no corresponding metadata (formats like SNAP, ncol, nsa, ...)',
 			'    - ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
 			' is up to the clustering algorithm',
-			'  -t[X]=<number>  - specifies timeout for each benchmarking application per single evalution on each network'
+			'  -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evalution on each network'
 			' in sec, min or hours. Default: 0 sec  - no timeout',
 			'    Xs  - time in seconds. Default option',
 			'    Xm  - time in minutes',

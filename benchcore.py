@@ -57,8 +57,9 @@ class Job:
 		ontimeout  - action on timeout:
 			0  - terminate the job. Default
 			1  - restart the job
-		onstart  - callback which is executed on the job starting in the CONTEXT OF
-			THE CALLER (main process) with the single argument, the job. Default: None
+		onstart  - callback which is executed on the job starting (before the execution
+			started) in the CONTEXT OF THE CALLER (main process) with the single argument,
+			the job. Default: None
 			ATTENTION: must be lightweight
 		ondone  - callback which is executed on successful completion of the job in the
 			CONTEXT OF THE CALLER (main process) with the single argument, the job. Default: None
@@ -169,7 +170,7 @@ class ExecPool:
 		if job.onstart:
 			try:
 				job.onstart(job)
-			except Exception as err:
+			except StandardError as err:
 				print('ERROR in onstart callback of "{}": {}'.format(job.name, err), file=sys.stderr)
 		# Consider custom output channels for the job
 		fstdout = None
@@ -198,6 +199,8 @@ class ExecPool:
 					, job.stdout if fstdout else '<default>', job.stderr if fstderr else '<default>'))
 			if(job.args):
 				proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
+				# Wait a little bit to start the process besides it's scheduling
+				time.sleep(0.2)
 			else:
 				proc = None
 		except StandardError as err:  # Should not occur: subprocess.CalledProcessError
@@ -215,7 +218,7 @@ class ExecPool:
 					proc.wait()
 				try:
 					job.ondone(job)
-				except Exception as err:
+				except StandardError as err:
 					print('ERROR in ondone callback of "{}": {}'.format(job.name, err), file=sys.stderr)
 				job.executed.value = True
 				if proc is not None:
@@ -263,7 +266,7 @@ class ExecPool:
 			if job.ondone:
 				try:
 					job.ondone(job)
-				except Exception as err:
+				except StandardError as err:
 					print('ERROR in ondone callback of "{}": {}'.format(job.name, err), file=sys.stderr)
 			del self._workers[proc]
 			# Clear up

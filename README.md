@@ -168,8 +168,8 @@ bamp	 0.528431
 
 - ./realnets/  - simple gold standard networks with available ground truth value of the modularity for non-overlapping clustering (from [DIMACS 10th](http://www.cc.gatech.edu/dimacs10/), "Modularity Maximization in Networks by Variable Neighborhood Search" by Daniel Aloise et al)
 - ./syntnets/  - synthetic networks produced by the extended LFR framework: undirected weighted complex networks with overlaps, both mixing parameters are set for the topology and weights, both exponential nodes degree and weights distributions are set.
-	- paramsdir/  - network generation parameters: `*.ngp`
-	- seedsdir/  - time seed for each network instance: `<netname[_instanceid]>.tsd`
+	- params/  - network generation parameters: `*.ngp`
+	- seeds/  - time seed for each network instance: `<netname[_instanceid]>.tsd`
 	- networks/\<netname\>/  - networks in correspondance with the generation params, contains all shuffles of all instances of each network:
 		* `*.ngs`  - time seed for the network (**n**etwork **g**eneration **s**eed)
 		* `*.nst`  - statistics for the generated network (**n**etwork **st**atistics)

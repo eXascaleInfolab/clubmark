@@ -78,7 +78,7 @@ def parseParams(args):
 			1 - generate only if this network is not exist
 			2 - force geration (overwrite all)
 		netins  - number of network instances for each network type to be generated, >= 1
-		shfins  - number of shuffles of each network instance to be produced, >= 0
+		shufnum  - number of shuffles of each network instance to be produced, >= 0
 		convnets  - convert existing networks into the .hig format
 			0 - do not convert
 			0b001  - convert:
@@ -93,7 +93,7 @@ def parseParams(args):
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
 	gensynt = 0
 	netins = _synetsnum  # Number of network instances to generate, >= 1
-	shfins = 0  # Number of shuffles for each network instance to be produced, >=0
+	shufnum = 0  # Number of shuffles for each network instance to be produced, >=0
 	convnets = 0
 	runalgs = False
 	evalres = 0  # 1 - NMIs, 2 - Q, 3 - all measures
@@ -123,10 +123,10 @@ def parseParams(args):
 				val = arg[pos+1:].split('.', 1)
 				netins = int(val[0])
 				if len(arg) > 1:
-					shfins = int(val[1])
-				if netins <= 0 or shfins < 0:
-					raise ValueError('Value is out of range:  netins: {netins} >= 1, shfins: {shfins} >= 0'
-						.format(netins=netins, shfins=shfins))
+					shufnum = int(val[1])
+				if netins <= 0 or shufnum < 0:
+					raise ValueError('Value is out of range:  netins: {netins} >= 1, shufnum: {shufnum} >= 0'
+						.format(netins=netins, shufnum=shufnum))
 		elif arg[1] == 'a':
 			if not (arg[0:3] == '-a=' and len(arg) >= 4):
 				raise ValueError('Unexpected argument: ' + arg)
@@ -180,7 +180,7 @@ def parseParams(args):
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
 
-	return gensynt, netins, shfins, convnets, runalgs, evalres, datas, timeout, algorithms
+	return gensynt, netins, shufnum, convnets, runalgs, evalres, datas, timeout, algorithms
 
 
 def generateNets(overwrite=False, count=8, shufnum=0):
@@ -233,11 +233,16 @@ def generateNets(overwrite=False, count=8, shufnum=0):
 
 	def shuffling(job):
 		"""Shufling postprocessing"""
-		args = ''.join(pyexec, '-c',
+		args = ''.join((pyexec, '-c',
 """
+basename = ''.join(({netsdirfull}, {taskname}, '/', {jobname}))
+basenet = basename + {_extnetfile}
 for i in range(1, {shufnum} + 1):
-	
-""".format(shufnum=shufnum))
+	# sort -R pgp_udir.net -o pgp_udir_rand3.net
+	subprocess.call(('sort', '-R', basenet, '-o'
+		, ''.join((basenet, '.', str(i), _extnetfile))))
+""".format(netsdirfull=netsdirfull, taskname=job.task.name, jobname=job.name
+, _extnetfile=_extnetfile, shufnum=shufnum)))
 		subprocess.call(args)
 				
 	_execpool = ExecPool(max(cpu_count() - 1, 1))
@@ -265,22 +270,26 @@ for i in range(1, {shufnum} + 1):
 						, 'maxc': evalmaxc(genopts), 'on': evalon(genopts), 'name': name})
 					for opt in genopts.items():
 						fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
-			netpath = name.join(netsdirfull, )
-			if os.path.isfile(fnamex) and not os.path.exists():  # TODO: target 
+			if os.path.isfile(fnamex) and not os.path.exists():  # TODO: target
+				netpath = name.join((netsdir, '/'))  # syntnets/networks/<netname>/  netname.*
+				netparams = name.join((paramsdir, ext))  # syntnets/params/<netname>.<ext>
 				# Generate required number of network instances
 				args = ('../exectime', '-n=' + name, ''.join(('-o=', _syntdir, bmname, _extexectime))
-					, bmbin, '-f', name.join((paramsdir, ext)))
-				#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
+					, bmbin, '-f', netparams, '-name', netpath + name)
+				#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 				if _execpool:
-					_execpool.execute(Job(name=name, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=1
+					netpathfull = _syntdir + netpath
+					if not os.path.exists(netpathfull):
+						os.mkdir(netpathfull)
+					_execpool.execute(Job(name=name, task=name, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
 						, onstart=lambda job: shutil.copy2(timeseed, name.join((seedsdirfull, '.ngs')))))  # Network generation seed
 				for i in range(1, count):
 					namext = ''.join((name, '_', str(i)))
 					args = ('../exectime', '-n=' + namext, ''.join(('-o=', _syntdir, bmname, _extexectime))
-						, bmbin, '-f', name.join((paramsdir, ext)), '-name', namext)
-					#Job(name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None)
+						, bmbin, '-f', netparams, '-name', netpath + namext)
+					#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 					if _execpool:
-						_execpool.execute(Job(name=namext, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=1
+						_execpool.execute(Job(name=namext, task=name, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
 							, onstart=lambda job: shutil.copy2(timeseed, namext.join((seedsdirfull, '.ngs')))  # Network generation seed
 							, ondone=shuffling if shufnum > 0 else None))
 			else:
@@ -385,7 +394,7 @@ def benchmark(*args):
 	Run the algorithms on the specified datasets respecting the parameters.
 	"""
 	exectime = time.time()  # Start of the executing time
-	gensynt, netins, shfins, convnets, runalgs, evalres, datas, timeout, algorithms = parseParams(args)
+	gensynt, netins, shufnum, convnets, runalgs, evalres, datas, timeout, algorithms = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tconvnets: {:b}'
 		'\n\trunalgs: {}\n\tevalres: {}\n\tdatas: {}\n\ttimeout: {}\n\talgorithms: {}'
 		.format(gensynt, convnets
@@ -410,7 +419,7 @@ def benchmark(*args):
 	#print('Datadirs: ', datadirs)
 
 	if gensynt:
-		generateNets(gensynt == 2)  # 0 - do not generate, 1 - only if not exists, 2 - forced generation
+		generateNets(gensynt == 2, netins, shufnum)  # 0 - do not generate, 1 - only if not exists, 2 - forced generation
 
 	# convnets: 0 - do not convert, 0b01 - only if not exists, 0b11 - forced conversion, 0b100 - resolve duplicated links
 	if convnets:

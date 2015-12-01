@@ -20,6 +20,7 @@ import time
 import subprocess
 from multiprocessing import cpu_count
 from multiprocessing import Value
+#from multiprocessing import Lock
 import collections
 import os
 import ctypes  # Required for the multiprocessing Value definition
@@ -33,6 +34,79 @@ _execpool = None  # Active execution pool
 _netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
 
 
+class Task:
+	def __init__(self, name, timeout=0, onstart=None, ondone=None, stdout=None, stderr=None):
+		"""Initialize task, which is a number of jobs to be executed
+		
+		name  - task name
+		timeout  - execution timeout. Default: 0, means infinity
+		onstart  - callback which is executed on the task starting (before the execution
+			started) in the CONTEXT OF THE CALLER (main process) with the single argument,
+			the task. Default: None
+			ATTENTION: must be lightweight
+		ondone  - callback which is executed on successful completion of the task in the
+			CONTEXT OF THE CALLER (main process) with the single argument, the task. Default: None
+			ATTENTION: must be lightweight
+		stdout  - file name for the buffered output
+		stderr  - file name for the unbuffered output
+			
+		tstart  - start time is filled automatically on the execution start (before onstart). Default: None
+		tstop  - termination / completion time after ondone
+		"""
+		assert isinstance(name, str) and timeout >= 0, 'Parameters validaiton failed'
+		self.name = name
+		self.timeout = timeout
+		self.onstart = onstart
+		self.ondone = ondone
+		self.stdout = stdout
+		self.stderr = stderr
+		self.tstart = None
+		self.tstop = Value(ctypes.c_float)  # Termination / completion time after ondone
+		# Private attributes
+		self._jobsnum = None  # Value(ctypes.c_ushort)
+		# Graceful completion of all tasks or at least one of the tasks was terminated
+		self._graceful = Value(ctypes.c_bool)
+		self._graceful.value = True
+		
+		
+	def addJob(self):
+		"""Add one more job to the task
+		
+		return  - updated task
+		"""
+		initial = False
+		with self._jobsnum.get_lock():
+			if self._jobsnum.value == 0:
+				initial = True
+			self._jobsnum.value += 1
+		# Run onstart if required
+		if initial:
+			self.tstart = time.time()
+			if self.onstart:
+				self.onstart()
+		return self
+		
+			
+	def delJob(self, graceful):
+		"""Delete one job from the task
+		
+		graceful  - the job is successfully completed or it was terminated
+		return  - None
+		"""
+		final = False
+		with self._jobsnum.get_lock():
+			self._jobsnum.value -= 1
+			if self._jobsnum.value == 0:
+				final = True
+		# Finalize if required
+		if not graceful:
+			self._graceful.value = False
+		elif final and self.ondone and self._graceful.value:
+			self.ondone()
+		self.tstop = time.time()
+		return None
+	
+
 class Job:
 #class Job(collections.namedtuple('Job', ('name', 'workdir', 'args', 'timeout', 'ontimeout', 'onstart', 'ondone', 'tstart'))):  # , 'tracelev'
 	#Job = collections.namedtuple('Job', ('name', 'workdir', 'args', 'timeout', 'ontimeout', 'onstart', 'ondone', 'tstart'))
@@ -41,13 +115,13 @@ class Job:
 	#	1  - trace to stdout only
 	#	2  - trace to stderr only. Default
 	#	3  - trace to both stdout and stderr
-	#def __new__(cls, name, workdir, args, timeout=0, ontimeout=0, onstart=None, ondone=None, tstart=None):
+	#def __new__(cls, name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None):
 	#	assert name, "Job parameters must be defined"  #  and job.workdir and job.args
 	#	return super(Job, cls).__new__(cls, name, workdir, args, timeout, ontimeout, onstart, ondone, tstart)
 	# NOTE: keyword-only arguments are specified after the *, supported only since Python 3
-	def __init__(self, name, workdir, args, timeout=0, ontimeout=0, #*,
-	onstart=None, ondone=None, stdout=None, stderr=None, tstart=None):
-		"""The job to be executed
+	def __init__(self, name, workdir, args, timeout=0, ontimeout=False, task=None, #*,
+	onstart=None, ondone=None, stdout=None, stderr=None):
+		"""Initialize job to be executed
 		
 		name  - job name
 		workdir  - working directory for the corresponding process
@@ -55,19 +129,24 @@ class Job:
 			NOTE: can be None to make make a stub process and execute the callbacks
 		timeout  - execution timeout. Default: 0, means infinity
 		ontimeout  - action on timeout:
-			0  - terminate the job. Default
-			1  - restart the job
+			False  - terminate the job. Default
+			True  - restart the job
+		task  - origin task if this job is a part of the task
 		onstart  - callback which is executed on the job starting (before the execution
 			started) in the CONTEXT OF THE CALLER (main process) with the single argument,
 			the job. Default: None
 			ATTENTION: must be lightweight
+			NOTE: can be executed a few times if the job is restarted on timeout
 		ondone  - callback which is executed on successful completion of the job in the
 			CONTEXT OF THE CALLER (main process) with the single argument, the job. Default: None
 			ATTENTION: must be lightweight
+		stdout  - file name for the buffered output
+		stderr  - file name for the unbuffered output
 			
-		tstart  - start time is filled automatically on the execution start. Default: None
+		tstart  - start time is filled automatically on the execution start (before onstart). Default: None
+		tstop  - termination / completion time after ondone
 		"""
-		assert name, "Job parameters must be defined"  #  and job.workdir and job.args
+		assert isinstance(task, str) and timeout >= 0 and task is None or isinstance(task, Task), 'Parameters validaiton failed'
 		#if not args:
 		#	args = ("false")  # Create an empty process to schedule it's execution
 		
@@ -77,6 +156,9 @@ class Job:
 		self.args = args
 		self.timeout = timeout
 		self.ontimeout = ontimeout
+		self.task = task.addJob() if task else None
+		# Delay in the callers context after starting the job process. Should be small.
+		self.startdelay = 0.2  # Required to sync sequence of started processes
 		# Callbacks ------------------------------------------------------------
 		self.onstart = onstart
 		self.ondone = ondone
@@ -84,12 +166,44 @@ class Job:
 		self.stdout = stdout
 		self.stderr = stderr
 		# Internal properties --------------------------------------------------
-		self.tstart = tstart
-		# Whether the job is executed (including terminated). Initially False,
-		# The value is set after all callbacks are executed or on the termination
-		# NOTE: if the job is restarted on timeout then the value is set only on
-		# the last execution
-		self.executed = Value(ctypes.c_bool)
+		self.tstart = None  # start time is filled automatically on the execution start, before onstart. Default: None
+		self.tstop = None  # Value(ctypes.c_float)  # Termination / completion time after ondone
+		# Private attributes
+		self._proc = None  # Process of the job
+		
+		
+	def complete(self, graceful=True):
+		"""Completion function
+		
+		graceful  - the job is successfully completed or it was terminated
+		"""
+		if graceful:
+			if self.ondone:
+				try:
+					self.ondone()
+				except StandardError as err:
+					print('ERROR in ondone callback of "{}": {}'.format(self.name, err), file=sys.stderr)
+			# Clean up
+			# Remove empty logs skipping the system devnull
+			tpaths = []  # Base dir of the output
+			if self.stdout and self.stdout != os.devnull and os.path.getsize(self.stdout) == 0:
+				tpaths.append(os.path.split(self.stdout)[0])
+				os.remove(self.stdout)
+			if self.stderr and self.stderr != os.devnull and os.path.getsize(self.stderr) == 0:
+				tpath = os.path.split(self.stderr)[0]
+				if not tpaths or tpath not in tpaths:
+					tpaths.append(tpath)
+				os.remove(self.stderr)
+			# Also remove the directory if it is empty
+			for tpath in tpaths:
+				try:
+					os.rmdir(tpath)
+				except OSError:
+					pass  # The dir is not empty, just skip it
+			print('"{}" #{} is completed'.format(self.name, self._proc.pid if self._proc else -1), file=sys.stderr)
+		self.task = self.task.delJob(graceful)
+		## Updated execution status
+		self.tstop = time.time()
 
 
 class ExecPool:
@@ -123,12 +237,10 @@ class ExecPool:
 		
 		print('Terminating the workers pool ...')
 		for job in self._jobs:
-			job.executed.value = True
+			job.complete(False)
 			print('Scheduled "{}" is removed'.format(job.name))
 		self._jobs.clear()
 		while self._workers:
-			for job in self._workers.values():
-				job.executed.value = True
 			procs = self._workers.keys()
 			for proc in procs:
 				print('Terminating "{}" #{} ...'.format(self._workers[proc].name, proc.pid), file=sys.stderr)
@@ -149,6 +261,9 @@ class ExecPool:
 					if proc.poll() is None:
 						print('Killing the worker #{} ...'.format(proc.pid), file=sys.stderr)
 						proc.kill()
+			# Tidy jobs
+			for job in self._workers.values():
+				job.complete(False)
 			self._workers.clear()
 			
 			
@@ -159,8 +274,8 @@ class ExecPool:
 		async  - async execution or wait intill execution completed
 		return  - 0 on successful execution, proc.returncode otherwise
 		"""
-		assert isinstance(job, Job), 'Job must be a valid entity'
-		assert job.executed.value == False, 'Job must have executed attribute set only after the execution'
+		assert isinstance(job, Job), 'job type is invalid'
+		assert job.tstop is None, 'Only non-completed jobs should be started'
 		if async and len(self._workers) > self._workersLim:
 			raise AssertionError('Free workers must be available ({} busy workers of {})'
 				.format(len(self._workers), self._workersLim))
@@ -172,6 +287,7 @@ class ExecPool:
 				job.onstart(job)
 			except StandardError as err:
 				print('ERROR in onstart callback of "{}": {}'.format(job.name, err), file=sys.stderr)
+				return -1
 		# Consider custom output channels for the job
 		fstdout = None
 		fstderr = None
@@ -198,34 +314,23 @@ class ExecPool:
 				print('"{}" uses custom output channels:\n\tstdout: {}\n\tstderr: {}'.format(job.name
 					, job.stdout if fstdout else '<default>', job.stderr if fstderr else '<default>'))
 			if(job.args):
-				proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
+				job._proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
 				# Wait a little bit to start the process besides it's scheduling
-				time.sleep(0.2)
-			else:
-				proc = None
+				time.sleep(self.startdelay)
 		except StandardError as err:  # Should not occur: subprocess.CalledProcessError
 			if fstdout:
 				fstdout.close()
 			if fstderr:
 				fstderr.close()
-			job.executed.value = True
 			print('ERROR on "{}" execution occurred: {}, skipping the job'.format(job.name, err), file=sys.stderr)
+			job.complete(False)
 		else:
-			if async and proc is not None:
-				self._workers[proc] = job
+			if async:
+				self._workers[job._proc] = job
 			else:
-				if proc is not None:
-					proc.wait()
-				try:
-					job.ondone(job)
-				except StandardError as err:
-					print('ERROR in ondone callback of "{}": {}'.format(job.name, err), file=sys.stderr)
-				job.executed.value = True
-				if proc is not None:
-					print('"{}" #{} is completed: {}'.format(job.name, proc.pid, proc.returncode), file=sys.stderr)
-					return proc.returncode
-				else:
-					print('"{}" is completed: the process was not created because of empty args'.format(job.name), file=sys.stderr)
+				job._proc.wait()
+				job.complete()
+				return job._proc.returncode
 		return 0
 
 
@@ -259,36 +364,12 @@ class ExecPool:
 			if job.ontimeout:
 				self.__startJob(job)
 			else:
-				job.executed.value = True
+				job.complete(False)
 
 		# Process completed jobs: execute callbacks and remove the workers
 		for proc, job in completed:
-			if job.ondone:
-				try:
-					job.ondone(job)
-				except StandardError as err:
-					print('ERROR in ondone callback of "{}": {}'.format(job.name, err), file=sys.stderr)
 			del self._workers[proc]
-			# Clear up
-			# Remove empty logs skipping the system devnull
-			tpaths = []
-			if job.stdout and job.stdout != os.devnull and os.path.getsize(job.stdout) == 0:
-				tpaths.append(os.path.split(job.stdout)[0])
-				os.remove(job.stdout)
-			if job.stderr and job.stderr != os.devnull and os.path.getsize(job.stderr) == 0:
-				tpath = os.path.split(job.stderr)[0]
-				if not tpaths or tpath not in tpaths:
-					tpaths.append(tpath)
-				os.remove(job.stderr)
-			# Also remove the directory if it is empty
-			for tpath in tpaths:
-				try:
-					os.rmdir(tpath)
-				except OSError:
-					pass  # The dir is not empty, just skip it
-			# Updated execution status
-			job.executed.value = True
-			print('"{}" #{} is completed'.format(job.name, proc.pid), file=sys.stderr)
+			job.complete()
 			
 		# Start subsequent job if it is required
 		while self._jobs and len(self._workers) <  self._workersLim:
@@ -303,7 +384,7 @@ class ExecPool:
 		  NOTE: sync tasks are started at once
 		return  - 0 on successful execution, proc.returncode otherwise
 		"""
-		assert isinstance(job, Job), 'job must be a valid entity'
+		assert isinstance(job, Job), 'job type is invalid'
 		assert len(self._workers) <= self._workersLim, 'Number of workers exceeds the limit'
 		assert job.name, "Job parameters must be defined"  #  and job.workdir and job.args
 		
@@ -331,6 +412,7 @@ class ExecPool:
 			The time is measured SINCE the first job was scheduled UNTIL the
 			completion of all scheduled jobs and then is resetted.
 		"""
+		assert exectime >= 0, 'exectime valiadtion failed'
 		if self._tstart is None:
 			assert not self._jobs and not self._workers, \
 				'Start time should be defined for the present jobs'

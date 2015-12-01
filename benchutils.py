@@ -23,10 +23,11 @@ from sys import executable as pyexec  # Full path to the current Python interpre
 def secondsToHms(seconds):
 	"""Convert seconds to hours, mins, secs
 	
-	seconds  - seconds to be converted
+	seconds  - seconds to be converted, >= 0
 	
 	return hours, mins, secs
 	"""
+	assert seconds >= 0, 'seconds validation failed'
 	hours = int(seconds / 3600)
 	mins = int((seconds - hours * 3600) / 60)
 	secs = seconds - hours * 3600 - mins * 60

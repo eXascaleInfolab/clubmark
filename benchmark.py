@@ -230,26 +230,29 @@ def generateNets(overwrite=False, count=8, shufnum=0):
 	varNmul = (1, 2, 5, 10, 25, 50)  # *N0 - sizes of the generating networks
 	vark = (5, 10, 20)  # Average density of network links
 	global _execpool
-
-	def shuffling(job):
-		"""Shufling postprocessing"""
-		args = ''.join((pyexec, '-c',
-"""
-basename = ''.join(({netsdirfull}, {taskname}, '/', {jobname}))
-basenet = basename + {_extnetfile}
-for i in range(1, {shufnum} + 1):
-	# sort -R pgp_udir.net -o pgp_udir_rand3.net
-	subprocess.call(('sort', '-R', basenet, '-o'
-		, ''.join((basenet, '.', str(i), _extnetfile))))
-""".format(netsdirfull=netsdirfull, taskname=job.task.name, jobname=job.name
-, _extnetfile=_extnetfile, shufnum=shufnum)))
-		subprocess.call(args)
 				
 	_execpool = ExecPool(max(cpu_count() - 1, 1))
 	netgenTimeout = 15 * 60  # 15 min
-	bmname = 'frbench_uwovp'  # Benchmark name
+	shuftimeout = 5  # 5 sec per each shuffling
+	bmname = 'lfrbench_udwov'  # Benchmark name
 	bmbin = './' + bmname  # Benchmark binary
 	timeseed = _syntdir + 'time_seed.dat'
+
+	def shuffling(job):
+		"""Shufling postprocessing"""
+		if shufnum < 1:
+			return
+		args = ''.join((pyexec, '-c',
+"""
+basenet = {jobname} + {_extnetfile}
+for i in range(1, {shufnum} + 1):
+	# sort -R pgp_udir.net -o pgp_udir_rand3.net
+	subprocess.call(('sort', '-R', basenet, '-o', ''.join(({jobname}, '.', str(i), {_extnetfile}))))
+""".format(jobname=job.name, _extnetfile=_extnetfile, shufnum=shufnum)))
+		_execpool.execute(Job(name=job.name + '_shf', task=job.task, workdir=netsdirfull + job.task.name
+			, args=args, timeout=shuftimeout * shufnum))
+		time.sleep(job.startdelay)  # Wait a little bit to start the process
+
 	# Check whether time seed exists and create it if required
 	if not os.path.exists(timeseed):
 		proc = subprocess.Popen((bmbin), bufsize=-1, cwd=timeseed)
@@ -281,22 +284,23 @@ for i in range(1, {shufnum} + 1):
 					netpathfull = _syntdir + netpath
 					if not os.path.exists(netpathfull):
 						os.mkdir(netpathfull)
-					_execpool.execute(Job(name=name, task=name, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
-						, onstart=lambda job: shutil.copy2(timeseed, name.join((seedsdirfull, '.ngs')))))  # Network generation seed
-				for i in range(1, count):
-					namext = ''.join((name, '_', str(i)))
-					args = ('../exectime', '-n=' + namext, ''.join(('-o=', _syntdir, bmname, _extexectime))
-						, bmbin, '-f', netparams, '-name', netpath + namext)
-					#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
-					if _execpool:
-						_execpool.execute(Job(name=namext, task=name, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
+					task = Task(name)  # Required to use task.name as basedir identifier
+					_execpool.execute(Job(name=name, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
+						, onstart=lambda job: shutil.copy2(timeseed, name.join((seedsdirfull, '.ngs')))  # Network generation seed
+						, ondone=shuffling if shufnum > 0 else None))
+					for i in range(1, count):
+						namext = ''.join((name, '_', str(i)))
+						args = ('../exectime', '-n=' + namext, ''.join(('-o=', _syntdir, bmname, _extexectime))
+							, bmbin, '-f', netparams, '-name', netpath + namext)
+						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
+						_execpool.execute(Job(name=namext, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
 							, onstart=lambda job: shutil.copy2(timeseed, namext.join((seedsdirfull, '.ngs')))  # Network generation seed
 							, ondone=shuffling if shufnum > 0 else None))
 			else:
 				print('ERROR: network parameters file "{}" is not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')
 	if _execpool:
-		_execpool.join(2 * 60*60)  # 2 hours
+		_execpool.join(max(2 * 60*60, count * (netgenTimeout  + (shufnum * shuftimeout))))  # 2 hours
 		_execpool = None
 	print('Synthetic networks files generation is completed')
 

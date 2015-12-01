@@ -35,6 +35,7 @@ _netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph
 
 
 class Task:
+	#TODO: Implement timeout support in add/delJob
 	def __init__(self, name, timeout=0, onstart=None, ondone=None, stdout=None, stderr=None):
 		"""Initialize task, which is a number of jobs to be executed
 		
@@ -220,6 +221,9 @@ class ExecPool:
 		self._workers = {}  # Current workers: 'jname': <proc>; <proc>: timeout
 		self._jobs = collections.deque()  # Scheduled jobs: 'jname': **args
 		self._tstart = None  # Start time of the execution of the first task
+		# Predefined privte attributes
+		self._latency = 1  # 1 sec of sleep on pooling
+		self._killCount = 3  # 3 cycles of self._latency, termination wait time
 
 
 	def __del__(self):
@@ -248,13 +252,13 @@ class ExecPool:
 			# Wait a few sec for the successful process termitaion before killing it
 			i = 0
 			active = True
-			while active and i < 3:
+			while active and i < self._killCount:
 				active = False
 				for proc in procs:
 					if proc.poll() is None:
 						active = True
 						break
-				time.sleep(1)
+				time.sleep(self._latency)
 			# Kill nonterminated processes
 			if active:
 				for proc in procs:
@@ -352,9 +356,9 @@ class ExecPool:
 			proc.terminate()
 			# Wait a few sec for the successful process termitaion before killing it
 			i = 0
-			while proc.poll() is None and i < 3:
+			while proc.poll() is None and i < self._killCount:
 				i += 1
-				time.sleep(1)
+				time.sleep(self._latency)
 			if proc.poll() is None:
 				proc.kill()
 			del self._workers[proc]
@@ -422,6 +426,6 @@ class ExecPool:
 		while self._jobs or self._workers:
 			if exectime and time.time() - self._tstart > exectime:
 				self.__terminate()
-			time.sleep(1)
+			time.sleep(self._latency)
 			self.__reviseWorkers()
 		self._tstart = None

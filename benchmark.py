@@ -228,7 +228,7 @@ def generateNets(overwrite=False, count=8, shufnum=0):
 
 	# Generate options for the networks generation using chosen variations of params
 	varNmul = (1, 2, 5, 10, 25, 50)  # *N0 - sizes of the generating networks
-	vark = (5, 10, 20)  # Average density of network links
+	vark = (5, 10)  #, 20)  # Average density of network links
 	global _execpool
 				
 	_execpool = ExecPool(max(cpu_count() - 1, 1))
@@ -255,7 +255,7 @@ for i in range(1, {shufnum} + 1):
 
 	# Check whether time seed exists and create it if required
 	if not os.path.exists(timeseed):
-		proc = subprocess.Popen((bmbin), bufsize=-1, cwd=timeseed)
+		proc = subprocess.Popen((bmbin), bufsize=-1, cwd=_syntdir)
 		proc.wait()
 		assert os.path.exists(timeseed), timeseed + ' must be created'
 	for nm in varNmul:
@@ -263,8 +263,8 @@ for i in range(1, {shufnum} + 1):
 		for k in vark:
 			name = 'K'.join((str(nm), str(k)))
 			ext = '.ngp'  # Network generation parameters
+			# Generate network parameters files if not exist
 			fnamex = name.join((paramsdirfull, ext))
-			assert os.path.isfile(fnamex), '{} should be a file'.format(fnamex)
 			if overwrite or not os.path.exists(fnamex):
 				print('Generating {} parameters file...'.format(fnamex))
 				with open(fnamex, 'w') as fout:
@@ -273,29 +273,36 @@ for i in range(1, {shufnum} + 1):
 						, 'maxc': evalmaxc(genopts), 'on': evalon(genopts), 'name': name})
 					for opt in genopts.items():
 						fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
-			if os.path.isfile(fnamex) and not os.path.exists():  # TODO: target
+			else:
+				assert os.path.isfile(fnamex), '{} should be a file'.format(fnamex)
+			# Generate networks with ground truth corresponding to the parameters
+			if os.path.isfile(fnamex):  # TODO: target
 				netpath = name.join((netsdir, '/'))  # syntnets/networks/<netname>/  netname.*
 				netparams = name.join((paramsdir, ext))  # syntnets/params/<netname>.<ext>
 				# Generate required number of network instances
-				args = ('../exectime', '-n=' + name, ''.join(('-o=', _syntdir, bmname, _extexectime))
-					, bmbin, '-f', netparams, '-name', netpath + name)
-				#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 				if _execpool:
 					netpathfull = _syntdir + netpath
 					if not os.path.exists(netpathfull):
 						os.mkdir(netpathfull)
 					task = Task(name)  # Required to use task.name as basedir identifier
-					_execpool.execute(Job(name=name, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
-						, onstart=lambda job: shutil.copy2(timeseed, name.join((seedsdirfull, '.ngs')))  # Network generation seed
-						, ondone=shuffling if shufnum > 0 else None))
+					netfile = netpath + name
+					if not os.path.exists(_syntdir + netfile):
+						args = ('../exectime', '-n=' + name, ''.join(('-o=', _syntdir, bmname, _extexectime))
+							, bmbin, '-f', netparams, '-name', netfile)
+						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
+						_execpool.execute(Job(name=name, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
+							, onstart=lambda job: shutil.copy2(timeseed, name.join((seedsdirfull, '.ngs')))  # Network generation seed
+							, ondone=shuffling if shufnum > 0 else None))
 					for i in range(1, count):
 						namext = ''.join((name, '_', str(i)))
-						args = ('../exectime', '-n=' + namext, ''.join(('-o=', _syntdir, bmname, _extexectime))
-							, bmbin, '-f', netparams, '-name', netpath + namext)
-						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
-						_execpool.execute(Job(name=namext, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
-							, onstart=lambda job: shutil.copy2(timeseed, namext.join((seedsdirfull, '.ngs')))  # Network generation seed
-							, ondone=shuffling if shufnum > 0 else None))
+						netfile = netpath + namext
+						if not os.path.exists(_syntdir + netfile):
+							args = ('../exectime', '-n=' + namext, ''.join(('-o=', _syntdir, bmname, _extexectime))
+								, bmbin, '-f', netparams, '-name', netfile)
+							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
+							_execpool.execute(Job(name=namext, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
+								, onstart=lambda job: shutil.copy2(timeseed, namext.join((seedsdirfull, '.ngs')))  # Network generation seed
+								, ondone=shuffling if shufnum > 0 else None))
 			else:
 				print('ERROR: network parameters file "{}" is not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')

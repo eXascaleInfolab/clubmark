@@ -64,7 +64,7 @@ class Task:
 		self.tstart = None
 		self.tstop = Value(ctypes.c_float)  # Termination / completion time after ondone
 		# Private attributes
-		self._jobsnum = None  # Value(ctypes.c_ushort)
+		self._jobsnum = Value(ctypes.c_ushort)
 		# Graceful completion of all tasks or at least one of the tasks was terminated
 		self._graceful = Value(ctypes.c_bool)
 		self._graceful.value = True

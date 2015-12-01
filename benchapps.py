@@ -26,7 +26,7 @@ import sys
 from algorithms.louvain_igraph import louvain
 from algorithms.randcommuns import randcommuns
 from benchcore import Job
-from benchutils import backupFiles
+from benchutils import backupPath
 
 from benchcore import _extexectime
 from benchcore import _extclnodes

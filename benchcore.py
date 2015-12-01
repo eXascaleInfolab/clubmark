@@ -120,7 +120,7 @@ class Job:
 	#	assert name, "Job parameters must be defined"  #  and job.workdir and job.args
 	#	return super(Job, cls).__new__(cls, name, workdir, args, timeout, ontimeout, onstart, ondone, tstart)
 	# NOTE: keyword-only arguments are specified after the *, supported only since Python 3
-	def __init__(self, name, workdir, args, timeout=0, ontimeout=False, task=None, #*,
+	def __init__(self, name, workdir='', args=(), timeout=0, ontimeout=False, task=None, #*,
 	onstart=None, ondone=None, stdout=None, stderr=None):
 		"""Initialize job to be executed
 		
@@ -318,6 +318,7 @@ class ExecPool:
 				print('"{}" uses custom output channels:\n\tstdout: {}\n\tstderr: {}'.format(job.name
 					, job.stdout if fstdout else '<default>', job.stderr if fstderr else '<default>'))
 			if(job.args):
+				#print('Opening proc with:\n\tjob.args: {},\n\tcwd: {}'.format(' '.join(job.args), job.workdir))
 				job._proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
 				# Wait a little bit to start the process besides it's scheduling
 				time.sleep(job.startdelay)

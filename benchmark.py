@@ -242,19 +242,23 @@ def generateNets(overwrite=False, count=8, shufnum=0):
 		"""Shufling postprocessing"""
 		if shufnum < 1:
 			return
-		args = ''.join((pyexec, '-c',
-"""
-basenet = {jobname} + {_extnetfile}
+		args = (pyexec, '-c',
+"""import os
+import subprocess
+
+basenet = '{jobname}' + '{_extnetfile}'
 for i in range(1, {shufnum} + 1):
 	# sort -R pgp_udir.net -o pgp_udir_rand3.net
-	subprocess.call(('sort', '-R', basenet, '-o', ''.join(({jobname}, '.', str(i), {_extnetfile}))))
-""".format(jobname=job.name, _extnetfile=_extnetfile, shufnum=shufnum)))
+	netfile = ''.join(('{jobname}', '.', str(i), '{_extnetfile}'))
+	if {overwrite} or not os.path.exists(netfile):
+		subprocess.call(('sort', '-R', basenet, '-o', netfile))
+""".format(jobname=job.name, _extnetfile=_extnetfile, shufnum=shufnum, overwrite=overwrite))
+		#print('Calling args: ' + args, file=sys.stderr)
 		_execpool.execute(Job(name=job.name + '_shf', task=job.task, workdir=netsdirfull + job.task.name
 			, args=args, timeout=shuftimeout * shufnum))
-		time.sleep(job.startdelay)  # Wait a little bit to start the process
 
 	# Check whether time seed exists and create it if required
-	if not os.path.exists(timeseed):
+	if not os.path.exists(timeseed):  # Note: overwrite is not relevant here
 		proc = subprocess.Popen((bmbin), bufsize=-1, cwd=_syntdir)
 		proc.wait()
 		assert os.path.exists(timeseed), timeseed + ' must be created'
@@ -286,23 +290,29 @@ for i in range(1, {shufnum} + 1):
 						os.mkdir(netpathfull)
 					task = Task(name)  # Required to use task.name as basedir identifier
 					netfile = netpath + name
-					if not os.path.exists(_syntdir + netfile):
+					if overwrite or not os.path.exists(netfile.join((_syntdir, _extnetfile))):
 						args = ('../exectime', '-n=' + name, ''.join(('-o=', bmname, _extexectime))  # Output .rcp in the current dir, _syntdir
 							, bmbin, '-f', netparams, '-name', netfile)
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 						_execpool.execute(Job(name=name, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
 							, onstart=lambda job: shutil.copy2(timeseed, name.join((seedsdirfull, '.ngs')))  # Network generation seed
 							, ondone=shuffling if shufnum > 0 else None))
+					else:
+						# Create missing shufflings
+						shuffling(Job(name=name, task=task))
 					for i in range(1, count):
 						namext = ''.join((name, '_', str(i)))
 						netfile = netpath + namext
-						if not os.path.exists(_syntdir + netfile):
+						if overwrite or not os.path.exists(netfile.join((_syntdir, _extnetfile))):
 							args = ('../exectime', '-n=' + namext, ''.join(('-o=', bmname, _extexectime))
 								, bmbin, '-f', netparams, '-name', netfile)
 							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 							_execpool.execute(Job(name=namext, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
 								, onstart=lambda job: shutil.copy2(timeseed, namext.join((seedsdirfull, '.ngs')))  # Network generation seed
 								, ondone=shuffling if shufnum > 0 else None))
+						else:
+							# Create missing shufflings
+							shuffling(Job(name=namext, task=task))
 			else:
 				print('ERROR: network parameters file "{}" is not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')

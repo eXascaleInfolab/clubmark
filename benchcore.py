@@ -320,7 +320,7 @@ class ExecPool:
 			if(job.args):
 				job._proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
 				# Wait a little bit to start the process besides it's scheduling
-				time.sleep(self.startdelay)
+				time.sleep(job.startdelay)
 		except StandardError as err:  # Should not occur: subprocess.CalledProcessError
 			if fstdout:
 				fstdout.close()

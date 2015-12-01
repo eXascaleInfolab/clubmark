@@ -287,7 +287,7 @@ for i in range(1, {shufnum} + 1):
 					task = Task(name)  # Required to use task.name as basedir identifier
 					netfile = netpath + name
 					if not os.path.exists(_syntdir + netfile):
-						args = ('../exectime', '-n=' + name, ''.join(('-o=', _syntdir, bmname, _extexectime))
+						args = ('../exectime', '-n=' + name, ''.join(('-o=', bmname, _extexectime))  # Output .rcp in the current dir, _syntdir
 							, bmbin, '-f', netparams, '-name', netfile)
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 						_execpool.execute(Job(name=name, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
@@ -297,7 +297,7 @@ for i in range(1, {shufnum} + 1):
 						namext = ''.join((name, '_', str(i)))
 						netfile = netpath + namext
 						if not os.path.exists(_syntdir + netfile):
-							args = ('../exectime', '-n=' + namext, ''.join(('-o=', _syntdir, bmname, _extexectime))
+							args = ('../exectime', '-n=' + namext, ''.join(('-o=', bmname, _extexectime))
 								, bmbin, '-f', netparams, '-name', netfile)
 							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 							_execpool.execute(Job(name=namext, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True

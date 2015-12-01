@@ -57,8 +57,8 @@ class Task:
 		assert isinstance(name, str) and timeout >= 0, 'Parameters validaiton failed'
 		self.name = name
 		self.timeout = timeout
-		self.onstart = onstart
-		self.ondone = ondone
+		Task.onstart = onstart
+		Task.ondone = ondone
 		self.stdout = stdout
 		self.stderr = stderr
 		self.tstart = None
@@ -161,8 +161,8 @@ class Job:
 		# Delay in the callers context after starting the job process. Should be small.
 		self.startdelay = 0.2  # Required to sync sequence of started processes
 		# Callbacks ------------------------------------------------------------
-		self.onstart = onstart
-		self.ondone = ondone
+		Job.onstart = onstart
+		Job.ondone = ondone
 		# I/O redirection ------------------------------------------------------
 		self.stdout = stdout
 		self.stderr = stderr
@@ -288,7 +288,7 @@ class ExecPool:
 		job.tstart = time.time()
 		if job.onstart:
 			try:
-				job.onstart(job)
+				job.onstart()
 			except StandardError as err:
 				print('ERROR in onstart callback of "{}": {}'.format(job.name, err), file=sys.stderr)
 				return -1

@@ -97,13 +97,15 @@ $ sudo apt-get install libstdc++6
 > Note: Execution of the benchmark was verified only on Linux Ubuntu 14.04 x64, but it should work on any platform if corresponding external executables (algorithms, nmi evaluation apps, etc.) are provided for the required platforms.
 
 To see possible input parameters run the benchmark without arguments: `$ ./benchmark.py`.  
-For the version from 20015-11-20 the output is:
+For the version from 20015-12-02 the output is:
 ```
 $ ./benchmark.py 
-Usage: ./benchmark.py [-g[f] [-c[f][r]] [-r] [-e[n][m]] [-d{a,s}=<datasets_dir>] [-f{a,s}=<dataset>] [-t[{s,m,h}]=<timeout>]
-  -g[f]  - generate synthetic datasets in the syntnets/
-    Xf  - force the generation even when the data already exists
-  -a[="app1 app2 ..."]  - apps (clusering algorithms) to benchmark among the implemented. Available: scp louvain_ig randcommuns hirecs oslom2 ganxis Impacts -{c, r, e} options. Optional, all apps are executed by default
+Usage: ./benchmark.py [-g[f][=[<number>][.<shuffles_number>]] [-c[f][r]] [-r] [-e[n][m]] [-d{a,s}=<datasets_dir>] [-f{a,s}=<dataset>] [-t[{s,m,h}]=<timeout>]
+  -g[f][=[<number>][.<shuffles_number>]]  - generate <number> (8 by default) >= 1 synthetic datasets in the syntnets/, shuffling each <shuffles_number> (0 by default) >= 0 times.
+  NOTE: shuffled datasets have the following naming format <net_name>.<shuffle_index>.<net_extension>
+    Xf  - force the generation even when the data already exists (existent datasets are moved to backup)
+  -a[="app1 app2 ..."]  - apps (clustering algorithms) to benchmark among the implemented. Available: scp louvain_ig randcommuns hirecs oslom2 ganxis. Impacts -{c, r, e} options. Optional, all apps are executed by default.
+  NOTE: output results are stored in the "algorithms/<algname>outp/" directory
   -c[X]  - convert existing networks into the .hig, .lig, etc. formats
     Xf  - force the conversion even when the data is already exist
     Xr  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used
@@ -111,16 +113,17 @@ Usage: ./benchmark.py [-g[f] [-c[f][r]] [-r] [-e[n][m]] [-d{a,s}=<datasets_dir>]
   -e[X]  - evaluate quality of the results. Default: apply all measurements
     Xn  - evaluate results accuracy using NMI measures for overlapping communities
     Xm  - evaluate results quality by modularity
-  -d[X]=<datasets_dir>  - directory of the datasets
-  -f[X]=<dataset>  - dataset (network, graph) file name
+  -d[X]=<datasets_dir>  - directory of the datasets.
+  -f[X]=<dataset>  - dataset (network, graph) file name.
+  NOTE: datasets file names must not contain "." (besides the extension), because it is used as indicator of the shuffled datasets
     Xa  - the dataset is specified by asymmetric links (in/outbound weights of the link migh differ), arcs
     Xs  - the dataset is specified by symmetric links, edges. Default option
     Notes:
     - multiple directories and files can be specified via multiple -d/f options (one per the item)
     - datasets should have the following format: <node_src> <node_dest> [<weight>]
-    - {a, s} is considered only if the network file has no corresponding metadata (formats like SNAP, ncol, nsa, ...)
+    - {a,s} is considered only if the network file has no corresponding metadata (formats like SNAP, ncol, nsa, ...)
     - ambiguity of links weight resolution in case of duplicates (or edges specified in both directions) is up to the clustering algorithm
-  -t[X]=<number>  - specifies timeout for each benchmarking application per single evalution on each network in sec, min or hours. Default: 0 sec  - no timeout
+  -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network in sec, min or hours. Default: 0 sec  - no timeout
     Xs  - time in seconds. Default option
     Xm  - time in minutes
     Xh  - time in hours

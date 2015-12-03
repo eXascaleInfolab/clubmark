@@ -31,7 +31,6 @@ from benchutils import secondsToHms
 _extexectime = '.rcp'  # Resource Consumption Profile
 _extclnodes = '.cnl'  # Clusters (Communities) Nodes Lists
 _execpool = None  # Active execution pool
-_netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
 
 
 class Task(object):

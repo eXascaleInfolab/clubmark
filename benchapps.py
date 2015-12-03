@@ -30,7 +30,6 @@ from benchutils import backupPath
 
 from benchcore import _extexectime
 from benchcore import _extclnodes
-from benchcore import _netshuffles
 from benchutils import  pyexec  # Full path to the current Python interpreter
 
 
@@ -41,6 +40,7 @@ _logext = '.log'
 _errext = '.err'
 _nmibin = './gecmi'  # Binary for NMI evaluation
 _modext = '.mod'
+#_netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
 
 
 def evalAlgorithm(execpool, gtres, timeout, algname, evalbin=_nmibin, evalname='nmi', stderr=os.devnull):
@@ -151,7 +151,7 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 		execpool.execute(job)
 
 
-def execAlgorithm(execpool, netfile, asym, timeout, selfexec=False):
+def execAlgorithm(execpool, netfile, asym, timeout, selfexec=False, **kwargs):
 	"""Execute the algorithm (stub)
 
 	execpool  - execution pool to perform execution of current task
@@ -159,6 +159,7 @@ def execAlgorithm(execpool, netfile, asym, timeout, selfexec=False):
 	asym  - network links weights are assymetric (in/outbound weights can be different)
 	timeout  - execution timeout for this task
 	selfexec=False  - current execution is the external or internal self call
+	kwargs  - optional algorithm-specific keyword agguments
 
 	return  - number of executions
 	"""
@@ -168,7 +169,7 @@ def execAlgorithm(execpool, netfile, asym, timeout, selfexec=False):
 
 # Louvain
 ## Original Louvain
-#def execLouvain(execpool, netfile, asym, timeout, tasknum=0):
+#def execLouvain(execpool, netfile, asym, timeout, tasknum=0, **kwargs):
 #	"""Execute Louvain
 #	Results are not stable => multiple execution is desirable.
 #
@@ -197,7 +198,7 @@ def execAlgorithm(execpool, netfile, asym, timeout, selfexec=False):
 #	return
 
 
-def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False):
+def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False, **kwargs):
 	"""Execute Louvain
 	Results are not stable => multiple execution is desirable.
 
@@ -270,7 +271,7 @@ def modLouvain_ig(execpool, netfile, timeout):
 
 
 # SCP (Sequential algorithm for fast clique percolation)
-def execScp(execpool, netfile, asym, timeout):
+def execScp(execpool, netfile, asym, timeout, **kwargs):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name
 	task, netext = os.path.splitext(netfile)
@@ -321,9 +322,11 @@ def modScp(execpool, netfile, timeout):
 
 
 # Random Disjoing Clustering
-def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False):
+def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False, instances=5, **kwargs):  # _netshuffles + 1
 	"""Execute Randcommuns
 	Results are not stable => multiple execution is desirable.
+	
+	instances  - number of networks instances to be generated
 	"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name and chose correct network filename
@@ -340,7 +343,7 @@ def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False):
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, pyexec, ''.join(('./', algname, '.py')), ''.join(('-g=../', netfile, _extclnodes))
 		, ''.join(('-i=../', netfile, netext)), ''.join(('-o=', algname, 'outp/', task))
-		, ''.join(('-n=', str(_netshuffles + 1))))
+		, ''.join(('-n=', str(instances))))
 	#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout
 		, stdout=os.devnull, stderr=taskpath + _logext))
@@ -362,7 +365,7 @@ def modRandcommuns(execpool, netfile, timeout):
 
 
 # HiReCS
-def execHirecs(execpool, netfile, asym, timeout):
+def execHirecs(execpool, netfile, asym, timeout, **kwargs):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name and chose correct network filename
 	netfile = os.path.splitext(netfile)[0]  # Remove the extension
@@ -397,7 +400,7 @@ def evalHirecsNS(execpool, cnlfile, timeout):
 #	modAlgorithm(execpool, netfile, timeout, 'hirecs')
 
 
-def execHirecsOtl(execpool, netfile, asym, timeout):
+def execHirecsOtl(execpool, netfile, asym, timeout, **kwargs):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
@@ -430,7 +433,7 @@ def evalHirecsOtlNS(execpool, cnlfile, timeout):
 	evalAlgorithm(execpool, cnlfile, timeout, 'hirecsotl', evalbin='./onmi_sum', evalname='nmi-s')
 
 
-def execHirecsAhOtl(execpool, netfile, asym, timeout):
+def execHirecsAhOtl(execpool, netfile, asym, timeout, **kwargs):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
@@ -463,7 +466,7 @@ def evalHirecsAhOtlNS(execpool, cnlfile, timeout):
 	evalAlgorithm(execpool, cnlfile, timeout, 'hirecsahotl', evalbin='./onmi_sum', evalname='nmi-s')
 
 
-def execHirecsNounwrap(execpool, netfile, asym, timeout):
+def execHirecsNounwrap(execpool, netfile, asym, timeout, **kwargs):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
@@ -488,7 +491,7 @@ def execHirecsNounwrap(execpool, netfile, asym, timeout):
 
 
 # Oslom2
-def execOslom2(execpool, netfile, asym, timeout):
+def execOslom2(execpool, netfile, asym, timeout, **kwargs):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'
 	# Fetch the task name
 	task, netext = os.path.splitext(netfile)
@@ -546,7 +549,7 @@ def modOslom2(execpool, netfile, timeout):
 
 
 # Ganxis (SLPA)
-def execGanxis(execpool, netfile, asym, timeout):
+def execGanxis(execpool, netfile, asym, timeout, **kwargs):
 	#print('> exec params:\n\texecpool: {}\n\tnetfile: {}\n\tasym: {}\n\ttimeout: {}'
 	#	.format(execpool, netfile, asym, timeout))
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and isinstance(timeout, int), 'Invalid params'

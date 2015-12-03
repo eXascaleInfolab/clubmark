@@ -56,7 +56,6 @@ tohig = thirdparty.tohig.tohig  # ~ from 3dparty.tohig import tohig
 from benchcore import _extexectime
 from benchcore import _extclnodes
 from benchcore import _execpool
-from benchcore import _netshuffles
 from benchapps import _algsdir
 from benchapps import _resdir
 from benchapps import pyexec
@@ -238,7 +237,7 @@ def generateNets(overwrite=False, count=8, shufnum=0):
 	bmbin = './' + bmname  # Benchmark binary
 	timeseed = _syntdir + 'time_seed.dat'
 	
-	def shuffling(job):
+	def shuffle(job):
 		"""Shufling postprocessing"""
 		if shufnum < 1:
 			return
@@ -296,10 +295,10 @@ for i in range(1, {shufnum} + 1):
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 						_execpool.execute(Job(name=name, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
 							, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
-							, ondone=shuffling if shufnum > 0 else None, startdelay=startdelay))
+							, ondone=shuffle if shufnum > 0 else None, startdelay=startdelay))
 					else:
 						# Create missing shufflings
-						shuffling(Job(name=name, task=task))
+						shuffle(Job(name=name, task=task))
 					for i in range(1, count):
 						namext = ''.join((name, '_', str(i)))
 						netfile = netpath + namext
@@ -309,10 +308,10 @@ for i in range(1, {shufnum} + 1):
 							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 							_execpool.execute(Job(name=namext, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
 								, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
-								, ondone=shuffling if shufnum > 0 else None, startdelay=startdelay))
+								, ondone=shuffle if shufnum > 0 else None, startdelay=startdelay))
 						else:
 							# Create missing shufflings
-							shuffling(Job(name=namext, task=task))
+							shuffle(Job(name=namext, task=task))
 			else:
 				print('ERROR: network parameters file "{}" is not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')
@@ -351,20 +350,20 @@ def convertNet(filename, asym, overwrite=False, resdub=False):
 	#except StandardError as err:
 	#	print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
 
-	# Make shuffled copies of the input networks for the Louvain_igraph
-	#if not os.path.exists(netnoext) or overwrite:
-	print('Shuffling {} into {} {} times...'.format(net, netnoext, _netshuffles))
-	if not os.path.exists(netnoext):
-		os.makedirs(netnoext)
-	netname = os.path.split(netnoext)[1]
-	assert netname, 'netname should be defined'
-	for i in range(_netshuffles):
-		outpfile = ''.join((netnoext, '/', netname, '_', str(i), _extnetfile))
-		if overwrite or not sys.path.exists(outpfile):
-			# sort -R pgp_udir.net -o pgp_udir_rand3.net
-			subprocess.call(('sort', '-R', net, '-o', outpfile))
-	#else:
-	#	print('The shuffling is skipped: {} is already exist'.format(netnoext))
+	## Make shuffled copies of the input networks for the Louvain_igraph
+	##if not os.path.exists(netnoext) or overwrite:
+	#print('Shuffling {} into {} {} times...'.format(net, netnoext, _netshuffles))
+	#if not os.path.exists(netnoext):
+	#	os.makedirs(netnoext)
+	#netname = os.path.split(netnoext)[1]
+	#assert netname, 'netname should be defined'
+	#for i in range(_netshuffles):
+	#	outpfile = ''.join((netnoext, '/', netname, '_', str(i), _extnetfile))
+	#	if overwrite or not sys.path.exists(outpfile):
+	#		# sort -R pgp_udir.net -o pgp_udir_rand3.net
+	#		subprocess.call(('sort', '-R', net, '-o', outpfile))
+	##else:
+	##	print('The shuffling is skipped: {} is already exist'.format(netnoext))
 
 
 def convertNets(datadir, asym, overwrite=False, resdub=False):

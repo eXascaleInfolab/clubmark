@@ -17,4 +17,4 @@ EXECERR=bench.err  # Log for execution errors
 
 echo 'Starting the benchmark in daemom mode ...'
 #  -dw=${DATASETS}
-nohup $PYTHON benchmark.py -g -cr -r -e -t$TIMEOUT_UNIT=$TIMEOUT 1> ${EXECLOG} 2> ${EXECERR} &
+nohup $PYTHON benchmark.py -g=4.4 -cr -r -e -t$TIMEOUT_UNIT=$TIMEOUT 1> ${EXECLOG} 2> ${EXECERR} &

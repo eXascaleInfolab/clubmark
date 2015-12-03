@@ -18,6 +18,7 @@ import time
 import tarfile
 
 from sys import executable as pyexec  # Full path to the current Python interpreter
+from multiprocessing import Lock
 
 
 def secondsToHms(seconds):
@@ -45,22 +46,100 @@ def dirempty(dirpath):
 	return False
 
 
-def nameVersion(path):
-	"""Name the last path component basedon modification time and return this part"""
+class SyncValue(object):
+	"""Interprocess synchronized value.
+	Provides the single attribute: 'value', which should be used inside "with" statement
+	if non-atomic operation is applied like +=.
+	"""
+	def __init__(self, val=None):
+		"""Sync value constructor
+		
+		val  - initial value
+		"""
+		# Note: recursive lock occurs if normal attrib names are used because of __setattr__ definition
+		object.__setattr__(self, 'value', val)
+		# Private attributes
+		object.__setattr__(self, '_lock', Lock())
+		object.__setattr__(self, '_synced', 0)
+			
+			
+	def __setattr__(self, name, val):
+		if name != 'value':
+			raise AttributeError('Attribute "{}" is not accessable'.format(name))
+		if name != 'value' or object.__getattribute__(self, '_synced') > 0:
+			object.__setattr__(self, name, val)
+		else:
+			with object.__getattribute__(self, '_lock'):
+				object.__setattr__(self, name, val)
+
+
+	def __getattribute__(self, name):
+		if name != 'value':
+			raise AttributeError('Attribute "{}" is not accessable'.format(name))
+		if name != 'value' or object.__getattribute__(self, '_synced') > 0:
+			return object.__getattribute__(self, name)
+		with object.__getattribute__(self, '_lock'):
+			return object.__getattribute__(self, name)
+
+
+	def __enter__(self):
+		# Do not lock when already synced
+		if (not object.__getattribute__(self, '_synced')
+		and not object.__getattribute__(self, '_lock').acquire()):
+			raise ValueError('Lock timeout is exceeded')
+		object.__setattr__(self, '_synced', object.__getattribute__(self, '_synced') + 1)
+		return self
+	
+	
+	def __exit__(self, exception_type, exception_val, trace):
+		object.__setattr__(self, '_synced', object.__getattribute__(self, '_synced') - 1)
+		# Unlock only when not synced
+		if not object.__getattribute__(self, '_synced'):
+			object.__getattribute__(self, '_lock').release()
+		assert object.__getattribute__(self, '_synced') >= 0, 'Synchronization is broken'
+		
+		
+	#def get_lock(self):
+	#	"""Return synchronization lock"""
+	#	self._synced = True
+	#	return self._lock
+	#	
+	#	
+	#def get_obj(self):
+	#	self._synced = True
+	#	return self._lock
+			
+
+def nameVersion(path, synctime=None):
+	"""Name the last path component basedon modification time and return this part
+	
+	path  - the path to be named with version
+	synctime  - use the same time suffix for multiple paths when is not None,
+		SyncValue is expected
+	"""
 	if not path:
 		print('WARNING: specified path is empty', file=sys.stderr)
 		return
-	mtime = time.strftime('_%y%m%d_%M%S', time.gmtime(os.path.getmtime(path)))  # Modification time
+	if synctime is not None:
+		with synctime:
+			if synctime.value is None:
+				synctime.value = time.gmtime(os.path.getmtime(path))
+			mtime = synctime.value
+	else:
+		mtime = time.gmtime(os.path.getmtime(path))
+	mtime = time.strftime('_%y%m%d_%M%S', mtime)  # Modification time
 	name = os.path.split(os.path.normpath(path))[1]  # Extract dir of file name
 	return name + mtime
 	
 	
-def backupPath(basepath, compress=True):  # basedir, name
+def backupPath(basepath, synctime=None, compress=True):  # basedir, name
 	"""Backup all files and dirs started from the specified name in the specified path
 	into backup/ dir inside the specified path
 	
 	basepath  - path, last component of which (file or dir) is a template to backup
 		all paths starting from it in the same location
+	synctime  - use the same time suffix for multiple paths when is not None,
+		SyncValue is expected
 	compress  - compress or just copy spesified paths
 	
 	ATTENTION: All paths are MOVED to the dedicated timestamped dir / archive
@@ -78,10 +157,10 @@ def backupPath(basepath, compress=True):  # basedir, name
 	# Backup files
 	rennmarg = 10  # Max number of renaming attempts
 	if compress:
-		archname = ''.join((basedir, nameVersion(basepath), '.tar.gz'))
+		archname = ''.join((basedir, nameVersion(basepath, synctime), '.tar.gz'))
 		# Rename already existent archive if required
 		if os.path.exists(archname):
-			nametmpl = ''.join((basedir, nameVersion(basepath), '-{}', '.tar.gz'))
+			nametmpl = ''.join((basedir, nameVersion(basepath, synctime), '-{}', '.tar.gz'))
 			for i in range(rennmarg):
 				bckname = nametmpl.format(i)
 				if not os.path.exists(bckname):
@@ -104,7 +183,7 @@ def backupPath(basepath, compress=True):  # basedir, name
 				else:
 					os.remove(path)
 	else:
-		basedir = ''.join((basedir, nameVersion(basepath), '/'))
+		basedir = ''.join((basedir, nameVersion(basepath, synctime), '/'))
 		# Rename already existent backup if required
 		if os.path.exists(basedir):
 			nametmpl = basedir + '-{}'

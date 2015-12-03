@@ -20,7 +20,6 @@ import time
 import subprocess
 from multiprocessing import cpu_count
 from multiprocessing import Value
-#from multiprocessing import Lock
 import collections
 import os
 import ctypes  # Required for the multiprocessing Value definition
@@ -34,7 +33,7 @@ _execpool = None  # Active execution pool
 _netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
 
 
-class Task:
+class Task(object):
 	#TODO: Implement timeout support in add/delJob
 	def __init__(self, name, timeout=0, onstart=None, ondone=None, stdout=None, stderr=None):
 		"""Initialize task, which is a number of jobs to be executed
@@ -62,9 +61,9 @@ class Task:
 		self.stdout = stdout
 		self.stderr = stderr
 		self.tstart = None
-		self.tstop = Value(ctypes.c_float)  # Termination / completion time after ondone
+		self.tstop = None  # SyncValue()  # Termination / completion time after ondone
 		# Private attributes
-		self._jobsnum = Value(ctypes.c_ushort)
+		self._jobsnum = Value(ctypes.c_uint)
 		# Graceful completion of all tasks or at least one of the tasks was terminated
 		self._graceful = Value(ctypes.c_bool)
 		self._graceful.value = True
@@ -102,13 +101,14 @@ class Task:
 		# Finalize if required
 		if not graceful:
 			self._graceful.value = False
-		elif final and self.ondone and self._graceful.value:
-			self.ondone()
-		self.tstop = time.time()
+		elif final:
+			if self.ondone and self._graceful.value:
+				self.ondone()
+			self.tstop = time.time()
 		return None
 	
 
-class Job:
+class Job(object):
 #class Job(collections.namedtuple('Job', ('name', 'workdir', 'args', 'timeout', 'ontimeout', 'onstart', 'ondone', 'tstart'))):  # , 'tracelev'
 	#Job = collections.namedtuple('Job', ('name', 'workdir', 'args', 'timeout', 'ontimeout', 'onstart', 'ondone', 'tstart'))
 	#tracelev  - tracing detalizationg level:
@@ -159,7 +159,7 @@ class Job:
 		self.ontimeout = ontimeout
 		self.task = task.addJob() if task else None
 		# Delay in the callers context after starting the job process. Should be small.
-		self.startdelay = 0.2  # Required to sync sequence of started processes
+		self.startdelay = 0  # 0.2  # Required to sync sequence of started processes
 		# Callbacks ------------------------------------------------------------
 		Job.onstart = onstart
 		Job.ondone = ondone
@@ -168,7 +168,7 @@ class Job:
 		self.stderr = stderr
 		# Internal properties --------------------------------------------------
 		self.tstart = None  # start time is filled automatically on the execution start, before onstart. Default: None
-		self.tstop = None  # Value(ctypes.c_float)  # Termination / completion time after ondone
+		self.tstop = None  # SyncValue()  # Termination / completion time after ondone
 		# Private attributes
 		self._proc = None  # Process of the job
 		
@@ -207,7 +207,7 @@ class Job:
 		self.tstop = time.time()
 
 
-class ExecPool:
+class ExecPool(object):
 	'''Execution Pool of workers for jobs
 	
 	A worker in the pool executes only the one job, a new worker is created for
@@ -321,7 +321,8 @@ class ExecPool:
 				#print('Opening proc with:\n\tjob.args: {},\n\tcwd: {}'.format(' '.join(job.args), job.workdir))
 				job._proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
 				# Wait a little bit to start the process besides it's scheduling
-				time.sleep(job.startdelay)
+				if job.startdelay > 0:
+					time.sleep(job.startdelay)
 		except StandardError as err:  # Should not occur: subprocess.CalledProcessError
 			if fstdout:
 				fstdout.close()

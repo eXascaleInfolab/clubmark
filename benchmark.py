@@ -207,7 +207,7 @@ def generateNets(overwrite=False, count=8, shufnum=0):
 	if overwrite:
 		for dirname in (paramsdirfull, seedsdirfull, netsdirfull):
 			if os.path.exists(dirname) and not dirempty(dirname):
-				backupPath(dirname)
+				backupPath(dirname, SyncValue())
 				
 	# Create dirs if required
 	if not os.path.exists(_syntdir):
@@ -253,7 +253,6 @@ for i in range(1, {shufnum} + 1):
 	if {overwrite} or not os.path.exists(netfile):
 		subprocess.call(('sort', '-R', basenet, '-o', netfile))
 """.format(jobname=job.name, _extnetfile=_extnetfile, shufnum=shufnum, overwrite=overwrite))
-		#print('Calling args: ' + args, file=sys.stderr)
 		_execpool.execute(Job(name=job.name + '_shf', task=job.task, workdir=netsdirfull + job.task.name
 			, args=args, timeout=shuftimeout * shufnum))
 
@@ -591,20 +590,22 @@ if __name__ == '__main__':
 		signal.signal(signal.SIGABRT, terminationHandler)
 		benchmark(*sys.argv[1:])
 	else:
-		print('\n'.join(('Usage: {0} [-g[f][=[<number>][.<shuffles_number>]] [-c[f][r]] [-r] [-e[n][m]] [-d{{a,s}}=<datasets_dir>] [-f{{a,s}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
+		print('\n'.join(('Usage: {0} [-g[f][=[<number>][.<shuffles_number>]] [-c[f][r]] [-a="app1 app2 ..."] [-r] [-e[n][m]] [-d{{a,s}}=<datasets_dir>] [-f{{a,s}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
 			'  -g[f][=[<number>][.<shuffles_number>]]  - generate <number> ({synetsnum} by default) >= 1 synthetic datasets in the {syntdir},'
 			' shuffling each <shuffles_number> (0 by default) >= 0 times.',
 			'  NOTE: shuffled datasets have the following naming format <net_name>.<shuffle_index>.<net_extension>',
-			'    Xf  - force the generation even when the data already exists (existent .ngs are backed up)',
-			'  -a[="app1 app2 ..."]  - apps (clusering algorithms) to benchmark among the implemented.'
-			' Available: scp louvain_ig randcommuns hirecs oslom2 ganxis.'
-			' Impacts -{{c, r, e}} options. Optional, all apps are executed by default.',
-			'  NOTE: output results are stored in the "algorithms/<algname>outp/" directory',
+			'    Xf  - force the generation even when the data already exists (existent datasets are moved to backup)',
 			'  -c[X]  - convert existing networks into the .hig, .lig, etc. formats',
 			'    Xf  - force the conversion even when the data is already exist',
 			'    Xr  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used',
+			'  -a="app1 app2 ..."  - apps (clustering algorithms) to run/benchmark among the implemented.'
+			' Available: scp louvain_ig randcommuns hirecs oslom2 ganxis.'
+			' Impacts -{{r, e}} options. Optional, all apps are executed by default.',
+			'  NOTE: output results are stored in the "algorithms/<algname>outp/" directory',
 			'  -r  - run the benchmarking apps on the prepared data',
-			'  -e[X]  - evaluate quality of the results. Default: apply all measurements',
+			#'    Xf  - force execution even when the results already exists (existent datasets are moved to backup)',
+			'  -e[[X]  - evaluate quality of the results. Default: apply all measurements',
+			#'    Xf  - force execution even when the results already exists (existent datasets are moved to backup)',
 			'    Xn  - evaluate results accuracy using NMI measures for overlapping communities',
 			'    Xm  - evaluate results quality by modularity',
 			# TODO: customize extension of the network files (implement filters)
@@ -620,7 +621,7 @@ if __name__ == '__main__':
 			'    - {{a,s}} is considered only if the network file has no corresponding metadata (formats like SNAP, ncol, nsa, ...)',
 			'    - ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
 			' is up to the clustering algorithm',
-			'  -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evalution on each network'
+			'  -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network'
 			' in sec, min or hours. Default: 0 sec  - no timeout',
 			'    Xs  - time in seconds. Default option',
 			'    Xm  - time in minutes',

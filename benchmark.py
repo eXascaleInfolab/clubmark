@@ -200,7 +200,7 @@ def parseParams(args):
 	return gensynt, netins, shufnum, syntdir, convnets, runalgs, evalres, datas, timeout, algorithms
 
 
-def generateNets(genbin, basedir, overwrite=False, count=8, shufnum=0):
+def generateNets(genbin, basedir, overwrite=False, count=_syntinum, shufnum=0):
 	"""Generate synthetic networks with ground-truth communities and save generation params
 
 	genbin  - the binary used to generate the data
@@ -215,9 +215,10 @@ def generateNets(genbin, basedir, overwrite=False, count=8, shufnum=0):
 	# Note: shuffles unlike ordinary networks have double extension: shuffling nimber and standard extension
 
 	# Store all instances of each network with generation parameters in the dedicated directory
-	assert count >= 1, 'Number of the network instances to be generated must be positive'
-	assert shufnum >= 0, 'Number of shufflings must be non-negative'
-	assert basedir[-1] == '/' and paramsdir[-1] == '/' and seedsdir[-1] == '/' and netsdir[-1] == '/', "Directory name must have valid terminator"
+	assert (shufnum >= 0 and (count >= 1 or (not count and shufnum >= 1))
+		, 'Number of the network instances to be generated or their shuffles shuold must be positive')
+	assert (basedir[-1] == '/' and paramsdir[-1] == '/' and seedsdir[-1] == '/' and netsdir[-1] == '/'
+		, "Directory name must have valid terminator")
 	
 	paramsdirfull = basedir + paramsdir
 	seedsdirfull = basedir + seedsdir
@@ -309,7 +310,7 @@ for i in range(1, {shufnum} + 1):
 					task = Task(name)  # Required to use task.name as basedir identifier
 					startdelay = 0.1  # Required to start execution of the LFR benchmark before copying the time_seed for the following process
 					netfile = netpath + name
-					if overwrite or not os.path.exists(netfile.join((basedir, _extnetfile))):
+					if count and overwrite or not os.path.exists(netfile.join((basedir, _extnetfile))):
 						args = ('../exectime', '-n=' + name, ''.join(('-o=', bmname, _extexectime))  # Output .rcp in the current dir, basedir
 							, bmbin, '-f', netparams, '-name', netfile)
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)

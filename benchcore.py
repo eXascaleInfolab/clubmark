@@ -23,6 +23,7 @@ from multiprocessing import Value
 import collections
 import os
 import ctypes  # Required for the multiprocessing Value definition
+import types  # Required for instance methods definition
 
 from benchutils import secondsToHms
 
@@ -56,8 +57,8 @@ class Task(object):
 		assert isinstance(name, str) and timeout >= 0, 'Parameters validaiton failed'
 		self.name = name
 		self.timeout = timeout
-		Task.onstart = onstart
-		Task.ondone = ondone
+		self.onstart = types.MethodType(onstart, self) if onstart else None
+		self.ondone = types.MethodType(ondone, self) if ondone else None
 		self.stdout = stdout
 		self.stderr = stderr
 		self.tstart = None
@@ -120,8 +121,8 @@ class Job(object):
 	#	assert name, "Job parameters must be defined"  #  and job.workdir and job.args
 	#	return super(Job, cls).__new__(cls, name, workdir, args, timeout, ontimeout, onstart, ondone, tstart)
 	# NOTE: keyword-only arguments are specified after the *, supported only since Python 3
-	def __init__(self, name, workdir='', args=(), timeout=0, ontimeout=False, task=None, #*,
-	onstart=None, ondone=None, stdout=None, stderr=None):
+	def __init__(self, name, workdir='', args=(), timeout=0, ontimeout=False, task=None #,*
+	, startdelay=0, onstart=None, ondone=None, stdout=None, stderr=None):
 		"""Initialize job to be executed
 		
 		name  - job name
@@ -133,6 +134,9 @@ class Job(object):
 			False  - terminate the job. Default
 			True  - restart the job
 		task  - origin task if this job is a part of the task
+		startdelay  - delay after the job process starting to execute it for some time,
+			executed in the CONTEXT OF THE CALLER (main process).
+			ATTENTION: should be small (0.1 .. 1 sec)
 		onstart  - callback which is executed on the job starting (before the execution
 			started) in the CONTEXT OF THE CALLER (main process) with the single argument,
 			the job. Default: None
@@ -159,10 +163,10 @@ class Job(object):
 		self.ontimeout = ontimeout
 		self.task = task.addJob() if task else None
 		# Delay in the callers context after starting the job process. Should be small.
-		self.startdelay = 0  # 0.2  # Required to sync sequence of started processes
+		self.startdelay = startdelay  # 0.2  # Required to sync sequence of started processes
 		# Callbacks ------------------------------------------------------------
-		Job.onstart = onstart
-		Job.ondone = ondone
+		self.onstart = types.MethodType(onstart, self) if onstart else None
+		self.ondone = types.MethodType(ondone, self) if ondone else None
 		# I/O redirection ------------------------------------------------------
 		self.stdout = stdout
 		self.stderr = stderr
@@ -180,6 +184,7 @@ class Job(object):
 		"""
 		if graceful:
 			if self.ondone:
+				#print('Starting ondone() for job {}'.format(self.name), file=sys.stderr)
 				try:
 					self.ondone()
 				except StandardError as err:
@@ -287,6 +292,7 @@ class ExecPool(object):
 		print('Starting "{}"{}...'.format(job.name, '' if async else ' in sync mode'), file=sys.stderr)
 		job.tstart = time.time()
 		if job.onstart:
+			#print('Starting onstart() for job {}'.format(job.name), file=sys.stderr)
 			try:
 				job.onstart()
 			except StandardError as err:

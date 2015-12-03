@@ -233,7 +233,7 @@ def generateNets(overwrite=False, count=8, shufnum=0):
 				
 	_execpool = ExecPool(max(cpu_count() - 1, 1))
 	netgenTimeout = 15 * 60  # 15 min
-	shuftimeout = 5  # 5 sec per each shuffling
+	shuftimeout = 1  # 1 min per each shuffling
 	bmname = 'lfrbench_udwov'  # Benchmark name
 	bmbin = './' + bmname  # Benchmark binary
 	timeseed = _syntdir + 'time_seed.dat'
@@ -288,6 +288,7 @@ for i in range(1, {shufnum} + 1):
 					if not os.path.exists(netpathfull):
 						os.mkdir(netpathfull)
 					task = Task(name)  # Required to use task.name as basedir identifier
+					startdelay = 0.1  # Required to start execution of the LFR benchmark before copying the time_seed for the following process
 					netfile = netpath + name
 					if overwrite or not os.path.exists(netfile.join((_syntdir, _extnetfile))):
 						args = ('../exectime', '-n=' + name, ''.join(('-o=', bmname, _extexectime))  # Output .rcp in the current dir, _syntdir
@@ -295,7 +296,7 @@ for i in range(1, {shufnum} + 1):
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 						_execpool.execute(Job(name=name, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
 							, onstart=lambda job: shutil.copy2(timeseed, name.join((seedsdirfull, '.ngs')))  # Network generation seed
-							, ondone=shuffling if shufnum > 0 else None))
+							, ondone=shuffling if shufnum > 0 else None, startdelay=startdelay))
 					else:
 						# Create missing shufflings
 						shuffling(Job(name=name, task=task))
@@ -308,7 +309,7 @@ for i in range(1, {shufnum} + 1):
 							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 							_execpool.execute(Job(name=namext, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
 								, onstart=lambda job: shutil.copy2(timeseed, namext.join((seedsdirfull, '.ngs')))  # Network generation seed
-								, ondone=shuffling if shufnum > 0 else None))
+								, ondone=shuffling if shufnum > 0 else None, startdelay=startdelay))
 						else:
 							# Create missing shufflings
 							shuffling(Job(name=namext, task=task))

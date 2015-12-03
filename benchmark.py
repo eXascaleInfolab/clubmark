@@ -233,11 +233,11 @@ def generateNets(overwrite=False, count=8, shufnum=0):
 				
 	_execpool = ExecPool(max(cpu_count() - 1, 1))
 	netgenTimeout = 15 * 60  # 15 min
-	shuftimeout = 1  # 1 min per each shuffling
+	shuftimeout = 1 * 60  # 1 min per each shuffling
 	bmname = 'lfrbench_udwov'  # Benchmark name
 	bmbin = './' + bmname  # Benchmark binary
 	timeseed = _syntdir + 'time_seed.dat'
-
+	
 	def shuffling(job):
 		"""Shufling postprocessing"""
 		if shufnum < 1:
@@ -295,7 +295,7 @@ for i in range(1, {shufnum} + 1):
 							, bmbin, '-f', netparams, '-name', netfile)
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 						_execpool.execute(Job(name=name, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
-							, onstart=lambda job: shutil.copy2(timeseed, name.join((seedsdirfull, '.ngs')))  # Network generation seed
+							, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 							, ondone=shuffling if shufnum > 0 else None, startdelay=startdelay))
 					else:
 						# Create missing shufflings
@@ -308,7 +308,7 @@ for i in range(1, {shufnum} + 1):
 								, bmbin, '-f', netparams, '-name', netfile)
 							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 							_execpool.execute(Job(name=namext, task=task, workdir=_syntdir, args=args, timeout=netgenTimeout, ontimeout=True
-								, onstart=lambda job: shutil.copy2(timeseed, namext.join((seedsdirfull, '.ngs')))  # Network generation seed
+								, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 								, ondone=shuffling if shufnum > 0 else None, startdelay=startdelay))
 						else:
 							# Create missing shufflings

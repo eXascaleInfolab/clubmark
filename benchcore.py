@@ -184,7 +184,6 @@ class Job(object):
 		"""
 		if graceful:
 			if self.ondone:
-				#print('Starting ondone() for job {}'.format(self.name), file=sys.stderr)
 				try:
 					self.ondone()
 				except StandardError as err:
@@ -292,7 +291,8 @@ class ExecPool(object):
 		print('Starting "{}"{}...'.format(job.name, '' if async else ' in sync mode'), file=sys.stderr)
 		job.tstart = time.time()
 		if job.onstart:
-			#print('Starting onstart() for job {}'.format(job.name), file=sys.stderr)
+			# import inspect;  inspect.getsource(job.onstart)
+			#print('Starting onstart() for job {}: {}'.format(job.name), file=sys.stderr)
 			try:
 				job.onstart()
 			except StandardError as err:

@@ -331,7 +331,7 @@ if __name__ == '__main__':
 	if len(sys.argv) > 1:
 		tohig(*sys.argv[1:])
 	else:
-		print('\n'.join(('Usage: {0} <network> [-ru] [-f={{{1}, {2}}}]',
+		print('\n'.join(('Usage: {0} <network> [-ru] [-f={{{1}, {2}}}] [-o{{f,r,s}}]',
 			'  -r  - resolve (remove) duplicated links to be unique',
 			'  -u  - force links to be unweighted even for the weighted input graph.'
 			' Generates weighted links by default (only for the weighted graphs)',

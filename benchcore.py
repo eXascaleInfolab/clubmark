@@ -34,6 +34,7 @@ _execpool = None  # Active execution pool
 
 
 class Task(object):
+	""" Container of Jobs"""
 	#TODO: Implement timeout support in add/delJob
 	def __init__(self, name, timeout=0, onstart=None, ondone=None, stdout=None, stderr=None):
 		"""Initialize task, which is a number of jobs to be executed
@@ -106,9 +107,14 @@ class Task(object):
 				self.ondone()
 			self.tstop = time.time()
 		return None
-	
 
+	
 class Job(object):
+	# Note: the same job can be executed as Popen or Process object, but ExecPool
+	# should use some wrapper in the latter case to manage it
+	"""Job is executed in a separate process via Popen or Process object and is
+	managed by the Process Pool Executor
+	"""
 #class Job(collections.namedtuple('Job', ('name', 'workdir', 'args', 'timeout', 'ontimeout', 'onstart', 'ondone', 'tstart'))):  # , 'tracelev'
 	#Job = collections.namedtuple('Job', ('name', 'workdir', 'args', 'timeout', 'ontimeout', 'onstart', 'ondone', 'tstart'))
 	#tracelev  - tracing detalizationg level:
@@ -120,7 +126,7 @@ class Job(object):
 	#	assert name, "Job parameters must be defined"  #  and job.workdir and job.args
 	#	return super(Job, cls).__new__(cls, name, workdir, args, timeout, ontimeout, onstart, ondone, tstart)
 	# NOTE: keyword-only arguments are specified after the *, supported only since Python 3
-	def __init__(self, name, workdir='', args=(), timeout=0, ontimeout=False, task=None #,*
+	def __init__(self, name, workdir=None, args=(), timeout=0, ontimeout=False, task=None #,*
 	, startdelay=0, onstart=None, ondone=None, stdout=None, stderr=None):
 		"""Initialize job to be executed
 		
@@ -150,7 +156,7 @@ class Job(object):
 		tstart  - start time is filled automatically on the execution start (before onstart). Default: None
 		tstop  - termination / completion time after ondone
 		"""
-		assert isinstance(task, str) and timeout >= 0 and task is None or isinstance(task, Task), 'Parameters validaiton failed'
+		assert isinstance(name, str) and timeout >= 0 and (task is None or isinstance(task, Task)), 'Parameters validaiton failed'
 		#if not args:
 		#	args = ("false")  # Create an empty process to schedule it's execution
 		
@@ -205,7 +211,9 @@ class Job(object):
 				except OSError:
 					pass  # The dir is not empty, just skip it
 			print('"{}" #{} is completed'.format(self.name, self._proc.pid if self._proc else -1), file=sys.stderr)
-		self.task = self.task.delJob(graceful)
+		# Check whether the job is associated with any task
+		if self.task:
+			self.task = self.task.delJob(graceful)
 		## Updated execution status
 		self.tstop = time.time()
 

@@ -61,7 +61,6 @@ def evalAlgorithm(execpool, gtres, timeout, algname, evalbin=_nmibin, evalname='
 
 	args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', task, '_', algname))
 		, './eval.sh', evalbin, '../' + gtres, ''.join((algname, 'outp/', task)), algname, evalname)
-	#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((evalname, task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', evalname, '_', task, _logext)), stderr=stderr))
 
@@ -71,7 +70,6 @@ def evalAlgorithm(execpool, gtres, timeout, algname, evalbin=_nmibin, evalname='
 	while os.path.exists(''.join((_algsdir, algname, 'outp/', taskex))):
 		args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', taskex, '_', algname))
 			, './eval.sh', evalbin, '../' + gtres, ''.join((algname, 'outp/', taskex)), algname, evalname)
-		#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 		execpool.execute(Job(name='_'.join((evalname, taskex, algname)), workdir=_algsdir, args=args
 			, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', evalname, '_', taskex, _logext)), stderr=stderr))
 		i += 1
@@ -144,7 +142,6 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 			with open(amodname, 'a') as amod:  # Append to the end
 				subprocess.call(''.join(('printf "', task, '\t `sort -g -r "', tmodname,'" | head -n 1`\n"')), stdout=amod, shell=True)
 
-		#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 		job = Job(name='_'.join((evalname, taskex, algname)), workdir=_algsdir, args=args
 			, timeout=timeout, ondone=postexec, stdout=os.devnull, stderr=''.join((logsdir, taskex, _logext)))
 		jobsinfo.append(job.executed)
@@ -187,7 +184,6 @@ def execAlgorithm(execpool, netfile, asym, timeout, selfexec=False, **kwargs):
 #	# ./community graph.bin -l -1 -w graph.weights > graph.tree
 #	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 #		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
-#	#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 #	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 #		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', task, '.loc'))
 #		, stderr=''.join((_algsdir, algname, 'outp/', task, _logext))))
@@ -240,7 +236,6 @@ def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False, **kwargs):
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, pyexec, ''.join(('./', algname, '.py')), ''.join(('-i=../', netfile, netext))
 		, ''.join(('-ol=', algname, 'outp/', task, _extclnodes)))
-	#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout
 		, ondone=postexec, stdout=os.devnull, stderr=''.join((logsbase, _logext))))
 
@@ -295,7 +290,6 @@ def execScp(execpool, netfile, asym, timeout, **kwargs):
 	for k in range(kmin, kmax + 1):
 		kstr = str(k)
 		kstrex = 'k' + kstr
-		#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 		#print('> Starting job {} with args: {}'.format('_'.join((task, algname, kstrex)), args + [kstr]))
 		finargs = list(args)  # Copy args
 		finargs[2] = finargs[2].format(kstrex)
@@ -344,7 +338,6 @@ def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False, instances=
 		, pyexec, ''.join(('./', algname, '.py')), ''.join(('-g=../', netfile, _extclnodes))
 		, ''.join(('-i=../', netfile, netext)), ''.join(('-o=', algname, 'outp/', task))
 		, ''.join(('-n=', str(instances))))
-	#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout
 		, stdout=os.devnull, stderr=taskpath + _logext))
 	return 1
@@ -381,7 +374,6 @@ def execHirecs(execpool, netfile, asym, timeout, **kwargs):
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', ''.join(('-cls=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
-	#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=os.devnull, stderr=taskpath + _logext))
 	return 1
@@ -418,7 +410,6 @@ def execHirecsOtl(execpool, netfile, asym, timeout, **kwargs):
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', ''.join(('-cols=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
-	#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=os.devnull, stderr=taskpath + _logext))
 	return 1
@@ -451,7 +442,6 @@ def execHirecsAhOtl(execpool, netfile, asym, timeout, **kwargs):
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', ''.join(('-coas=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
-	#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=os.devnull, stderr=taskpath + _logext))
 	return 1
@@ -483,7 +473,6 @@ def execHirecsNounwrap(execpool, netfile, asym, timeout, **kwargs):
 		backupPath(taskpath)
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', '../' + netfile)
-	#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, stdout=None, stderr=None, tstart=None)  os.devnull
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=''.join((_algsdir, algname, 'outp/', task, '.hoc'))
 		, stderr=taskpath + _logext))
@@ -529,7 +518,6 @@ def execOslom2(execpool, netfile, asym, timeout, **kwargs):
 		if os.path.exists(fname):
 			os.remove(fname)
 
-	#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
 		, stdout=taskpath + _logext, stderr=taskpath + _errext))
 	return 1
@@ -562,7 +550,6 @@ def execGanxis(execpool, netfile, asym, timeout, **kwargs):
 		, 'java', '-jar', './GANXiSw.jar', '-i', '../' + netfile, '-d', algname + 'outp/']
 	if not asym:
 		args.append('-Sym 1')  # Check existance of the back links and generate them if requried
-	#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 	logsdir = ''.join((_algsdir, algname, 'outp/'))
 	# Backup previous results if exist
 	taskpath = logsdir +  task

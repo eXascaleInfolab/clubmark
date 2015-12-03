@@ -46,11 +46,11 @@ from benchcore import *
 from benchutils import *
 
 
-# Add 3dparty modules
-#sys.path.insert(0, '3dparty')  # Note: this operation might lead to ambiguity on paths resolving
-thirdparty = __import__('3dparty.tohig')
-tohig = thirdparty.tohig.tohig  # ~ from 3dparty.tohig import tohig
-#from tohig import tohig
+## Add 3dparty modules
+##sys.path.insert(0, '3dparty')  # Note: this operation might lead to ambiguity on paths resolving
+#thirdparty = __import__('3dparty.tohig')
+#tohig = thirdparty.tohig.tohig  # ~ from 3dparty.tohig import tohig
+
 #from functools import wraps
 
 from benchcore import _extexectime
@@ -200,7 +200,7 @@ def parseParams(args):
 	return gensynt, netins, shufnum, syntdir, convnets, runalgs, evalres, datas, timeout, algorithms
 
 
-def generateNets(genbin, basedir, overwrite=False, count=_syntinum, shufnum=0):
+def generateNets(genbin, basedir, overwrite=False, count=_syntinum, shufnum=0, gentimeout=2*60*60):  # 2 hour
 	"""Generate synthetic networks with ground-truth communities and save generation params
 
 	genbin  - the binary used to generate the data
@@ -250,8 +250,9 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, shufnum=0):
 	varNmul = (1, 2, 5, 10, 25, 50)  # *N0 - sizes of the generating networks
 	vark = (5, 10)  #, 20)  # Average density of network links
 	global _execpool
-				
-	_execpool = ExecPool(max(cpu_count() - 1, 1))
+	
+	if not _execpool:
+		_execpool = ExecPool(max(cpu_count() - 1, 1))
 	netgenTimeout = 15 * 60  # 15 min
 	shuftimeout = 1 * 60  # 1 min per each shuffling
 	bmname =  os.path.split(genbin)[1]  # Benchmark name
@@ -337,29 +338,37 @@ for i in range(1, {shufnum} + 1):
 				print('ERROR: network parameters file "{}" is not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')
 	if _execpool:
-		_execpool.join(max(2 * 60*60, count * (netgenTimeout  + (shufnum * shuftimeout))))  # 2 hours
+		_execpool.join(max(gentimeout, count * (netgenTimeout  + (shufnum * shuftimeout))))  # 2 hours
 		_execpool = None
 	print('Synthetic networks files generation is completed')
 
 
-def convertNet(filename, asym, overwrite=False, resdub=False):
+def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 min
 	"""Gonvert input networks to another formats
 
 	datadir  - directory of the networks to be converted
 	asym  - network has asymmetric links weights (in/outbound weights can be different)
 	overwrite  - whether to overwrite existing networks or use them
 	resdub  - resolve duplicated links
+	timeout  - network conversion timeout
 	"""
 	try:
-		# Convert to .hig format
-		# Network in the tab separated weighted arcs format
-		args = ['-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
+		## Convert to .hig format
+		## Network in the tab separated weighted arcs format
+		#args = ['-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
+		#if resdub:
+		#	args.append('-r')
+		#tohig(inpnet, args)
+
+		args = [pyexec, '3dparty/tohig.py', inpnet, '-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
 		if resdub:
 			args.append('-r')
-		tohig(net, args)
+		#print('args: "{}"'.format(' '.join(args)))
+		_execpool.execute(Job(name=os.path.split(os.path.splitext(inpnet)[0])[1], args=args, timeout=timeout))
+
 	except StandardError as err:
-		print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(net, err), file=sys.stderr)
-	netnoext = os.path.splitext(net)[0]  # Remove the extension
+		print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(inpnet, err), file=sys.stderr)
+	#netnoext = os.path.splitext(net)[0]  # Remove the extension
 
 	## Confert to Louvain binaty input format
 	#try:
@@ -387,7 +396,7 @@ def convertNet(filename, asym, overwrite=False, resdub=False):
 	##	print('The shuffling is skipped: {} is already exist'.format(netnoext))
 
 
-def convertNets(datadir, asym, overwrite=False, resdub=False):
+def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60):  # 30 min
 	"""Gonvert input networks to another formats
 
 	datadir  - directory of the networks to be converted
@@ -397,11 +406,44 @@ def convertNets(datadir, asym, overwrite=False, resdub=False):
 	"""
 	print('Converting networks from {} into the required formats (.hig, .lig, etc.)...'
 		.format(datadir))
+
+	global _execpool
+			
+	if not _execpool:
+		_execpool = ExecPool(max(cpu_count() - 1, 1))		## Convert to .hig format
+		## Network in the tab separated weighted arcs format
+		#args = ['-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
+		#if resdub:
+		#	args.append('-r')
+		#tohig(inpnet, args)
+
+	convTimeMax = 3 * 60  # 3 min
+	netsnum = 0  # Number of converted networks
 	# Convert network files into .hig format and .lig (Louvain Input Format)
 	for net in glob.iglob('*'.join((datadir, _extnetfile))):
-		convertNet(net, asym, overwrite, resdub)
+		# Check existence of the corresponding dir with shuffled files
+		netdir = os.path.splitext(net)[0]
+		if os.path.exists(netdir):
+			for net in glob.iglob('/*'.join((netdir, _extnetfile))):
+				convertNet(net, asym, overwrite, resdub, convTimeMax)
+				netsnum += 1
+		else:
+			# Convert the original
+			convertNet(net, asym, overwrite, resdub, convTimeMax)
+			netsnum += 1
+	# Traverse direct subfolders if target networks are not directly in the folder
+	if not netsnum:
+		for netdir in glob.iglob(datadir + '*'):
+			# Convert networks in subdirs
+			if os.path.isdir(netdir):
+				for net in glob.iglob('/*'.join((netdir, _extnetfile))):
+					convertNet(net, asym, overwrite, resdub, convTimeMax)
+					netsnum += 1
 
-	print('Networks conversion is completed')
+	if _execpool:
+		_execpool.join(max(convtimeout, netsnum * convTimeMax))  # 2 hours
+		_execpool = None
+	print('Networks conversion is completed, converted {} networks'.format(netsnum))
 
 
 def unknownApp(name):
@@ -468,11 +510,17 @@ def benchmark(*args):
 		generateNets(benchpath, syntdir, gensynt == 2, netins, shufnum)  # 0 - do not generate, 1 - only if not exists, 2 - forced generation
 
 	# convnets: 0 - do not convert, 0b01 - only if not exists, 0b11 - forced conversion, 0b100 - resolve duplicated links
-	if convnets:
-		for asym, ddir in datadirs:
-			convertNets(ddir, asym, convnets&0b11, convnets&0b100)
-		for asym, dfile in datafiles:
-			convertNet(dfile, asym, convnets&0b11, convnets&0b100)
+	for asym, ddir in datadirs:
+		if shufnum:
+			shuffleNets(ddir, )
+		# TODO: consider shuffled nets on conversion
+		if convnets:
+			convertNets(ddir, asym, convnets&0b11 == 0b11, convnets&0b100)
+	for asym, dfile in datafiles:
+		if shufnum:
+			pass
+		if convnets:
+			convertNet(dfile, asym, convnets&0b11 == 0b11, convnets&0b100)
 
 	global _execpool
 	appsmodule = benchapps  # Module with algorithms definitions to be run; sys.modules[__name__]
@@ -482,7 +530,8 @@ def benchmark(*args):
 		# Run algs on synthetic datasets
 		#udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']
 		assert not _execpool, '_execpool should be clear on algs execution'
-		_execpool = ExecPool(max(min(4, cpu_count() - 1), 1))
+		if not _execpool:
+			_execpool = ExecPool(max(min(4, cpu_count() - 1), 1))
 
 		if not algorithms:
 			#algs = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
@@ -588,7 +637,8 @@ def benchmark(*args):
 
 			print('Starting {} evaluation...'.format(measures[im][2]))
 			assert not _execpool, '_execpool should be clear on algs evaluation'
-			_execpool = ExecPool(max(cpu_count() - 1, 1))
+			if not _execpool:
+				_execpool = ExecPool(max(cpu_count() - 1, 1))
 			taksnum = 0
 			timeout = 20 *60*60  # 20 hours
 			for asym, ddir in datadirs:

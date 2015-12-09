@@ -127,17 +127,18 @@ def nameVersion(path, synctime=None):
 			mtime = synctime.value
 	else:
 		mtime = time.gmtime(os.path.getmtime(path))
-	mtime = time.strftime('_%y%m%d_%M%S', mtime)  # Modification time
+	mtime = time.strftime('_%y%m%d_%H%M%S', mtime)  # Modification time
 	name = os.path.split(os.path.normpath(path))[1]  # Extract dir of file name
 	return name + mtime
 	
 	
-def backupPath(basepath, synctime=None, compress=True):  # basedir, name
-	"""Backup all files and dirs started from the specified name in the specified path
-	into backup/ dir inside the specified path
+def backupPath(basepath, exprefix=False, synctime=None, compress=True):  # basedir, name
+	"""Backup all files and dirs starting from the specified basepath into backup/
+	located in the parent dir of the basepath 
 	
 	basepath  - path, last component of which (file or dir) is a template to backup
 		all paths starting from it in the same location
+	exprefix  - expand prefix, backup all paths staring from basepath, or basepath only
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
 	compress  - compress or just copy spesified paths
@@ -147,11 +148,11 @@ def backupPath(basepath, synctime=None, compress=True):  # basedir, name
 	# Check if there anything available to be backuped
 	if not os.path.exists(basepath):
 		return
+	#print('Backuping "{}"{}...'.format(basepath, 'with synctime' if synctime else ''))
 	# Remove trailing path separator if exists
 	basepath = os.path.normpath(basepath)
 	# Create backup/ if required
-	basedir, basename = os.path.split(basepath)
-	basedir += '/backup/'
+	basedir = os.path.split(basepath)[0] + '/backup/'
 	if not os.path.exists(basedir):
 		os.mkdir(basedir)
 	# Backup files
@@ -175,7 +176,7 @@ def backupPath(basepath, synctime=None, compress=True):  # basedir, name
 				os.remove(archname)
 		# Move data to the archive
 		with tarfile.open(archname, 'w:gz', bufsize=64*1024, compresslevel=6) as tar:
-			for path in glob.iglob(basepath + '*'):
+			for path in glob.iglob(basepath + ('*' if exprefix else '')):
 				tar.add(path, arcname=os.path.split(path)[1])
 				# Delete the archived paths
 				if os.path.isdir(path):
@@ -203,5 +204,5 @@ def backupPath(basepath, synctime=None, compress=True):  # basedir, name
 		# Move data to the backup
 		if not os.path.exists(basedir):
 			os.mkdir(basedir)
-		for path in glob.iglob(basepath + '*'):
+		for path in glob.iglob(basepath + ('*' if exprefix else '')):
 			shutil.move(path, basedir + os.path.split(path)[1])

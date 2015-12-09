@@ -213,7 +213,7 @@ def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False, **kwargs):
 	logsbase = ''.join((_algsdir, algname, 'outp/', task))
 	# Backup previous results if exist
 	if os.path.exists(logsbase):
-		backupPath(logsbase)
+		backupPath(logsbase, True)
 	# Louvain accumulated statistics over shuffled modification of the network or total statistics for all networks
 	resext = '.acs'
 	if not selfexec:
@@ -277,7 +277,7 @@ def execScp(execpool, netfile, asym, timeout, **kwargs):
 	# Backup previous results if exist
 	taskpath = ''.join((_algsdir, algname, 'outp/', task))
 	if os.path.exists(taskpath):
-		backupPath(taskpath)
+		backupPath(taskpath, True)
 	# ATTENTION: a single argument is k-clique size, specified later
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), ''.join(('-n=', task, '_{}'))
 		, pyexec, ''.join(('./', algname, '.py')), '../' + netfile, '{}')
@@ -332,7 +332,7 @@ def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False, instances=
 	# Backup previous results if exist
 	taskpath = ''.join((_algsdir, algname, 'outp/', task))
 	if os.path.exists(taskpath):
-		backupPath(taskpath)
+		backupPath(taskpath, True)
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, pyexec, ''.join(('./', algname, '.py')), ''.join(('-g=../', netfile, _extclnodes))
@@ -370,7 +370,7 @@ def execHirecs(execpool, netfile, asym, timeout, **kwargs):
 	# Backup previous results if exist
 	taskpath = ''.join((_algsdir, algname, 'outp/', task))
 	if os.path.exists(taskpath):
-		backupPath(taskpath)
+		backupPath(taskpath, True)
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', ''.join(('-cls=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
@@ -406,7 +406,7 @@ def execHirecsOtl(execpool, netfile, asym, timeout, **kwargs):
 	# Backup previous results if exist
 	taskpath = ''.join((_algsdir, algname, 'outp/', task))
 	if os.path.exists(taskpath):
-		backupPath(taskpath)
+		backupPath(taskpath, True)
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', ''.join(('-cols=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
@@ -438,7 +438,7 @@ def execHirecsAhOtl(execpool, netfile, asym, timeout, **kwargs):
 	# Backup previous results if exist
 	taskpath = ''.join((_algsdir, algname, 'outp/', task))
 	if os.path.exists(taskpath):
-		backupPath(taskpath)
+		backupPath(taskpath, True)
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', ''.join(('-coas=./', algname, 'outp/', task, '/', task, '_', algname, _extclnodes))
 		, '../' + netfile)
@@ -470,7 +470,7 @@ def execHirecsNounwrap(execpool, netfile, asym, timeout, **kwargs):
 	# Backup previous results if exist
 	taskpath = ''.join((_algsdir, algname, 'outp/', task))
 	if os.path.exists(taskpath):
-		backupPath(taskpath)
+		backupPath(taskpath, True)
 	args = ('../exectime', ''.join(('-o=', _resdir, algname, _extexectime)), '-n=' + task
 		, './hirecs', '-oc', '../' + netfile)
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
@@ -497,7 +497,7 @@ def execOslom2(execpool, netfile, asym, timeout, **kwargs):
 	# Backup previous results if exist
 	taskpath = logsdir +  task
 	if os.path.exists(taskpath):
-		backupPath(taskpath)
+		backupPath(taskpath, True)
 	netdir = os.path.split(netfile)[0] + '/'
 	def postexec(job):
 		# Copy communities output
@@ -554,7 +554,7 @@ def execGanxis(execpool, netfile, asym, timeout, **kwargs):
 	# Backup previous results if exist
 	taskpath = logsdir +  task
 	if os.path.exists(taskpath):
-		backupPath(taskpath)
+		backupPath(taskpath, True)
 	def postexec(job):
 		outpdir = ''.join((logsdir, task, '/'))
 		if not os.path.exists(outpdir):

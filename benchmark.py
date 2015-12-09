@@ -216,9 +216,9 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, shufnum=0, g
 
 	# Store all instances of each network with generation parameters in the dedicated directory
 	assert (shufnum >= 0 and (count >= 1 or (not count and shufnum >= 1))
-		, 'Number of the network instances to be generated or their shuffles shuold must be positive')
+		), 'Number of the network instances to be generated or their shuffles shuold must be positive'
 	assert (basedir[-1] == '/' and paramsdir[-1] == '/' and seedsdir[-1] == '/' and netsdir[-1] == '/'
-		, "Directory name must have valid terminator")
+		), "Directory name must have valid terminator"
 	
 	paramsdirfull = basedir + paramsdir
 	seedsdirfull = basedir + seedsdir
@@ -264,6 +264,7 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, shufnum=0, g
 		if shufnum < 1:
 			return
 		args = (pyexec, '-c',
+# Shuffling procedure
 """import os
 import subprocess
 
@@ -344,7 +345,7 @@ for i in range(1, {shufnum} + 1):
 
 
 def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 min
-	"""Gonvert input networks to another formats
+	"""Convert input networks to another formats
 
 	datadir  - directory of the networks to be converted
 	asym  - network has asymmetric links weights (in/outbound weights can be different)
@@ -363,7 +364,6 @@ def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 
 		args = [pyexec, '3dparty/tohig.py', inpnet, '-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
 		if resdub:
 			args.append('-r')
-		#print('args: "{}"'.format(' '.join(args)))
 		_execpool.execute(Job(name=os.path.split(os.path.splitext(inpnet)[0])[1], args=args, timeout=timeout))
 
 	except StandardError as err:
@@ -397,7 +397,7 @@ def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 
 
 
 def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60):  # 30 min
-	"""Gonvert input networks to another formats
+	"""Convert input networks to another formats
 
 	datadir  - directory of the networks to be converted
 	asym  - network links weights are asymmetric (in/outbound weights can be different)
@@ -410,16 +410,11 @@ def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60)
 	global _execpool
 			
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, 1))		## Convert to .hig format
-		## Network in the tab separated weighted arcs format
-		#args = ['-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
-		#if resdub:
-		#	args.append('-r')
-		#tohig(inpnet, args)
+		_execpool = ExecPool(max(cpu_count() - 1, 1))
 
 	convTimeMax = 3 * 60  # 3 min
 	netsnum = 0  # Number of converted networks
-	# Convert network files into .hig format and .lig (Louvain Input Format)
+	# Convert network files to .hig format and .lig (Louvain Input Format)
 	for net in glob.iglob('*'.join((datadir, _extnetfile))):
 		# Check existence of the corresponding dir with shuffled files
 		netdir = os.path.splitext(net)[0]
@@ -457,26 +452,176 @@ def unknownApp(name):
 	return stub
 
 
-def terminationHandler(signal, frame):
-	"""Signal termination handler"""
+def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
+	"""Run specified applications (clustering algorithms) on the specified datasets
+	
+	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
+	algorithms  - list of the algorithms to be executed
+	datadirs  - directories with target networks to be processed
+	datafiles  - target networks to be processed
+	exectime  - elapsed time since the benchmarking started
+	timeout  - timeout per each algorithm execution
+	"""
+	assert (evalres and appsmodule and (datadirs or datafiles) and exectime >= 0
+		and timeout >= 0), 'Invalid input arguments'
+
 	global _execpool
 
-	#if signal == signal.SIGABRT:
-	#	os.killpg(os.getpgrp(), signal)
-	#	os.kill(os.getpid(), signal)
+	assert not _execpool, '_execpool should be clear on algs execution'
+	starttime = time.time()  # Procedure start time
+	if not _execpool:
+		_execpool = ExecPool(max(min(4, cpu_count() - 1), 1))
+
+	# Run algs on synthetic datasets
+	#udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']
+	if not algorithms:
+		#algs = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
+		#algs = (execHirecsNounwrap,)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
+		# , execHirecsOtl, execHirecsAhOtl, execHirecsNounwrap)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
+		algs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith('exec')]
+	else:
+		algs = [getattr(appsmodule, 'exec' + alg.capitalize(), unknownApp('exec' + alg.capitalize())) for alg in algorithms]
+	algs = tuple(algs)
+
+	def execute(net, asym, jobsnum):
+		"""Execute algorithms on the specified network counting number of ran jobs
+
+		net  - network to be processed
+		asym  - network links weights are asymmetric (in/outbound weights can be different)
+		jobsnum  - accumulated number of scheduled jobs
+		
+		return
+			jobsnum  - updated accumulated number of scheduled jobs
+		"""
+		for alg in algs:
+			try:
+				jobsnum += alg(_execpool, net, asym, timeout)
+			except StandardError as err:
+				errexectime = time.time() - exectime
+				print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
+					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
+		return jobsnum
+
+	jobsnum = 1  # Number of networks jobs to be processed (can be a few per each algorithm per each network)
+	netcount = 0  # Number of networks to be processed
+	for asym, ddir in datadirs:
+		for net in glob.iglob('*'.join((ddir, _extnetfile))):
+			tnum = execute(net, asym, jobsnum)
+			jobsnum += tnum
+			netcount += tnum != 0
+	for asym, net in datafiles:
+		tnum = execute(net, asym, jobsnum)
+		jobsnum += tnum
+		netcount += tnum != 0
 
 	if _execpool:
-		del _execpool
+		timelim = min(timeout * jobsnum, 5 * 24*60*60)  # Global timeout, up to N days
+		print('Waiting for the algorithms execution on {} jobs from {} networks'
+			' with {} sec ({} h {} m {:.4f} s) timeout'.format(jobsnum, netcount, timelim, *secondsToHms(timelim)))
+		_execpool.join(timelim)
 		_execpool = None
-	sys.exit(0)
+	starttime -= time.time() - starttime
+	print('The apps execution is successfully completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
+		.format(starttime, *secondsToHms(starttime)))
+
+
+def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
+	"""Run specified applications (clustering algorithms) on the specified datasets
+	
+	evalres  - evaluation flags: 0 - Skip evaluations, 1 - NMIs, 2 - Q (modularity), 3 - all measures
+	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
+	algorithms  - list of the algorithms to be executed
+	datadirs  - directories with target networks to be processed
+	datafiles  - target networks to be processed
+	exectime  - elapsed time since the benchmarking started
+	timeout  - timeout per each evaluation run
+	"""
+	assert (evalres and appsmodule and (datadirs or datafiles) and exectime >= 0
+		and timeout >= 0), 'Invalid input arguments'
+
+	global _execpool
+
+	assert not _execpool, '_execpool should be clear on algs evaluation'
+	starttime = time.time()  # Procedure start time
+	if not _execpool:
+		_execpool = ExecPool(max(cpu_count() - 1, 1))
+
+	# Create dir for the final results
+	if not os.path.exists(_algsdir + _resdir):
+		os.mkdir(_algsdir + _resdir)
+	# measures is a mao with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
+	measures = {1: ['eval', _extclnodes, 'NMI'], 2: ['mod', '.hig', 'Q']}
+	for im in measures:
+		# Evaluate only required measures
+		if evalres & im != im:
+			continue
+
+		evalpref = measures[im][0]  # Evaluation prefix
+		if not algorithms:
+			#evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
+			#				, evalHirecsNS, evalOslom2NS, evalGanxisNS)
+			#evalalgs = (evalHirecs, evalHirecsOtl, evalHirecsAhOtl
+			#				, evalHirecsNS, evalHirecsOtlNS, evalHirecsAhOtlNS)
+			evalalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(evalpref)]
+		else:
+			if im == 1:
+				assert evalpref == 'eval', 'Evaluation prefix is invalid'
+				evalalgs = chain(*[(getattr(appsmodule, evalpref + alg.capitalize(), unknownApp(evalpref + alg.capitalize())),
+					getattr(appsmodule, ''.join((evalpref, alg.capitalize(), 'NS')), unknownApp(''.join((evalpref, alg.capitalize(), 'NS')))))
+					for alg in algorithms])
+			else:
+				assert evalpref == 'mod', 'Evaluation prefix is invalid'
+				evalalgs = [getattr(appsmodule, evalpref + alg.capitalize(), unknownApp(evalpref + alg.capitalize()))
+					for alg in algorithms]
+		evalalgs = tuple(evalalgs)
+		
+		def evaluate(gtres, asym, jobsnum):
+			"""Evaluate algorithms on the specified network
+
+			gtres  - ground truth results
+			asym  - network links weights are asymmetric (in/outbound weights can be different)
+			jobsnum  - accumulated number of scheduled jobs
+			
+			return
+				jobsnum  - updated accumulated number of scheduled jobs
+			"""
+			for elg in evalalgs:
+				try:
+					elg(_execpool, gtres, timeout)
+				except StandardError as err:
+					print('The {} is interrupted by the exception: {}'
+						.format(elg.__name__, err))
+				else:
+					jobsnum += 1
+			return jobsnum
+
+		print('Starting {} evaluation...'.format(measures[im][2]))
+		jobsnum = 0
+		for asym, ddir in datadirs:
+			# Read ground truth
+			for gtfile in glob.iglob('*'.join((ddir, measures[im][1]))):
+				evaluate(gtfile, asym, jobsnum)
+		for asym, gtfile in datafiles:
+			# Use files with required extension
+			gtfile = os.path.splitext(gtfile)[0] + measures[im][1]
+			evaluate(gtfile, asym, jobsnum)
+		print('{} evaluation is completed'.format(measures[im][2]))	
+	if _execpool:
+		timelim = min(timeout * jobsnum, 5 * 24*60*60)  # Global timeout, up to N days
+		_execpool.join(max(timelim, exectime * 2))  # Twice the time of algorithms execution
+		_execpool = None
+	starttime -= time.time() - starttime
+	print('Results evaluation is successfully completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
+		.format(starttime, *secondsToHms(starttime)))
 
 
 def benchmark(*args):
-	""" Execute the benchmark
+	"""Execute the benchmark
 
 	Run the algorithms on the specified datasets respecting the parameters.
 	"""
-	exectime = time.time()  # Start of the executing time
+	exectime = time.time()  # Benchmarking start time
+
 	gensynt, netins, shufnum, syntdir, convnets, runalgs, evalres, datas, timeout, algorithms = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tsyntdir: {}\n\tconvnets: {:b}'
 		'\n\trunalgs: {}\n\tevalres: {}\n\tdatas: {}\n\ttimeout: {}\n\talgorithms: {}'
@@ -502,8 +647,8 @@ def benchmark(*args):
 		else:
 			datafiles.append((asym, path))
 	datas = None
-	if not datadirs and not datafiles:
-		datadirs = [(False, syntdir)]
+	if gensynt or (not datadirs and not datafiles):
+		datadirs.append((False, syntdir))  # asym, ddir
 	#print('Datadirs: ', datadirs)
 
 	if gensynt or shufnum:
@@ -522,138 +667,31 @@ def benchmark(*args):
 		if convnets:
 			convertNet(dfile, asym, convnets&0b11 == 0b11, convnets&0b100)
 
-	global _execpool
-	appsmodule = benchapps  # Module with algorithms definitions to be run; sys.modules[__name__]
-
 	# Run the algorithms and measure their resource consumption
 	if runalgs:
-		# Run algs on synthetic datasets
-		#udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']
-		assert not _execpool, '_execpool should be clear on algs execution'
-		if not _execpool:
-			_execpool = ExecPool(max(min(4, cpu_count() - 1), 1))
-
-		if not algorithms:
-			#algs = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
-			#algs = (execHirecsNounwrap,)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
-			# , execHirecsOtl, execHirecsAhOtl, execHirecsNounwrap)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
-			algs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith('exec')]
-		else:
-			algs = [getattr(appsmodule, 'exec' + alg.capitalize(), unknownApp('exec' + alg.capitalize())) for alg in algorithms]
-		algs = tuple(algs)
-
-		def execute(net, asym, taksnum):
-			"""Execute algorithms on the specified network counting number of ran tasks
-
-			net  - network to be processed
-			asym  - network links weights are asymmetric (in/outbound weights can be different)
-			taksnum  - accumulated number of scheduled tasks
-			
-			return
-				taksnum  - updated accumulated number of scheduled tasks
-			"""
-			for alg in algs:
-				try:
-					taksnum += alg(_execpool, net, asym, timeout)
-				except StandardError as err:
-					errexectime = time.time() - exectime
-					print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
-						.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
-			return taksnum
-
-		taksnum = 1  # Number of networks tasks to be processed (can be a few per each algorithm per each network)
-		netcount = 0  # Number of networks to be processed
-		for asym, ddir in datadirs:
-			for net in glob.iglob('*'.join((ddir, _extnetfile))):
-				tnum = execute(net, asym, taksnum)
-				taksnum += tnum
-				netcount += tnum != 0
-		for asym, net in datafiles:
-			tnum = execute(net, asym, taksnum)
-			taksnum += tnum
-			netcount += tnum != 0
-
-		if _execpool:
-			timelim = timeout * taksnum
-			print('Waiting for the algorithms execution on {} tasks from {} networks'
-				' with {} sec ({} h {} m {:.4f} s) timeout'.format(taksnum, netcount, timelim, *secondsToHms(timelim)))
-			_execpool.join(timelim)
-			_execpool = None
-		exectime = time.time() - exectime
-		print('The benchmark execution is successfully comleted on {:.4f} sec ({} h {} m {:.4f} s)'
-			.format(exectime, *secondsToHms(exectime)))
+		runApps(benchapps, algorithms, datadirs, datafiles, exectime, timeout)
 
 	# Evaluate results
 	if evalres:
-		# Create dir for the final results
-		if not os.path.exists(_algsdir + _resdir):
-			os.mkdir(_algsdir + _resdir)
-		# measures is a mao with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
-		measures = {1: ['eval', _extclnodes, 'NMI'], 2: ['mod', '.hig', 'Q']}
-		for im in measures:
-			# Evaluate only required measures
-			if evalres & im != im:
-				continue
+		evalResults(evalres, benchapps, algorithms, datadirs, datafiles, exectime, timeout)
 
-			evalpref = measures[im][0]  # Evaluation prefix
-			if not algorithms:
-				#evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
-				#				, evalHirecsNS, evalOslom2NS, evalGanxisNS)
-				#evalalgs = (evalHirecs, evalHirecsOtl, evalHirecsAhOtl
-				#				, evalHirecsNS, evalHirecsOtlNS, evalHirecsAhOtlNS)
-				evalalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(evalpref)]
-			else:
-				if im == 1:
-					assert evalpref == 'eval', 'Evaluation prefix is invalid'
-					evalalgs = chain(*[(getattr(appsmodule, evalpref + alg.capitalize(), unknownApp(evalpref + alg.capitalize())),
-						getattr(appsmodule, ''.join((evalpref, alg.capitalize(), 'NS')), unknownApp(''.join((evalpref, alg.capitalize(), 'NS')))))
-						for alg in algorithms])
-				else:
-					assert evalpref == 'mod', 'Evaluation prefix is invalid'
-					evalalgs = [getattr(appsmodule, evalpref + alg.capitalize(), unknownApp(evalpref + alg.capitalize()))
-						for alg in algorithms]
-			evalalgs = tuple(evalalgs)
-			
-			def evaluate(gtres, asym, taksnum):
-				"""Evaluate algorithms on the specified network
+	exectime -= time.time() - exectime
+	print('The benchmark is completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
+		.format(exectime, *secondsToHms(exectime)))
 	
-				gtres  - ground truth results
-				asym  - network links weights are asymmetric (in/outbound weights can be different)
-				taksnum  - accumulated number of scheduled tasks
-				
-				return
-					taksnum  - updated accumulated number of scheduled tasks
-				"""
-				for elg in evalalgs:
-					try:
-						elg(_execpool, gtres, timeout)
-					except StandardError as err:
-						print('The {} is interrupted by the exception: {}'
-							.format(elg.__name__, err))
-					else:
-						taksnum += 1
-				return taksnum
-				
 
-			print('Starting {} evaluation...'.format(measures[im][2]))
-			assert not _execpool, '_execpool should be clear on algs evaluation'
-			if not _execpool:
-				_execpool = ExecPool(max(cpu_count() - 1, 1))
-			taksnum = 0
-			timeout = 20 *60*60  # 20 hours
-			for asym, ddir in datadirs:
-				# Read ground truth
-				for gtfile in glob.iglob('*'.join((ddir, measures[im][1]))):
-					evaluate(gtfile, asym, taksnum)
-			for asym, gtfile in datafiles:
-				# Use files with required extension
-				gtfile = os.path.splitext(gtfile)[0] + measures[im][1]
-				evaluate(gtfile, asym, taksnum)
-			if _execpool:
-				_execpool.join(max(max(timeout, exectime * 2), timeout + 60 * taksnum))  # Twice the time of algorithms execution
-				_execpool = None
-			print('{} evaluation is completed'.format(measures[im][2]))
-	print('The benchmark is completed')
+def terminationHandler(signal, frame):
+	"""Signal termination handler"""
+	global _execpool
+
+	#if signal == signal.SIGABRT:
+	#	os.killpg(os.getpgrp(), signal)
+	#	os.kill(os.getpid(), signal)
+
+	if _execpool:
+		del _execpool
+		_execpool = None
+	sys.exit(0)
 
 
 if __name__ == '__main__':
@@ -678,6 +716,9 @@ if __name__ == '__main__':
 			'  -c[X]  - convert existing networks into the .hig, .lig, etc. formats',
 			'    Xf  - force the conversion even when the data is already exist',
 			'    Xr  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used',
+			'  NOTE: files with {extnetfile} are looked for in the specified dirs, then dirs with corresponding names'
+			' are checked for the files with the same extnsion to be converted, other wise original files are converted,'
+			' otherwise files with the same extension in the direct subdirs are looked for to be converted',
 			'  -a="app1 app2 ..."  - apps (clustering algorithms) to run/benchmark among the implemented.'
 			' Available: scp louvain_ig randcommuns hirecs oslom2 ganxis.'
 			' Impacts -{{r, e}} options. Optional, all apps are executed by default.',
@@ -691,7 +732,7 @@ if __name__ == '__main__':
 			# TODO: customize extension of the network files (implement filters)
 			'  -d[X]=<datasets_dir>  - directory of the datasets.',
 			'  -f[X]=<dataset>  - dataset (network, graph) file name.',
-			'    Xa  - the dataset is specified by asymmetric links (in/outbound weights of the link migh differ), arcs',
+			'    Xa  - the dataset is specified by asymmetric links (in/outbound weights of the link might differ), arcs',
 			'    Xs  - the dataset is specified by symmetric links, edges. Default option',
 			'    NOTE:',
 			'	 - datasets file names must not contain "." (besides the extension),'
@@ -706,4 +747,4 @@ if __name__ == '__main__':
 			'    Xs  - time in seconds. Default option',
 			'    Xm  - time in minutes',
 			'    Xh  - time in hours',
-			)).format(sys.argv[0], syntdir=_syntdir, synetsnum=_syntinum))
+			)).format(sys.argv[0], syntdir=_syntdir, synetsnum=_syntinum, extnetfile=_extnetfile))

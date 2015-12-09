@@ -131,7 +131,7 @@ class Job(object):
 		"""Initialize job to be executed
 		
 		name  - job name
-		workdir  - working directory for the corresponding process
+		workdir  - working directory for the corresponding process, None means the dir of the benchmarking
 		args  - execution arguments including the executable itself for the process
 			NOTE: can be None to make make a stub process and execute the callbacks
 		timeout  - execution timeout. Default: 0, means infinity
@@ -424,14 +424,15 @@ class ExecPool(object):
 
 
 
-	def join(self, exectime=0):
+	def join(self, timeout=0):
 		"""Execution cycle
 		
-		exectime  - execution timeout in seconds before the workers termination.
-			The time is measured SINCE the first job was scheduled UNTIL the
-			completion of all scheduled jobs and then is resetted.
+		timeout  - execution timeout in seconds before the workers termination, >= 0.
+			0 means absebse of the timeout. The time is measured SINCE the first job
+			was scheduled UNTIL the completion of all scheduled jobs.
+		return  - True on graceful completion, Flase on termination by the specified timeout
 		"""
-		assert exectime >= 0, 'exectime valiadtion failed'
+		assert timeout >= 0, 'timeout valiadtion failed'
 		if self._tstart is None:
 			assert not self._jobs and not self._workers, \
 				'Start time should be defined for the present jobs'
@@ -439,8 +440,10 @@ class ExecPool(object):
 		
 		self.__reviseWorkers()
 		while self._jobs or self._workers:
-			if exectime and time.time() - self._tstart > exectime:
+			if timeout and time.time() - self._tstart > timeout:
 				self.__terminate()
+				return False
 			time.sleep(self._latency)
 			self.__reviseWorkers()
 		self._tstart = None
+		return True

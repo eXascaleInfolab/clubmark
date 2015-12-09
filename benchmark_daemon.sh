@@ -9,7 +9,7 @@ else
 	PYTHON="python"
 fi
 
-TIMEOUT=6  # 6 hours per task of any algorithm on any network
+TIMEOUT=6  # 6 hours per singe execution of any algorithm on any network
 TIMEOUT_UNIT=h
 #DATASETS=syntnets
 EXECLOG=bench.log  # Log for the execution status

@@ -21,6 +21,9 @@ from sys import executable as pyexec  # Full path to the current Python interpre
 from multiprocessing import Lock
 
 
+_bckdir = 'backup/'  # Backup directory
+
+
 def secondsToHms(seconds):
 	"""Convert seconds to hours, mins, secs
 	
@@ -152,7 +155,7 @@ def backupPath(basepath, exprefix=False, synctime=None, compress=True):  # based
 	# Remove trailing path separator if exists
 	basepath = os.path.normpath(basepath)
 	# Create backup/ if required
-	basedir = os.path.split(basepath)[0] + '/backup/'
+	basedir = '/'.join((os.path.split(basepath)[0], _bckdir))
 	if not os.path.exists(basedir):
 		os.mkdir(basedir)
 	# Backup files

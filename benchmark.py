@@ -57,6 +57,7 @@ from benchcore import _execpool
 from benchapps import _algsdir
 from benchapps import _resdir
 from benchapps import pyexec
+#from benchutils import _bckdir
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
@@ -146,7 +147,7 @@ def parseParams(args):
 		elif arg[1] == 'a':
 			if not (arg[0:3] == '-a=' and len(arg) >= 4):
 				raise ValueError('Unexpected argument: ' + arg)
-			algorithms = arg[3:].split()
+			algorithms = arg[3:].strip('"\'').split()
 		elif arg[1] == 'c':
 			convnets = 1
 			for i in range(2,4):
@@ -206,7 +207,7 @@ def parseParams(args):
 
 def dirsAndFiles(datas):
 	"""Extacts dirs and files from the datas, generating directories according to the
-	specidied <gendir> flag and linking there the original network.
+	specidied <gendir> flag and linking there the original network, the former dir is backuped.
 	
 	datas  - pathes with flags to be processed in the format: [(<asym>, <path>, <gendir>), ...]
 	
@@ -228,44 +229,41 @@ def dirsAndFiles(datas):
 		netfile  - network file to be linked into the <dirname> dir
 		bcksuffix  - backup suffix for the group of directories
 		"""
-		#print('Backuping "{}" with origin "{}"'.format(dirname, netfile))
 		if os.path.exists(dirname) and not dirempty(dirname):
 			backupPath(dirname, False, bcksuffix)
 		if not os.path.exists(dirname):
 			os.mkdir(dirname)
 		# Make hard link to the network.
 		# Hard link is used to have initial former copy in the archive even when the origin is changed
-		#print('Making hard link "{}" with name "{}"'.format(os.path.relpath(netfile, dirname)
-		#	, '/'.join((dirname, os.path.split(netfile)[1]))))
 		os.link(netfile, '/'.join((dirname, os.path.split(netfile)[1])))
 			
-	for asym, path, gen in datas:
-		if os.path.isdir(path):
-			# Use the same path separator on all OSs
-			if not path.endswith('/'):
-				path += '/'
-			# Generate dirs if required
-			#print('Preprocessing "{}"{}...'.format(path, ' (gendir)' if gen else ''))
-			if gen:
-				bcksuffix = SyncValue()  # Use inified syffix for the backup of various network instances
-				# Traverse over the networks instances and create corresponding dirs
-				for net in glob.iglob('*'.join((path, _extnetfile))):
-					# Backup existent dir
-					dirname = os.path.splitext(net)[0]
-					#print('Backuping "{}"...'.format(dirname))
-					backupDir(dirname, net, bcksuffix)
-					# Update target dirs
-					datadirs.append((asym, dirname + '/'))
+	for asym, wpath, gen in datas:
+		# Resolve wildcards
+		for path in glob.iglob(wpath):
+			if os.path.isdir(path):
+				# Use the same path separator on all OSs
+				if not path.endswith('/'):
+					path += '/'
+				# Generate dirs if required
+				if gen:
+					bcksuffix = SyncValue()  # Use inified syffix for the backup of various network instances
+					# Traverse over the networks instances and create corresponding dirs
+					for net in glob.iglob('*'.join((path, _extnetfile))):
+						# Backup existent dir
+						dirname = os.path.splitext(net)[0]
+						backupDir(dirname, net, bcksuffix)
+						# Update target dirs
+						datadirs.append((asym, dirname + '/'))
+				else:
+					datadirs.append((asym, path))
 			else:
-				datadirs.append((asym, path))
-		else:
-			# Generate dirs if required
-			if gen:
-				dirname = os.path.splitext(path)[0]
-				backupDir(dirname, path, bcksuffix)
-				datafiles.append((asym, '/'.join((dirname, os.path.split(path)[1]))))
-			else:
-				datafiles.append((asym, path))
+				# Generate dirs if required
+				if gen:
+					dirname = os.path.splitext(path)[0]
+					backupDir(dirname, path, bcksuffix)
+					datafiles.append((asym, '/'.join((dirname, os.path.split(path)[1]))))
+				else:
+					datafiles.append((asym, path))
 	return datadirs, datafiles
 
 
@@ -369,9 +367,9 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 							, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 							#, ondone=shuffle if shufnum > 0 else None
 							, startdelay=startdelay))
-					else:
-						# Create missing shufflings
-						shuffle(Job(name=name, task=task))
+					#else:
+					#	# Create missing shufflings
+					#	shuffle(Job(name=name, task=task))
 					for i in range(1, count):
 						namext = ''.join((name, '_', str(i)))
 						netfile = netpath + namext
@@ -383,9 +381,9 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 								, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 								#, ondone=shuffle if shufnum > 0 else None
 								, startdelay=startdelay))
-						else:
-							# Create missing shufflings
-							shuffle(Job(name=namext, task=task))
+						#else:
+						#	# Create missing shufflings
+						#	shuffle(Job(name=namext, task=task))
 			else:
 				print('ERROR: network parameters file "{}" is not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')
@@ -772,17 +770,20 @@ def benchmark(*args):
 		os.makedirs(syntdir)
 		# Symlink is used to work even when target file is on another file system
 		os.symlink(os.path.relpath(_syntdir + bmname, syntdir), benchpath)
-	
+
 	# Extract dirs and files from datas
 	datadirs, datafiles = dirsAndFiles(datas)
 	datas = None
-	if gensynt or (not datadirs and not datafiles):
-		datadirs.append((False, _netsdir.join((syntdir, '*/'))))  # asym, ddir
 	#print('Datadirs: ', datadirs)
 
 	if gensynt and netins >= 1:
 		# gensynt:  0 - do not generate, 1 - only if not exists, 2 - forced generation
 		generateNets(benchpath, syntdir, gensynt == 2, netins)
+	
+	# Update datasets with sythetic generated
+	# Note: should be done only after the genertion, because new directories can be created
+	if gensynt or (not datadirs and not datafiles):
+		datadirs.append((False, _netsdir.join((syntdir, '*/'))))  # asym, ddir
 
 	if shufnum:
 		shuffleNets(datadirs, datafiles, shufnum, gensynt == 2)

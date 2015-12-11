@@ -58,7 +58,7 @@ def parseParams(args):
 			pos += 1
 			dirnet = arg[2] == 'd'
 			network = arg[pos:]
-			outname = os.path.split(os.path.splitext(network)[0])[1]
+			outname = os.path.splitext(os.path.split(network)[1])[0]
 			if not outname:
 				raise ValueError('Invalid network name (is a directory): ' + network)
 		elif arg[1] == 'n':

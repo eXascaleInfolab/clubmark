@@ -494,7 +494,7 @@ def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 
 		args = [pyexec, '3dparty/tohig.py', inpnet, '-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
 		if resdub:
 			args.append('-r')
-		_execpool.execute(Job(name=os.path.split(os.path.splitext(inpnet)[0])[1], args=args, timeout=timeout))
+		_execpool.execute(Job(name=os.path.splitext(os.path.split(inpnet)[1])[0], args=args, timeout=timeout))
 
 	except StandardError as err:
 		print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(inpnet, err), file=sys.stderr)
@@ -596,8 +596,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 	exectime  - elapsed time since the benchmarking started
 	timeout  - timeout per each algorithm execution
 	"""
-	assert (evalres and appsmodule and (datadirs or datafiles) and exectime >= 0
-		and timeout >= 0), 'Invalid input arguments'
+	assert appsmodule and (datadirs or datafiles) and exectime >= 0 and timeout >= 0, 'Invalid input arguments'
 
 	global _execpool
 

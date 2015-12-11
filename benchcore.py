@@ -412,7 +412,7 @@ class ExecPool(object):
 			# Start the execution timer
 			if self._tstart is None:
 				self._tstart = time.time()
-			# Schedule the job
+			# Schedule the job, postpone it if already postponed jobs exist or no any free workers
 			if self._jobs or len(self._workers) >= self._workersLim:
 				self._jobs.append(job)
 				#self.__reviseWorkers()  # Anyway the workers are revised if exist in the working cycle

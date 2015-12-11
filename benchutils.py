@@ -41,12 +41,23 @@ def secondsToHms(seconds):
 def dirempty(dirpath):
 	"""Whether specified directory is empty"""
 	assert os.path.isdir(dirpath), 'Existent directory is expected'
+	if not dirpath.endswith('/'):
+		dirpath += '/'
 	try:
 		glob.iglob(dirpath + '*').next()
 	except StopIteration:
 		# Diretory is empty
 		return True
 	return False
+
+
+def basePathExists(path):
+	try:
+		glob.iglob(path + '*').next()
+	except StopIteration:
+		# No such files / dirs
+		return False
+	return True
 
 
 class SyncValue(object):
@@ -149,7 +160,7 @@ def backupPath(basepath, exprefix=False, synctime=None, compress=True):  # based
 	ATTENTION: All paths are MOVED to the dedicated timestamped dir / archive
 	"""
 	# Check if there anything available to be backuped
-	if not os.path.exists(basepath):
+	if not os.path.exists(basepath) or not exprefix or not basePathExists(basepath):
 		return
 	#print('Backuping "{}"{}...'.format(basepath, 'with synctime' if synctime else ''))
 	# Remove trailing path separator if exists

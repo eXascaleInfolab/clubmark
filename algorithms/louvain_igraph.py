@@ -98,7 +98,7 @@ def louvain(*args):
 		graph = ig.Graph.Read_Pajek(network)
 	else:
 		raise ValueError('Unknown network format: ' + netfmt)
-		
+	
 	hier = graph.community_multilevel(return_levels=True)
 	# Output levels
 	#fname = 'level'

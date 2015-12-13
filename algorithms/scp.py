@@ -17,8 +17,9 @@ Jorkki Hyvonen is the author of the classes Net, Node and SymmNet
 Changelog by Artem Lutov (luart@ya.ru):
 - Processing of the unweighted networks
 - Proceesing of the networks specified by the arcs becides the edges
-- Automatic estimation of start and stop step for the given number of evaluations:
+- Automatic evaluation of start and stop step for the given number of evaluations:
 	stop = linksnum, start = log(stop)
+- Community structure levels (dendrogram) output to the files
 """
 import sys,array,math
 from operator import mul
@@ -756,7 +757,6 @@ def communitiesByKCliques(kcliques):
 			krcliques=list(kclique.getSubcliques()) #list all k-1 cliques that are subcliques
 			krTree.mergeSetsWithElements(krcliques) #merge the sets of k-1 cliques at the list 
 
-
 def kcliquePercolator(net,k,start,stop,evaluations,reverse=False,weightFunction=None):
 	"""
 	K-clique percolator. This sorts the edges and combines the phases I-II. See
@@ -780,7 +780,7 @@ def kcliquePercolator(net,k,start,stop,evaluations,reverse=False,weightFunction=
 # ---- Main program and parsing arguments ----
 
 helpstring=("Incremental k-clique percolation algorithm.\n"
-		"Usage: python {0} netname k [[start end numberofevaluations] | numberofevaluations] [weight]\n"
+		"Usage: python {0} netname k [(start end numberofevaluations) | (numberofevaluations [outpfile])] [weight]\n"
 		"\n"
 		"If only net name and k is specified, the components are returned. If start end and"
 		" number of evaluation are specified the community structure will be evaluated many times."
@@ -788,7 +788,8 @@ helpstring=("Incremental k-clique percolation algorithm.\n"
 		" are made with respect to edge weights and if intensity is specified as the weight, weighted k-clique"
 		" percolation is used and the evaluation are made with respect to cliques.\n"
 		"If numberofevaluations is specified, but start and end are omitted then: end = nunmber of links,"
-		" start = log(end) (of the heaviest cliques).\n"
+		" start = log(end) (of the heaviest links). Base of the output file names, corresponding to the"
+		" dendrogram levels can be specified as outpfile parameter.\n"
 		"Example: python kclique.py mynet.edg 5 1000 5000 5 intensty\n"
 		"This example returns nodes in 5-clique communities when 1000, 2000, 3000, 4000 and 5000 first 5-cliques are"
 		" added to the network after sorting them with respect to intensity.\n"
@@ -800,11 +801,15 @@ if len(sys.argv)>2:
 	f=open(filename,'r')
 	net,stop=loadNet_edg(f)
 	assert stop >= 3, "Network must have at least 3 links"
+	outbase = None
 if len(sys.argv)>3:
 	evaluations = int(sys.argv[3])
-	print('Network with {} links is loaded'.format(stop))
+	#print('Network with {} links is loaded'.format(stop))
 	start = math.log(stop) if evaluations >= 2 else stop
 	weightFunction=None
+if len(sys.argv) == 5:
+	outbase = sys.argv[4]
+#print('Outpbase: ' + outbase)
 if len(sys.argv)>5:
 	start,stop,evaluations=int(sys.argv[3]),int(sys.argv[4]),int(sys.argv[5])
 if len(sys.argv)==7:
@@ -814,11 +819,21 @@ if len(sys.argv)==7:
 if len(sys.argv)==3:
 	cs=getKCliqueComponents(net,k)
 	print cs
-elif len(sys.argv)==4 or len(sys.argv)==6 or len(sys.argv)==7:
+elif len(sys.argv)>=4 and len(sys.argv)<=7:
+	lev = 0  # Level in the dendrogram
 	for i, cs in enumerate(kcliquePercolator(net,k,start,stop,evaluations,weightFunction=weightFunction)):
-		print "# Communities for the top heaviest {}-cliques at the threshold {}:".format(
-				int(round(start if evaluations <= 1 else start + (stop - start) * i / (evaluations - 1))),
-				k, cs.threshold)
-		print cs
+		if not cs:
+			continue  # Skip empty levels
+		if not outbase:
+			toplinks = int(round(start if evaluations <= 1 else start + (stop - start) * i / (evaluations - 1)))
+			print "# {}. Communities for the top heaviest {}-cliques at the threshold {}:".format(
+				lev, toplinks, k, cs.threshold)
+			print cs
+		else:
+			outfile = outbase.rsplit('.', 1)  # Fetch extension
+			outfile = ''.join((outfile[0], '_', str(lev), '' if len(outfile) <= 1 else '.' + outfile[1]))
+			with open(outfile, 'w') as fout:
+				fout.write(str(cs))
+		lev += 1
 else:
 	print helpstring.format(sys.argv[0])

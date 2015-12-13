@@ -30,7 +30,7 @@ from benchutils import *
 
 from benchcore import _extexectime
 from benchcore import _extclnodes
-from benchutils import  pyexec  # Full path to the current Python interpreter
+from benchutils import  *  # Full path to the current Python interpreter
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
@@ -53,9 +53,12 @@ def	preparePath(taskpath):
 	"""
 	# Backup previous results if exist
 	#print('Checking path: ' + taskpath)
-	if os.path.exists(taskpath) and not dirempty(taskpath):
+	if basePathExists(taskpath) and not dirempty(taskpath):
 		# Extract main task from shuffles and process them all together
-		mainpath = os.path.splitext(taskpath)[0]
+		# Multiple extension can be in parameterized algorithms like SP
+		mainpath, ext = os.path.splitext(taskpath)
+		while ext:
+			mainpath, ext = os.path.splitext(mainpath)
 		# Extract endings of multiple instances
 		parts = mainpath.rsplit('_', 1)
 		if len(parts) >= 2:
@@ -312,30 +315,28 @@ def execScp(execpool, netfile, asym, timeout, **kwargs):
 	assert task, 'The network name should exists'
 
 	algname = 'scp'
-	# Backup previous results if exist
-	taskpath = ''.join((_resdir, algname, '/', task))
-	
-	preparePath(taskpath)
-
-	# ATTENTION: a single argument is k-clique size, specified later
-	args = ('../exectime', ''.join(('-o=../', _resdir, algname, _extexectime)), ''.join(('-n=', task, '_{}'))
-		, pyexec, ''.join(('./', algname, '.py')), '../' + netfile, '{}')
-
-	# Run again for k E [3, 12]
-	resbase = ''.join((taskpath, '/', task, '_'))  # Base name of the result
-	taskbase = ''.join((taskpath, '_log/', task, '_'))
 	kmin = 3  # Min clique size to be used for the communities identificaiton
-	kmax = 8  # Max clique size
+	kmax = 8  # Max clique size (~ min node degree to be considered)
+	# Run for range of clique sizes
 	for k in range(kmin, kmax + 1):
 		kstr = str(k)
 		kstrex = 'k' + kstr
-		#print('> Starting job {} with args: {}'.format('_'.join((task, algname, kstrex)), args + [kstr]))
-		finargs = list(args)  # Copy args
-		finargs[2] = finargs[2].format(kstrex)
-		finargs[-1] = finargs[-1].format(kstr)
-		execpool.execute(Job(name='_'.join((task, algname, kstrex)), workdir=_algsdir, args=finargs, timeout=timeout
-			, stdout=''.join((resbase, kstrex, _extclnodes))
-			, stderr=''.join((taskbase, kstrex, _extlog)) ))
+		ktask = '.'.join((task, kstrex))
+		# Backup previous results if exist
+		taskpath = ''.join((_resdir, algname, '/', ktask))
+		
+		preparePath(taskpath)
+	
+		# ATTENTION: a single argument is k-clique size, specified later
+		steps = '10'  # Use 10 levels in the hierarchy Ganxis
+		resbase = ''.join(('../', taskpath, '/', ktask))  # Base name of the result
+		# scp.py netname k [start_linksnum end__linksnum numberofevaluations] [weight] 
+		args = ('../exectime', ''.join(('-o=../', _resdir, algname, _extexectime)), '-n=' + ktask
+			, pyexec, ''.join(('./', algname, '.py')), '../' + netfile, kstr, steps, resbase + _extclnodes)
+	
+		#print('> Starting job {} with args: {}'.format('_'.join((ktask, algname, kstrex)), args + [kstr]))
+		execpool.execute(Job(name='_'.join((ktask, algname, kstrex)), workdir=_algsdir, args=args, timeout=timeout
+			, stderr=taskpath + _extlog))
 
 	return kmax + 1 - kmin
 

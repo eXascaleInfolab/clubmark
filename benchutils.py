@@ -124,16 +124,31 @@ class SyncValue(object):
 	#	return self._lock
 			
 
-def nameVersion(path, synctime=None):
+def nameVersion(path, expand, synctime=None):
 	"""Name the last path component basedon modification time and return this part
 	
 	path  - the path to be named with version
+	expand  - whether to expand the path or use as it is
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
 	"""
+	path = os.path.normpath(path)
+	name = os.path.split(path)[1]  # Extract dir of file name
 	if not path:
-		print('WARNING: specified path is empty', file=sys.stderr)
-		return
+		raise ValueError('Specified path is empty')
+	# Check whether path exists and expand it if required
+	if not os.path.exists(path):
+		exists = False
+		if expand:
+			try:
+				path = glob.iglob(path + '*').next()
+				exists = True
+			except StopIteration:
+				pass
+		if not exists:
+			print('WARNING: specified path is not exist empty', file=sys.stderr)
+			return name
+	# Process existing path
 	if synctime is not None:
 		with synctime:
 			if synctime.value is None:
@@ -142,17 +157,16 @@ def nameVersion(path, synctime=None):
 	else:
 		mtime = time.gmtime(os.path.getmtime(path))
 	mtime = time.strftime('_%y%m%d_%H%M%S', mtime)  # Modification time
-	name = os.path.split(os.path.normpath(path))[1]  # Extract dir of file name
 	return name + mtime
 	
 	
-def backupPath(basepath, exprefix=False, synctime=None, compress=True):  # basedir, name
+def backupPath(basepath, expand=False, synctime=None, compress=True):  # basedir, name
 	"""Backup all files and dirs starting from the specified basepath into backup/
 	located in the parent dir of the basepath 
 	
 	basepath  - path, last component of which (file or dir) is a template to backup
 		all paths starting from it in the same location
-	exprefix  - expand prefix, backup all paths staring from basepath, or basepath only
+	expand  - expand prefix, backup all paths staring from basepath, or basepath only
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
 	compress  - compress or just copy spesified paths
@@ -160,7 +174,7 @@ def backupPath(basepath, exprefix=False, synctime=None, compress=True):  # based
 	ATTENTION: All paths are MOVED to the dedicated timestamped dir / archive
 	"""
 	# Check if there anything available to be backuped
-	if not os.path.exists(basepath) or not exprefix or not basePathExists(basepath):
+	if (expand and not basePathExists(basepath)) or (not expand and not os.path.exists(basepath)):
 		return
 	#print('Backuping "{}"{}...'.format(basepath, 'with synctime' if synctime else ''))
 	# Remove trailing path separator if exists
@@ -172,10 +186,10 @@ def backupPath(basepath, exprefix=False, synctime=None, compress=True):  # based
 	# Backup files
 	rennmarg = 10  # Max number of renaming attempts
 	if compress:
-		archname = ''.join((basedir, nameVersion(basepath, synctime), '.tar.gz'))
+		archname = ''.join((basedir, nameVersion(basepath, expand, synctime), '.tar.gz'))
 		# Rename already existent archive if required
 		if os.path.exists(archname):
-			nametmpl = ''.join((basedir, nameVersion(basepath, synctime), '-{}', '.tar.gz'))
+			nametmpl = ''.join((basedir, nameVersion(basepath, expand, synctime), '-{}', '.tar.gz'))
 			for i in range(rennmarg):
 				bckname = nametmpl.format(i)
 				if not os.path.exists(bckname):
@@ -190,7 +204,7 @@ def backupPath(basepath, exprefix=False, synctime=None, compress=True):  # based
 				os.remove(archname)
 		# Move data to the archive
 		with tarfile.open(archname, 'w:gz', bufsize=64*1024, compresslevel=6) as tar:
-			for path in glob.iglob(basepath + ('*' if exprefix else '')):
+			for path in glob.iglob(basepath + ('*' if expand else '')):
 				tar.add(path, arcname=os.path.split(path)[1])
 				# Delete the archived paths
 				if os.path.isdir(path):
@@ -198,7 +212,7 @@ def backupPath(basepath, exprefix=False, synctime=None, compress=True):  # based
 				else:
 					os.remove(path)
 	else:
-		basedir = ''.join((basedir, nameVersion(basepath, synctime), '/'))
+		basedir = ''.join((basedir, nameVersion(basepath, expand, synctime), '/'))
 		# Rename already existent backup if required
 		if os.path.exists(basedir):
 			nametmpl = basedir + '-{}'
@@ -218,5 +232,5 @@ def backupPath(basepath, exprefix=False, synctime=None, compress=True):  # based
 		# Move data to the backup
 		if not os.path.exists(basedir):
 			os.mkdir(basedir)
-		for path in glob.iglob(basepath + ('*' if exprefix else '')):
+		for path in glob.iglob(basepath + ('*' if expand else '')):
 			shutil.move(path, basedir + os.path.split(path)[1])

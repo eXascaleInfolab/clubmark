@@ -15,8 +15,10 @@ Author: Mikko Kivela (mtkivela at lce.hut.fi)
 Jorkki Hyvonen is the author of the classes Net, Node and SymmNet
 
 Changelog by Artem Lutov (luart@ya.ru):
-- Added processing of the unweighted networks
-- Added proceesing of the networks specified by the arcs becides the edges
+- Processing of the unweighted networks
+- Proceesing of the networks specified by the arcs becides the edges
+- Automatic estimation of start and stop step for the given number of evaluations:
+	stop = linksnum, start = log(stop)
 """
 import sys,array,math
 from operator import mul
@@ -221,6 +223,7 @@ def loadNet_edg(input, mutualEdges = False, splitterChar = None,symmetricNet=Tru
 
 
 	nodeMap = {} # Used only if mutualEdges = True.
+	linksnum = 0
 
 	for line in input:
 		fields=line.split(splitterChar)
@@ -229,6 +232,7 @@ def loadNet_edg(input, mutualEdges = False, splitterChar = None,symmetricNet=Tru
 				fields[0]=int(fields[0])
 				fields[1]=int(fields[1])
 			if fields[0]!=fields[1]:
+				linksnum += 1
 				if len(fields) == 2:
 					fields.append(1)
 				if mutualEdges:
@@ -240,7 +244,7 @@ def loadNet_edg(input, mutualEdges = False, splitterChar = None,symmetricNet=Tru
 				else:
 					newNet[fields[0]][fields[1]]=float(fields[2])
 
-	return newNet
+	return newNet, linksnum
 
 
 
@@ -758,6 +762,7 @@ def kcliquePercolator(net,k,start,stop,evaluations,reverse=False,weightFunction=
 	K-clique percolator. This sorts the edges and combines the phases I-II. See
 	helpstring below for explanation of the arguments.
 	"""
+	assert evaluations >= 1, "At least one evaluation should be performed"
 	if weightFunction==None: #unweighted clique percolation with thresholding
 		edges=list(net.edges)
 		edges.sort(lambda x, y: cmp(x[2],y[2]),reverse=reverse)
@@ -775,13 +780,15 @@ def kcliquePercolator(net,k,start,stop,evaluations,reverse=False,weightFunction=
 # ---- Main program and parsing arguments ----
 
 helpstring=("Incremental k-clique percolation algorithm.\n"
-		"Usage: python {0} netname k [start end numberofevaluations] [weight]\n"
+		"Usage: python {0} netname k [[start end numberofevaluations] | numberofevaluations] [weight]\n"
 		"\n"
 		"If only net name and k is specified, the components are returned. If start end and"
 		" number of evaluation are specified the community structure will be evaluated many times."
 		" The evaluations are made linearly between start and end. If no weigh is defined, the evaluations"
-		" are made with respect to edge weights and if intensity is specified as the weight, weighted k-clique "
-		"percolation is used and the evaluation are made with respect to cliques.\n"
+		" are made with respect to edge weights and if intensity is specified as the weight, weighted k-clique"
+		" percolation is used and the evaluation are made with respect to cliques.\n"
+		"If numberofevaluations is specified, but start and end are omitted then: end = nunmber of links,"
+		" start = log(end) (of the heaviest cliques).\n"
 		"Example: python kclique.py mynet.edg 5 1000 5000 5 intensty\n"
 		"This example returns nodes in 5-clique communities when 1000, 2000, 3000, 4000 and 5000 first 5-cliques are"
 		" added to the network after sorting them with respect to intensity.\n"
@@ -791,10 +798,15 @@ if len(sys.argv)>2:
 	filename=sys.argv[1]
 	k=int(sys.argv[2])
 	f=open(filename,'r')
-	net=loadNet_edg(f)
+	net,stop=loadNet_edg(f)
+	assert stop >= 3, "Network must have at least 3 links"
+if len(sys.argv)>3:
+	evaluations = int(sys.argv[3])
+	print('Network with {} links is loaded'.format(stop))
+	start = math.log(stop) if evaluations >= 2 else stop
+	weightFunction=None
 if len(sys.argv)>5:
 	start,stop,evaluations=int(sys.argv[3]),int(sys.argv[4]),int(sys.argv[5])
-	weightFunction=None
 if len(sys.argv)==7:
 	if sys.argv[6]=="intensity":
 		weightFunction=getIntensity
@@ -802,10 +814,11 @@ if len(sys.argv)==7:
 if len(sys.argv)==3:
 	cs=getKCliqueComponents(net,k)
 	print cs
-elif len(sys.argv)==6 or len(sys.argv)==7:
+elif len(sys.argv)==4 or len(sys.argv)==6 or len(sys.argv)==7:
 	for i, cs in enumerate(kcliquePercolator(net,k,start,stop,evaluations,weightFunction=weightFunction)):
-		print "# Communities for the top {} heaviest {}-cliques at the threshold {}:".format(
-				start + (stop - start) * i / (evaluations - 1), k, cs.threshold)
+		print "# Communities for the top heaviest {}-cliques at the threshold {}:".format(
+				int(round(start if evaluations <= 1 else start + (stop - start) * i / (evaluations - 1))),
+				k, cs.threshold)
 		print cs
 else:
 	print helpstring.format(sys.argv[0])

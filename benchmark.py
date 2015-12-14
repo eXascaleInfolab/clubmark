@@ -841,8 +841,10 @@ if __name__ == '__main__':
 			' (0 by default) >= 0 times. If <number> is omitted or set to 0 then ONLY shuffling of the specified datasets'
 			' should be performed including the <outpdir>/{netsdir}/*.',
 			'    Xf  - force the generation even when the data already exists (existent datasets are moved to backup)',
-			'  NOTE: shuffled datasets have the following naming format:'
+			'  NOTE:',
+			'    - shuffled datasets have the following naming format:'
 			' <base_name>[{sepinst}<instance_index>][(seppars)<param1>...][.<shuffle_index>].<net_extension>',
+			'    - use "-g0" to execute existing synthetic networks not changing them',
 			'  -c[X]  - convert existing networks into the .hig, .lig, etc. formats',
 			'    Xf  - force the conversion even when the data is already exist',
 			'    Xr  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used',

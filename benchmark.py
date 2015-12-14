@@ -548,7 +548,7 @@ def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60)
 	netsnum = 0  # Number of converted networks
 	# Convert network files to .hig format and .lig (Louvain Input Format)
 	for net in glob.iglob('*'.join((datadir, _extnetfile))):
-		# Do skip shuffles
+		# Skip shuffles
 		if not os.path.splitext(os.path.splitext(net)[0])[1]:
 			convertNet(net, asym, overwrite, resdub, convTimeMax)
 			netsnum += 1

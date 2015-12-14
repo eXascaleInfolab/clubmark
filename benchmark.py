@@ -43,21 +43,20 @@ import benchapps  # Benchmarking apps (clustering algs)
 from benchcore import *
 from benchutils import *
 
-
 ## Add 3dparty modules
 ##sys.path.insert(0, '3dparty')  # Note: this operation might lead to ambiguity on paths resolving
 #thirdparty = __import__('3dparty.tohig')
 #tohig = thirdparty.tohig.tohig  # ~ from 3dparty.tohig import tohig
 
 #from functools import wraps
-
+from benchapps import pyexec
 from benchcore import _extexectime
 from benchcore import _extclnodes
 from benchcore import _execpool
 from benchapps import _algsdir
 from benchapps import _resdir
-from benchapps import pyexec
-#from benchutils import _bckdir
+from benchapps import _sepinst
+from benchapps import _seppars
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
@@ -374,7 +373,7 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 					#	# Create missing shufflings
 					#	shuffle(Job(name=name, task=task))
 					for i in range(1, count):
-						namext = ''.join((name, '^', str(i)))
+						namext = ''.join((name, _sepinst, str(i)))
 						netfile = netpath + namext
 						if overwrite or not os.path.exists(netfile.join((basedir, _extnetfile))):
 							args = ('../exectime', '-n=' + namext, ''.join(('-o=', bmname, _extexectime))
@@ -842,7 +841,8 @@ if __name__ == '__main__':
 			' (0 by default) >= 0 times. If <number> is omitted or set to 0 then ONLY shuffling of the specified datasets'
 			' should be performed including the <outpdir>/{netsdir}/*.',
 			'    Xf  - force the generation even when the data already exists (existent datasets are moved to backup)',
-			'  NOTE: shuffled datasets have the following naming format: <base_name>^<instance_index>.<shuffle_index>.<net_extension>',
+			'  NOTE: shuffled datasets have the following naming format:'
+			' <base_name>[{sepinst}<instance_index>][(seppars)<param1>...][.<shuffle_index>].<net_extension>',
 			'  -c[X]  - convert existing networks into the .hig, .lig, etc. formats',
 			'    Xf  - force the conversion even when the data is already exist',
 			'    Xr  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used',
@@ -879,4 +879,5 @@ if __name__ == '__main__':
 			'    Xs  - time in seconds. Default option',
 			'    Xm  - time in minutes',
 			'    Xh  - time in hours',
-			)).format(sys.argv[0], syntdir=_syntdir, synetsnum=_syntinum, netsdir=_netsdir, extnetfile=_extnetfile))
+			)).format(sys.argv[0], syntdir=_syntdir, synetsnum=_syntinum, netsdir=_netsdir, sepinst=_sepinst
+				, seppars=_seppars, extnetfile=_extnetfile))

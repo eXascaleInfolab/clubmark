@@ -5,10 +5,10 @@
 \descr:  The benchmark, winch optionally generates or preprocesses datasets using specified executable,
 	optionally executes specified apps with the specified params on the specified datasets,
 	and optionally evaluates results of the execution using specified executable(s).
-	
+
 	All executions are traced and logged also as resources consumption: CPU (user, kernel, etc.) and memory (RSS RAM).
 	Traces are saved even in case of internal / external interruptions and crashes.
-	
+
 \author: (c) Artem Lutov <artem@exascale.info>
 \organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>
 \date: 2015-07
@@ -38,7 +38,7 @@ class Task(object):
 	#TODO: Implement timeout support in add/delJob
 	def __init__(self, name, timeout=0, onstart=None, ondone=None, stdout=None, stderr=None):
 		"""Initialize task, which is a number of jobs to be executed
-		
+
 		name  - task name
 		timeout  - execution timeout. Default: 0, means infinity
 		onstart  - callback which is executed on the task starting (before the execution
@@ -50,7 +50,7 @@ class Task(object):
 			ATTENTION: must be lightweight
 		stdout  - file name for the buffered output
 		stderr  - file name for the unbuffered output
-			
+
 		tstart  - start time is filled automatically on the execution start (before onstart). Default: None
 		tstop  - termination / completion time after ondone
 		"""
@@ -68,11 +68,11 @@ class Task(object):
 		# Graceful completion of all tasks or at least one of the tasks was terminated
 		self._graceful = Value(ctypes.c_bool)
 		self._graceful.value = True
-		
-		
+
+
 	def addJob(self):
 		"""Add one more job to the task
-		
+
 		return  - updated task
 		"""
 		initial = False
@@ -86,11 +86,11 @@ class Task(object):
 			if self.onstart:
 				self.onstart()
 		return self
-		
-			
+
+
 	def delJob(self, graceful):
 		"""Delete one job from the task
-		
+
 		graceful  - the job is successfully completed or it was terminated
 		return  - None
 		"""
@@ -108,7 +108,7 @@ class Task(object):
 			self.tstop = time.time()
 		return None
 
-	
+
 class Job(object):
 	# Note: the same job can be executed as Popen or Process object, but ExecPool
 	# should use some wrapper in the latter case to manage it
@@ -129,7 +129,7 @@ class Job(object):
 	def __init__(self, name, workdir=None, args=(), timeout=0, ontimeout=False, task=None #,*
 	, startdelay=0, onstart=None, ondone=None, stdout=None, stderr=None):
 		"""Initialize job to be executed
-		
+
 		name  - job name
 		workdir  - working directory for the corresponding process, None means the dir of the benchmarking
 		args  - execution arguments including the executable itself for the process
@@ -152,14 +152,14 @@ class Job(object):
 			ATTENTION: must be lightweight
 		stdout  - file name for the buffered output
 		stderr  - file name for the unbuffered output
-			
+
 		tstart  - start time is filled automatically on the execution start (before onstart). Default: None
 		tstop  - termination / completion time after ondone
 		"""
 		assert isinstance(name, str) and timeout >= 0 and (task is None or isinstance(task, Task)), 'Parameters validaiton failed'
 		#if not args:
 		#	args = ("false")  # Create an empty process to schedule it's execution
-		
+
 		# Properties specified by the input parameters -------------------------
 		self.name = name
 		self.workdir = workdir
@@ -180,11 +180,11 @@ class Job(object):
 		self.tstop = None  # SyncValue()  # Termination / completion time after ondone
 		# Private attributes
 		self._proc = None  # Process of the job
-		
-		
+
+
 	def complete(self, graceful=True):
 		"""Completion function
-		
+
 		graceful  - the job is successfully completed or it was terminated
 		"""
 		if graceful:
@@ -220,14 +220,14 @@ class Job(object):
 
 class ExecPool(object):
 	'''Execution Pool of workers for jobs
-	
+
 	A worker in the pool executes only the one job, a new worker is created for
 	each subsequent job.
 	'''
-	
+
 	def __init__(self, workers=cpu_count()):
 		assert workers >= 1, 'At least one worker should be managed by the pool'
-		
+
 		self._workersLim = workers  # Max number of workers
 		self._workers = {}  # Current workers: 'jname': <proc>; <proc>: timeout
 		self._jobs = collections.deque()  # Scheduled jobs: 'jname': **args
@@ -239,17 +239,17 @@ class ExecPool(object):
 
 	def __del__(self):
 		self.__terminate()
-	
-		
+
+
 	def __finalize__(self):
 		self.__del__()
-		
-		
+
+
 	def __terminate(self):
 		"""Force termination of the pool"""
 		if not self._jobs and not self._workers:
 			return
-		
+
 		print('Terminating the workers pool ...')
 		for job in self._jobs:
 			job.complete(False)
@@ -280,11 +280,11 @@ class ExecPool(object):
 			for job in self._workers.values():
 				job.complete(False)
 			self._workers.clear()
-			
-			
+
+
 	def __startJob(self, job, async=True):
 		"""Start the specified job by one of workers
-		
+
 		job  - the job to be executed, instance of Job
 		async  - async execution or wait intill execution completed
 		return  - 0 on successful execution, proc.returncode otherwise
@@ -294,11 +294,10 @@ class ExecPool(object):
 		if async and len(self._workers) > self._workersLim:
 			raise AssertionError('Free workers must be available ({} busy workers of {})'
 				.format(len(self._workers), self._workersLim))
-		
+
 		print('Starting "{}"{}...'.format(job.name, '' if async else ' in sync mode'), file=sys.stderr)
 		job.tstart = time.time()
 		if job.onstart:
-			# import inspect;  inspect.getsource(job.onstart)
 			#print('Starting onstart() for job {}: {}'.format(job.name), file=sys.stderr)
 			try:
 				job.onstart()
@@ -355,7 +354,7 @@ class ExecPool(object):
 
 	def __reviseWorkers(self):
 		"""Rewise the workers
-		
+
 		Check for the comleted jobs and their timeous, update corresponding
 		workers and start the jobs if possible
 		"""
@@ -389,7 +388,7 @@ class ExecPool(object):
 		for proc, job in completed:
 			del self._workers[proc]
 			job.complete()
-			
+
 		# Start subsequent job if it is required
 		while self._jobs and len(self._workers) <  self._workersLim:
 			self.__startJob(self._jobs.popleft())
@@ -397,7 +396,7 @@ class ExecPool(object):
 
 	def execute(self, job, async=True):
 		"""Schecule the job for the execution
-		
+
 		job  - the job to be executed, instance of Job
 		async  - async execution or wait intill execution completed
 		  NOTE: sync tasks are started at once
@@ -406,7 +405,7 @@ class ExecPool(object):
 		assert isinstance(job, Job), 'job type is invalid'
 		assert len(self._workers) <= self._workersLim, 'Number of workers exceeds the limit'
 		assert job.name, "Job parameters must be defined"  #  and job.workdir and job.args
-		
+
 		print('Scheduling the job "{}" with timeout {}'.format(job.name, job.timeout))
 		if async:
 			# Start the execution timer
@@ -426,7 +425,7 @@ class ExecPool(object):
 
 	def join(self, timeout=0):
 		"""Execution cycle
-		
+
 		timeout  - execution timeout in seconds before the workers termination, >= 0.
 			0 means absebse of the timeout. The time is measured SINCE the first job
 			was scheduled UNTIL the completion of all scheduled jobs.
@@ -437,7 +436,7 @@ class ExecPool(object):
 			assert not self._jobs and not self._workers, \
 				'Start time should be defined for the present jobs'
 			return
-		
+
 		self.__reviseWorkers()
 		while self._jobs or self._workers:
 			if timeout and time.time() - self._tstart > timeout:

@@ -40,6 +40,8 @@ _extlog = '.log'
 _exterr = '.err'
 _execnmi = './gecmi'  # Binary for NMI evaluation
 _extmod = '.mod'
+_sepinst = '^'  # Network instances separator, must be a char
+_seppars = '*'  # Network shuffles separator, must be a char
 #_netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
 
 
@@ -48,17 +50,23 @@ def	preparePath(taskpath):
 	All itnstances and shuffles of each network are handled all together and only once,
 	even on calling this function for each shuffle.
 	NOTE: To process files starting with taskpath, it should not contain '/' in the end
-	
+
 	taskpath  - the path to be prepared
 	"""
 	# Backup previous results if exist
 	#print('Checking path: ' + taskpath)
+	#taskpath = os.path.normpath(taskpath)
 	if basePathExists(taskpath) and not dirempty(taskpath):
-		# Extract main task from shuffles and process them all together
-		# Multiple extension can be in parameterized algorithms like SP
-		mainpath, ext = os.path.splitext(taskpath)
-		while ext:
-			mainpath, ext = os.path.splitext(mainpath)
+		# Extract main task base name from instances, shuffles and params and process them all together
+		mainpath, name = os.path.split(taskpath)
+		if name:
+			name = os.path.splitext(name)[0]
+			pos = filter(lambda x: x != -1, [name.find(c) for c in (_sepinst, _seppars)])
+			if pos:
+				pos = min(pos)
+				assert pos, 'Separators are not the first symbol of the name'
+				name = name[:pos]
+			mainpath = '/'.join((mainpath, name))
 		# Extract endings of multiple instances
 		parts = mainpath.rsplit('_', 1)
 		if len(parts) >= 2:
@@ -140,19 +148,19 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 	# Fetch the task name and chose correct network filename
 	task = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network
 	assert task, 'The network name should exists'
-	
+
 	# Make dirs with mod logs
 	# Directory of resulting community structures (clusters) for each network
 	clsbase = ''.join((_resdir, algname, '/', task))
 	if not os.path.exists(clsbase):
 		print('WARNING clusters "{}" do not exist from "{}"'.format(task, algname), file=sys.stderr)
 		return
-	
+
 	evalname = 'mod'
 	logsdir = ''.join((clsbase, '_', evalname, '/'))
 	if not os.path.exists(logsdir):
 		os.makedirs(logsdir)
-	
+
 	# Traverse over all resulting communities for each ground truth, log results
 	tmodname = ''.join((clsbase, '_', algname, _extmod))  # Name of the file with accumulated modularity
 	jobsinfo = []
@@ -248,7 +256,7 @@ def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False, **kwargs):
 	algname = 'louvain_igraph'
 	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -ol=louvain_igoutp/1K5/1K5.cnl
 	taskpath = ''.join((_resdir, algname, '/', task))
-	
+
 	preparePath(taskpath)
 
 	## Louvain accumulated statistics over shuffled modification of the network or total statistics for all networks
@@ -321,22 +329,30 @@ def execScp(execpool, netfile, asym, timeout, **kwargs):
 	for k in range(kmin, kmax + 1):
 		kstr = str(k)
 		kstrex = 'k' + kstr
-		ktask = '.'.join((task, kstrex))
+		taskbase, extshuf = os.path.splitext(task)
+		ktask = ''.join((taskbase, _seppars, kstrex, extshuf))
 		# Backup previous results if exist
 		taskpath = ''.join((_resdir, algname, '/', ktask))
-		
+
 		preparePath(taskpath)
-	
+
 		# ATTENTION: a single argument is k-clique size, specified later
 		steps = '10'  # Use 10 levels in the hierarchy Ganxis
 		resbase = ''.join(('../', taskpath, '/', ktask))  # Base name of the result
-		# scp.py netname k [start_linksnum end__linksnum numberofevaluations] [weight] 
+		# scp.py netname k [start_linksnum end__linksnum numberofevaluations] [weight]
 		args = ('../exectime', ''.join(('-o=../', _resdir, algname, _extexectime)), '-n=' + ktask
 			, pyexec, ''.join(('./', algname, '.py')), '../' + netfile, kstr, steps, resbase + _extclnodes)
-	
+
+		def tidy(job):
+			"""Remove empty resulting folders"""
+			# Note: GANXiS leaves empty ./output dir in the _algsdir, which should be deleted
+			path = os.path.split(job.args[-1])[0][3:]  # Skip '../' prefix
+			if dirempty(path):
+				os.rmdir(path)
+
 		#print('> Starting job {} with args: {}'.format('_'.join((ktask, algname, kstrex)), args + [kstr]))
-		execpool.execute(Job(name='_'.join((ktask, algname, kstrex)), workdir=_algsdir, args=args, timeout=timeout
-			, stderr=taskpath + _extlog))
+		execpool.execute(Job(name='_'.join((ktask, algname)), workdir=_algsdir, args=args, timeout=timeout
+			, ondone=tidy, stderr=taskpath + _extlog))
 
 	return kmax + 1 - kmin
 
@@ -359,7 +375,7 @@ def modScp(execpool, netfile, timeout):
 def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False, instances=5, **kwargs):  # _netshuffles + 1
 	"""Execute Randcommuns
 	Results are not stable => multiple execution is desirable.
-	
+
 	instances  - number of networks instances to be generated
 	"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -372,7 +388,7 @@ def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False, instances=
 	algname = 'randcommuns'
 	# Backup previous results if exist
 	taskpath = ''.join((_resdir, algname, '/', task))
-	
+
 	preparePath(taskpath)
 
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
@@ -411,7 +427,7 @@ def execHirecs(execpool, netfile, asym, timeout, **kwargs):
 	netfile += '.hig'  # Use network in the required format
 	algname = 'hirecs'
 	taskpath = ''.join((_resdir, algname, '/', task))
-	
+
 	preparePath(taskpath)
 
 	args = ('../exectime', ''.join(('-o=../', _resdir, algname, _extexectime)), '-n=' + task, '-s=/etime_' + algname
@@ -448,7 +464,7 @@ def execHirecsOtl(execpool, netfile, asym, timeout, **kwargs):
 	netfile += '.hig'  # Use network in the required format
 	algname = 'hirecsotl'
 	taskpath = ''.join((_resdir, algname, '/', task))
-	
+
 	preparePath(taskpath)
 
 	args = ('../exectime', ''.join(('-o=../', _resdir, algname, _extexectime)), '-n=' + task, '-s=/etime_' + algname
@@ -481,7 +497,7 @@ def execHirecsAhOtl(execpool, netfile, asym, timeout, **kwargs):
 	netfile += '.hig'  # Use network in the required format
 	algname = 'hirecsahotl'
 	taskpath = ''.join((_resdir, algname, '/', task))
-	
+
 	preparePath(taskpath)
 
 	args = ('../exectime', ''.join(('-o=../', _resdir, algname, _extexectime)), '-n=' + task, '-s=/etime_' + algname
@@ -514,7 +530,7 @@ def execHirecsNounwrap(execpool, netfile, asym, timeout, **kwargs):
 	netfile += '.hig'  # Use network in the required format
 	algname = 'hirecshfold'
 	taskpath = ''.join((_resdir, algname, '/', task))
-	
+
 	preparePath(taskpath)
 
 	args = ('../exectime', ''.join(('-o=../', _resdir, algname, _extexectime)), '-n=' + task, '-s=/etime_' + algname
@@ -541,7 +557,7 @@ def execOslom2(execpool, netfile, asym, timeout, **kwargs):
 	# Link weight is set to 1 if not specified in the file for weighted network.
 	args = ('../exectime', ''.join(('-o=../', _resdir, algname, _extexectime)), '-n=' + task, '-s=/etime_' + algname
 		, './oslom_undir' if not asym else './oslom_dir', '-f', '../' + netfile, '-w')
-	
+
 	preparePath(taskpath)
 
 	netdir = os.path.split(netfile)[0] + '/'
@@ -560,7 +576,7 @@ def execOslom2(execpool, netfile, asym, timeout, **kwargs):
 			# If dest dir already exists, remove it to avoid exception on rename
 			shutil.rmtree(outpdire)
 		os.rename(origResDir, outpdire)
-		
+
 		# Note: oslom2 leaves ./tp file in the _algsdir, which should be deleted
 		fname = _algsdir + 'tp'
 		if os.path.exists(fname):
@@ -601,7 +617,7 @@ def execGanxis(execpool, netfile, asym, timeout, **kwargs):
 		, 'java', '-jar', './GANXiSw.jar', '-i', '../' + netfile, '-d', '../' + taskpath]
 	if not asym:
 		args.append('-Sym 1')  # Check existance of the back links and generate them if requried
-	
+
 	preparePath(taskpath)
 
 	def postexec(job):

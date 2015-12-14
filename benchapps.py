@@ -151,60 +151,73 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 
 	# Make dirs with mod logs
 	# Directory of resulting community structures (clusters) for each network
-	clsbase = ''.join((_resdir, algname, '/', task))
-	if not os.path.exists(clsbase):
-		print('WARNING clusters "{}" do not exist from "{}"'.format(task, algname), file=sys.stderr)
-		return
-
+	# Note: consider possible parameters of the executed algorithm, embedded into the dir names with _seppars
+	basename, ishuf = os.path.splitext(task)  # Separate shuffling index if present
 	evalname = 'mod'
-	logsdir = ''.join((clsbase, '_', evalname, '/'))
-	if not os.path.exists(logsdir):
-		os.makedirs(logsdir)
+	evaluated = False
+	#clsbase = ''.join((_resdir, algname, '/', task))
+	print('netfile: {}, basename: {}'.format(netfile, basename))
+	iisep = len(_resdir) + len(algname) + 1 + len(basename)  # Inex of the possible instance symbol
+	for clsbase in glob.iglob(''.join((_resdir, algname, '/', basename, '*', ishuf))):
+		# Skip instances different from the basename
+		if clsbase[iisep] == _sepinst:
+			continue
+		evaluated = True
+		# Note: separate dir is created, because modularity is evaluated for all files in the target dir,
+		# which are different granularity / hierarchy levels
+		logsdir = ''.join((clsbase, '_', evalname, '/'))
+		if not os.path.exists(logsdir):
+			os.makedirs(logsdir)
 
-	# Traverse over all resulting communities for each ground truth, log results
-	tmodname = ''.join((clsbase, '_', algname, _extmod))  # Name of the file with accumulated modularity
-	jobsinfo = []
-	for cfile in glob.iglob(clsbase + '/*'):
-		print('Checking ' + cfile)
-		taskex = os.path.splitext(os.path.split(cfile)[1])[0]  # Base name of the network
-		assert taskex, 'The clusters name should exists'
-		args = ('./hirecs', '-e=../' + cfile, '../' + netfile)
-		#print('> Executing: ' + ' '.join(args))
+		# Traverse over all resulting communities for each ground truth, log results
+		tmodname = ''.join((clsbase, '_', algname, _extmod))  # Name of the file with modularity values for each level
+		jobsinfo = []
+		for cfile in glob.iglob(clsbase + '/*'):
+			#print('Checking ' + cfile)
+			# Extract base name of the evaluating level
+			taskex = os.path.splitext(os.path.split(cfile)[1])[0]
+			assert taskex, 'The clusters name should exists'
+			# Processing is performed from the algorithms dir
+			args = ('./hirecs', '-e=../' + cfile, '../' + netfile)
+			#print('> Executing: ' + ' '.join(args))
 
-		# Job postprocessing
-		def postexec(job):
-			"""Copy final modularity output to the separate file"""
-			with open(tmodname, 'a') as tmod:  # Append to the end
-				subprocess.call(''.join(('tail -n 1 "', job.stderr, '" ', "| sed 's/.* mod: \\([^,]*\\).*/\\1\\t{}/'"
-					# Add task name as part of the filename considering redundant prefix in GANXiS
-					.format(job.name.lstrip(evalname + '_').rstrip('_' + algname).split('_', 2)[-1]))), stdout=tmod, shell=True)
-			# Accuulate all results by the last task of the job ----------------
-			# Check number of completed jobs
-			processing = False
-			skip = False  # If more than one task is executed, skip accumulative statistics evaluation
-			for jobexec in jobsinfo:
-				if not jobexec.value:
-					if skip:
-						processing = True
-						break
-					skip = True
-			if processing:
-				return
-			# Find the highest value of modularity from the accumulated one and store it in the
-			# acc file for all networks
-			# Sort the task acc mod file and accumulate the largest value to the totall acc mod file
-			# Note: here full path is required
-			amodname = ''.join((_algsdir, _resdir, algname, _extmod))  # Name of the file with accumulated modularity
-			if not os.path.exists(amodname):
-				with open(amodname, 'a') as amod:
-					amod.write('# Network\tQ\tTask\n')
-			with open(amodname, 'a') as amod:  # Append to the end
-				subprocess.call(''.join(('printf "', task, '\t `sort -g -r "', tmodname,'" | head -n 1`\n"')), stdout=amod, shell=True)
+			#raise AssertionError('Checkpoint, taskex: ' + taskex)
+			# Job postprocessing
+			def postexec(job):
+				"""Copy final modularity output to the separate file"""
+				with open(tmodname, 'a') as tmod:  # Append to the end
+					subprocess.call(''.join(('tail -n 1 "', job.stderr, '" ', "| sed 's/.* mod: \\([^,]*\\).*/\\1\\t{}/'"
+						# Add task name as part of the filename considering redundant prefix in GANXiS
+						.format(job.name.lstrip(evalname + '_').rstrip('_' + algname).split('_', 2)[-1]))), stdout=tmod, shell=True)
+				# Accuulate all results by the last task of the job ----------------
+				# Check number of completed jobs
+				processing = False
+				skip = False  # If more than one task is executed, skip accumulative statistics evaluation
+				for jobexec in jobsinfo:
+					if not jobexec.value:
+						if skip:
+							processing = True
+							break
+						skip = True
+				if processing:
+					return
+				# Find the highest value of modularity from the accumulated one and store it in the
+				# acc file for all networks
+				# Sort the task acc mod file and accumulate the largest value to the totall acc mod file
+				# Note: here full path is required
+				amodname = ''.join((_algsdir, _resdir, algname, _extmod))  # Name of the file with accumulated modularity
+				if not os.path.exists(amodname):
+					with open(amodname, 'a') as amod:
+						amod.write('# Network\tQ\tTask\n')
+				with open(amodname, 'a') as amod:  # Append to the end
+					subprocess.call(''.join(('printf "', task, '\t `sort -g -r "', tmodname,'" | head -n 1`\n"')), stdout=amod, shell=True)
 
-		job = Job(name='_'.join((evalname, taskex, algname)), workdir=_algsdir, args=args
-			, timeout=timeout, ondone=postexec, stdout=os.devnull, stderr=''.join((logsdir, taskex, _extlog)))
-		jobsinfo.append(job.executed)
-		execpool.execute(job)
+			job = Job(name='_'.join((evalname, taskex, algname)), workdir=_algsdir, args=args
+				, timeout=timeout, ondone=postexec, stdout=os.devnull, stderr=''.join((logsdir, taskex, _extlog)))
+			jobsinfo.append(job.executed)
+			execpool.execute(job)
+	if not evaluated:
+		print('WARNING clusters "{}" do not exist from "{}"'.format(task, algname), file=sys.stderr)
 
 
 # Louvain

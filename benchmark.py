@@ -548,8 +548,10 @@ def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60)
 	netsnum = 0  # Number of converted networks
 	# Convert network files to .hig format and .lig (Louvain Input Format)
 	for net in glob.iglob('*'.join((datadir, _extnetfile))):
-		convertNet(net, asym, overwrite, resdub, convTimeMax)
-		netsnum += 1
+		# Do skip shuffles
+		if not os.path.splitext(os.path.splitext(net)[0])[1]:
+			convertNet(net, asym, overwrite, resdub, convTimeMax)
+			netsnum += 1
 	## Convert network files to .hig format and .lig (Louvain Input Format)
 	#for net in glob.iglob('*'.join((datadir, _extnetfile))):
 	#	# Check existence of the corresponding dir with shuffled files
@@ -681,10 +683,7 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 	if not _execpool:
 		_execpool = ExecPool(max(cpu_count() - 1, 1))
 
-	# Create dir for the final results
-	if not os.path.exists(_algsdir + _resdir):
-		os.mkdir(_algsdir + _resdir)
-	# measures is a mao with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
+	# Measures is a dict with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
 	measures = {1: ['eval', _extclnodes, 'NMI'], 2: ['mod', '.hig', 'Q']}
 	for im in measures:
 		# Evaluate only required measures

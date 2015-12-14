@@ -205,26 +205,27 @@ def parseParams(args):
 	return gensynt, netins, shufnum, syntdir, convnets, runalgs, evalres, datas, timeout, algorithms
 
 
-def dirsAndFiles(datas):
-	"""Extacts dirs and files from the datas, generating directories according to the
-	specidied <gendir> flag and linking there the original network, the former dir is backuped.
-	
+def prepareInput(datas):
+	"""Generating directories structure, linking there the original network, and shuffles
+	for the input datasets according to the specidied parameters. The former dir is backuped.
+
 	datas  - pathes with flags to be processed in the format: [(<asym>, <path>, <gendir>), ...]
-	
+
 	return
 		datadirs  - target dirs of networks to be processed: [(<asym>, <path>), ...]
 		datafiles  - target networks to be processed: [(<asym>, <path>), ...]
 	"""
 	datadirs = []
 	datafiles = []
-	
+
 	if not datas:
 		return datadirs, datafiles
 	assert len(datas[0]) == 3, 'datas must be a container of items of 3 subitems'
-	
-	def backupDir(dirname, netfile, bcksuffix=None):
-		"""Move specified dir to the backup
-		
+
+	def prepareDir(dirname, netfile, bcksuffix=None):
+		"""Move specified dir to the backup if not empty. Make the dir if not exists.
+		Link the origal network inside the dir.
+
 		dirname  - dir to be moved
 		netfile  - network file to be linked into the <dirname> dir
 		bcksuffix  - backup suffix for the group of directories
@@ -236,22 +237,23 @@ def dirsAndFiles(datas):
 		# Make hard link to the network.
 		# Hard link is used to have initial former copy in the archive even when the origin is changed
 		os.link(netfile, '/'.join((dirname, os.path.split(netfile)[1])))
-			
+
 	for asym, wpath, gen in datas:
 		# Resolve wildcards
 		for path in glob.iglob(wpath):
+			if gen:
+				bcksuffix = SyncValue()  # Use inified syffix for the backup of various network instances
 			if os.path.isdir(path):
 				# Use the same path separator on all OSs
 				if not path.endswith('/'):
 					path += '/'
 				# Generate dirs if required
 				if gen:
-					bcksuffix = SyncValue()  # Use inified syffix for the backup of various network instances
 					# Traverse over the networks instances and create corresponding dirs
 					for net in glob.iglob('*'.join((path, _extnetfile))):
 						# Backup existent dir
 						dirname = os.path.splitext(net)[0]
-						backupDir(dirname, net, bcksuffix)
+						prepareDir(dirname, net, bcksuffix)
 						# Update target dirs
 						datadirs.append((asym, dirname + '/'))
 				else:
@@ -260,7 +262,7 @@ def dirsAndFiles(datas):
 				# Generate dirs if required
 				if gen:
 					dirname = os.path.splitext(path)[0]
-					backupDir(dirname, path, bcksuffix)
+					prepareDir(dirname, path, bcksuffix)
 					datafiles.append((asym, '/'.join((dirname, os.path.split(path)[1]))))
 				else:
 					datafiles.append((asym, path))
@@ -268,7 +270,8 @@ def dirsAndFiles(datas):
 
 
 def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2*60*60):  # 2 hour
-	"""Generate synthetic networks with ground-truth communities and save generation params
+	"""Generate synthetic networks with ground-truth communities and save generation params.
+	Previously existed paths with the same name are backuped.
 
 	genbin  - the binary used to generate the data
 	basedir  - base directory where data will be generated
@@ -284,7 +287,7 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 	assert count >= 1, 'Number of the network instances to be generated must be positive'
 	assert (basedir[-1] == '/' and paramsdir[-1] == '/' and seedsdir[-1] == '/' and netsdir[-1] == '/'
 		), "Directory name must have valid terminator"
-	
+
 	paramsdirfull = basedir + paramsdir
 	seedsdirfull = basedir + seedsdir
 	netsdirfull = basedir + netsdir
@@ -293,15 +296,15 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 		bcksuffix = SyncValue()
 		for dirname in (paramsdirfull, seedsdirfull, netsdirfull):
 			if os.path.exists(dirname) and not dirempty(dirname):
-				backupPath(dirname, True, bcksuffix)
-				
+				backupPath(dirname, False, bcksuffix)
+
 	# Create dirs if required
 	if not os.path.exists(basedir):
 		os.mkdir(basedir)
 	for dirname in (paramsdirfull, seedsdirfull, netsdirfull):
 		if not os.path.exists(dirname):
 			os.mkdir(dirname)
-		
+
 	# Initial options for the networks generation
 	N0 = 1000;  # Satrting number of nodes
 	evalmaxk = lambda genopts: int(round(sqrt(genopts['N'])))
@@ -316,7 +319,7 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 	varNmul = (1, 2, 5, 10, 25, 50)  # *N0 - sizes of the generating networks
 	vark = (5, 10)  #, 20)  # Average density of network links
 	global _execpool
-	
+
 	if not _execpool:
 		_execpool = ExecPool(max(cpu_count() - 1, 1))
 	netgenTimeout = 15 * 60  # 15 min
@@ -324,7 +327,7 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 	bmname =  os.path.split(genbin)[1]  # Benchmark name
 	bmbin = './' + bmname  # Benchmark binary
 	timeseed = basedir + 'time_seed.dat'
-	
+
 	# Check whether time seed exists and create it if required
 	if not os.path.exists(timeseed):  # Note: overwrite is not relevant here
 		proc = subprocess.Popen((bmbin), bufsize=-1, cwd=basedir)
@@ -371,7 +374,7 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 					#	# Create missing shufflings
 					#	shuffle(Job(name=name, task=task))
 					for i in range(1, count):
-						namext = ''.join((name, '_', str(i)))
+						namext = ''.join((name, '^', str(i)))
 						netfile = netpath + namext
 						if overwrite or not os.path.exists(netfile.join((basedir, _extnetfile))):
 							args = ('../exectime', '-n=' + namext, ''.join(('-o=', bmname, _extexectime))
@@ -396,7 +399,7 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 
 def shuffleNets(datadirs, datafiles, shufnum, overwrite=False, shuftimeout=30*60):  # 30 min
 	"""Shuffle specified networks
-	
+
 	datadirs  - directories with target networks to be processed
 	datafiles  - target networks to be processed
 	shufnum  - number of shufflings for of each instance on the generated network, > 0
@@ -404,10 +407,10 @@ def shuffleNets(datadirs, datafiles, shufnum, overwrite=False, shuftimeout=30*60
 		ATTENTION: Anyway redundant shuffles are deleted.
 	shuftimeout  - global shuffling timeout
 	"""
-	# Note: backup is performe on paths extraction, see dirsAndFiles()
+	# Note: backup is performe on paths extraction, see prepareInput()
 	assert shufnum >= 1, 'Number of the network shuffles to be generated must be positive'
 	global _execpool
-	
+
 	if not _execpool:
 		_execpool = ExecPool(max(cpu_count() - 1, 1))
 
@@ -443,7 +446,7 @@ for i in range(1, {shufnum} + 1):
 
 	def shuffleNet(netfile):
 		"""Shuffle specified network
-		
+
 		return
 			shufnum - number of shufflings to be done
 		"""
@@ -538,7 +541,7 @@ def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60)
 		.format(datadir))
 
 	global _execpool
-			
+
 	if not _execpool:
 		_execpool = ExecPool(max(cpu_count() - 1, 1))
 
@@ -588,7 +591,7 @@ def unknownApp(name):
 
 def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 	"""Run specified applications (clustering algorithms) on the specified datasets
-	
+
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
 	algorithms  - list of the algorithms to be executed
 	datadirs  - directories with target networks to be processed
@@ -622,7 +625,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 		net  - network to be processed
 		asym  - network links weights are asymmetric (in/outbound weights can be different)
 		jobsnum  - accumulated number of scheduled jobs
-		
+
 		return
 			jobsnum  - updated accumulated number of scheduled jobs
 		"""
@@ -660,7 +663,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 
 def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 	"""Run specified applications (clustering algorithms) on the specified datasets
-	
+
 	evalres  - evaluation flags: 0 - Skip evaluations, 1 - NMIs, 2 - Q (modularity), 3 - all measures
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
 	algorithms  - list of the algorithms to be executed
@@ -707,14 +710,14 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 				evalalgs = [getattr(appsmodule, evalpref + alg.capitalize(), unknownApp(evalpref + alg.capitalize()))
 					for alg in algorithms]
 		evalalgs = tuple(evalalgs)
-		
+
 		def evaluate(gtres, asym, jobsnum):
 			"""Evaluate algorithms on the specified network
 
 			gtres  - ground truth results
 			asym  - network links weights are asymmetric (in/outbound weights can be different)
 			jobsnum  - accumulated number of scheduled jobs
-			
+
 			return
 				jobsnum  - updated accumulated number of scheduled jobs
 			"""
@@ -738,7 +741,7 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 			# Use files with required extension
 			gtfile = os.path.splitext(gtfile)[0] + measures[im][1]
 			evaluate(gtfile, asym, jobsnum)
-		print('{} evaluation is completed'.format(measures[im][2]))	
+		print('{} evaluation is completed'.format(measures[im][2]))
 	if _execpool:
 		timelim = min(timeout * jobsnum, 5 * 24*60*60)  # Global timeout, up to N days
 		_execpool.join(max(timelim, exectime * 2))  # Twice the time of algorithms execution
@@ -770,15 +773,15 @@ def benchmark(*args):
 		# Symlink is used to work even when target file is on another file system
 		os.symlink(os.path.relpath(_syntdir + bmname, syntdir), benchpath)
 
-	# Extract dirs and files from datas
-	datadirs, datafiles = dirsAndFiles(datas)
+	# Extract dirs and files from datas, generate dirs structure and shuffles if required
+	datadirs, datafiles = prepareInput(datas)
 	datas = None
 	#print('Datadirs: ', datadirs)
 
 	if gensynt and netins >= 1:
 		# gensynt:  0 - do not generate, 1 - only if not exists, 2 - forced generation
 		generateNets(benchpath, syntdir, gensynt == 2, netins)
-	
+
 	# Update datasets with sythetic generated
 	# Note: should be done only after the genertion, because new directories can be created
 	if gensynt or (not datadirs and not datafiles):
@@ -805,7 +808,7 @@ def benchmark(*args):
 	exectime = time.time() - exectime
 	print('The benchmark is completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(exectime, *secondsToHms(exectime)))
-	
+
 
 def terminationHandler(signal, frame):
 	"""Signal termination handler"""
@@ -837,9 +840,9 @@ if __name__ == '__main__':
 			'  -g[f][=[<number>][.<shuffles_number>][=<outpdir>]]  - generate <number> ({synetsnum} by default) >= 0'
 			' synthetic datasets in the <outpdir> ("{syntdir}" by default), shuffling each <shuffles_number>'
 			' (0 by default) >= 0 times. If <number> is omitted or set to 0 then ONLY shuffling of the specified datasets'
-			' should be performed including the <outpdir>/{netsdir}/*/.',
+			' should be performed including the <outpdir>/{netsdir}/*.',
 			'    Xf  - force the generation even when the data already exists (existent datasets are moved to backup)',
-			'  NOTE: shuffled datasets have the following naming format <net_name>.<shuffle_index>.<net_extension>',
+			'  NOTE: shuffled datasets have the following naming format: <base_name>^<instance_index>.<shuffle_index>.<net_extension>',
 			'  -c[X]  - convert existing networks into the .hig, .lig, etc. formats',
 			'    Xf  - force the conversion even when the data is already exist',
 			'    Xr  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used',

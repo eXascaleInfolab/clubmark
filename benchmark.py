@@ -50,6 +50,7 @@ from benchutils import *
 
 #from functools import wraps
 from benchapps import pyexec
+from benchapps import evalAlgorithm
 from benchcore import _extexectime
 from benchcore import _extclnodes
 from benchcore import _execpool
@@ -65,6 +66,7 @@ _netsdir = 'networks/'  # Networks directory inside syntnets
 _syntinum = 5  # Default number of instances of each synthetic network
 _extnetfile = '.nsa'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated arcs
 #_algseeds = 9  # TODO: Implement
+_prefExec = 'exec'  # Execution prefix for the apps functions in benchapps
 
 
 def parseParams(args):
@@ -579,17 +581,6 @@ def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60)
 	print('Networks conversion is completed, converted {} networks'.format(netsnum))
 
 
-def unknownApp(name):
-	"""A stub for the unknown / not implemented apps (algorithms) to be benchmaked
-
-	name  - name of the funciton to be called (traced and skipped)
-	"""
-	def stub(*args):
-		print(' '.join(('ERROR: ', name, 'function is not implemented, the call is skipped.')), file=sys.stderr)
-	stub.__name__ = name  # Set original name to the stub func
-	return stub
-
-
 def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
@@ -615,9 +606,9 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 		#algs = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
 		#algs = (execHirecsNounwrap,)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
 		# , execHirecsOtl, execHirecsAhOtl, execHirecsNounwrap)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
-		algs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith('exec')]
+		algs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_prefExec)]
 	else:
-		algs = [getattr(appsmodule, 'exec' + alg.capitalize(), unknownApp('exec' + alg.capitalize())) for alg in algorithms]
+		algs = [getattr(appsmodule, _prefExec + alg.capitalize(), unknownApp(_prefExec + alg.capitalize())) for alg in algorithms]
 	algs = tuple(algs)
 
 	def execute(net, asym, jobsnum):
@@ -684,61 +675,59 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 		_execpool = ExecPool(max(cpu_count() - 1, 1))
 
 	# Measures is a dict with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
-	measures = {1: ['eval', _extclnodes, 'NMI'], 2: ['mod', '.hig', 'Q']}
+	measures = {1: ['nmi', _extclnodes, 'NMI'], 2: ['mod', '.hig', 'Q']}
 	for im in measures:
 		# Evaluate only required measures
 		if evalres & im != im:
 			continue
 
-		evalpref = measures[im][0]  # Evaluation prefix
 		if not algorithms:
 			#evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
 			#				, evalHirecsNS, evalOslom2NS, evalGanxisNS)
 			#evalalgs = (evalHirecs, evalHirecsOtl, evalHirecsAhOtl
 			#				, evalHirecsNS, evalHirecsOtlNS, evalHirecsAhOtlNS)
-			evalalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(evalpref)]
+			# Fetch available algorithms
+			ianame = len(_prefExec)  # Index of the algorithm name start
+			evalalgs = [funcname[ianame:].lower() for funcname in dir(appsmodule) if func.startswith(_prefExec)]
 		else:
-			if im == 1:
-				assert evalpref == 'eval', 'Evaluation prefix is invalid'
-				evalalgs = chain(*[(getattr(appsmodule, evalpref + alg.capitalize(), unknownApp(evalpref + alg.capitalize())),
-					getattr(appsmodule, ''.join((evalpref, alg.capitalize(), 'NS')), unknownApp(''.join((evalpref, alg.capitalize(), 'NS')))))
-					for alg in algorithms])
-			else:
-				assert evalpref == 'mod', 'Evaluation prefix is invalid'
-				evalalgs = [getattr(appsmodule, evalpref + alg.capitalize(), unknownApp(evalpref + alg.capitalize()))
-					for alg in algorithms]
+			evalalgs = [alg.lower() for alg in algorithms]
 		evalalgs = tuple(evalalgs)
 
-		def evaluate(gtres, asym, jobsnum):
+		def evaluate(measure, basefile, asym, jobsnum):
 			"""Evaluate algorithms on the specified network
 
-			gtres  - ground truth results
+			measure  - target measure to be evaluated: {nmi, mod}
+			basefile  - ground truth result, or initial network file or another measure-related file
 			asym  - network links weights are asymmetric (in/outbound weights can be different)
 			jobsnum  - accumulated number of scheduled jobs
 
 			return
 				jobsnum  - updated accumulated number of scheduled jobs
 			"""
-			for elg in evalalgs:
+			for elgname in evalalgs:
 				try:
-					elg(_execpool, gtres, timeout)
+					evalAlgorithm(_execpool, elgname, basefile, measure, timeout)
+					# Evaluate also nmi-s for nmi
+					if measure == 'nmi':
+						evalAlgorithm(_execpool, elgname, basefile, 'nmi-s', timeout)
 				except StandardError as err:
-					print('The {} is interrupted by the exception: {}'
-						.format(elg.__name__, err))
+					print('The {} is interrupted by the exception: {}'.format(elgname, err))
 				else:
 					jobsnum += 1
 			return jobsnum
 
 		print('Starting {} evaluation...'.format(measures[im][2]))
 		jobsnum = 0
+		measure = measures[im][0]
+		fileext = measures[im][1]
 		for asym, ddir in datadirs:
 			# Read ground truth
-			for gtfile in glob.iglob('*'.join((ddir, measures[im][1]))):
-				evaluate(gtfile, asym, jobsnum)
-		for asym, gtfile in datafiles:
+			for basefile in glob.iglob('*'.join((ddir, fileext))):
+				evaluate(measure, basefile, asym, jobsnum)
+		for asym, basefile in datafiles:
 			# Use files with required extension
-			gtfile = os.path.splitext(gtfile)[0] + measures[im][1]
-			evaluate(gtfile, asym, jobsnum)
+			basefile = os.path.splitext(basefile)[0] + fileext
+			evaluate(basefile, asym, jobsnum)
 		print('{} evaluation is completed'.format(measures[im][2]))
 	if _execpool:
 		timelim = min(timeout * jobsnum, 5 * 24*60*60)  # Global timeout, up to N days

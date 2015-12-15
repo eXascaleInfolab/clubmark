@@ -83,26 +83,19 @@ def	preparePath(taskpath):
 		os.makedirs(taskpath)
 
 
-def execAlgorithm(execpool, netfile, asym, timeout, selfexec=False, **kwargs):
-	"""Execute the algorithm (stub)
+def unknownApp(name):
+	"""A stub for the unknown / not implemented apps (algorithms) to be benchmaked
 
-	execpool  - execution pool to perform execution of current task
-	netfile  -  input network to be processed
-	asym  - network links weights are assymetric (in/outbound weights can be different)
-	timeout  - execution timeout for this task
-	selfexec=False  - current execution is the external or internal self call
-	kwargs  - optional algorithm-specific keyword agguments
-
-	return  - number of executions
+	name  - name of the funciton to be called (traced and skipped)
 	"""
-	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
-		.format(execpool, netfile, asym, timeout))
-	return 0
+	def stub(*args, **kwargs):
+		print(' '.join(('ERROR: ', name, 'function is not implemented, the call is skipped.')), file=sys.stderr)
+	stub.__name__ = name  # Set original name to the stub func
+	return stub
 
 
-def evalAlgorithm(execpool, gtres, timeout, algname, evalbin=_execnmi, evalname='nmi', stderr=os.devnull):
-	"""Evaluate the algorithm by the specified measure
+def nmiAlgorithm(execpool, gtres, timeout, algname, evalbin=_execnmi, evalname='nmi', stderr=os.devnull):
+	"""Evaluate the algorithm by the specified nmi measure
 
 	execpool  - execution pool of worker processes
 	gtres  - ground truth result: file name of clusters for each of which nodes are listed (clusters nodes lists file)
@@ -152,6 +145,7 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 	# Directory of resulting community structures (clusters) for each network
 	# Note: consider possible parameters of the executed algorithm, embedded into the dir names with _seppars
 	basename, ishuf = os.path.splitext(task)  # Separate shuffling index if present
+	assert not ishuf, 'Base file should not be shuffled'
 	evalname = 'mod'
 	evaluated = False
 	#clsbase = ''.join((_resdir, algname, '/', task))
@@ -176,15 +170,17 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 	task = Task(name='_'.join((evalname, basename, algname)), ondone=instMod)
 
 	iisep = len(_resdir) + len(algname) + 1 + len(basename)  # Inex of the possible instance symbol
-	for clsbase in glob.iglob(''.join((_resdir, algname, '/', basename, '*', ishuf))):
-		# Skip instances different from the basename
-		if clsbase[iisep] == _sepinst:
+	sfxEvalname = '_' + evalname
+	for clsbase in glob.iglob(''.join((_resdir, algname, '/', basename, '*'))):
+		# Skip instances different from the basename and producing dirs
+		if clsbase[iisep] == _sepinst or clsbase.endswith(sfxEvalname):
 			continue
 		evaluated = True
 		# Note: separate dir is created, because modularity is evaluated for all files in the target dir,
 		# which are different granularity / hierarchy levels
-		logsdir = ''.join((clsbase, '_', evalname, '/'))
+		logsdir = ''.join((clsbase, sfxEvalname, '/'))
 		if not os.path.exists(logsdir):
+			print('logsdir: {}, clsbase: {}, basename: {}'.format(logsdir, clsbase, basename))
 			os.makedirs(logsdir)
 
 
@@ -215,6 +211,48 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 		print('WARNING clusters "{}" do not exist from "{}"'.format(task, algname), file=sys.stderr)
 
 
+def evalAlgorithm(execpool, algname, basefile, measure, timeout):
+	"""Evaluate the algorithm by the specified measure
+
+	execpool  - execution pool of worker processes
+	algname  - a name of the algorithm being under evaluation
+	basefile  - ground truth result, or initial network file or another measure-related file
+	measure  - target measure to be evaluated: {nmi, nmi-s, mod}
+	timeout  - execution timeout for this task
+	"""
+	print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
+	evalname = None
+	if measure == 'nmi-s':
+		# Evaluate by NMI_sum (onmi) instead of NMI_conv(gecmi)
+		evalname = measure
+		measure = 'nmi'
+	eaname = measure + 'Algorithm'
+	evalg = getattr(sys.modules[__name__], eaname, unknownApp(eaname))
+	if not evalname:
+		evalg(execpool, basefile, timeout, algname)
+	else:
+		evalg(execpool, basefile, timeout, algname, evalbin='./onmi_sum', evalname=evalname)
+
+
+# ATTENTION: this function should not be defined to not beight automatically executed
+#def execAlgorithm(execpool, netfile, asym, timeout, selfexec=False, **kwargs):
+#	"""Execute the algorithm (stub)
+#
+#	execpool  - execution pool to perform execution of current task
+#	netfile  -  input network to be processed
+#	asym  - network links weights are assymetric (in/outbound weights can be different)
+#	timeout  - execution timeout for this task
+#	selfexec=False  - current execution is the external or internal self call
+#	kwargs  - optional algorithm-specific keyword agguments
+#
+#	return  - number of executions
+#	"""
+#	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
+#		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
+#		.format(execpool, netfile, asym, timeout))
+#	return 0
+
+
 # Louvain
 ## Original Louvain
 #def execLouvain(execpool, netfile, asym, timeout, tasknum=0, **kwargs):
@@ -241,7 +279,7 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 #	return 1
 #
 #
-#def evalLouvain(execpool, cnlfile, timeout):
+#def evalLouvain(execpool, basefile, measure, timeout):
 #	return
 
 
@@ -304,20 +342,20 @@ def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False, **kwargs):
 	#		execLouvain_ig(execpool, netfile, asym, timeout, selfexec)
 	#		execnum += 1
 	return execnum
-
-
-def evalLouvain_ig(execpool, cnlfile, timeout):
-	#print('Applying {} to {}'.format('louvain_igraph', cnlfile))
-	evalAlgorithm(execpool, cnlfile, timeout, 'louvain_igraph')
-
-
-def evalLouvain_igNS(execpool, cnlfile, timeout):
-	"""Evaluate Louvain_igraph by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
-	evalAlgorithm(execpool, cnlfile, timeout, 'louvain_igraph', evalbin='./onmi_sum', evalname='nmi-s')
-
-
-def modLouvain_ig(execpool, netfile, timeout):
-	modAlgorithm(execpool, netfile, timeout, 'louvain_igraph')
+#
+#
+#def evalLouvain_ig(execpool, cnlfile, timeout):
+#	#print('Applying {} to {}'.format('louvain_igraph', cnlfile))
+#	evalAlgorithm(execpool, cnlfile, timeout, 'louvain_igraph')
+#
+#
+#def evalLouvain_igNS(execpool, basefile, measure, timeout):
+#	"""Evaluate Louvain_igraph by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
+#	evalAlgorithm(execpool, cnlfile, timeout, 'louvain_igraph', evalbin='./onmi_sum', evalname='nmi-s')
+#
+#
+#def modLouvain_ig(execpool, netfile, timeout):
+#	modAlgorithm(execpool, netfile, timeout, 'louvain_igraph')
 
 
 # SCP (Sequential algorithm for fast clique percolation)
@@ -365,23 +403,8 @@ def execScp(execpool, netfile, asym, timeout, **kwargs):
 	return kmax + 1 - kmin
 
 
-def evalScp(execpool, cnlfile, timeout):
-	#print('Applying {} to {}'.format('louvain_igraph', cnlfile))
-	evalAlgorithm(execpool, cnlfile, timeout, 'scp')
-
-
-def evalScpNS(execpool, cnlfile, timeout):
-	"""Evaluate Louvain_igraph by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
-	evalAlgorithm(execpool, cnlfile, timeout, 'scp', evalbin='./onmi_sum', evalname='nmi-s')
-
-
-def modScp(execpool, netfile, timeout):
-	modAlgorithm(execpool, netfile, timeout, 'scp')
-
-
-# Random Disjoing Clustering
 def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False, instances=5, **kwargs):  # _netshuffles + 1
-	"""Execute Randcommuns
+	"""Execute Randcommuns, Random Disjoint Clustering
 	Results are not stable => multiple execution is desirable.
 
 	instances  - number of networks instances to be generated
@@ -409,21 +432,6 @@ def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False, instances=
 	return 1
 
 
-def evalRandcommuns(execpool, cnlfile, timeout):
-	#print('Applying {} to {}'.format('randcommuns', cnlfile))
-	evalAlgorithm(execpool, cnlfile, timeout, 'randcommuns')
-
-
-def evalRandcommunsNS(execpool, cnlfile, timeout):
-	"""Evaluate Randcommuns by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
-	evalAlgorithm(execpool, cnlfile, timeout, 'randcommuns', evalbin='./onmi_sum', evalname='nmi-s')
-
-
-def modRandcommuns(execpool, netfile, timeout):
-	modAlgorithm(execpool, netfile, timeout, 'randcommuns')
-
-
-# HiReCS
 def execHirecs(execpool, netfile, asym, timeout, **kwargs):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
@@ -444,19 +452,6 @@ def execHirecs(execpool, netfile, asym, timeout, **kwargs):
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=os.devnull, stderr=taskpath + _extlog))
 	return 1
-
-
-def evalHirecs(execpool, cnlfile, timeout):
-	evalAlgorithm(execpool, cnlfile, timeout, 'hirecs')
-
-
-def evalHirecsNS(execpool, cnlfile, timeout):
-	"""Evaluate Hirecs by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
-	evalAlgorithm(execpool, cnlfile, timeout, 'hirecs', evalbin='./onmi_sum', evalname='nmi-s')
-
-
-#def modHirecs(execpool, netfile, timeout):
-#	modAlgorithm(execpool, netfile, timeout, 'hirecs')
 
 
 def execHirecsOtl(execpool, netfile, asym, timeout, **kwargs):
@@ -483,15 +478,6 @@ def execHirecsOtl(execpool, netfile, asym, timeout, **kwargs):
 	return 1
 
 
-def evalHirecsOtl(execpool, cnlfile, timeout):
-	evalAlgorithm(execpool, cnlfile, timeout, 'hirecsotl')
-
-
-def evalHirecsOtlNS(execpool, cnlfile, timeout):
-	"""Evaluate Hirecs by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
-	evalAlgorithm(execpool, cnlfile, timeout, 'hirecsotl', evalbin='./onmi_sum', evalname='nmi-s')
-
-
 def execHirecsAhOtl(execpool, netfile, asym, timeout, **kwargs):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
@@ -514,15 +500,6 @@ def execHirecsAhOtl(execpool, netfile, asym, timeout, **kwargs):
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args
 		, timeout=timeout, stdout=os.devnull, stderr=taskpath + _extlog))
 	return 1
-
-
-def evalHirecsAhOtl(execpool, cnlfile, timeout):
-	evalAlgorithm(execpool, cnlfile, timeout, 'hirecsahotl')
-
-
-def evalHirecsAhOtlNS(execpool, cnlfile, timeout):
-	"""Evaluate Hirecs by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
-	evalAlgorithm(execpool, cnlfile, timeout, 'hirecsahotl', evalbin='./onmi_sum', evalname='nmi-s')
 
 
 def execHirecsNounwrap(execpool, netfile, asym, timeout, **kwargs):
@@ -595,19 +572,6 @@ def execOslom2(execpool, netfile, asym, timeout, **kwargs):
 	return 1
 
 
-def evalOslom2(execpool, cnlfile, timeout):
-	evalAlgorithm(execpool, cnlfile, timeout, 'oslom2')
-
-
-def evalOslom2NS(execpool, cnlfile, timeout):
-	"""Evaluate Oslom2 by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
-	evalAlgorithm(execpool, cnlfile, timeout, 'oslom2', evalbin='./onmi_sum', evalname='nmi-s')
-
-
-def modOslom2(execpool, netfile, timeout):
-	modAlgorithm(execpool, netfile, timeout, 'oslom2')
-
-
 # Ganxis (SLPA)
 def execGanxis(execpool, netfile, asym, timeout, **kwargs):
 	#print('> exec params:\n\texecpool: {}\n\tnetfile: {}\n\tasym: {}\n\ttimeout: {}'
@@ -638,16 +602,3 @@ def execGanxis(execpool, netfile, asym, timeout, **kwargs):
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
 		, stdout=taskpath + _extlog, stderr=taskpath + _exterr))
 	return 1
-
-
-def evalGanxis(execpool, cnlfile, timeout):
-	evalAlgorithm(execpool, cnlfile, timeout, 'ganxis')
-
-
-def evalGanxisNS(execpool, cnlfile, timeout):
-	"""Evaluate Ganxis by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
-	evalAlgorithm(execpool, cnlfile, timeout, 'ganxis', evalbin='./onmi_sum', evalname='nmi-s')
-
-
-def modGanxis(execpool, netfile, timeout):
-	modAlgorithm(execpool, netfile, timeout, 'ganxis')

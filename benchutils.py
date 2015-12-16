@@ -3,7 +3,7 @@
 
 """
 \descr:  Common routines for the benchmarking framework.
-		
+
 \author: (c) Artem Lutov <artem@exascale.info>
 \organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>
 \date: 2015-11
@@ -24,11 +24,16 @@ from multiprocessing import Lock
 _bckdir = 'backup/'  # Backup directory
 
 
+def escapeWildcards(path):
+	"""Escape wildcards in the path"""
+	return glob.escape(path) if hasattr(glob, 'escape') else path
+
+
 def secondsToHms(seconds):
 	"""Convert seconds to hours, mins, secs
-	
+
 	seconds  - seconds to be converted, >= 0
-	
+
 	return hours, mins, secs
 	"""
 	assert seconds >= 0, 'seconds validation failed'
@@ -40,6 +45,7 @@ def secondsToHms(seconds):
 
 def dirempty(dirpath):
 	"""Whether specified directory is empty"""
+	dirpath = escapeWildcards(dirpath)
 	assert os.path.isdir(dirpath), 'Existent directory is expected'
 	if not dirpath.endswith('/'):
 		dirpath += '/'
@@ -52,8 +58,11 @@ def dirempty(dirpath):
 
 
 def basePathExists(path):
+	"""Whether there are any existent files/dirs with the specified base name.
+		ATTENTION: the basepathis escaped, i.e. wildcards are not supported
+	"""
 	try:
-		glob.iglob(path + '*').next()
+		glob.iglob(escapeWildcards(path) + '*').next()
 	except StopIteration:
 		# No such files / dirs
 		return False
@@ -67,7 +76,7 @@ class SyncValue(object):
 	"""
 	def __init__(self, val=None):
 		"""Sync value constructor
-		
+
 		val  - initial value
 		"""
 		# Note: recursive lock occurs if normal attrib names are used because of __setattr__ definition
@@ -75,8 +84,8 @@ class SyncValue(object):
 		# Private attributes
 		object.__setattr__(self, '_lock', Lock())
 		object.__setattr__(self, '_synced', 0)
-			
-			
+
+
 	def __setattr__(self, name, val):
 		if name != 'value':
 			raise AttributeError('Attribute "{}" is not accessable'.format(name))
@@ -103,36 +112,37 @@ class SyncValue(object):
 			raise ValueError('Lock timeout is exceeded')
 		object.__setattr__(self, '_synced', object.__getattribute__(self, '_synced') + 1)
 		return self
-	
-	
+
+
 	def __exit__(self, exception_type, exception_val, trace):
 		object.__setattr__(self, '_synced', object.__getattribute__(self, '_synced') - 1)
 		# Unlock only when not synced
 		if not object.__getattribute__(self, '_synced'):
 			object.__getattribute__(self, '_lock').release()
 		assert object.__getattribute__(self, '_synced') >= 0, 'Synchronization is broken'
-		
-		
+
+
 	#def get_lock(self):
 	#	"""Return synchronization lock"""
 	#	self._synced = True
 	#	return self._lock
-	#	
-	#	
+	#
+	#
 	#def get_obj(self):
 	#	self._synced = True
 	#	return self._lock
-			
+
 
 def nameVersion(path, expand, synctime=None):
 	"""Name the last path component basedon modification time and return this part
-	
-	path  - the path to be named with version
+
+	path  - the path to be named with version.
+		ATTENTION: the basepathis escaped, i.e. wildcards are not supported
 	expand  - whether to expand the path or use as it is
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
 	"""
-	path = os.path.normpath(path)
+	path = os.path.normpath(escapeWildcards(path))
 	name = os.path.split(path)[1]  # Extract dir of file name
 	if not path:
 		raise ValueError('Specified path is empty')
@@ -158,19 +168,20 @@ def nameVersion(path, expand, synctime=None):
 		mtime = time.gmtime(os.path.getmtime(path))
 	mtime = time.strftime('_%y%m%d_%H%M%S', mtime)  # Modification time
 	return name + mtime
-	
-	
+
+
 def backupPath(basepath, expand=False, synctime=None, compress=True):  # basedir, name
 	"""Backup all files and dirs starting from the specified basepath into backup/
-	located in the parent dir of the basepath 
-	
+	located in the parent dir of the basepath
+
 	basepath  - path, last component of which (file or dir) is a template to backup
-		all paths starting from it in the same location
+		all paths starting from it in the same location.
+		ATTENTION: the basepathis escaped, i.e. wildcards are not supported
 	expand  - expand prefix, backup all paths staring from basepath, or basepath only
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
 	compress  - compress or just copy spesified paths
-	
+
 	ATTENTION: All paths are MOVED to the dedicated timestamped dir / archive
 	"""
 	# Check if there anything available to be backuped
@@ -178,7 +189,7 @@ def backupPath(basepath, expand=False, synctime=None, compress=True):  # basedir
 		return
 	#print('Backuping "{}"{}...'.format(basepath, 'with synctime' if synctime else ''))
 	# Remove trailing path separator if exists
-	basepath = os.path.normpath(basepath)
+	basepath = os.path.normpath(escapeWildcards(basepath))
 	# Create backup/ if required
 	basedir = '/'.join((os.path.split(basepath)[0], _bckdir))
 	if not os.path.exists(basedir):

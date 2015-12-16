@@ -36,7 +36,7 @@ _execpool = None  # Active execution pool
 class Task(object):
 	""" Container of Jobs"""
 	#TODO: Implement timeout support in add/delJob
-	def __init__(self, name, timeout=0, onstart=None, ondone=None, stdout=None, stderr=None):
+	def __init__(self, name, timeout=0, onstart=None, ondone=None, params=None, stdout=None, stderr=None):
 		"""Initialize task, which is a number of jobs to be executed
 
 		name  - task name
@@ -48,6 +48,7 @@ class Task(object):
 		ondone  - callback which is executed on successful completion of the task in the
 			CONTEXT OF THE CALLER (main process) with the single argument, the task. Default: None
 			ATTENTION: must be lightweight
+		params  - additional parameters to be used in callbacks
 		stdout  - file name for the buffered output
 		stderr  - file name for the unbuffered output
 
@@ -57,6 +58,7 @@ class Task(object):
 		assert isinstance(name, str) and timeout >= 0, 'Parameters validaiton failed'
 		self.name = name
 		self.timeout = timeout
+		self.params = params
 		self.onstart = types.MethodType(onstart, self) if onstart else None
 		self.ondone = types.MethodType(ondone, self) if ondone else None
 		self.stdout = stdout
@@ -127,7 +129,7 @@ class Job(object):
 	#	return super(Job, cls).__new__(cls, name, workdir, args, timeout, ontimeout, onstart, ondone, tstart)
 	# NOTE: keyword-only arguments are specified after the *, supported only since Python 3
 	def __init__(self, name, workdir=None, args=(), timeout=0, ontimeout=False, task=None #,*
-	, startdelay=0, onstart=None, ondone=None, stdout=None, stderr=None):
+	, startdelay=0, onstart=None, ondone=None, params=None, stdout=None, stderr=None):
 		"""Initialize job to be executed
 
 		name  - job name
@@ -150,6 +152,7 @@ class Job(object):
 		ondone  - callback which is executed on successful completion of the job in the
 			CONTEXT OF THE CALLER (main process) with the single argument, the job. Default: None
 			ATTENTION: must be lightweight
+		params  - additional parameters to be used in callbacks
 		stdout  - file name for the buffered output
 		stderr  - file name for the unbuffered output
 
@@ -164,6 +167,7 @@ class Job(object):
 		self.name = name
 		self.workdir = workdir
 		self.args = args
+		self.params = params
 		self.timeout = timeout
 		self.ontimeout = ontimeout
 		self.task = task.addJob() if task else None

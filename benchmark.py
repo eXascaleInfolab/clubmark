@@ -51,6 +51,7 @@ from benchutils import *
 #from functools import wraps
 from benchapps import pyexec
 from benchapps import evalAlgorithm
+from benchapps import unknownApp
 from benchcore import _extexectime
 from benchcore import _extclnodes
 from benchcore import _execpool
@@ -241,7 +242,7 @@ def prepareInput(datas):
 
 	for asym, wpath, gen in datas:
 		# Resolve wildcards
-		for path in glob.iglob(wpath):
+		for path in glob.iglob(wpath):  # Allow wildcards
 			if gen:
 				bcksuffix = SyncValue()  # Use inified syffix for the backup of various network instances
 			if os.path.isdir(path):
@@ -251,7 +252,7 @@ def prepareInput(datas):
 				# Generate dirs if required
 				if gen:
 					# Traverse over the networks instances and create corresponding dirs
-					for net in glob.iglob('*'.join((path, _extnetfile))):
+					for net in glob.iglob('*'.join((path, _extnetfile))):  # Allow wildcards
 						# Backup existent dir
 						dirname = os.path.splitext(net)[0]
 						prepareDir(dirname, net, bcksuffix)
@@ -360,20 +361,16 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 					netpathfull = basedir + netpath
 					if not os.path.exists(netpathfull):
 						os.mkdir(netpathfull)
-					task = Task(name)  # Required to use task.name as basedir identifier
 					startdelay = 0.1  # Required to start execution of the LFR benchmark before copying the time_seed for the following process
 					netfile = netpath + name
 					if count and overwrite or not os.path.exists(netfile.join((basedir, _extnetfile))):
 						args = ('../exectime', '-n=' + name, ''.join(('-o=', bmname, _extexectime))  # Output .rcp in the current dir, basedir
 							, bmbin, '-f', netparams, '-name', netfile)
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
-						_execpool.execute(Job(name=name, task=task, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
+						_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
 							, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 							#, ondone=shuffle if shufnum > 0 else None
 							, startdelay=startdelay))
-					#else:
-					#	# Create missing shufflings
-					#	shuffle(Job(name=name, task=task))
 					for i in range(1, count):
 						namext = ''.join((name, _sepinst, str(i)))
 						netfile = netpath + namext
@@ -381,13 +378,10 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 							args = ('../exectime', '-n=' + namext, ''.join(('-o=', bmname, _extexectime))
 								, bmbin, '-f', netparams, '-name', netfile)
 							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
-							_execpool.execute(Job(name=namext, task=task, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
+							_execpool.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
 								, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 								#, ondone=shuffle if shufnum > 0 else None
 								, startdelay=startdelay))
-						#else:
-						#	# Create missing shufflings
-						#	shuffle(Job(name=namext, task=task))
 			else:
 				print('ERROR: network parameters file "{}" is not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')
@@ -442,7 +436,7 @@ for i in range(1, {shufnum} + 1):
 #	else:
 #		os.remove(netfile)
 """.format(jobname=job.name, _extnetfile=_extnetfile, shufnum=shufnum, overwrite=overwrite))
-		_execpool.execute(Job(name=job.name + '_shf', task=job.task, workdir=job.workdir  # + job.task.name
+		_execpool.execute(Job(name=job.name + '_shf', workdir=job.workdir
 			, args=args, timeout=timeout * shufnum))
 
 	def shuffleNet(netfile):
@@ -461,13 +455,12 @@ for i in range(1, {shufnum} + 1):
 			if int(ext2[1:]) > shufnum:
 				os.remove(netfile)
 			return 0
-		task = Task(name)  # Required to use task.name as basedir identifier
-		shuffle(Job(name=name, task=task, workdir=path + '/'))
+		shuffle(Job(name=name, workdir=path + '/'))
 		return shufnum
 
 	count = 0
 	for asym, ddir in datadirs:
-		for dfile in glob.iglob('*'.join((ddir, _extnetfile))):
+		for dfile in glob.iglob('*'.join((ddir, _extnetfile))):  # Allow wildcards
 			count += shuffleNet(dfile)
 	for asym, dfile in datafiles:
 		count += shuffleNet(dfile)
@@ -549,7 +542,7 @@ def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60)
 	convTimeMax = 3 * 60  # 3 min
 	netsnum = 0  # Number of converted networks
 	# Convert network files to .hig format and .lig (Louvain Input Format)
-	for net in glob.iglob('*'.join((datadir, _extnetfile))):
+	for net in glob.iglob('*'.join((datadir, _extnetfile))):  # Allow wildcards
 		# Skip shuffles
 		if not os.path.splitext(os.path.splitext(net)[0])[1]:
 			convertNet(net, asym, overwrite, resdub, convTimeMax)
@@ -633,7 +626,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 	jobsnum = 1  # Number of networks jobs to be processed (can be a few per each algorithm per each network)
 	netcount = 0  # Number of networks to be processed
 	for asym, ddir in datadirs:
-		for net in glob.iglob('*'.join((ddir, _extnetfile))):
+		for net in glob.iglob('*'.join((ddir, _extnetfile))):  # Allow wildcards
 			tnum = execute(net, asym, jobsnum)
 			jobsnum += tnum
 			netcount += tnum != 0
@@ -711,7 +704,7 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 					if measure == 'nmi':
 						evalAlgorithm(_execpool, elgname, basefile, 'nmi-s', timeout)
 				except StandardError as err:
-					print('The {} is interrupted by the exception: {}'.format(elgname, err))
+					print('"{}" evaluation of "{}" is interrupted by the exception: {}'.format(measure, elgname, err))
 				else:
 					jobsnum += 1
 			return jobsnum
@@ -722,7 +715,7 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 		fileext = measures[im][1]
 		for asym, ddir in datadirs:
 			# Read ground truth
-			for basefile in glob.iglob('*'.join((ddir, fileext))):
+			for basefile in glob.iglob('*'.join((ddir, fileext))):  # Allow wildcards in the names
 				evaluate(measure, basefile, asym, jobsnum)
 		for asym, basefile in datafiles:
 			# Use files with required extension

@@ -51,7 +51,6 @@ from benchutils import *
 #from functools import wraps
 from benchapps import pyexec
 from benchapps import evalAlgorithm
-from benchapps import unknownApp
 from benchapps import _extexectime
 from benchapps import _extclnodes
 from benchapps import _algsdir
@@ -593,6 +592,16 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 	starttime = time.time()  # Procedure start time
 	if not _execpool:
 		_execpool = ExecPool(max(min(4, cpu_count() - 1), 1))
+
+	def unknownApp(name):
+		"""A stub for the unknown / not implemented apps (algorithms) to be benchmaked
+
+		name  - name of the funciton to be called (traced and skipped)
+		"""
+		def stub(*args, **kwargs):
+			print(' '.join(('ERROR: ', name, 'function is not implemented, the call is skipped.')), file=sys.stderr)
+		stub.__name__ = name  # Set original name to the stub func
+		return stub
 
 	# Run all algs if not specified the concrete algorithms to be run
 	#udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']

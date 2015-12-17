@@ -52,9 +52,8 @@ from benchutils import *
 from benchapps import pyexec
 from benchapps import evalAlgorithm
 from benchapps import unknownApp
-from benchcore import _extexectime
-from benchcore import _extclnodes
-from benchcore import _execpool
+from benchapps import _extexectime
+from benchapps import _extclnodes
 from benchapps import _algsdir
 from benchapps import _resdir
 from benchapps import _sepinst
@@ -68,6 +67,8 @@ _syntinum = 5  # Default number of instances of each synthetic network
 _extnetfile = '.nsa'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated arcs
 #_algseeds = 9  # TODO: Implement
 _prefExec = 'exec'  # Execution prefix for the apps functions in benchapps
+
+_execpool = None  # Pool of executors to process jobs
 
 
 def parseParams(args):

@@ -28,9 +28,6 @@ from algorithms.randcommuns import randcommuns
 from benchcore import *
 from benchutils import *
 
-from benchcore import _extexectime
-from benchcore import _extclnodes
-
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 _algsdir = 'algorithms/'  # Default directory of the benchmarking algorithms
@@ -40,8 +37,10 @@ _moddir = 'mod/'
 _nmidir = 'nmi/'
 _extlog = '.log'
 _exterr = '.err'
-_execnmi = './gecmi'  # Binary for NMI evaluation
+_extexectime = '.rcp'  # Resource Consumption Profile
+_extclnodes = '.cnl'  # Clusters (Communities) Nodes Lists
 _extmod = '.mod'
+_execnmi = './gecmi'  # Binary for NMI evaluation
 _sepinst = '^'  # Network instances separator, must be a char
 _seppars = '!'  # Network shuffles separator, must be a char
 #_netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
@@ -66,7 +65,7 @@ def	preparePath(taskpath):
 			pos = filter(lambda x: x != -1, [name.find(c) for c in (_sepinst, _seppars)])
 			if pos:
 				pos = min(pos)
-				assert pos, 'Separators are not the first symbol of the name'
+				assert pos, 'Separators should not be the first symbol of the name'
 				name = name[:pos]
 			mainpath = '/'.join((mainpath, name))
 		# Extract endings of multiple instances
@@ -97,13 +96,13 @@ def unknownApp(name):
 	return stub
 
 
-def nmiAlgorithm(execpool, gtres, timeout, algname, evalbin=_execnmi, evalname='nmi', stderr=os.devnull):
+def nmiAlgorithm(execpool, algname, gtres, timeout, evalbin=_execnmi, evalname='nmi', stderr=os.devnull):
 	"""Evaluate the algorithm by the specified nmi measure
 
 	execpool  - execution pool of worker processes
+	algname  - the algorithm name that is evaluated
 	gtres  - ground truth result: file name of clusters for each of which nodes are listed (clusters nodes lists file)
 	timeout  - execution timeout, 0 - infinity
-	algname  - the algorithm name that is evaluated
 	evalbin  - file name of the evaluation binary
 	evalname  - name of the evaluation measure
 	stderr  - optional redifinition of the stderr channel: None - use default, os.devnull - skip
@@ -130,14 +129,13 @@ def nmiAlgorithm(execpool, gtres, timeout, algname, evalbin=_execnmi, evalname='
 		taskex = ''.join((task, '_', str(i)))
 
 
-def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
+def modAlgorithm(execpool, algname, netfile, timeout):  # , multirun=True  - evaluate also on the shuffled networks (is required for non-deterministic algorithms only)
 	"""Evaluate quality of the algorithm by modularity
 
+	algname  - the algorithm name that is evaluated
 	execpool  - execution pool of worker processes
 	netfile  - file name of the input network
 	timeout  - execution timeout, 0 - infinity
-	algname  - the algorithm name that is evaluated
-	multirun  - evaluate also on the shuffled networks (is required for non-deterministic algorithms only)
 	"""
 	assert execpool and netfile and algname, "Parameters must be defined"
 	# Fetch the task name and chose correct network filename
@@ -157,6 +155,8 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 		"""Modularity of the network instance as mean over the shuffles with 2 standard deviation
 		to evaluate stability of the clustering
 		"""
+		# Traverse over *.mod files, evaluate mean and 2*STD for shuffles and output
+		# everything to the accumulative average file: resdir/scp.mod
 		pass
 		## Sort the task acc mod file and accumulate the largest value to the totall acc mod file
 		## Note: here full path is required
@@ -167,7 +167,7 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 		#			amod.write('# Network\tQ\tTask\n')  # Network\tQ\tQ_STD
 		#			amod.flush()
 		#with open(amodname, 'a') as amod:  # Append to the end
-		#	subprocess.call(''.join(('printf "', task, '\t `sort -g -r "', tmodname,'" | head -n 1`\n"')), stdout=amod, shell=True)
+		#	subprocess.call(''.join(('printf "', task, '\t `sort -g -r "', taskoutp,'" | head -n 1`\n"')), stdout=amod, shell=True)
 
 	# Task for all instances and shuffles to perform single postprocessing
 	itaskcapt = len(taskcapt)  # Index of the task identifier start
@@ -180,9 +180,15 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 			continue
 		evaluated = True
 		# Index of the base name without shuffling notation
-		ibasename = basename.rfind('.') + 1  # Remove shuffling part
-		if not ibasename:
-			ibasename = len(basename) + 1  # Skip level separator symbol
+		# Remove shuffling part
+		ijobsuff = basename.rfind('.') + 1  # ATTENTION: start from the end to avoid misinterpretation of the '.' symbol in initial name
+		if not ijobsuff:
+			ijobsuff = len(basename) + 1  # Skip level separator symbol
+		else:
+			try:
+				int(basename[ijobsuff:])
+			except ValueError as err:
+				raise ValueError('Shuffling suffix represents part of the filename: ' + str(err))
 		# Note: separate dir is created, because modularity is evaluated for all files in the target dir,
 		# which are different granularity / hierarchy levels
 		logsbase = clsbase.replace(_clsdir, _moddir)
@@ -192,9 +198,9 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 		os.makedirs(logsbase)
 
 		# Skip shuffle indicator to accumulate values from all shuffles into the single file
-		tmodname = os.path.splitext(logsbase)[0] + _extmod  # Name of the file with modularity values for each level
-		if os.path.exists(tmodname):
-			os.remove(tmodname)
+		taskoutp = os.path.splitext(logsbase)[0] + _extmod  # Name of the file with modularity values for each level
+		if os.path.exists(taskoutp):
+			os.remove(taskoutp)
 
 		# Traverse over all resulting communities for each ground truth, log results
 		print('>>> clsbase0: ' + clsbase)
@@ -208,16 +214,93 @@ def modAlgorithm(execpool, netfile, timeout, algname):  # , multirun=True
 			# Job postprocessing
 			def levelsMod(job):
 				"""Copy final modularity output to the separate file"""
-				assert isinstance(job.params, dict), 'job.params must represent tmodname'
-				with open(job.params['tmodname'], 'a') as tmod:  # Append to the end
+				taskoutp = job.params['taskoutp']
+				with open(taskoutp, 'a') as tmod:  # Append to the end
+					if not os.path.getsize(taskoutp):
+						tmod.write('# Q\t[shuffle_]level\n')
+						tmod.flush()
 					subprocess.call(''.join(('tail -n 1 "', job.stdout, '" ', "| sed 's/^mod: \\([^,]*\\).*/\\1\\t{}/'"
 						# Add task name as part of the filename considering redundant prefix in GANXiS
 						.format(job.params['taskcapt']))), stdout=tmod, shell=True)
 
 			jobs.append(Job(name='_'.join((evalname, taskex, algname)), task=task, workdir=_algsdir, args=args
-				, timeout=timeout, ondone=levelsMod, params={'tmodname': tmodname, 'taskcapt': taskex[ibasename:]}
+				, timeout=timeout, ondone=levelsMod, params={'taskoutp': taskoutp, 'taskcapt': taskex[ijobsuff:]}
 				, stdout=''.join((logsbase, '/', taskex, _extlog))
 				, stderr=''.join((logsbase, '/', taskex, _exterr))))
+	# Run all jobs after all of them were added to the task
+	if not evaluated:
+		print('WARNING, "{}" clusters "{}" do not exist'.format(algname, basename), file=sys.stderr)
+	else:
+		for job in jobs:
+			execpool.execute(job)
+
+
+def evalGeneric(execpool, algname, basefile, resdir, timeout, evalfile, aggregate=None):
+	"""Generic evaluation on the specidied file
+
+	execpool  - execution pool of worker processes
+	algname  - a name of the algorithm being under evaluation
+	basefile  - ground truth result, or initial network file or another measure-related file
+	resdir  - dir to store results
+	timeout  - execution timeout for this task
+	evalfile  - file evaluation callback to define evaluation jobs, signature:
+		evalfile(jobs, cfile, jobname, task, taskoutp, ijobsuff, logsbase)
+	aggregate  - aggregation callback, called on the task completion, signature: aggregate(task)
+	"""
+	assert execpool and basefile and algname, "Parameters must be defined"
+	# Fetch the task name and chose correct network filename
+	taskcapt = os.path.splitext(os.path.split(basefile)[1])[0]  # Name of the basefile
+	assert taskcapt, 'The file name must exists'
+
+	# Make dirs with logs & errors
+	# Directory of resulting community structures (clusters) for each network
+	# Note: consider possible parameters of the executed algorithm, embedded into the dir names with _seppars
+	taskame, ishuf = os.path.splitext(taskcapt)  # Separate shuffling index if present
+	assert not ishuf, 'Base file should not be shuffled'
+	evalname = 'mod'
+	evaluated = False
+	#print('basefile: {}, taskame: {}'.format(basefile, taskame))
+
+	# Task for all instances and shuffles to perform single postprocessing
+	itaskcapt = len(taskcapt)  # Index of the task identifier start
+	task = Task(name='_'.join((evalname, taskame, algname)), ondone=aggregate)
+	jobs = []
+	for clsbase in glob.iglob(''.join((_resdir, algname, '/', _clsdir, escapeWildcards(taskame), '*'))):
+		# Skip instances of the base network traversed by iglob
+		basename = os.path.split(clsbase)[1]
+		if basename[itaskcapt] == _sepinst:
+			continue
+		evaluated = True
+		# Index of the base name without shuffling notation
+		ijobsuff = basename.rfind('.') + 1  # Remove shuffling part
+		if not ijobsuff:
+			ijobsuff = len(basename) + 1  # Skip level separator symbol
+		else:
+			try:
+				int(basename[ijobsuff:])
+			except ValueError as err:
+				raise ValueError('Shuffling suffix represents part of the filename: ' + str(err))
+		# Note: separate dir is created, because modularity is evaluated for all files in the target dir,
+		# which are different granularity / hierarchy levels
+		logsbase = clsbase.replace(_clsdir, resdir)
+		# Remove previous results if exist
+		if os.path.exists(logsbase):
+			shutil.rmtree(logsbase)
+		os.makedirs(logsbase)
+
+		# Skip shuffle indicator to accumulate values from all shuffles into the single file
+		taskoutp = os.path.splitext(logsbase)[0] + _extmod  # Name of the file with modularity values for each level
+		if os.path.exists(taskoutp):
+			os.remove(taskoutp)
+
+		# Traverse over all resulting communities for each ground truth, log results
+		for cfile in glob.iglob(escapeWildcards(clsbase) + '/*'):
+			# Extract base name of the evaluating level
+			taskex = os.path.splitext(os.path.split(cfile)[1])[0]
+			assert taskex, 'The clusters name should exists'
+			jobname = '_'.join((evalname, taskex, algname))
+			logfilebase = '/'.join((logsbase, taskex))
+			evalfile(jobs, cfile, jobname, task, taskoutp, taskex[ijobsuff:], logfilebase)
 	# Run all jobs after all of them were added to the task
 	if not evaluated:
 		print('WARNING, "{}" clusters "{}" do not exist'.format(algname, basename), file=sys.stderr)
@@ -236,17 +319,74 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 	timeout  - execution timeout for this task
 	"""
 	print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
-	evalname = None
-	if measure == 'nmi-s':
-		# Evaluate by NMI_sum (onmi) instead of NMI_conv(gecmi)
-		evalname = measure
-		measure = 'nmi'
-	eaname = measure + 'Algorithm'
-	evalg = getattr(sys.modules[__name__], eaname, unknownApp(eaname))
-	if not evalname:
-		evalg(execpool, basefile, timeout, algname)
+
+	#evalname = None
+	#if measure == 'nmi-s':
+	#	# Evaluate by NMI_sum (onmi) instead of NMI_conv(gecmi)
+	#	evalname = measure
+	#	measure = 'nmi'
+	#eaname = measure + 'Algorithm'
+	#evalg = getattr(sys.modules[__name__], eaname, unknownApp(eaname))
+	#if not evalname:
+	#	evalg(execpool, algname, basefile, timeout)
+	#else:
+	#	evalg(execpool, algname, basefile, timeout, evalbin='./onmi_sum', evalname=evalname)
+
+	def modEvaluate(jobs, cfile, jobname, task, taskoutp, jobcapt, logsbase):
+		"""Add modularity evaluatoin job to the current jobs
+
+		jobs  - list of jobs
+		cfile  - clusters file to be evaluated
+		jobname  - name of the creating job
+		task  - task to wich the job belongs
+		taskoutp  - accumulative output file for all jobs of the current task
+		jobcapt  - job specific suffix after the mutual name base inherent to the task
+		logsbase  - base part of the file name for the logs including errors
+		"""
+		# Processing is performed from the algorithms dir
+		args = ('./hirecs', '-e=../' + cfile, '../' + basefile)
+
+		# Job postprocessing
+		def levelsMod(job):
+			"""Copy final modularity output to the separate file"""
+			taskoutp = job.params['taskoutp']
+			with open(taskoutp, 'a') as tmod:  # Append to the end
+				if not os.path.getsize(taskoutp):
+					tmod.write('# Q\t[shuffle_]level\n')
+					tmod.flush()
+				subprocess.call(''.join(('tail -n 1 "', job.stdout, '" ', "| sed 's/^mod: \\([^,]*\\).*/\\1\\t{}/'"
+					# Add task name as part of the filename considering redundant prefix in GANXiS
+					.format(job.params['jobcapt']))), stdout=tmod, shell=True)
+
+		jobs.append(Job(name=jobname, task=task, workdir=_algsdir, args=args
+			, timeout=timeout, ondone=levelsMod, params={'taskoutp': taskoutp, 'jobcapt': jobcapt}
+			, stdout=logsbase + _extlog, stderr=logsbase + _exterr))
+
+	def modAggregate(task):
+		"""Aggregate resutls for the executed task from task-related resulting files
+		"""
+		# Traverse over *.mod files, evaluate mean and 2*STD for shuffles and output
+		# everything to the accumulative average file: resdir/scp.mod
+		pass
+		## Sort the task acc mod file and accumulate the largest value to the totall acc mod file
+		## Note: here full path is required
+		#amodname = ''.join((_resdir, algname, _extmod))  # Name of the file with resulting modularities
+		#if not os.path.exists(amodname):
+		#	with open(amodname, 'a') as amod:
+		#		if not os.path.getsize(amodname):
+		#			amod.write('# Network\tQ\tTask\n')  # Network\tQ\tQ_STD
+		#			amod.flush()
+		#with open(amodname, 'a') as amod:  # Append to the end
+		#	subprocess.call(''.join(('printf "', task, '\t `sort -g -r "', taskoutp,'" | head -n 1`\n"')), stdout=amod, shell=True)
+
+	if measure == 'mod':
+		evalGeneric(execpool, algname, basefile, _moddir, timeout, modEvaluate, modAggregate)
+	elif measure.startswith('nmi'):
+		pass
+		#evalGeneric(execpool, algname, basefile, timeoutm, modEvaluate, modAggregate)
+		#evalg(execpool, algname, basefile, timeout, evalbin='./onmi_sum', evalname=evalname)
 	else:
-		evalg(execpool, basefile, timeout, algname, evalbin='./onmi_sum', evalname=evalname)
+		raise ValueError('Unexpected measure: ' + measure)
 
 
 # ATTENTION: this function should not be defined to not beight automatically executed
@@ -270,7 +410,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 
 # Louvain
 ## Original Louvain
-#def execLouvain(execpool, netfile, asym, timeout, tasknum=0, **kwargs):
+#def execLouvain(execpool, netfile, asym, timeout, tasknum=0):
 #	"""Execute Louvain
 #	Results are not stable => multiple execution is desirable.
 #
@@ -298,7 +438,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 #	return
 
 
-def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False, **kwargs):
+def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False):
 	"""Execute Louvain
 	Results are not stable => multiple execution is desirable.
 
@@ -374,7 +514,7 @@ def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False, **kwargs):
 
 
 # SCP (Sequential algorithm for fast clique percolation)
-def execScp(execpool, netfile, asym, timeout, **kwargs):
+def execScp(execpool, netfile, asym, timeout):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -419,7 +559,7 @@ def execScp(execpool, netfile, asym, timeout, **kwargs):
 	return kmax + 1 - kmin
 
 
-def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False, instances=5, **kwargs):  # _netshuffles + 1
+def execRandcommuns(execpool, netfile, asym, timeout, instances=5):  # _netshuffles + 1
 	"""Execute Randcommuns, Random Disjoint Clustering
 	Results are not stable => multiple execution is desirable.
 
@@ -448,7 +588,7 @@ def execRandcommuns(execpool, netfile, asym, timeout, selfexec=False, instances=
 	return 1
 
 
-def execHirecs(execpool, netfile, asym, timeout, **kwargs):
+def execHirecs(execpool, netfile, asym, timeout):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -470,7 +610,7 @@ def execHirecs(execpool, netfile, asym, timeout, **kwargs):
 	return 1
 
 
-def execHirecsOtl(execpool, netfile, asym, timeout, **kwargs):
+def execHirecsOtl(execpool, netfile, asym, timeout):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -494,7 +634,7 @@ def execHirecsOtl(execpool, netfile, asym, timeout, **kwargs):
 	return 1
 
 
-def execHirecsAhOtl(execpool, netfile, asym, timeout, **kwargs):
+def execHirecsAhOtl(execpool, netfile, asym, timeout):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -518,7 +658,7 @@ def execHirecsAhOtl(execpool, netfile, asym, timeout, **kwargs):
 	return 1
 
 
-def execHirecsNounwrap(execpool, netfile, asym, timeout, **kwargs):
+def execHirecsNounwrap(execpool, netfile, asym, timeout):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -543,7 +683,7 @@ def execHirecsNounwrap(execpool, netfile, asym, timeout, **kwargs):
 
 
 # Oslom2
-def execOslom2(execpool, netfile, asym, timeout, **kwargs):
+def execOslom2(execpool, netfile, asym, timeout):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -589,7 +729,7 @@ def execOslom2(execpool, netfile, asym, timeout, **kwargs):
 
 
 # Ganxis (SLPA)
-def execGanxis(execpool, netfile, asym, timeout, **kwargs):
+def execGanxis(execpool, netfile, asym, timeout):
 	#print('> exec params:\n\texecpool: {}\n\tnetfile: {}\n\tasym: {}\n\ttimeout: {}'
 	#	.format(execpool, netfile, asym, timeout))
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (

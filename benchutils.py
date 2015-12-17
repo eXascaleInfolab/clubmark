@@ -29,20 +29,6 @@ def escapeWildcards(path):
 	return glob.escape(path) if hasattr(glob, 'escape') else path
 
 
-def secondsToHms(seconds):
-	"""Convert seconds to hours, mins, secs
-
-	seconds  - seconds to be converted, >= 0
-
-	return hours, mins, secs
-	"""
-	assert seconds >= 0, 'seconds validation failed'
-	hours = int(seconds / 3600)
-	mins = int((seconds - hours * 3600) / 60)
-	secs = seconds - hours * 3600 - mins * 60
-	return hours, mins, secs
-
-
 def dirempty(dirpath):
 	"""Whether specified directory is empty"""
 	dirpath = escapeWildcards(dirpath)

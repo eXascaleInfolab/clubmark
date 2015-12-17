@@ -25,12 +25,19 @@ import os
 import ctypes  # Required for the multiprocessing Value definition
 import types  # Required for instance methods definition
 
-from benchutils import secondsToHms
 
+def secondsToHms(seconds):
+	"""Convert seconds to hours, mins, secs
 
-_extexectime = '.rcp'  # Resource Consumption Profile
-_extclnodes = '.cnl'  # Clusters (Communities) Nodes Lists
-_execpool = None  # Active execution pool
+	seconds  - seconds to be converted, >= 0
+
+	return hours, mins, secs
+	"""
+	assert seconds >= 0, 'seconds validation failed'
+	hours = int(seconds / 3600)
+	mins = int((seconds - hours * 3600) / 60)
+	secs = seconds - hours * 3600 - mins * 60
+	return hours, mins, secs
 
 
 class Task(object):

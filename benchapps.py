@@ -239,17 +239,16 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 		args = ('./hirecs', '-e=../' + cfile, '../' + basefile)
 
 		# Job postprocessing
-		def levelsMod(job):
-			"""Copy final modularity output to the separate file"""
-			result =  job.proc.communicate()[0]  # Read buffered stdout
+		def aggLevs(job):
+			"""Aggregate results over all levels, appending final value for each level to the dedicated file"""
+			result = job.proc.communicate()[0]  # Read buffered stdout
 			# Find require value to be aggregated
 			targpref = 'mod: '
 			# Match float number
 			mod = parseFloat(result[len(targpref):]) if result.startswith(targpref) else None
 			if mod is None:
-				print('ERROR, invalid output file format of the job "{}", moularity value is not found in:\n{}'
-					.format(job.name, result), file=job.stderr if job.stderr else sys.stderr)
-				joboutp.close()
+				print('ERROR, job "{}" has invalid output format. Moularity value is not found in:\n{}'
+					.format(job.name, result), file=sys.stderr)
 				return
 
 			taskoutp = job.params['taskoutp']
@@ -259,10 +258,12 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 					tmod.flush()
 				tmod.write('{}\t{}\n'.format(mod, job.params['jobsuff']))
 
+
 		jobs.append(Job(name=jobname, task=task, workdir=_algsdir, args=args
-			, timeout=timeout, ondone=levelsMod, params={'taskoutp': taskoutp, 'jobsuff': jobsuff}
+			, timeout=timeout, ondone=aggLevs, params={'taskoutp': taskoutp, 'jobsuff': jobsuff}
 			# Output modularity to the proc PIPE buffer to be aggregated on postexec to avoid redundant files
 			, stdout=PIPE, stderr=logsbase + _exterr))
+
 
 	def nmiEvaluate(jobs, cfile, jobname, task, taskoutp, rcpoutp, jobsuff, logsbase):
 		"""Add nmi evaluatoin job to the current jobs
@@ -289,30 +290,51 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 		print('nmieval;  basefile: {}\n\tcfile: {}\n\tjobname: {}\n\ttask.name: {}\n\ttaskoutp: {}'
 			  '\n\trcpoutp: {} \n\tjobsuff: {}\n\tlogsbase: {}'
 			  .format(basefile, cfile, jobname, task.name, taskoutp, rcpoutp, jobsuff, logsbase))
-		raise AssertionError('checkpoint')
+		## Undate current environmental variables with LD_LIBRARY_PATH
+		ldpname = 'LD_LIBRARY_PATH'
+		ldpval = '.'
+		ldpath = os.environ.get(ldpname, '')
+		if not ldpath or not envVarDefined(value=ldpval, evar=ldpath):
+			if ldpath:
+				ldpath = ':'.join((ldpath, ldpval))
+			else:
+				ldpath = ldpval
+			os.environ[ldpname] = ldpath
+
 		# Processing is performed from the algorithms dir
-		args = ('../exectime', '-o=../' + rcpoutp, '-n=' + jobname, 'LD_LIBRARY_PATH=. ./gecmi', basefile, cfile)
+		args = ('../exectime', '-o=../' + rcpoutp, '-n=' + jobname, './gecmi', '../' + basefile, '../' + cfile)
 
 		# Job postprocessing
-		def levelsNMI(job):
-			"""Aggregate max resulting output to the separate file"""
-			taskoutp = job.params['taskoutp']
-			with open(taskoutp, 'a') as tmod:  # Append to the end
-				if not os.path.getsize(taskoutp):
-					tmod.write('# Q\t[shuffle_]level\n')
-					tmod.flush()
-				subprocess.call(''.join(('tail -n 1 "', job.stdout, '" ', "| sed 's/^mod: \\([^,]*\\).*/\\1\\t{}/'"
-					# Add task name as part of the filename considering redundant prefix in GANXiS
-					.format(job.params['jobsuff']))), stdout=tmod, shell=True)
+		def aggLevs(job):
+			"""Aggregate results over all levels, appending final value for each level to the dedicated file"""
+			try:
+				result = job.proc.communicate()[0]
+				nmi = float(result)  # Read buffered stdout
+			except ValueError:
+				print('ERROR, nmi evaluation failed for the job "{}": {}'
+					.format(job.name, result), file=sys.stderr)
+			else:
+				taskoutp = job.params['taskoutp']
+				print('>>> NMI aggLevs executing, taskoutp: ' + taskoutp)
+				with open(taskoutp, 'a') as tnmi:  # Append to the end
+					if not os.path.getsize(taskoutp):
+						tnmi.write('# NMI\t[shuffle_]level\n')
+						tnmi.flush()
+					tnmi.write('{}\t{}\n'.format(nmi, job.params['jobsuff']))
+					#subprocess.call(''.join(('tail -n 1 "', job.stdout, '" ', "| sed 's/^mod: \\([^,]*\\).*/\\1\\t{}/'"
+					#	# Add task name as part of the filename considering redundant prefix in GANXiS
+					#	.format(job.params['jobsuff']))), stdout=tnmi, shell=True)
+
 
 		jobs.append(Job(name=jobname, task=task, workdir=_algsdir, args=args
-			, timeout=timeout, ondone=levelsMod, params={'taskoutp': taskoutp, 'jobsuff': jobsuff}
-			, stdout=taskoutp, stderr=logsbase + _exterr))
+			, timeout=timeout, ondone=aggLevs, params={'taskoutp': taskoutp, 'jobsuff': jobsuff}
+			, stdout=PIPE, stderr=logsbase + _exterr))
 
 		#args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', task, '_', algname))
 		#	, './eval.sh', evalbin, '../' + gtres, ''.join(('../', _resdir, algname, '/', task)), algname, evalname)
 		#execpool.execute(Job(name='_'.join((evalname, task, algname)), workdir=_algsdir, args=args
 		#	, timeout=timeout, stdout=''.join((_resdir, algname, '/', evalname, '_', task, _extlog)), stderr=stderr))
+
 
 	def modAggregate(task):
 		"""Aggregate resutls for the executed task from task-related resulting files
@@ -331,8 +353,10 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 		#with open(amodname, 'a') as amod:  # Append to the end
 		#	subprocess.call(''.join(('printf "', task, '\t `sort -g -r "', taskoutp,'" | head -n 1`\n"')), stdout=amod, shell=True)
 
+
 	def nmiAggregate(task):
 		pass
+
 
 	if measure == 'mod':
 		evalGeneric(execpool, measure, algname, basefile, _moddir, timeout, modEvaluate, modAggregate)

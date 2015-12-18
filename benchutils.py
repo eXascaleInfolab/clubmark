@@ -27,6 +27,23 @@ _refloat = re.compile('[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')
 _reint = re.compile('[-+]?\d+(?=\W)')
 
 
+def envVarDefined(value, name=None, evar=None):
+	"""Checks wether specified environment variable is already defined
+
+	value  - value of the environmental variable to be checked
+	name  - name of the environment var to be retrieved (required in evar is not specified)
+	evar  - retrieved value of the environmental var to check inclusoin of the specified value
+
+	return  True if the var is defined as specified, otherwise FALSE
+	"""
+	assert isinstance(value, str) and (name is None or isinstance(name, str)) and (
+		evar is None or isinstance(evar, str)), 'Environmental vars are strings'
+	if evar is None:
+		assert name, 'Evnironmental variable name must be specified if the value is not provided'
+		evar = os.environ.get(name, '')
+	return evar and re.search('^(.+:)?{}(:.*)?$'.format(re.escape(value)), evar) is not None
+
+
 def parseFloat(text):
 	"""Parse float number from the text if exists and separated by non-alphabet symbols.
 

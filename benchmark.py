@@ -710,9 +710,9 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 			for elgname in evalalgs:
 				try:
 					evalAlgorithm(_execpool, elgname, basefile, measure, timeout)
-					# Evaluate also nmi-s for nmi
+					# Evaluate also nmi_s for nmi
 					if measure == 'nmi':
-						evalAlgorithm(_execpool, elgname, basefile, 'nmi-s', timeout)
+						evalAlgorithm(_execpool, elgname, basefile, 'nmi_s', timeout)
 				except StandardError as err:
 					print('WARNING, "{}" evaluation of "{}" is interrupted by the exception: {}'
 						.format(measure, elgname, err), file=sys.stderr)

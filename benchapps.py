@@ -117,7 +117,7 @@ def nmiAlgorithm(execpool, algname, gtres, timeout, evalbin=_execnmi, evalname='
 		taskex = ''.join((task, '_', str(i)))
 
 
-def evalGeneric(execpool, evalname, algname, basefile, resdir, timeout, evalfile, aggregate=None):
+def evalGeneric(execpool, evalname, algname, basefile, resdir, timeout, evalfile, aggregate=None, tidy=True):
 	"""Generic evaluation on the specidied file
 	NOTE: all paths are given relative to the root benchmark directory.
 
@@ -130,6 +130,7 @@ def evalGeneric(execpool, evalname, algname, basefile, resdir, timeout, evalfile
 	evalfile  - file evaluation callback to define evaluation jobs, signature:
 		evalfile(jobs, cfile, jobname, task, taskoutp, ijobsuff, logsbase)
 	aggregate  - aggregation callback, called on the task completion, signature: aggregate(task)
+	tidy  - delete previously existent resutls. Must be False if a few apps output results into the same dir
 	"""
 	assert execpool and basefile and evalname and algname, "Parameters must be defined"
 	# Fetch the task name and chose correct network filename
@@ -169,13 +170,14 @@ def evalGeneric(execpool, evalname, algname, basefile, resdir, timeout, evalfile
 		# which are different granularity / hierarchy levels
 		logsbase = clsbase.replace(_clsdir, resdir)
 		# Remove previous results if exist
-		if os.path.exists(logsbase):
+		if tidy and os.path.exists(logsbase):
 			shutil.rmtree(logsbase)
-		os.makedirs(logsbase)
+		if tidy or not os.path.exists(logsbase):
+			os.makedirs(logsbase)
 
 		# Skip shuffle indicator to accumulate values from all shuffles into the single file
 		taskoutp = '.'.join((os.path.splitext(logsbase)[0], evalname))  # evalext  # Name of the file with modularity values for each level
-		if os.path.exists(taskoutp):
+		if tidy and os.path.exists(taskoutp):
 			os.remove(taskoutp)
 
 		# Traverse over all resulting communities for each ground truth, log results
@@ -205,13 +207,13 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 	execpool  - execution pool of worker processes
 	algname  - a name of the algorithm being under evaluation
 	basefile  - ground truth result, or initial network file or another measure-related file
-	measure  - target measure to be evaluated: {nmi, nmi-s, mod}
+	measure  - target measure to be evaluated: {nmi, nmi_s, mod}
 	timeout  - execution timeout for this task
 	"""
 	print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
 
 	#evalname = None
-	#if measure == 'nmi-s':
+	#if measure == 'nmi_s':
 	#	# Evaluate by NMI_sum (onmi) instead of NMI_conv(gecmi)
 	#	evalname = measure
 	#	measure = 'nmi'
@@ -287,9 +289,6 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 		jobsuff: 1
 		logsbase: results/scp/nmi/1K10!k3/1K10!k3_1
 		"""
-		print('nmieval;  basefile: {}\n\tcfile: {}\n\tjobname: {}\n\ttask.name: {}\n\ttaskoutp: {}'
-			  '\n\trcpoutp: {} \n\tjobsuff: {}\n\tlogsbase: {}'
-			  .format(basefile, cfile, jobname, task.name, taskoutp, rcpoutp, jobsuff, logsbase))
 		## Undate current environmental variables with LD_LIBRARY_PATH
 		ldpname = 'LD_LIBRARY_PATH'
 		ldpval = '.'
@@ -315,25 +314,55 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 					.format(job.name, result), file=sys.stderr)
 			else:
 				taskoutp = job.params['taskoutp']
-				print('>>> NMI aggLevs executing, taskoutp: ' + taskoutp)
 				with open(taskoutp, 'a') as tnmi:  # Append to the end
 					if not os.path.getsize(taskoutp):
 						tnmi.write('# NMI\t[shuffle_]level\n')
 						tnmi.flush()
 					tnmi.write('{}\t{}\n'.format(nmi, job.params['jobsuff']))
-					#subprocess.call(''.join(('tail -n 1 "', job.stdout, '" ', "| sed 's/^mod: \\([^,]*\\).*/\\1\\t{}/'"
-					#	# Add task name as part of the filename considering redundant prefix in GANXiS
-					#	.format(job.params['jobsuff']))), stdout=tnmi, shell=True)
 
 
 		jobs.append(Job(name=jobname, task=task, workdir=_algsdir, args=args
 			, timeout=timeout, ondone=aggLevs, params={'taskoutp': taskoutp, 'jobsuff': jobsuff}
 			, stdout=PIPE, stderr=logsbase + _exterr))
 
-		#args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', task, '_', algname))
-		#	, './eval.sh', evalbin, '../' + gtres, ''.join(('../', _resdir, algname, '/', task)), algname, evalname)
-		#execpool.execute(Job(name='_'.join((evalname, task, algname)), workdir=_algsdir, args=args
-		#	, timeout=timeout, stdout=''.join((_resdir, algname, '/', evalname, '_', task, _extlog)), stderr=stderr))
+
+	def nmisEvaluate(jobs, cfile, jobname, task, taskoutp, rcpoutp, jobsuff, logsbase):
+		"""Add nmi evaluatoin job to the current jobs
+
+		jobs  - list of jobs
+		cfile  - clusters file to be evaluated
+		jobname  - name of the creating job
+		task  - task to wich the job belongs
+		taskoutp  - accumulative output file for all jobs of the current task
+		rcpoutp  - file name for the aggregated output of the jobs resources consumption
+		jobsuff  - job specific suffix after the mutual name base inherent to the task
+		logsbase  - base part of the file name for the logs including errors
+		"""
+		# Processing is performed from the algorithms dir
+		args = ('../exectime', '-o=../' + rcpoutp, '-n=' + jobname, './onmi_sum', '../' + basefile, '../' + cfile)
+
+		# Job postprocessing
+		def aggLevs(job):
+			"""Aggregate results over all levels, appending final value for each level to the dedicated file"""
+			try:
+				result = job.proc.communicate()[0]
+				nmi = float(result)  # Read buffered stdout
+			except ValueError:
+				print('ERROR, nmi_s evaluation failed for the job "{}": {}'
+					.format(job.name, result), file=sys.stderr)
+			else:
+				taskoutp = job.params['taskoutp']
+				with open(taskoutp, 'a') as tnmi:  # Append to the end
+					if not os.path.getsize(taskoutp):
+						tnmi.write('# NMI_S\t[shuffle_]level\n')
+						tnmi.flush()
+					tnmi.write('{}\t{}\n'.format(nmi, job.params['jobsuff']))
+
+
+		jobs.append(Job(name=jobname, task=task, workdir=_algsdir, args=args
+			, timeout=timeout, ondone=aggLevs, params={'taskoutp': taskoutp, 'jobsuff': jobsuff}
+			, stdout=PIPE, stderr=logsbase + _exterr))
+
 
 
 	def modAggregate(task):
@@ -358,14 +387,16 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 		pass
 
 
+	def nmisAggregate(task):
+		pass
+
+
 	if measure == 'mod':
 		evalGeneric(execpool, measure, algname, basefile, _moddir, timeout, modEvaluate, modAggregate)
 	elif measure == 'nmi':
 		evalGeneric(execpool, measure, algname, basefile, _nmidir, timeout, nmiEvaluate, nmiAggregate)
-	elif measure == 'nmi-s':
-		pass
-		#evalg(execpool, algname, basefile, timeout)
-		#evalg(execpool, algname, basefile, timeout, evalbin='./onmi_sum', evalname=evalname)
+	elif measure == 'nmi_s':
+		evalGeneric(execpool, measure, algname, basefile, _nmidir, timeout, nmisEvaluate, nmisAggregate, tidy=False)
 	else:
 		raise ValueError('Unexpected measure: ' + measure)
 
@@ -487,7 +518,7 @@ def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False):
 #
 #def evalLouvain_igNS(execpool, basefile, measure, timeout):
 #	"""Evaluate Louvain_igraph by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
-#	evalAlgorithm(execpool, cnlfile, timeout, 'louvain_igraph', evalbin='./onmi_sum', evalname='nmi-s')
+#	evalAlgorithm(execpool, cnlfile, timeout, 'louvain_igraph', evalbin='./onmi_sum', evalname='nmi_s')
 #
 #
 #def modLouvain_ig(execpool, netfile, timeout):

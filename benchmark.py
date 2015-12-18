@@ -629,8 +629,8 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 				jobsnum += alg(_execpool, net, asym, timeout)
 			except StandardError as err:
 				errexectime = time.time() - exectime
-				print('The {} is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
-					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)))
+				print('WARNING, the "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
+					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
 		return jobsnum
 
 	jobsnum = 1  # Number of networks jobs to be processed (can be a few per each algorithm per each network)
@@ -714,7 +714,8 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 					if measure == 'nmi':
 						evalAlgorithm(_execpool, elgname, basefile, 'nmi-s', timeout)
 				except StandardError as err:
-					print('"{}" evaluation of "{}" is interrupted by the exception: {}'.format(measure, elgname, err))
+					print('WARNING, "{}" evaluation of "{}" is interrupted by the exception: {}'
+						.format(measure, elgname, err), file=sys.stderr)
 				else:
 					jobsnum += 1
 			return jobsnum

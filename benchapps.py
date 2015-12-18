@@ -18,9 +18,8 @@ import os
 import shutil
 import glob
 import subprocess
-
-# Add algorithms modules
 import sys
+# Add algorithms modules
 #sys.path.insert(0, 'algorithms')  # Note: this operation might lead to ambiguity on paths resolving
 
 from algorithms.louvain_igraph import louvain
@@ -120,6 +119,7 @@ def nmiAlgorithm(execpool, algname, gtres, timeout, evalbin=_execnmi, evalname='
 
 def evalGeneric(execpool, evalname, algname, basefile, resdir, timeout, evalfile, aggregate=None):
 	"""Generic evaluation on the specidied file
+	NOTE: all paths are given relative to the root benchmark directory.
 
 	execpool  - execution pool of worker processes
 	evalname  - evaluating measure name
@@ -144,11 +144,13 @@ def evalGeneric(execpool, evalname, algname, basefile, resdir, timeout, evalfile
 	evaluated = False
 	#print('basefile: {}, taskame: {}'.format(basefile, taskame))
 
+	# Resource consumption profile file name
+	rcpoutp = ''.join((_resdir, algname, '/', evalname, _extexectime))
 	# Task for all instances and shuffles to perform single postprocessing
 	itaskcapt = len(taskcapt)  # Index of the task identifier start
 	task = Task(name='_'.join((evalname, taskame, algname)), ondone=aggregate)
 	jobs = []
-	for clsbase in glob.iglob(''.join((_resdir, algname, '/', _clsdir, escapeWildcards(taskame), '*'))):
+	for clsbase in glob.iglob(''.join((_resdir, algname, '/', _clsdir, escapePathWildcards(taskame), '*'))):
 		# Skip instances of the base network traversed by iglob
 		basename = os.path.split(clsbase)[1]
 		if basename[itaskcapt] == _sepinst:
@@ -177,23 +179,28 @@ def evalGeneric(execpool, evalname, algname, basefile, resdir, timeout, evalfile
 			os.remove(taskoutp)
 
 		# Traverse over all resulting communities for each ground truth, log results
-		for cfile in glob.iglob(escapeWildcards(clsbase) + '/*'):
+		for cfile in glob.iglob(escapePathWildcards(clsbase) + '/*'):
 			# Extract base name of the evaluating level
 			taskex = os.path.splitext(os.path.split(cfile)[1])[0]
 			assert taskex, 'The clusters name should exists'
 			jobname = '_'.join((evalname, taskex, algname))
 			logfilebase = '/'.join((logsbase, taskex))
-			evalfile(jobs, cfile, jobname, task, taskoutp, taskex[ijobsuff:], logfilebase)
+			evalfile(jobs, cfile, jobname, task, taskoutp, rcpoutp, taskex[ijobsuff:], logfilebase)
 	# Run all jobs after all of them were added to the task
 	if not evaluated:
 		print('WARNING, "{}" clusters "{}" do not exist'.format(algname, basename), file=sys.stderr)
 	else:
 		for job in jobs:
-			execpool.execute(job)
+			try:
+				execpool.execute(job)
+			except StandardError as err:
+				print('WARNING, "{}" job is interrupted by the exception: {}'
+					.format(job.name, err), file=sys.stderr)
 
 
 def evalAlgorithm(execpool, algname, basefile, measure, timeout):
-	"""Evaluate the algorithm by the specified measure
+	"""Evaluate the algorithm by the specified measure.
+	NOTE: all paths are given relative to the root benchmark directory.
 
 	execpool  - execution pool of worker processes
 	algname  - a name of the algorithm being under evaluation
@@ -215,14 +222,16 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 	#else:
 	#	evalg(execpool, algname, basefile, timeout, evalbin='./onmi_sum', evalname=evalname)
 
-	def modEvaluate(jobs, cfile, jobname, task, taskoutp, jobsuff, logsbase):
+	def modEvaluate(jobs, cfile, jobname, task, taskoutp, rcpoutp, jobsuff, logsbase):
 		"""Add modularity evaluatoin job to the current jobs
+		NOTE: all paths are given relative to the root benchmark directory.
 
 		jobs  - list of jobs
 		cfile  - clusters file to be evaluated
 		jobname  - name of the creating job
 		task  - task to wich the job belongs
 		taskoutp  - accumulative output file for all jobs of the current task
+		rcpoutp  - file name for the aggregated output of the jobs resources consumption
 		jobsuff  - job specific suffix after the mutual name base inherent to the task
 		logsbase  - base part of the file name for the logs including errors
 		"""
@@ -232,6 +241,61 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 		# Job postprocessing
 		def levelsMod(job):
 			"""Copy final modularity output to the separate file"""
+			result =  job.proc.communicate()[0]  # Read buffered stdout
+			# Find require value to be aggregated
+			targpref = 'mod: '
+			# Match float number
+			mod = parseFloat(result[len(targpref):]) if result.startswith(targpref) else None
+			if mod is None:
+				print('ERROR, invalid output file format of the job "{}", moularity value is not found in:\n{}'
+					.format(job.name, result), file=job.stderr if job.stderr else sys.stderr)
+				joboutp.close()
+				return
+
+			taskoutp = job.params['taskoutp']
+			with open(taskoutp, 'a') as tmod:  # Append to the end
+				if not os.path.getsize(taskoutp):
+					tmod.write('# Q\t[ShuffleIndex_]Level\n')
+					tmod.flush()
+				tmod.write('{}\t{}\n'.format(mod, job.params['jobsuff']))
+
+		jobs.append(Job(name=jobname, task=task, workdir=_algsdir, args=args
+			, timeout=timeout, ondone=levelsMod, params={'taskoutp': taskoutp, 'jobsuff': jobsuff}
+			# Output modularity to the proc PIPE buffer to be aggregated on postexec to avoid redundant files
+			, stdout=PIPE, stderr=logsbase + _exterr))
+
+	def nmiEvaluate(jobs, cfile, jobname, task, taskoutp, rcpoutp, jobsuff, logsbase):
+		"""Add nmi evaluatoin job to the current jobs
+
+		jobs  - list of jobs
+		cfile  - clusters file to be evaluated
+		jobname  - name of the creating job
+		task  - task to wich the job belongs
+		taskoutp  - accumulative output file for all jobs of the current task
+		rcpoutp  - file name for the aggregated output of the jobs resources consumption
+		jobsuff  - job specific suffix after the mutual name base inherent to the task
+		logsbase  - base part of the file name for the logs including errors
+
+		Example:
+		[basefile: syntnets/networks/1K10/1K10.cnl]
+		cfile: results/scp/clusters/1K10!k3/1K10!k3_1.cnl
+		jobname: nmi_1K10!k3_1_scp
+		task.name: nmi_1K10_scp
+		taskoutp: results/scp/nmi/1K10!k3.nmi
+		rcpoutp: results/scp/nmi.rcp
+		jobsuff: 1
+		logsbase: results/scp/nmi/1K10!k3/1K10!k3_1
+		"""
+		print('nmieval;  basefile: {}\n\tcfile: {}\n\tjobname: {}\n\ttask.name: {}\n\ttaskoutp: {}'
+			  '\n\trcpoutp: {} \n\tjobsuff: {}\n\tlogsbase: {}'
+			  .format(basefile, cfile, jobname, task.name, taskoutp, rcpoutp, jobsuff, logsbase))
+		raise AssertionError('checkpoint')
+		# Processing is performed from the algorithms dir
+		args = ('../exectime', '-o=../' + rcpoutp, '-n=' + jobname, 'LD_LIBRARY_PATH=. ./gecmi', basefile, cfile)
+
+		# Job postprocessing
+		def levelsNMI(job):
+			"""Aggregate max resulting output to the separate file"""
 			taskoutp = job.params['taskoutp']
 			with open(taskoutp, 'a') as tmod:  # Append to the end
 				if not os.path.getsize(taskoutp):
@@ -243,22 +307,8 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 
 		jobs.append(Job(name=jobname, task=task, workdir=_algsdir, args=args
 			, timeout=timeout, ondone=levelsMod, params={'taskoutp': taskoutp, 'jobsuff': jobsuff}
-			, stdout=logsbase + _extlog, stderr=logsbase + _exterr))
+			, stdout=taskoutp, stderr=logsbase + _exterr))
 
-	def nmiEvaluate(jobs, cfile, jobname, task, taskoutp, jobsuff, logsbase):
-		"""Add nmi evaluatoin job to the current jobs
-
-		jobs  - list of jobs
-		cfile  - clusters file to be evaluated
-		jobname  - name of the creating job
-		task  - task to wich the job belongs
-		taskoutp  - accumulative output file for all jobs of the current task
-		jobsuff  - job specific suffix after the mutual name base inherent to the task
-		logsbase  - base part of the file name for the logs including errors
-		"""
-		print('nmieval;  basefile: {}\n\tcfile: {}\n\tjobname: {}\n\ttask.name: {}\n\ttaskoutp: {}\n\tjobsuff: {}\n\tlogsbase: {}'
-			  .format(basefile, cfile, jobname, task.name, taskoutp, jobsuff, logsbase))
-		raise AssertionError('checkpoint')
 		#args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', task, '_', algname))
 		#	, './eval.sh', evalbin, '../' + gtres, ''.join(('../', _resdir, algname, '/', task)), algname, evalname)
 		#execpool.execute(Job(name='_'.join((evalname, task, algname)), workdir=_algsdir, args=args
@@ -400,7 +450,7 @@ def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False):
 	#	selfexec = True
 	#	netdir = os.path.split(netfile)[0] + '/'
 	#	#print('Netdir: ', netdir)
-	#	for netfile in glob.iglob(''.join((escapeWildcards(netdir), escapeWildcards(task), '/*', netext))):
+	#	for netfile in glob.iglob(''.join((escapePathWildcards(netdir), escapePathWildcards(task), '/*', netext))):
 	#		execLouvain_ig(execpool, netfile, asym, timeout, selfexec)
 	#		execnum += 1
 	return execnum
@@ -613,7 +663,7 @@ def execOslom2(execpool, netfile, asym, timeout):
 	def postexec(job):
 		# Copy communities output from original location to the target one
 		origResDir = ''.join((netdir, task, netext, '_oslo_files/'))
-		for fname in glob.iglob(escapeWildcards(origResDir) +'tp*'):
+		for fname in glob.iglob(escapePathWildcards(origResDir) +'tp*'):
 			shutil.copy2(fname, taskpath)
 
 		# Move whole dir as extra task output to the logsdir

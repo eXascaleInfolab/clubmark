@@ -16,22 +16,65 @@ import glob
 import shutil
 import time
 import tarfile
+import re
 
 from sys import executable as pyexec  # Full path to the current Python interpreter
 from multiprocessing import Lock
 
 
 _bckdir = 'backup/'  # Backup directory
+_refloat = re.compile('[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')
+_reint = re.compile('[-+]?\d+(?=\W)')
 
 
-def escapeWildcards(path):
+def parseFloat(text):
+	"""Parse float number from the text if exists and separated by non-alphabet symbols.
+
+	return  - parsed float number or None
+
+	>>> parseFloat('.3asdf') is None
+	True
+	>>> parseFloat('0.3 asdf')
+	0.3
+	>>> parseFloat("-324.65e-2;aset") == -324.65e-2
+	True
+	>>> parseFloat('5.2sdf, 45')
+	5.0
+	"""
+	match = _refloat.match(text)
+	if match:
+		return float(match.group(0))
+	return None
+
+
+def parseInt(text):
+	"""Parse int number from the text if exists and separated by non-alphabet symbols.
+
+	return  - parsed float number or None
+
+	>>> parseInt('3asdf') is None
+	True
+	>>> parseInt('3 asdf')
+	3
+	>>> parseInt("324e1;aset") is None
+	True
+	>>> parseInt('5.2sdf, 45')
+	5
+	"""
+	match = _reint.match(text)
+	if match:
+		return int(match.group(0))
+	return None
+
+
+def escapePathWildcards(path):
 	"""Escape wildcards in the path"""
 	return glob.escape(path) if hasattr(glob, 'escape') else path
 
 
 def dirempty(dirpath):
 	"""Whether specified directory is empty"""
-	dirpath = escapeWildcards(dirpath)
+	dirpath = escapePathWildcards(dirpath)
 	assert os.path.isdir(dirpath), 'Existent directory is expected'
 	if not dirpath.endswith('/'):
 		dirpath += '/'
@@ -48,7 +91,7 @@ def basePathExists(path):
 		ATTENTION: the basepathis escaped, i.e. wildcards are not supported
 	"""
 	try:
-		glob.iglob(escapeWildcards(path) + '*').next()
+		glob.iglob(escapePathWildcards(path) + '*').next()
 	except StopIteration:
 		# No such files / dirs
 		return False
@@ -128,7 +171,7 @@ def nameVersion(path, expand, synctime=None):
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
 	"""
-	path = os.path.normpath(escapeWildcards(path))
+	path = os.path.normpath(escapePathWildcards(path))
 	name = os.path.split(path)[1]  # Extract dir of file name
 	if not path:
 		raise ValueError('Specified path is empty')
@@ -175,7 +218,7 @@ def backupPath(basepath, expand=False, synctime=None, compress=True):  # basedir
 		return
 	#print('Backuping "{}"{}...'.format(basepath, 'with synctime' if synctime else ''))
 	# Remove trailing path separator if exists
-	basepath = os.path.normpath(escapeWildcards(basepath))
+	basepath = os.path.normpath(escapePathWildcards(basepath))
 	# Create backup/ if required
 	basedir = '/'.join((os.path.split(basepath)[0], _bckdir))
 	if not os.path.exists(basedir):
@@ -231,3 +274,14 @@ def backupPath(basepath, expand=False, synctime=None, compress=True):  # basedir
 			os.mkdir(basedir)
 		for path in glob.iglob(basepath + ('*' if expand else '')):
 			shutil.move(path, basedir + os.path.split(path)[1])
+
+
+if __name__ == "__main__":
+	"""Doc tests execution"""
+	import doctest
+	flags = doctest.REPORT_NDIFF | doctest.REPORT_ONLY_FIRST_FAILURE
+	failed, total = doctest.testmod(optionflags=flags)
+	if failed:
+		print("FAILED: {} failures out of {} tests".format(failed, total))
+	else:
+		print('PASSED')

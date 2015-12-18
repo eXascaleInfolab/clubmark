@@ -18,12 +18,15 @@ from __future__ import print_function  # Required for stderr output, must be the
 import sys
 import time
 import subprocess
-from multiprocessing import cpu_count
-from multiprocessing import Value
 import collections
 import os
 import ctypes  # Required for the multiprocessing Value definition
 import types  # Required for instance methods definition
+
+from multiprocessing import cpu_count
+from multiprocessing import Value
+from subprocess import PIPE
+from subprocess import STDOUT
 
 
 def secondsToHms(seconds):
@@ -43,7 +46,7 @@ def secondsToHms(seconds):
 class Task(object):
 	""" Container of Jobs"""
 	#TODO: Implement timeout support in add/delJob
-	def __init__(self, name, timeout=0, onstart=None, ondone=None, params=None, stdout=None, stderr=None):
+	def __init__(self, name, timeout=0, onstart=None, ondone=None, params=None, stdout=sys.stdout, stderr=sys.stderr):
 		"""Initialize task, which is a number of jobs to be executed
 
 		name  - task name
@@ -56,8 +59,8 @@ class Task(object):
 			CONTEXT OF THE CALLER (main process) with the single argument, the task. Default: None
 			ATTENTION: must be lightweight
 		params  - additional parameters to be used in callbacks
-		stdout  - file name for the buffered output
-		stderr  - file name for the unbuffered output
+		stdout  - None or file name or PIPE for the buffered output to be APPENDED
+		stderr  - None or file name or PIPE or STDOUT for the unbuffered error output to be APPENDED
 
 		tstart  - start time is filled automatically on the execution start (before onstart). Default: None
 		tstop  - termination / completion time after ondone
@@ -136,7 +139,7 @@ class Job(object):
 	#	return super(Job, cls).__new__(cls, name, workdir, args, timeout, ontimeout, onstart, ondone, tstart)
 	# NOTE: keyword-only arguments are specified after the *, supported only since Python 3
 	def __init__(self, name, workdir=None, args=(), timeout=0, ontimeout=False, task=None #,*
-	, startdelay=0, onstart=None, ondone=None, params=None, stdout=None, stderr=None):
+	, startdelay=0, onstart=None, ondone=None, params=None, stdout=sys.stdout, stderr=sys.stderr):
 		"""Initialize job to be executed
 
 		name  - job name
@@ -160,11 +163,12 @@ class Job(object):
 			CONTEXT OF THE CALLER (main process) with the single argument, the job. Default: None
 			ATTENTION: must be lightweight
 		params  - additional parameters to be used in callbacks
-		stdout  - file name for the buffered output
-		stderr  - file name for the unbuffered output
+		stdout  - None or file name or PIPE for the buffered output to be APPENDED
+		stderr  - None or file name or PIPE or STDOUT for the unbuffered error output to be APPENDED
 
 		tstart  - start time is filled automatically on the execution start (before onstart). Default: None
 		tstop  - termination / completion time after ondone
+		proc  - process of the job, can be used in the ondone() to read it's PIPE
 		"""
 		assert isinstance(name, str) and timeout >= 0 and (task is None or isinstance(task, Task)), 'Parameters validaiton failed'
 		#if not args:
@@ -190,11 +194,13 @@ class Job(object):
 		self.tstart = None  # start time is filled automatically on the execution start, before onstart. Default: None
 		self.tstop = None  # SyncValue()  # Termination / completion time after ondone
 		# Private attributes
-		self._proc = None  # Process of the job
+		self.proc = None  # Process of the job, can be used in the ondone() to read it's PIPE
 
 
 	def complete(self, graceful=True):
 		"""Completion function
+		ATTENTION: This function is called after the destruction of the job-associated process
+		to perform cleanup in the context of the caller (main thread).
 
 		graceful  - the job is successfully completed or it was terminated
 		"""
@@ -207,10 +213,10 @@ class Job(object):
 			# Clean up
 			# Remove empty logs skipping the system devnull
 			tpaths = []  # Base dir of the output
-			if self.stdout and self.stdout != os.devnull and os.path.getsize(self.stdout) == 0:
+			if self.stdout and isinstance(self.stdout, str) and self.stdout != os.devnull and os.path.getsize(self.stdout) == 0:
 				tpaths.append(os.path.split(self.stdout)[0])
 				os.remove(self.stdout)
-			if self.stderr and self.stderr != os.devnull and os.path.getsize(self.stderr) == 0:
+			if self.stderr and isinstance(self.stderr, str) and self.stderr != os.devnull and os.path.getsize(self.stderr) == 0:
 				tpath = os.path.split(self.stderr)[0]
 				if not tpaths or tpath not in tpaths:
 					tpaths.append(tpath)
@@ -221,7 +227,7 @@ class Job(object):
 					os.rmdir(tpath)
 				except OSError:
 					pass  # The dir is not empty, just skip it
-			print('"{}" #{} is completed'.format(self.name, self._proc.pid if self._proc else -1), file=sys.stderr)
+			print('"{}" #{} is completed'.format(self.name, self.proc.pid if self.proc else -1), file=sys.stderr)
 		# Check whether the job is associated with any task
 		if self.task:
 			self.task = self.task.delJob(graceful)
@@ -319,30 +325,39 @@ class ExecPool(object):
 		fstdout = None
 		fstderr = None
 		try:
-			if job.stdout:
-				basedir = os.path.split(job.stdout)[0]
-				if not os.path.exists(basedir):
-					os.makedirs(basedir)
-				try:
-					fstdout = open(job.stdout, 'w')
-				except IOError as err:
-					print('ERROR on opening custom stdout "{}" for "{}": {}. Default stdout is used.'.format(
-						job.stdout, job.name, err), file=sys.stderr)
-			if job.stderr:
-				basedir = os.path.split(job.stderr)[0]
-				if not os.path.exists(basedir):
-					os.makedirs(basedir)
-				try:
-					fstderr = open(job.stderr, 'w')
-				except IOError as err:
-					print('ERROR on opening custom stderr "{}" for "{}": {}. Default stderr is used.'.format(
-						job.stderr, job.name, err), file=sys.stderr)
+			# Initialize fstdout, fstderr by the required output channel
+			for joutp in (job.stdout, job.stderr):
+				if joutp and isinstance(joutp, str):
+					basedir = os.path.split(joutp)[0]
+					if not os.path.exists(basedir):
+						os.makedirs(basedir)
+					try:
+						if joutp == job.stdout:
+							fstdout = open(joutp, 'a')
+							outcapt = 'stdout'
+						elif joutp == job.stderr:
+							fstderr = open(joutp, 'a')
+							outcapt = 'stderr'
+						else:
+							raise ValueError('Ivalid output stream value: ' + joutp)
+					except IOError as err:
+						print('ERROR on opening custom {} "{}" for "{}": {}. Default is used.'
+							.format(outcapt, joutp, job.name, err), file=sys.stderr)
+				else:
+					if joutp == job.stdout:
+						fstdout = joutp
+					elif joutp == job.stderr:
+						fstderr = joutp
+					else:
+						raise ValueError('Ivalid output stream buffer: ' + str(joutp))
+
 			if fstdout or fstderr:
-				print('"{}" uses custom output channels:\n\tstdout: {}\n\tstderr: {}'.format(job.name
-					, job.stdout if fstdout else '<default>', job.stderr if fstderr else '<default>'))
+				print('"{}" output channels:\n\tstdout: {}\n\tstderr: {}'.format(job.name
+					, str(job.stdout), str(job.stderr)))
 			if(job.args):
+				#print('>>> Opening the process', file=sys.stderr)
 				#print('Opening proc with:\n\tjob.args: {},\n\tcwd: {}'.format(' '.join(job.args), job.workdir), file=sys.stderr)
-				job._proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
+				job.proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
 				# Wait a little bit to start the process besides it's scheduling
 				if job.startdelay > 0:
 					time.sleep(job.startdelay)
@@ -355,11 +370,11 @@ class ExecPool(object):
 			job.complete(False)
 		else:
 			if async:
-				self._workers[job._proc] = job
+				self._workers[job.proc] = job
 			else:
-				job._proc.wait()
+				job.proc.wait()
 				job.complete()
-				return job._proc.returncode
+				return job.proc.returncode
 		return 0
 
 

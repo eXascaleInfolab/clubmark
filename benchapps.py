@@ -84,40 +84,7 @@ def	preparePath(taskpath):
 		os.makedirs(taskpath)
 
 
-def nmiAlgorithm(execpool, algname, gtres, timeout, evalbin=_execnmi, evalname='nmi', stderr=os.devnull):
-	"""Evaluate the algorithm by the specified nmi measure
-
-	execpool  - execution pool of worker processes
-	algname  - the algorithm name that is evaluated
-	gtres  - ground truth result: file name of clusters for each of which nodes are listed (clusters nodes lists file)
-	timeout  - execution timeout, 0 - infinity
-	evalbin  - file name of the evaluation binary
-	evalname  - name of the evaluation measure
-	stderr  - optional redifinition of the stderr channel: None - use default, os.devnull - skip
-	"""
-	assert execpool and gtres and algname and evalbin and evalname, "Parameters must be defined"
-	# Fetch the task name and chose correct network filename
-	task = os.path.splitext(os.path.split(gtres)[1])[0]  # Base name of the network
-	assert task, 'The network name should exists'
-
-	args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', task, '_', algname))
-		, './eval.sh', evalbin, '../' + gtres, ''.join(('../', _resdir, algname, '/', task)), algname, evalname)
-	execpool.execute(Job(name='_'.join((evalname, task, algname)), workdir=_algsdir, args=args
-		, timeout=timeout, stdout=''.join((_resdir, algname, '/', evalname, '_', task, _extlog)), stderr=stderr))
-
-	# Evaluate also shuffled networks if exists
-	i = 0
-	taskex = ''.join((task, '_', str(i)))
-	while os.path.exists(''.join((_resdir, algname, '/', taskex))):
-		args = ('../exectime', ''.join(('-o=./', evalname,_extexectime)), ''.join(('-n=', taskex, '_', algname))
-			, './eval.sh', evalbin, '../' + gtres, ''.join(('../', _resdir, algname, '/', taskex)), algname, evalname)
-		execpool.execute(Job(name='_'.join((evalname, taskex, algname)), workdir=_algsdir, args=args
-			, timeout=timeout, stdout=''.join((_resdir, algname, '/', evalname, '_', taskex, _extlog)), stderr=stderr))
-		i += 1
-		taskex = ''.join((task, '_', str(i)))
-
-
-def evalGeneric(execpool, evalname, algname, basefile, resdir, timeout, evalfile, aggregate=None, tidy=True):
+def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfile, aggregate=None, tidy=True):
 	"""Generic evaluation on the specidied file
 	NOTE: all paths are given relative to the root benchmark directory.
 
@@ -125,7 +92,7 @@ def evalGeneric(execpool, evalname, algname, basefile, resdir, timeout, evalfile
 	evalname  - evaluating measure name
 	algname  - a name of the algorithm being under evaluation
 	basefile  - ground truth result, or initial network file or another measure-related file
-	resdir  - dir to store results
+	measdir  - measure-identifying directory to store results
 	timeout  - execution timeout for this task
 	evalfile  - file evaluation callback to define evaluation jobs, signature:
 		evalfile(jobs, cfile, jobname, task, taskoutp, ijobsuff, logsbase)
@@ -139,10 +106,11 @@ def evalGeneric(execpool, evalname, algname, basefile, resdir, timeout, evalfile
 
 	# Make dirs with logs & errors
 	# Directory of resulting community structures (clusters) for each network
-	# Note: consider possible parameters of the executed algorithm, embedded into the dir names with _seppars
+	# Note:
+	#  - consider possible parameters of the executed algorithm, embedded into the dir names with _seppars
+	#  - base file never has '.' in the name except exception, so ext extraction is applicable
 	taskame, ishuf = os.path.splitext(taskcapt)  # Separate shuffling index if present
 	assert not ishuf, 'Base file should not be shuffled'
-	evaluated = False
 	#print('basefile: {}, taskame: {}'.format(basefile, taskame))
 
 	# Resource consumption profile file name
@@ -151,25 +119,32 @@ def evalGeneric(execpool, evalname, algname, basefile, resdir, timeout, evalfile
 	itaskcapt = len(taskcapt)  # Index of the task identifier start
 	task = Task(name='_'.join((evalname, taskame, algname)), ondone=aggregate)
 	jobs = []
+	# Traverse over directories of clusters corresponding to the base network
 	for clsbase in glob.iglob(''.join((_resdir, algname, '/', _clsdir, escapePathWildcards(taskame), '*'))):
-		# Skip instances of the base network traversed by iglob
-		basename = os.path.split(clsbase)[1]
-		if basename[itaskcapt] == _sepinst:
+		# Skip execution log files, leaving only dirs
+		if not os.path.isdir(clsbase):
 			continue
-		evaluated = True
+		# Skip instances of the base network traversed by iglob for the non-numbered instance
+		basename = os.path.split(clsbase)[1]  # Base name of the job, which is id part of the task name
+		bnameLen = len(basename)
+		if bnameLen > itaskcapt and basename[itaskcapt] == _sepinst:
+			continue
 		# Index of the base name without shuffling notation
+		# Note: generated folders corrponds to the input files/dirs that are controllable and do not contain '.' in name
 		ijobsuff = basename.rfind('.') + 1  # Remove shuffling part
 		if not ijobsuff:
-			ijobsuff = len(basename) + 1  # Skip level separator symbol
+			ijobsuff = bnameLen + 1  # Skip level separator symbol
 		else:
+			# Validate that the suffix is a shuffling index
 			try:
 				int(basename[ijobsuff:])
 			except ValueError as err:
-				raise ValueError('Shuffling suffix represents part of the filename: ' + str(err))
+				raise ValueError('Shuffling suffix represents part of the filename: "{}". Error: {}'
+					.format(basename, err))
 		# Note: separate dir is created, because modularity is evaluated for all files in the target dir,
 		# which are different granularity / hierarchy levels
-		logsbase = clsbase.replace(_clsdir, resdir)
-		# Remove previous results if exist
+		logsbase = clsbase.replace(_clsdir, measdir)
+		# Remove previous results if exist and required
 		if tidy and os.path.exists(logsbase):
 			shutil.rmtree(logsbase)
 		if tidy or not os.path.exists(logsbase):
@@ -182,22 +157,32 @@ def evalGeneric(execpool, evalname, algname, basefile, resdir, timeout, evalfile
 
 		# Traverse over all resulting communities for each ground truth, log results
 		for cfile in glob.iglob(escapePathWildcards(clsbase) + '/*'):
+			if os.path.isdir(cfile):  # Skip dirs among the resulting clusters (extra/ generated by OSLOM)
+				continue
 			# Extract base name of the evaluating level
-			taskex = os.path.splitext(os.path.split(cfile)[1])[0]
-			assert taskex, 'The clusters name should exists'
-			jobname = '_'.join((evalname, taskex, algname))
-			logfilebase = '/'.join((logsbase, taskex))
-			evalfile(jobs, cfile, jobname, task, taskoutp, rcpoutp, taskex[ijobsuff:], logfilebase)
+			# Note: names of benchmarking algortihms output files are not controllable and can be any, unlike the embracing folders
+			jobcapt = os.path.splitext(os.path.split(cfile)[1])[0]
+			assert jobcapt, 'The clusters name should exists'
+			# Extand job caption with the executing task if not already contains and update the caption index
+			ibn = jobcapt.find(basename)
+			if ibn != -1:
+				ijobsuff += ibn
+			else:
+				jobcapt = '_'.join((basename, jobcapt))
+			jobname = '_'.join((evalname, jobcapt, algname))
+			logfilebase = '/'.join((logsbase, jobcapt))
+			evalfile(jobs, cfile, jobname, task, taskoutp, rcpoutp, jobcapt[ijobsuff:], logfilebase)
 	# Run all jobs after all of them were added to the task
-	if not evaluated:
-		print('WARNING, "{}" clusters "{}" do not exist'.format(algname, basename), file=sys.stderr)
-	else:
+	if jobs:
 		for job in jobs:
 			try:
 				execpool.execute(job)
 			except StandardError as err:
 				print('WARNING, "{}" job is interrupted by the exception: {}'
 					.format(job.name, err), file=sys.stderr)
+	else:
+		print('WARNING, "{}" clusters "{}" do not exist to be evaluated'
+			.format(algname, basename), file=sys.stderr)
 
 
 def evalAlgorithm(execpool, algname, basefile, measure, timeout):
@@ -237,6 +222,10 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 		jobsuff  - job specific suffix after the mutual name base inherent to the task
 		logsbase  - base part of the file name for the logs including errors
 		"""
+		#print('Starting modEvaluate with params:\t[basefile: {}]\n\tcfile: {}\n\tjobname: {}'
+		#	'\n\ttask.name: {}\n\ttaskoutp: {}\n\tjobsuff: {}\n\tlogsbase: {}\n'
+		#	.format(basefile, cfile, jobname, task.name, taskoutp, jobsuff, logsbase), file=sys.stderr)
+
 		# Processing is performed from the algorithms dir
 		args = ('./hirecs', '-e=../' + cfile, '../' + basefile)
 
@@ -369,7 +358,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 		"""Aggregate resutls for the executed task from task-related resulting files
 		"""
 		# Traverse over *.mod files, evaluate mean and 2*STD for shuffles and output
-		# everything to the accumulative average file: resdir/scp.mod
+		# everything to the accumulative average file: measdir/scp.mod
 		pass
 		## Sort the task acc mod file and accumulate the largest value to the totall acc mod file
 		## Note: here full path is required
@@ -760,13 +749,13 @@ def execGanxis(execpool, netfile, asym, timeout):
 
 	preparePath(taskpath)
 
-	def postexec(job):
+	def tidy(job):
 		# Note: GANXiS leaves empty ./output dir in the _algsdir, which should be deleted
 		tmp = _algsdir + 'output/'
 		if os.path.exists(tmp):
 			#os.rmdir(tmp)
 			shutil.rmtree(tmp)
 
-	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=postexec
+	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout, ondone=tidy
 		, stdout=taskpath + _extlog, stderr=taskpath + _exterr))
 	return 1

@@ -2,12 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-\descr:  The benchmark, winch optionally generates or preprocesses datasets using specified executable,
-	optionally executes specified apps with the specified params on the specified datasets,
-	and optionally evaluates results of the execution using specified executable(s).
+\descr:  Multi-process Execution Pool to schedule Jobs execution optionally grouping them
+	into Tasks and specifying execution paremeters:
+	- timeout per each Job, which was the main motivation to implemtent this module
+	- onstart/ondone callbacks, ondone is called only on successful completion (not termination)
+	- stdout/err output, which can be a custom file of a PIPE
+	- custom parameters for each job and task besides the name/id
 
-	All executions are traced and logged also as resources consumption: CPU (user, kernel, etc.) and memory (RSS RAM).
-	Traces are saved even in case of internal / external interruptions and crashes.
+	Flexible API allows optional automatic restart of jobs on timeout, access to job's process,
+	parent task, start and stop execution time and much more...
 
 \author: (c) Artem Lutov <artem@exascale.info>
 \organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>
@@ -127,16 +130,6 @@ class Job(object):
 	"""Job is executed in a separate process via Popen or Process object and is
 	managed by the Process Pool Executor
 	"""
-#class Job(collections.namedtuple('Job', ('name', 'workdir', 'args', 'timeout', 'ontimeout', 'onstart', 'ondone', 'tstart'))):  # , 'tracelev'
-	#Job = collections.namedtuple('Job', ('name', 'workdir', 'args', 'timeout', 'ontimeout', 'onstart', 'ondone', 'tstart'))
-	#tracelev  - tracing detalizationg level:
-	#	0  - no tracing
-	#	1  - trace to stdout only
-	#	2  - trace to stderr only. Default
-	#	3  - trace to both stdout and stderr
-	#def __new__(cls, name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None):
-	#	assert name, "Job parameters must be defined"  #  and job.workdir and job.args
-	#	return super(Job, cls).__new__(cls, name, workdir, args, timeout, ontimeout, onstart, ondone, tstart)
 	# NOTE: keyword-only arguments are specified after the *, supported only since Python 3
 	def __init__(self, name, workdir=None, args=(), timeout=0, ontimeout=False, task=None #,*
 	, startdelay=0, onstart=None, ondone=None, params=None, stdout=sys.stdout, stderr=sys.stderr):

@@ -843,7 +843,7 @@ if __name__ == '__main__':
 			'  NOTE: files with {extnetfile} are looked for in the specified dirs to be converted',
 			'  -a="app1 app2 ..."  - apps (clustering algorithms) to run/benchmark among the implemented.'
 			' Available: scp louvain_ig randcommuns hirecs oslom2 ganxis.'
-			' Impacts -{{r, e}} options. Optional, all apps are executed by default.',
+			' Impacts {{r, e}} options. Optional, all apps are executed by default.',
 			'  NOTE: output results are stored in the "algorithms/<algname>outp/" directory',
 			'  -r  - run the benchmarking apps on the prepared data',
 			#'    Xf  - force execution even when the results already exists (existent datasets are moved to backup)',
@@ -854,8 +854,8 @@ if __name__ == '__main__':
 			# TODO: customize extension of the network files (implement filters)
 			'  -d[X]=<datasets_dir>  - directory of the datasets.',
 			'  -f[X]=<dataset>  - dataset (network, graph) file name.',
-			'    Xg  - generate directory with the network file name without extension for each input network (*{extnetfile}).'
-			' It can be used to avoid flooding of the dirctory with networks with shuffles of each network, previously'
+			'    Xg  - generate directory with the network file name without extension for each input network (*{extnetfile})'
+			' when shuffling is performed (to avoids flooding of the base directory with network shuffles). Previously'
 			' existed shuffles are backuped',
 			'    Xa  - the dataset is specified by asymmetric links (in/outbound weights of the link might differ), arcs',
 			'    Xs  - the dataset is specified by symmetric links, edges. Default option',

@@ -755,7 +755,7 @@ def benchmark(*args):
 		.format(gensynt, syntdir, convnets, runalgs, evalres
 			, ', '.join(['{}{}{}'.format('' if not asym else 'asym: ', path, ' (gendir)' if gen else '')
 				for asym, path, gen in datas])
-			, timeout, algorithms))
+			, timeout, ', '.join(algorithms)))
 	# Make syntdir and link there lfr benchmark bin if required
 	bmname = 'lfrbench_udwov'  # Benchmark name
 	benchpath = syntdir + bmname  # Benchmark path

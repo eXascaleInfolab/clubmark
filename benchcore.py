@@ -64,6 +64,7 @@ class Task(object):
 		params  - additional parameters to be used in callbacks
 		stdout  - None or file name or PIPE for the buffered output to be APPENDED
 		stderr  - None or file name or PIPE or STDOUT for the unbuffered error output to be APPENDED
+			ATTENTION: PIPE is a buffer in RAM, so do not use it if the output data is huge or unlimited
 
 		tstart  - start time is filled automatically on the execution start (before onstart). Default: None
 		tstop  - termination / completion time after ondone
@@ -158,6 +159,7 @@ class Job(object):
 		params  - additional parameters to be used in callbacks
 		stdout  - None or file name or PIPE for the buffered output to be APPENDED
 		stderr  - None or file name or PIPE or STDOUT for the unbuffered error output to be APPENDED
+			ATTENTION: PIPE is a buffer in RAM, so do not use it if the output data is huge or unlimited
 
 		tstart  - start time is filled automatically on the execution start (before onstart). Default: None
 		tstop  - termination / completion time after ondone
@@ -206,10 +208,12 @@ class Job(object):
 			# Clean up
 			# Remove empty logs skipping the system devnull
 			tpaths = []  # Base dir of the output
-			if self.stdout and isinstance(self.stdout, str) and self.stdout != os.devnull and os.path.getsize(self.stdout) == 0:
+			if (self.stdout and isinstance(self.stdout, str) and self.stdout != os.devnull
+			and os.path.exists(self.stdout) and os.path.getsize(self.stdout) == 0):
 				tpaths.append(os.path.split(self.stdout)[0])
 				os.remove(self.stdout)
-			if self.stderr and isinstance(self.stderr, str) and self.stderr != os.devnull and os.path.getsize(self.stderr) == 0:
+			if (self.stderr and isinstance(self.stderr, str) and self.stderr != os.devnull
+			and os.path.exists(self.stderr) and os.path.getsize(self.stderr) == 0):
 				tpath = os.path.split(self.stderr)[0]
 				if not tpaths or tpath not in tpaths:
 					tpaths.append(tpath)

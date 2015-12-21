@@ -41,7 +41,8 @@ _extclnodes = '.cnl'  # Clusters (Communities) Nodes Lists
 #_extmod = '.mod'
 _execnmi = './gecmi'  # Binary for NMI evaluation
 _sepinst = '^'  # Network instances separator, must be a char
-_seppars = '!'  # Network shuffles separator, must be a char
+_seppars = '!'  # Network parameters separator, must be a char
+# Note: '.' is used as network shuffles separator
 #_netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
 
 
@@ -68,7 +69,7 @@ def	preparePath(taskpath):
 				name = name[:pos]
 			mainpath = '/'.join((mainpath, name))
 		# Extract endings of multiple instances
-		parts = mainpath.rsplit('_', 1)
+		parts = mainpath.rsplit(_sepinst, 1)
 		if len(parts) >= 2:
 			try:
 				int(parts[1])
@@ -115,9 +116,9 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 
 	# Resource consumption profile file name
 	rcpoutp = ''.join((_resdir, algname, '/', evalname, _extexectime))
-	# Task for all instances and shuffles to perform single postprocessing
+	# Task for all instances and shuffles each network [type] performs single postprocessing
 	itaskcapt = len(taskcapt)  # Index of the task identifier start
-	task = Task(name='_'.join((evalname, taskame, algname)), ondone=aggregate)
+	task = Task(name='_'.join((evalname, taskame, algname)), ondone=aggregate)  # , params=EvalState(taskame, )
 	jobs = []
 	# Traverse over directories of clusters corresponding to the base network
 	for clsbase in glob.iglob(''.join((_resdir, algname, '/', _clsdir, escapePathWildcards(taskame), '*'))):
@@ -165,13 +166,14 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 			assert jobcapt, 'The clusters name should exists'
 			# Extand job caption with the executing task if not already contains and update the caption index
 			ibn = jobcapt.find(basename)
+			ijscorr = ijobsuff  # Corrected job suffix if required
 			if ibn != -1:
-				ijobsuff += ibn
+				ijscorr += ibn
 			else:
 				jobcapt = '_'.join((basename, jobcapt))
 			jobname = '_'.join((evalname, jobcapt, algname))
 			logfilebase = '/'.join((logsbase, jobcapt))
-			evalfile(jobs, cfile, jobname, task, taskoutp, rcpoutp, jobcapt[ijobsuff:], logfilebase)
+			evalfile(jobs, cfile, jobname, task, taskoutp, rcpoutp, jobcapt[ijscorr:], logfilebase)
 	# Run all jobs after all of them were added to the task
 	if jobs:
 		for job in jobs:
@@ -248,6 +250,12 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 					tmod.write('# Q\t[ShuffleIndex_]Level\n')
 					tmod.flush()
 				tmod.write('{}\t{}\n'.format(mod, job.params['jobsuff']))
+				# Also transfer this resutls to the embracing task if exists
+				if job.task and job.task.onjobdone:
+					job.task.onjobdone(job, mod)
+				else:
+					print('WARNING, task "{}" of job "{}" has no defined onjobdone() to aggregate results:\n{}'
+						.format(job.name, result), file=sys.stderr)
 
 
 		jobs.append(Job(name=jobname, task=task, workdir=_algsdir, args=args
@@ -370,22 +378,22 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 		#			amod.flush()
 		#with open(amodname, 'a') as amod:  # Append to the end
 		#	subprocess.call(''.join(('printf "', task, '\t `sort -g -r "', taskoutp,'" | head -n 1`\n"')), stdout=amod, shell=True)
-
-
-	def nmiAggregate(task):
+		#assert task.params, 'Task parameres must represent data structere to hold aggregated results'
+		#processRaw(task.params, )
 		pass
 
 
-	def nmisAggregate(task):
+
+	def nmixAggregate(task):
 		pass
 
 
 	if measure == 'mod':
 		evalGeneric(execpool, measure, algname, basefile, _moddir, timeout, modEvaluate, modAggregate)
 	elif measure == 'nmi':
-		evalGeneric(execpool, measure, algname, basefile, _nmidir, timeout, nmiEvaluate, nmiAggregate)
+		evalGeneric(execpool, measure, algname, basefile, _nmidir, timeout, nmiEvaluate, nmixAggregate)
 	elif measure == 'nmi_s':
-		evalGeneric(execpool, measure, algname, basefile, _nmidir, timeout, nmisEvaluate, nmisAggregate, tidy=False)
+		evalGeneric(execpool, measure, algname, basefile, _nmidir, timeout, nmisEvaluate, nmixAggregate, tidy=False)
 	else:
 		raise ValueError('Unexpected measure: ' + measure)
 
@@ -481,7 +489,8 @@ def execLouvain_ig(execpool, netfile, asym, timeout, selfexec=False):
 	#		subprocess.call(('tail', '-n 1', taskpath + _extlog), stdout=accres)
 
 	args = ('../exectime', ''.join(('-o=../', _resdir, algname, _extexectime)), '-n=' + task, '-s=/etime_' + algname
-		, pyexec, ''.join(('./', algname, '.py')), ''.join(('-i=../', netfile, netext))
+		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
+		, 'python', ''.join(('./', algname, '.py')), ''.join(('-i=../', netfile, netext))
 		, ''.join(('-ol=../', taskpath, _extclnodes)))
 	execpool.execute(Job(name='_'.join((task, algname)), workdir=_algsdir, args=args, timeout=timeout
 		#, ondone=postexec

@@ -68,7 +68,7 @@ _EXTNETFILE = '.nsa'  # Extension of the network files to be executed by the alg
 #_algseeds = 9  # TODO: Implement
 _PREFEXEC = 'exec'  # Execution prefix for the apps functions in benchapps
 
-_EXECPOOL = None  # Pool of executors to process jobs
+_execpool = None  # Pool of executors to process jobs
 
 
 def parseParams(args):
@@ -321,10 +321,10 @@ def generateNets(genbin, basedir, overwrite=False, count=_SYNTINUM, gentimeout=2
 	# Generate options for the networks generation using chosen variations of params
 	varNmul = (1, 2, 5, 10, 25, 50)  # *N0 - sizes of the generating networks
 	vark = (5, 10)  #, 20)  # Average density of network links
-	global _EXECPOOL
+	global _execpool
 
-	if not _EXECPOOL:
-		_EXECPOOL = ExecPool(max(cpu_count() - 1, 1))
+	if not _execpool:
+		_execpool = ExecPool(max(cpu_count() - 1, 1))
 	netgenTimeout = 15 * 60  # 15 min
 	#shuftimeout = 1 * 60  # 1 min per each shuffling
 	bmname =  os.path.split(genbin)[1]  # Benchmark name
@@ -358,7 +358,7 @@ def generateNets(genbin, basedir, overwrite=False, count=_SYNTINUM, gentimeout=2
 				netpath = name.join((netsdir, '/'))  # syntnets/networks/<netname>/  netname.*
 				netparams = name.join((paramsdir, ext))  # syntnets/params/<netname>.<ext>
 				# Generate required number of network instances
-				if _EXECPOOL:
+				if _execpool:
 					netpathfull = basedir + netpath
 					if not os.path.exists(netpathfull):
 						os.mkdir(netpathfull)
@@ -368,7 +368,7 @@ def generateNets(genbin, basedir, overwrite=False, count=_SYNTINUM, gentimeout=2
 						args = ('../exectime', '-n=' + name, ''.join(('-o=', bmname, _EXTEXECTIME))  # Output .rcp in the current dir, basedir
 							, bmbin, '-f', netparams, '-name', netfile)
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
-						_EXECPOOL.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
+						_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
 							, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 							#, ondone=shuffle if shufnum > 0 else None
 							, startdelay=startdelay))
@@ -379,17 +379,17 @@ def generateNets(genbin, basedir, overwrite=False, count=_SYNTINUM, gentimeout=2
 							args = ('../exectime', '-n=' + namext, ''.join(('-o=', bmname, _EXTEXECTIME))
 								, bmbin, '-f', netparams, '-name', netfile)
 							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
-							_EXECPOOL.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
+							_execpool.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
 								, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 								#, ondone=shuffle if shufnum > 0 else None
 								, startdelay=startdelay))
 			else:
 				print('ERROR: network parameters file "{}" is not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')
-	if _EXECPOOL:
-		_EXECPOOL.join(max(gentimeout, count * (netgenTimeout  #+ (shufnum * shuftimeout)
+	if _execpool:
+		_execpool.join(max(gentimeout, count * (netgenTimeout  #+ (shufnum * shuftimeout)
 			)))  # 2 hours
-		_EXECPOOL = None
+		_execpool = None
 	print('Synthetic networks files generation is completed')
 
 
@@ -405,10 +405,10 @@ def shuffleNets(datadirs, datafiles, shufnum, overwrite=False, shuftimeout=30*60
 	"""
 	# Note: backup is performe on paths extraction, see prepareInput()
 	assert shufnum >= 1, 'Number of the network shuffles to be generated must be positive'
-	global _EXECPOOL
+	global _execpool
 
-	if not _EXECPOOL:
-		_EXECPOOL = ExecPool(max(cpu_count() - 1, 1))
+	if not _execpool:
+		_execpool = ExecPool(max(cpu_count() - 1, 1))
 
 	timeout = 3 * 60  # 3 min per each shuffling
 
@@ -437,7 +437,7 @@ for i in range(1, {shufnum} + 1):
 #	else:
 #		os.remove(netfile)
 """.format(jobname=job.name, _EXTNETFILE=_EXTNETFILE, shufnum=shufnum, overwrite=overwrite))
-		_EXECPOOL.execute(Job(name=job.name + '_shf', workdir=job.workdir
+		_execpool.execute(Job(name=job.name + '_shf', workdir=job.workdir
 			, args=args, timeout=timeout * shufnum))
 
 	def shuffleNet(netfile):
@@ -466,9 +466,9 @@ for i in range(1, {shufnum} + 1):
 	for asym, dfile in datafiles:
 		count += shuffleNet(dfile)
 
-	if _EXECPOOL:
-		_EXECPOOL.join(max(shuftimeout, count * shufnum * timeout))  # 30 min
-		_EXECPOOL = None
+	if _execpool:
+		_execpool.join(max(shuftimeout, count * shufnum * timeout))  # 30 min
+		_execpool = None
 	print('Synthetic networks files generation is completed')
 
 
@@ -492,7 +492,7 @@ def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 
 		args = [PYEXEC, '3dparty/tohig.py', inpnet, '-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
 		if resdub:
 			args.append('-r')
-		_EXECPOOL.execute(Job(name=os.path.splitext(os.path.split(inpnet)[1])[0], args=args, timeout=timeout))
+		_execpool.execute(Job(name=os.path.splitext(os.path.split(inpnet)[1])[0], args=args, timeout=timeout))
 
 	except StandardError as err:
 		print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(inpnet, err), file=sys.stderr)
@@ -535,10 +535,10 @@ def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60)
 	print('Converting networks from {} into the required formats (.hig, .lig, etc.)...'
 		.format(datadir))
 
-	global _EXECPOOL
+	global _execpool
 
-	if not _EXECPOOL:
-		_EXECPOOL = ExecPool(max(cpu_count() - 1, 1))
+	if not _execpool:
+		_execpool = ExecPool(max(cpu_count() - 1, 1))
 
 	convTimeMax = 3 * 60  # 3 min
 	netsnum = 0  # Number of converted networks
@@ -569,9 +569,9 @@ def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60)
 	#				convertNet(net, asym, overwrite, resdub, convTimeMax)
 	#				netsnum += 1
 
-	if _EXECPOOL:
-		_EXECPOOL.join(max(convtimeout, netsnum * convTimeMax))  # 2 hours
-		_EXECPOOL = None
+	if _execpool:
+		_execpool.join(max(convtimeout, netsnum * convTimeMax))  # 2 hours
+		_execpool = None
 	print('Networks conversion is completed, converted {} networks'.format(netsnum))
 
 
@@ -587,12 +587,12 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 	"""
 	assert appsmodule and (datadirs or datafiles) and exectime >= 0 and timeout >= 0, 'Invalid input arguments'
 
-	global _EXECPOOL
+	global _execpool
 
-	assert not _EXECPOOL, '_EXECPOOL should be clear on algs execution'
+	assert not _execpool, '_execpool should be clear on algs execution'
 	starttime = time.time()  # Procedure start time
-	if not _EXECPOOL:
-		_EXECPOOL = ExecPool(max(min(4, cpu_count() - 1), 1))
+	if not _execpool:
+		_execpool = ExecPool(max(min(4, cpu_count() - 1), 1))
 
 	def unknownApp(name):
 		"""A stub for the unknown / not implemented apps (algorithms) to be benchmaked
@@ -628,7 +628,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 		"""
 		for alg in algs:
 			try:
-				jobsnum += alg(_EXECPOOL, net, asym, timeout, pathid)
+				jobsnum += alg(_execpool, net, asym, timeout, pathid)
 			except StandardError as err:
 				errexectime = time.time() - exectime
 				print('WARNING, the "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
@@ -636,6 +636,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 		return jobsnum
 
 	# Desribe paths mapping if required
+	fpid = None
 	if len(datadirs) + len(datafiles) > 1:
 		if not os.path.exists(_RESDIR):
 			os.mkdir(_RESDIR)
@@ -648,7 +649,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 			fpid = sys.stdout
 		# Write header if required
 		if not os.path.getsize(pathidsMap):
-			fpid.write('# ID\tPath\n')  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
+			fpid.write('# ID(#)\tPath\n')  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
 		fpid.write('# --- {} ---\n'.format(datetime.utcnow()))  # Write timestamp
 	jobsnum = 1  # Number of networks jobs to be processed (can be a few per each algorithm per each network)
 	netcount = 0  # Number of networks to be processed
@@ -669,27 +670,30 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 			jobsnum += tnum
 			netcount += tnum != 0
 		if tracePath:
-			fpid.write('{}\t{}\n'.format(pathid, ddir))
+			fpid.write('{}\t{}\n'.format(pathid[1:], ddir))  # Skip the separator symbol
 	for pathid, (asym, net) in enumerate(datafiles):
+		pathid = ''.join((_SEPPATHID, 'f', str(pathid)))
 		netname = os.path.split(net)[1]
 		ambiguous = False  # Net name is unambigues even without the dir
 		if netname not in filenames:
 			filenames.add(netname)
 		else:
 			ambiguous = True
-			fpid.write('{}\t{}\n'.format(pathid, net))
-		tnum = execute(net, asym, jobsnum, ''.join((_SEPPATHID, 'f', str(pathid))) if ambiguous else '')
+			fpid.write('{}\t{}\n'.format(pathid[1:], net))  # Skip the separator symbol
+		tnum = execute(net, asym, jobsnum, pathid if ambiguous else '')
 		jobsnum += tnum
 		netcount += tnum != 0
-	fpid.flush()
+	# Flush fesulting buffer
+	if fpid:
+		fpid.flush()
 	filenames = None  # Free memory from filenames
 
-	if _EXECPOOL:
+	if _execpool:
 		timelim = min(timeout * jobsnum, 5 * 24*60*60)  # Global timeout, up to N days
 		print('Waiting for the algorithms execution on {} jobs from {} networks'
 			' with {} sec ({} h {} m {:.4f} s) timeout'.format(jobsnum, netcount, timelim, *secondsToHms(timelim)))
-		_EXECPOOL.join(timelim)
-		_EXECPOOL = None
+		_execpool.join(timelim)
+		_execpool = None
 	starttime -= time.time() - starttime
 	print('The apps execution is successfully completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(starttime, *secondsToHms(starttime)))
@@ -709,12 +713,12 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 	assert (evalres and appsmodule and (datadirs or datafiles) and exectime >= 0
 		and timeout >= 0), 'Invalid input arguments'
 
-	global _EXECPOOL
+	global _execpool
 
-	assert not _EXECPOOL, '_EXECPOOL should be clear on algs evaluation'
+	assert not _execpool, '_execpool should be clear on algs evaluation'
 	starttime = time.time()  # Procedure start time
-	if not _EXECPOOL:
-		_EXECPOOL = ExecPool(max(cpu_count() - 1, 1))
+	if not _execpool:
+		_execpool = ExecPool(max(cpu_count() - 1, 1))
 
 	# Measures is a dict with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
 	measures = {1: ['nmi', _EXTCLNODES, 'NMI'], 2: ['mod', '.hig', 'Q']}
@@ -742,17 +746,17 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 			basefile  - ground truth result, or initial network file or another measure-related file
 			asym  - network links weights are asymmetric (in/outbound weights can be different)
 			jobsnum  - accumulated number of scheduled jobs
-			pathid  - path id of the net to distinguish nets with the same name located in different dirs
+			pathid  - path id of the basefile to distinguish files with the same name located in different dirs
 
 			return
 				jobsnum  - updated accumulated number of scheduled jobs
 			"""
 			for elgname in evalalgs:
 				try:
-					evalAlgorithm(_EXECPOOL, elgname, basefile, measure, timeout, pathid)
+					evalAlgorithm(_execpool, elgname, basefile, measure, timeout, pathid)
 					# Evaluate also nmi_s for nmi
 					if measure == 'nmi':
-						evalAlgorithm(_EXECPOOL, elgname, basefile, 'nmi_s', timeout, pathid)
+						evalAlgorithm(_execpool, elgname, basefile, 'nmi_s', timeout, pathid)
 				except StandardError as err:
 					print('WARNING, "{}" evaluation of "{}" is interrupted by the exception: {}'
 						.format(measure, elgname, err), file=sys.stderr)
@@ -778,6 +782,7 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 					ambiguous = True
 				evaluate(measure, basefile, asym, jobsnum, pathid if ambiguous else '')
 		for pathid, (asym, basefile) in enumerate(datafiles):
+			pathid = ''.join((_SEPPATHID, 'f', str(pathid)))
 			# Use files with required extension
 			basefile = os.path.splitext(basefile)[0] + fileext
 			netname = os.path.split(basefile)[1]
@@ -786,13 +791,13 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 				filenames.add(netname)
 			else:
 				ambiguous = True
-			evaluate(basefile, asym, jobsnum, ''.join((_SEPPATHID, 'f', str(pathid))) if ambiguous else '')
+			evaluate(basefile, asym, jobsnum, pathid if ambiguous else '')
 		print('{} evaluation is scheduled'.format(measures[im][2]))
 		filenames = None  # Free memory from filenames
-	if _EXECPOOL:
+	if _execpool:
 		timelim = min(timeout * jobsnum, 5 * 24*60*60)  # Global timeout, up to N days
-		_EXECPOOL.join(max(timelim, exectime * 2))  # Twice the time of algorithms execution
-		_EXECPOOL = None
+		_execpool.join(max(timelim, exectime * 2))  # Twice the time of algorithms execution
+		_execpool = None
 	starttime -= time.time() - starttime
 	print('Results evaluation is successfully completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(starttime, *secondsToHms(starttime)))
@@ -863,10 +868,10 @@ def terminationHandler(signal, frame):
 	#	os.killpg(os.getpgrp(), signal)
 	#	os.kill(os.getpid(), signal)
 
-	global _EXECPOOL
+	global _execpool
 
-	if _EXECPOOL:
-		del _EXECPOOL  # Destructors are caled later
+	if _execpool:
+		del _execpool  # Destructors are caled later
 	sys.exit(0)
 
 

@@ -88,7 +88,7 @@ def	preparePath(taskpath):
 		os.makedirs(taskpath)
 
 
-def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfile, aggregate=None, tidy=True):
+def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfile, aggregate=None, pathid='', tidy=True):
 	"""Generic evaluation on the specidied file
 	NOTE: all paths are given relative to the root benchmark directory.
 
@@ -101,6 +101,7 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 	evalfile  - file evaluation callback to define evaluation jobs, signature:
 		evalfile(jobs, cfile, jobname, task, taskoutp, ijobsuff, logsbase)
 	aggregate  - aggregation callback, called on the task completion, signature: aggregate(task)
+	pathid  - path id of the basefile to distinguish files with the same name located in different dirs
 	tidy  - delete previously existent resutls. Must be False if a few apps output results into the same dir
 	"""
 	assert execpool and basefile and evalname and algname, "Parameters must be defined"
@@ -121,7 +122,7 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 	rcpoutp = ''.join((_RESDIR, algname, '/', evalname, _EXTEXECTIME))
 	# Task for all instances and shuffles each network [type] performs single postprocessing
 	itaskcapt = len(taskcapt)  # Index of the task identifier start
-	task = Task(name='_'.join((evalname, taskame, algname)), ondone=aggregate)  # , params=EvalState(taskame, )
+	task = Task(name='_'.join((evalname, taskame, pathid, algname)), ondone=aggregate)  # , params=EvalState(taskame, )
 	jobs = []
 	# Traverse over directories of clusters corresponding to the base network
 	for clsbase in glob.iglob(''.join((_RESDIR, algname, '/', _CLSDIR, escapePathWildcards(taskame), '*'))):
@@ -190,7 +191,7 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 			.format(algname, basename), file=sys.stderr)
 
 
-def evalAlgorithm(execpool, algname, basefile, measure, timeout):
+def evalAlgorithm(execpool, algname, basefile, measure, timeout, pathid=''):
 	"""Evaluate the algorithm by the specified measure.
 	NOTE: all paths are given relative to the root benchmark directory.
 
@@ -199,6 +200,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 	basefile  - ground truth result, or initial network file or another measure-related file
 	measure  - target measure to be evaluated: {nmi, nmi_s, mod}
 	timeout  - execution timeout for this task
+	pathid  - path id of the basefile to distinguish files with the same name located in different dirs
 	"""
 	print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
 
@@ -392,11 +394,11 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout):
 
 
 	if measure == 'mod':
-		evalGeneric(execpool, measure, algname, basefile, _MODDIR, timeout, modEvaluate, modAggregate)
+		evalGeneric(execpool, measure, algname, basefile, _MODDIR, timeout, modEvaluate, modAggregate, pathid)
 	elif measure == 'nmi':
-		evalGeneric(execpool, measure, algname, basefile, _NMIDIR, timeout, nmiEvaluate, nmixAggregate)
+		evalGeneric(execpool, measure, algname, basefile, _NMIDIR, timeout, nmiEvaluate, nmixAggregate, pathid)
 	elif measure == 'nmi_s':
-		evalGeneric(execpool, measure, algname, basefile, _NMIDIR, timeout, nmisEvaluate, nmixAggregate, tidy=False)
+		evalGeneric(execpool, measure, algname, basefile, _NMIDIR, timeout, nmisEvaluate, nmixAggregate, pathid, tidy=False)
 	else:
 		raise ValueError('Unexpected measure: ' + measure)
 

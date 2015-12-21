@@ -1,4 +1,9 @@
 #!/bin/sh
+#
+# \description  Generate synthetic networks with shuffles and execute
+# benchmarking for all algorithms on these networks.
+#
+# \author Artem V L <luart@ya.ru>  http://exascale.info, http://lumais.com
 
 PYTHON=`whereis pypy | grep "/"`
 echo PYTHON1: $PYTHON

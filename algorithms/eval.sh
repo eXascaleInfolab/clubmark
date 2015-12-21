@@ -1,5 +1,9 @@
 #!/bin/sh
-# \author Artem V L <luart@ya.ru>  http://exascale.info http://lumais.com
+#
+# \description  Perform NMI or another evaluation of the resulting clusters
+# located in the specified directory comparing to the specified groud truth.
+#
+# \author Artem V L <luart@ya.ru>  http://exascale.info, http://lumais.com
 
 DFL_EVALNAME=nmi  # Default name of the evaluation algorithm
 
@@ -15,6 +19,7 @@ then
 		"  evalname  - name of the evaluation algorithm. Default: $DFL_EVALNAME\n"
 	exit 0
 fi
+
 
 EVALNAME=${5:-$DFL_EVALNAME}
 #echo "EVALNAME: $EVALNAME from $5"

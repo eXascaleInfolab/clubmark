@@ -179,7 +179,7 @@ class SyncValue(object):
 	#	return self._lock
 
 
-def nameVersion(path, expand, synctime=None):
+def nameVersion(path, expand, synctime=None, suffix=''):
 	"""Name the last path component basedon modification time and return this part
 
 	path  - the path to be named with version.
@@ -187,11 +187,15 @@ def nameVersion(path, expand, synctime=None):
 	expand  - whether to expand the path or use as it is
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
+	suffix  - suffix to be added to the backup name
 	"""
 	path = os.path.normpath(escapePathWildcards(path))
 	name = os.path.split(path)[1]  # Extract dir of file name
 	if not path:
 		raise ValueError('Specified path is empty')
+	# Prepend the suffix with separator
+	if suffix:
+		suffix = '_' + suffix
 	# Check whether path exists and expand it if required
 	if not os.path.exists(path):
 		exists = False
@@ -203,7 +207,7 @@ def nameVersion(path, expand, synctime=None):
 				pass
 		if not exists:
 			print('WARNING: specified path is not exist empty', file=sys.stderr)
-			return name
+			return name + suffix
 	# Process existing path
 	if synctime is not None:
 		with synctime:
@@ -213,10 +217,10 @@ def nameVersion(path, expand, synctime=None):
 	else:
 		mtime = time.gmtime(os.path.getmtime(path))
 	mtime = time.strftime('_%y%m%d_%H%M%S', mtime)  # Modification time
-	return name + mtime
+	return ''.join((name, suffix, mtime))
 
 
-def backupPath(basepath, expand=False, synctime=None, compress=True):  # basedir, name
+def backupPath(basepath, expand=False, synctime=None, compress=True, suffix=''):  # basedir, name
 	"""Backup all files and dirs starting from the specified basepath into backup/
 	located in the parent dir of the basepath
 
@@ -227,11 +231,13 @@ def backupPath(basepath, expand=False, synctime=None, compress=True):  # basedir
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
 	compress  - compress or just copy spesified paths
+	suffix  - suffix to be added to the backup name
 
 	ATTENTION: All paths are MOVED to the dedicated timestamped dir / archive
 	"""
 	# Check if there anything available to be backuped
-	if (expand and not basePathExists(basepath)) or (not expand and not os.path.exists(basepath)):
+	if (expand and not basePathExists(basepath)) or (not expand
+	and (not os.path.exists(basepath) or (os.path.isdir(basepath) and dirempty(basepath)))):
 		return
 	#print('Backuping "{}"{}...'.format(basepath, 'with synctime' if synctime else ''))
 	# Remove trailing path separator if exists
@@ -242,11 +248,12 @@ def backupPath(basepath, expand=False, synctime=None, compress=True):  # basedir
 		os.mkdir(basedir)
 	# Backup files
 	rennmarg = 10  # Max number of renaming attempts
+	basename = basedir + nameVersion(basepath, expand, synctime, suffix)  # Base name of the backup
 	if compress:
-		archname = ''.join((basedir, nameVersion(basepath, expand, synctime), '.tar.gz'))
+		archname = basename + '.tar.gz'
 		# Rename already existent archive if required
 		if os.path.exists(archname):
-			nametmpl = ''.join((basedir, nameVersion(basepath, expand, synctime), '-{}', '.tar.gz'))
+			nametmpl = ''.join((basename, '-{}', '.tar.gz'))
 			for i in range(rennmarg):
 				bckname = nametmpl.format(i)
 				if not os.path.exists(bckname):
@@ -269,10 +276,9 @@ def backupPath(basepath, expand=False, synctime=None, compress=True):  # basedir
 				else:
 					os.remove(path)
 	else:
-		basedir = ''.join((basedir, nameVersion(basepath, expand, synctime), '/'))
 		# Rename already existent backup if required
-		if os.path.exists(basedir):
-			nametmpl = basedir + '-{}'
+		if os.path.exists(basename):
+			nametmpl = basename + '-{}'
 			for i in range(rennmarg):
 				bckname = nametmpl.format(i)
 				if not os.path.exists(bckname):
@@ -281,16 +287,16 @@ def backupPath(basepath, expand=False, synctime=None, compress=True):  # basedir
 				print('WARNING: backup dir "{}" is being rewritten'.format(bckname), file=sys.stderr)
 				shutil.rmtree(bckname)
 			try:
-				os.rename(basedir, bckname)
+				os.rename(basename, bckname)
 			except StandardError as err:
 				print('WARNING: removing backup dir "{}", as its renaming failed: {}'
-					.format(basedir, err), file=sys.stderr)
-				shutil.rmtree(basedir)
+					.format(basename, err), file=sys.stderr)
+				shutil.rmtree(basename)
 		# Move data to the backup
-		if not os.path.exists(basedir):
-			os.mkdir(basedir)
+		if not os.path.exists(basename):
+			os.mkdir(basename)
 		for path in glob.iglob(basepath + ('*' if expand else '')):
-			shutil.move(path, basedir + os.path.split(path)[1])
+			shutil.move(path, '/'.join((basename, os.path.split(path)[1])))
 
 
 if __name__ == "__main__":

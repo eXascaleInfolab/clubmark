@@ -55,7 +55,7 @@ def	preparePath(taskpath):
 	taskpath  - the path to be prepared
 	"""
 	# Backup existent files & dirs with such base only if this path exists and is not empty
-	# ATTENTION: do not use basePathExists(taskpath) heree to avoid movement to the backup
+	# ATTENTION: do not use basePathExists(taskpath) here to avoid movement to the backup
 	# processing paths when xxx.mod.net is processed before the xxx.net (have the same base)
 	if os.path.exists(taskpath) and not dirempty(taskpath):
 		# Extract main task base name from instances, shuffles and params and process them all together

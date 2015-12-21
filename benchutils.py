@@ -18,13 +18,12 @@ import time
 import tarfile
 import re
 
-from sys import executable as pyexec  # Full path to the current Python interpreter
 from multiprocessing import Lock
 
 
-_bckdir = 'backup/'  # Backup directory
-_refloat = re.compile('[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')
-_reint = re.compile('[-+]?\d+(?=\W)')
+_BCKDIR = 'backup/'  # Backup directory
+_REFLOAT = re.compile('[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')  # Regular expression to parse float
+_REINT = re.compile('[-+]?\d+(?=\W)')  # Regular expression to parse int
 
 
 def envVarDefined(value, name=None, evar=None):
@@ -47,41 +46,47 @@ def envVarDefined(value, name=None, evar=None):
 def parseFloat(text):
 	"""Parse float number from the text if exists and separated by non-alphabet symbols.
 
-	return  - parsed float number or None
+	return
+		num  - parsed number or None
+		pose  - position of the end of the match or 0
 
-	>>> parseFloat('.3asdf') is None
+	>>> parseFloat('.3asdf')[0] is None
 	True
-	>>> parseFloat('0.3 asdf')
+	>>> parseFloat('0.3 asdf')[0]
 	0.3
-	>>> parseFloat("-324.65e-2;aset") == -324.65e-2
+	>>> parseFloat("-324.65e-2;aset")[0] == -324.65e-2
 	True
-	>>> parseFloat('5.2sdf, 45')
+	>>> parseFloat('5.2sdf, 45')[0]
 	5.0
 	"""
-	match = _refloat.match(text)
+	match = _REFLOAT.match(text)
 	if match:
-		return float(match.group(0))
-	return None
+		num = match.group(0)
+		return float(num), len(num)
+	return None, 0
 
 
 def parseInt(text):
 	"""Parse int number from the text if exists and separated by non-alphabet symbols.
 
-	return  - parsed float number or None
+	return
+		num  - parsed number or None
+		pose  - position of the end of the match or 0
 
-	>>> parseInt('3asdf') is None
+	>>> parseInt('3asdf')[0] is None
 	True
-	>>> parseInt('3 asdf')
+	>>> parseInt('3 asdf')[0]
 	3
-	>>> parseInt("324e1;aset") is None
+	>>> parseInt("324e1;aset")[0] is None
 	True
-	>>> parseInt('5.2sdf, 45')
+	>>> parseInt('5.2sdf, 45')[0]
 	5
 	"""
-	match = _reint.match(text)
+	match = _REINT.match(text)
 	if match:
-		return int(match.group(0))
-	return None
+		num = match.group(0)
+		return int(num), len(num)
+	return None, 0
 
 
 def escapePathWildcards(path):
@@ -243,7 +248,7 @@ def backupPath(basepath, expand=False, synctime=None, compress=True, suffix=''):
 	# Remove trailing path separator if exists
 	basepath = os.path.normpath(escapePathWildcards(basepath))
 	# Create backup/ if required
-	basedir = '/'.join((os.path.split(basepath)[0], _bckdir))
+	basedir = '/'.join((os.path.split(basepath)[0], _BCKDIR))
 	if not os.path.exists(basedir):
 		os.mkdir(basedir)
 	# Backup files

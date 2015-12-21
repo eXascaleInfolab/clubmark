@@ -37,7 +37,8 @@ import shutil
 import signal  # Intercept kill signals
 from math import sqrt
 import glob
-from itertools import chain
+#from itertools import chain
+from datetime import datetime
 
 import benchapps  # Benchmarking apps (clustering algs)
 from benchcore import *
@@ -49,25 +50,25 @@ from benchutils import *
 #tohig = thirdparty.tohig.tohig  # ~ from 3dparty.tohig import tohig
 
 #from functools import wraps
-from benchapps import pyexec
+from benchapps import PYEXEC
 from benchapps import evalAlgorithm
-from benchapps import _extexectime
-from benchapps import _extclnodes
-from benchapps import _algsdir
-from benchapps import _resdir
-from benchapps import _sepinst
-from benchapps import _seppars
+from benchapps import _RESDIR
+from benchapps import _EXTEXECTIME
+from benchapps import _EXTCLNODES
+from benchapps import _SEPINST
+from benchapps import _SEPPARS
+from benchapps import _SEPPATHID
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
-_syntdir = 'syntnets/'  # Default directory for the synthetic datasets
-_netsdir = 'networks/'  # Networks directory inside syntnets
-_syntinum = 5  # Default number of instances of each synthetic network
-_extnetfile = '.nsa'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated arcs
+_SYNTDIR = 'syntnets/'  # Default directory for the synthetic datasets
+_NETSDIR = 'networks/'  # Networks directory inside syntnets
+_SYNTINUM = 5  # Default number of instances of each synthetic network
+_EXTNETFILE = '.nsa'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated arcs
 #_algseeds = 9  # TODO: Implement
-_prefExec = 'exec'  # Execution prefix for the apps functions in benchapps
+_PREFEXEC = 'exec'  # Execution prefix for the apps functions in benchapps
 
-_execpool = None  # Pool of executors to process jobs
+_EXECPOOL = None  # Pool of executors to process jobs
 
 
 def parseParams(args):
@@ -94,9 +95,9 @@ def parseParams(args):
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
 	gensynt = 0
-	netins = _syntinum  # Number of network instances to generate, >= 1
+	netins = _SYNTINUM  # Number of network instances to generate, >= 1
 	shufnum = 0  # Number of shuffles for each network instance to be produced, >=0
-	syntdir = _syntdir  # Base directory for synthetic datasets
+	syntdir = _SYNTDIR  # Base directory for synthetic datasets
 	convnets = 0
 	runalgs = False
 	evalres = 0  # 1 - NMIs, 2 - Q, 3 - all measures
@@ -252,7 +253,7 @@ def prepareInput(datas):
 				# Generate dirs if required
 				if gen:
 					# Traverse over the networks instances and create corresponding dirs
-					for net in glob.iglob('*'.join((path, _extnetfile))):  # Allow wildcards
+					for net in glob.iglob('*'.join((path, _EXTNETFILE))):  # Allow wildcards
 						# Backup existent dir
 						dirname = os.path.splitext(net)[0]
 						prepareDir(dirname, net, bcksuffix)
@@ -271,7 +272,7 @@ def prepareInput(datas):
 	return datadirs, datafiles
 
 
-def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2*60*60):  # 2 hour
+def generateNets(genbin, basedir, overwrite=False, count=_SYNTINUM, gentimeout=2*60*60):  # 2 hour
 	"""Generate synthetic networks with ground-truth communities and save generation params.
 	Previously existed paths with the same name are backuped.
 
@@ -282,7 +283,7 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 	"""
 	paramsdir = 'params/'  # Contains networks generation parameters per each network type
 	seedsdir = 'seeds/'  # Contains network generation seeds per each network instance
-	netsdir = _netsdir  # Contains subdirs, each contains all instances of each network and all shuffles of each instance
+	netsdir = _NETSDIR  # Contains subdirs, each contains all instances of each network and all shuffles of each instance
 	# Note: shuffles unlike ordinary networks have double extension: shuffling nimber and standard extension
 
 	# Store all instances of each network with generation parameters in the dedicated directory
@@ -320,10 +321,10 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 	# Generate options for the networks generation using chosen variations of params
 	varNmul = (1, 2, 5, 10, 25, 50)  # *N0 - sizes of the generating networks
 	vark = (5, 10)  #, 20)  # Average density of network links
-	global _execpool
+	global _EXECPOOL
 
-	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, 1))
+	if not _EXECPOOL:
+		_EXECPOOL = ExecPool(max(cpu_count() - 1, 1))
 	netgenTimeout = 15 * 60  # 15 min
 	#shuftimeout = 1 * 60  # 1 min per each shuffling
 	bmname =  os.path.split(genbin)[1]  # Benchmark name
@@ -357,38 +358,38 @@ def generateNets(genbin, basedir, overwrite=False, count=_syntinum, gentimeout=2
 				netpath = name.join((netsdir, '/'))  # syntnets/networks/<netname>/  netname.*
 				netparams = name.join((paramsdir, ext))  # syntnets/params/<netname>.<ext>
 				# Generate required number of network instances
-				if _execpool:
+				if _EXECPOOL:
 					netpathfull = basedir + netpath
 					if not os.path.exists(netpathfull):
 						os.mkdir(netpathfull)
 					startdelay = 0.1  # Required to start execution of the LFR benchmark before copying the time_seed for the following process
 					netfile = netpath + name
-					if count and overwrite or not os.path.exists(netfile.join((basedir, _extnetfile))):
-						args = ('../exectime', '-n=' + name, ''.join(('-o=', bmname, _extexectime))  # Output .rcp in the current dir, basedir
+					if count and overwrite or not os.path.exists(netfile.join((basedir, _EXTNETFILE))):
+						args = ('../exectime', '-n=' + name, ''.join(('-o=', bmname, _EXTEXECTIME))  # Output .rcp in the current dir, basedir
 							, bmbin, '-f', netparams, '-name', netfile)
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
-						_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
+						_EXECPOOL.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
 							, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 							#, ondone=shuffle if shufnum > 0 else None
 							, startdelay=startdelay))
 					for i in range(1, count):
-						namext = ''.join((name, _sepinst, str(i)))
+						namext = ''.join((name, _SEPINST, str(i)))
 						netfile = netpath + namext
-						if overwrite or not os.path.exists(netfile.join((basedir, _extnetfile))):
-							args = ('../exectime', '-n=' + namext, ''.join(('-o=', bmname, _extexectime))
+						if overwrite or not os.path.exists(netfile.join((basedir, _EXTNETFILE))):
+							args = ('../exectime', '-n=' + namext, ''.join(('-o=', bmname, _EXTEXECTIME))
 								, bmbin, '-f', netparams, '-name', netfile)
 							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
-							_execpool.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
+							_EXECPOOL.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
 								, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 								#, ondone=shuffle if shufnum > 0 else None
 								, startdelay=startdelay))
 			else:
 				print('ERROR: network parameters file "{}" is not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')
-	if _execpool:
-		_execpool.join(max(gentimeout, count * (netgenTimeout  #+ (shufnum * shuftimeout)
+	if _EXECPOOL:
+		_EXECPOOL.join(max(gentimeout, count * (netgenTimeout  #+ (shufnum * shuftimeout)
 			)))  # 2 hours
-		_execpool = None
+		_EXECPOOL = None
 	print('Synthetic networks files generation is completed')
 
 
@@ -404,10 +405,10 @@ def shuffleNets(datadirs, datafiles, shufnum, overwrite=False, shuftimeout=30*60
 	"""
 	# Note: backup is performe on paths extraction, see prepareInput()
 	assert shufnum >= 1, 'Number of the network shuffles to be generated must be positive'
-	global _execpool
+	global _EXECPOOL
 
-	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, 1))
+	if not _EXECPOOL:
+		_EXECPOOL = ExecPool(max(cpu_count() - 1, 1))
 
 	timeout = 3 * 60  # 3 min per each shuffling
 
@@ -415,28 +416,28 @@ def shuffleNets(datadirs, datafiles, shufnum, overwrite=False, shuftimeout=30*60
 		"""Shufle network specified by the job"""
 		if shufnum < 1:
 			return
-		args = (pyexec, '-c',
+		args = (PYEXEC, '-c',
 # Shuffling procedure
 """import os
 import subprocess
 
-basenet = '{jobname}' + '{_extnetfile}'
+basenet = '{jobname}' + '{_EXTNETFILE}'
 #print('basenet: ' + basenet, file=sys.stderr)
 for i in range(1, {shufnum} + 1):
 	# sort -R pgp_udir.net -o pgp_udir_rand3.net
-	netfile = ''.join(('{jobname}', '.', str(i), '{_extnetfile}'))
+	netfile = ''.join(('{jobname}', '.', str(i), '{_EXTNETFILE}'))
 	if {overwrite} or not os.path.exists(netfile):
 		subprocess.call(('sort', '-R', basenet, '-o', netfile))
 # Remove existent redundant shuffles if any
 #i = {shufnum} + 1
 #while i < 100:  # Max number of shuffles
-#	netfile = ''.join(('{jobname}', '.', str(i), '{_extnetfile}'))
+#	netfile = ''.join(('{jobname}', '.', str(i), '{_EXTNETFILE}'))
 #	if not os.path.exists(netfile):
 #		break
 #	else:
 #		os.remove(netfile)
-""".format(jobname=job.name, _extnetfile=_extnetfile, shufnum=shufnum, overwrite=overwrite))
-		_execpool.execute(Job(name=job.name + '_shf', workdir=job.workdir
+""".format(jobname=job.name, _EXTNETFILE=_EXTNETFILE, shufnum=shufnum, overwrite=overwrite))
+		_EXECPOOL.execute(Job(name=job.name + '_shf', workdir=job.workdir
 			, args=args, timeout=timeout * shufnum))
 
 	def shuffleNet(netfile):
@@ -460,14 +461,14 @@ for i in range(1, {shufnum} + 1):
 
 	count = 0
 	for asym, ddir in datadirs:
-		for dfile in glob.iglob('*'.join((ddir, _extnetfile))):  # Allow wildcards
+		for dfile in glob.iglob('*'.join((ddir, _EXTNETFILE))):  # Allow wildcards
 			count += shuffleNet(dfile)
 	for asym, dfile in datafiles:
 		count += shuffleNet(dfile)
 
-	if _execpool:
-		_execpool.join(max(shuftimeout, count * shufnum * timeout))  # 30 min
-		_execpool = None
+	if _EXECPOOL:
+		_EXECPOOL.join(max(shuftimeout, count * shufnum * timeout))  # 30 min
+		_EXECPOOL = None
 	print('Synthetic networks files generation is completed')
 
 
@@ -488,10 +489,10 @@ def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 
 		#	args.append('-r')
 		#tohig(inpnet, args)
 
-		args = [pyexec, '3dparty/tohig.py', inpnet, '-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
+		args = [PYEXEC, '3dparty/tohig.py', inpnet, '-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
 		if resdub:
 			args.append('-r')
-		_execpool.execute(Job(name=os.path.splitext(os.path.split(inpnet)[1])[0], args=args, timeout=timeout))
+		_EXECPOOL.execute(Job(name=os.path.splitext(os.path.split(inpnet)[1])[0], args=args, timeout=timeout))
 
 	except StandardError as err:
 		print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(inpnet, err), file=sys.stderr)
@@ -502,7 +503,7 @@ def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 
 	#	# ./convert [-r] -i graph.txt -o graph.bin -w graph.weights
 	#	# r  - renumber nodes
 	#	# ATTENTION: original Louvain implementation processes incorrectly weighted networks with uniform weights (=1) if supplied as unweighted
-	#	subprocess.call((_algsdir + 'convert', '-i', net, '-o', netnoext + '.lig'
+	#	subprocess.call((_ALGSDIR + 'convert', '-i', net, '-o', netnoext + '.lig'
 	#		, '-w', netnoext + '.liw'))
 	#except StandardError as err:
 	#	print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
@@ -515,7 +516,7 @@ def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 
 	#netname = os.path.split(netnoext)[1]
 	#assert netname, 'netname should be defined'
 	#for i in range(_netshuffles):
-	#	outpfile = ''.join((netnoext, '/', netname, '_', str(i), _extnetfile))
+	#	outpfile = ''.join((netnoext, '/', netname, '_', str(i), _EXTNETFILE))
 	#	if overwrite or not sys.path.exists(outpfile):
 	#		# sort -R pgp_udir.net -o pgp_udir_rand3.net
 	#		subprocess.call(('sort', '-R', net, '-o', outpfile))
@@ -534,25 +535,25 @@ def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60)
 	print('Converting networks from {} into the required formats (.hig, .lig, etc.)...'
 		.format(datadir))
 
-	global _execpool
+	global _EXECPOOL
 
-	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, 1))
+	if not _EXECPOOL:
+		_EXECPOOL = ExecPool(max(cpu_count() - 1, 1))
 
 	convTimeMax = 3 * 60  # 3 min
 	netsnum = 0  # Number of converted networks
 	# Convert network files to .hig format and .lig (Louvain Input Format)
-	for net in glob.iglob('*'.join((datadir, _extnetfile))):  # Allow wildcards
+	for net in glob.iglob('*'.join((datadir, _EXTNETFILE))):  # Allow wildcards
 		# Skip shuffles
 		if not os.path.splitext(os.path.splitext(net)[0])[1]:
 			convertNet(net, asym, overwrite, resdub, convTimeMax)
 			netsnum += 1
 	## Convert network files to .hig format and .lig (Louvain Input Format)
-	#for net in glob.iglob('*'.join((datadir, _extnetfile))):
+	#for net in glob.iglob('*'.join((datadir, _EXTNETFILE))):
 	#	# Check existence of the corresponding dir with shuffled files
 	#	netdir = os.path.splitext(net)[0]
 	#	if os.path.exists(netdir):
-	#		for net in glob.iglob('/*'.join((netdir, _extnetfile))):
+	#		for net in glob.iglob('/*'.join((netdir, _EXTNETFILE))):
 	#			convertNet(net, asym, overwrite, resdub, convTimeMax)
 	#			netsnum += 1
 	#	else:
@@ -564,13 +565,13 @@ def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60)
 	#	for netdir in glob.iglob(datadir + '*'):
 	#		# Convert networks in subdirs
 	#		if os.path.isdir(netdir):
-	#			for net in glob.iglob('/*'.join((netdir, _extnetfile))):
+	#			for net in glob.iglob('/*'.join((netdir, _EXTNETFILE))):
 	#				convertNet(net, asym, overwrite, resdub, convTimeMax)
 	#				netsnum += 1
 
-	if _execpool:
-		_execpool.join(max(convtimeout, netsnum * convTimeMax))  # 2 hours
-		_execpool = None
+	if _EXECPOOL:
+		_EXECPOOL.join(max(convtimeout, netsnum * convTimeMax))  # 2 hours
+		_EXECPOOL = None
 	print('Networks conversion is completed, converted {} networks'.format(netsnum))
 
 
@@ -586,12 +587,12 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 	"""
 	assert appsmodule and (datadirs or datafiles) and exectime >= 0 and timeout >= 0, 'Invalid input arguments'
 
-	global _execpool
+	global _EXECPOOL
 
-	assert not _execpool, '_execpool should be clear on algs execution'
+	assert not _EXECPOOL, '_EXECPOOL should be clear on algs execution'
 	starttime = time.time()  # Procedure start time
-	if not _execpool:
-		_execpool = ExecPool(max(min(4, cpu_count() - 1), 1))
+	if not _EXECPOOL:
+		_EXECPOOL = ExecPool(max(min(4, cpu_count() - 1), 1))
 
 	def unknownApp(name):
 		"""A stub for the unknown / not implemented apps (algorithms) to be benchmaked
@@ -609,48 +610,86 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 		#algs = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
 		#algs = (execHirecsNounwrap,)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
 		# , execHirecsOtl, execHirecsAhOtl, execHirecsNounwrap)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
-		algs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_prefExec)]
+		algs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
 	else:
-		algs = [getattr(appsmodule, _prefExec + alg.capitalize(), unknownApp(_prefExec + alg.capitalize())) for alg in algorithms]
+		algs = [getattr(appsmodule, _PREFEXEC + alg.capitalize(), unknownApp(_PREFEXEC + alg.capitalize())) for alg in algorithms]
 	algs = tuple(algs)
 
-	def execute(net, asym, jobsnum):
+	def execute(net, asym, jobsnum, pathid=''):
 		"""Execute algorithms on the specified network counting number of ran jobs
 
 		net  - network to be processed
 		asym  - network links weights are asymmetric (in/outbound weights can be different)
 		jobsnum  - accumulated number of scheduled jobs
+		pathid  - path id of the net to distinguish nets with the same name located in different dirs
 
 		return
 			jobsnum  - updated accumulated number of scheduled jobs
 		"""
 		for alg in algs:
 			try:
-				jobsnum += alg(_execpool, net, asym, timeout)
+				jobsnum += alg(_EXECPOOL, net, asym, timeout, pathid)
 			except StandardError as err:
 				errexectime = time.time() - exectime
 				print('WARNING, the "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
 					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
 		return jobsnum
 
+	# Desribe paths mapping if required
+	if len(datadirs) + len(datafiles) > 1:
+		if not os.path.exists(_RESDIR):
+			os.mkdir(_RESDIR)
+		pathidsMap = _RESDIR + 'path_ids.map'  # Path ids map file
+		try:
+			fpid = open(pathidsMap, 'a')
+		except IOError as err:
+			print('WARNING, creation of the path ids map file is failed: {}. The mapping is outputted to stdout.'
+				.format(err), file=sys.stderr)
+			fpid = sys.stdout
+		# Write header if required
+		if not os.path.getsize(pathidsMap):
+			fpid.write('# ID\tPath\n')  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
+		fpid.write('# --- {} ---\n'.format(datetime.utcnow()))  # Write timestamp
 	jobsnum = 1  # Number of networks jobs to be processed (can be a few per each algorithm per each network)
 	netcount = 0  # Number of networks to be processed
-	for asym, ddir in datadirs:
-		for net in glob.iglob('*'.join((ddir, _extnetfile))):  # Allow wildcards
-			tnum = execute(net, asym, jobsnum)
+	# Track processed file names to resolve cases when files with the same name present in different input dirs
+	filenames = set()
+	for pathid, (asym, ddir) in enumerate(datadirs):
+		pathid = _SEPPATHID + str(pathid)
+		tracePath = False
+		for net in glob.iglob('*'.join((ddir, _EXTNETFILE))):  # Allow wildcards
+			netname = os.path.split(net)[1]
+			ambiguous = False  # Net name is unambigues even without the dir
+			if netname not in filenames:
+				filenames.add(netname)
+			else:
+				ambiguous = True
+				tracePath = True
+			tnum = execute(net, asym, jobsnum, pathid if ambiguous else '')
 			jobsnum += tnum
 			netcount += tnum != 0
-	for asym, net in datafiles:
-		tnum = execute(net, asym, jobsnum)
+		if tracePath:
+			fpid.write('{}\t{}\n'.format(pathid, ddir))
+	for pathid, (asym, net) in enumerate(datafiles):
+		netname = os.path.split(net)[1]
+		ambiguous = False  # Net name is unambigues even without the dir
+		if netname not in filenames:
+			filenames.add(netname)
+		else:
+			ambiguous = True
+			fpid.write('{}\t{}\n'.format(pathid, net))
+		tnum = execute(net, asym, jobsnum, ''.join((_SEPPATHID, 'f', str(pathid))) if ambiguous else '')
 		jobsnum += tnum
 		netcount += tnum != 0
+	fpid.flush()
+	filenames = None  # Free memory from filenames
 
-	if _execpool:
+	if _EXECPOOL:
 		timelim = min(timeout * jobsnum, 5 * 24*60*60)  # Global timeout, up to N days
 		print('Waiting for the algorithms execution on {} jobs from {} networks'
 			' with {} sec ({} h {} m {:.4f} s) timeout'.format(jobsnum, netcount, timelim, *secondsToHms(timelim)))
-		_execpool.join(timelim)
-		_execpool = None
+		_EXECPOOL.join(timelim)
+		_EXECPOOL = None
 	starttime -= time.time() - starttime
 	print('The apps execution is successfully completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(starttime, *secondsToHms(starttime)))
@@ -670,15 +709,15 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 	assert (evalres and appsmodule and (datadirs or datafiles) and exectime >= 0
 		and timeout >= 0), 'Invalid input arguments'
 
-	global _execpool
+	global _EXECPOOL
 
-	assert not _execpool, '_execpool should be clear on algs evaluation'
+	assert not _EXECPOOL, '_EXECPOOL should be clear on algs evaluation'
 	starttime = time.time()  # Procedure start time
-	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, 1))
+	if not _EXECPOOL:
+		_EXECPOOL = ExecPool(max(cpu_count() - 1, 1))
 
 	# Measures is a dict with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
-	measures = {1: ['nmi', _extclnodes, 'NMI'], 2: ['mod', '.hig', 'Q']}
+	measures = {1: ['nmi', _EXTCLNODES, 'NMI'], 2: ['mod', '.hig', 'Q']}
 	for im in measures:
 		# Evaluate only required measures
 		if evalres & im != im:
@@ -690,29 +729,30 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 			#evalalgs = (evalHirecs, evalHirecsOtl, evalHirecsAhOtl
 			#				, evalHirecsNS, evalHirecsOtlNS, evalHirecsAhOtlNS)
 			# Fetch available algorithms
-			ianame = len(_prefExec)  # Index of the algorithm name start
-			evalalgs = [funcname[ianame:].lower() for funcname in dir(appsmodule) if func.startswith(_prefExec)]
+			ianame = len(_PREFEXEC)  # Index of the algorithm name start
+			evalalgs = [funcname[ianame:].lower() for funcname in dir(appsmodule) if func.startswith(_PREFEXEC)]
 		else:
 			evalalgs = [alg.lower() for alg in algorithms]
 		evalalgs = tuple(evalalgs)
 
-		def evaluate(measure, basefile, asym, jobsnum):
+		def evaluate(measure, basefile, asym, jobsnum, pathid=''):
 			"""Evaluate algorithms on the specified network
 
 			measure  - target measure to be evaluated: {nmi, mod}
 			basefile  - ground truth result, or initial network file or another measure-related file
 			asym  - network links weights are asymmetric (in/outbound weights can be different)
 			jobsnum  - accumulated number of scheduled jobs
+			pathid  - path id of the net to distinguish nets with the same name located in different dirs
 
 			return
 				jobsnum  - updated accumulated number of scheduled jobs
 			"""
 			for elgname in evalalgs:
 				try:
-					evalAlgorithm(_execpool, elgname, basefile, measure, timeout)
+					evalAlgorithm(_EXECPOOL, elgname, basefile, measure, timeout, pathid)
 					# Evaluate also nmi_s for nmi
 					if measure == 'nmi':
-						evalAlgorithm(_execpool, elgname, basefile, 'nmi_s', timeout)
+						evalAlgorithm(_EXECPOOL, elgname, basefile, 'nmi_s', timeout, pathid)
 				except StandardError as err:
 					print('WARNING, "{}" evaluation of "{}" is interrupted by the exception: {}'
 						.format(measure, elgname, err), file=sys.stderr)
@@ -723,20 +763,36 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 		print('Starting {} evaluation...'.format(measures[im][2]))
 		jobsnum = 0
 		measure = measures[im][0]
-		fileext = measures[im][1]
-		for asym, ddir in datadirs:
+		fileext = measures[im][1]  # Initial networks in .hig formatare required for mod, clusters for NMIs
+		# Track processed file names to resolve cases when files with the same name present in different input dirs
+		filenames = set()
+		for pathid, (asym, ddir) in enumerate(datadirs):
+			pathid = _SEPPATHID + str(pathid)
 			# Read ground truth
 			for basefile in glob.iglob('*'.join((ddir, fileext))):  # Allow wildcards in the names
-				evaluate(measure, basefile, asym, jobsnum)
-		for asym, basefile in datafiles:
+				netname = os.path.split(basefile)[1]
+				ambiguous = False  # Net name is unambigues even without the dir
+				if netname not in filenames:
+					filenames.add(netname)
+				else:
+					ambiguous = True
+				evaluate(measure, basefile, asym, jobsnum, pathid if ambiguous else '')
+		for pathid, (asym, basefile) in enumerate(datafiles):
 			# Use files with required extension
 			basefile = os.path.splitext(basefile)[0] + fileext
-			evaluate(basefile, asym, jobsnum)
-		print('{} evaluation is completed'.format(measures[im][2]))
-	if _execpool:
+			netname = os.path.split(basefile)[1]
+			ambiguous = False  # Net name is unambigues even without the dir
+			if netname not in filenames:
+				filenames.add(netname)
+			else:
+				ambiguous = True
+			evaluate(basefile, asym, jobsnum, ''.join((_SEPPATHID, 'f', str(pathid))) if ambiguous else '')
+		print('{} evaluation is scheduled'.format(measures[im][2]))
+		filenames = None  # Free memory from filenames
+	if _EXECPOOL:
 		timelim = min(timeout * jobsnum, 5 * 24*60*60)  # Global timeout, up to N days
-		_execpool.join(max(timelim, exectime * 2))  # Twice the time of algorithms execution
-		_execpool = None
+		_EXECPOOL.join(max(timelim, exectime * 2))  # Twice the time of algorithms execution
+		_EXECPOOL = None
 	starttime -= time.time() - starttime
 	print('Results evaluation is successfully completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(starttime, *secondsToHms(starttime)))
@@ -762,7 +818,7 @@ def benchmark(*args):
 	if not os.path.exists(syntdir):
 		os.makedirs(syntdir)
 		# Symlink is used to work even when target file is on another file system
-		os.symlink(os.path.relpath(_syntdir + bmname, syntdir), benchpath)
+		os.symlink(os.path.relpath(_SYNTDIR + bmname, syntdir), benchpath)
 
 	# Extract dirs and files from datas, generate dirs structure and shuffles if required
 	datadirs, datafiles = prepareInput(datas)
@@ -776,7 +832,7 @@ def benchmark(*args):
 	# Update datasets with sythetic generated
 	# Note: should be done only after the genertion, because new directories can be created
 	if gensynt or (not datadirs and not datafiles):
-		datadirs.append((False, _netsdir.join((syntdir, '*/'))))  # asym, ddir
+		datadirs.append((False, _NETSDIR.join((syntdir, '*/'))))  # asym, ddir
 
 	if shufnum:
 		shuffleNets(datadirs, datafiles, shufnum, gensynt == 2)
@@ -807,11 +863,10 @@ def terminationHandler(signal, frame):
 	#	os.killpg(os.getpgrp(), signal)
 	#	os.kill(os.getpid(), signal)
 
-	global _execpool
+	global _EXECPOOL
 
-	if _execpool:
-		del _execpool
-		_execpool = None
+	if _EXECPOOL:
+		del _EXECPOOL  # Destructors are caled later
 	sys.exit(0)
 
 
@@ -873,5 +928,5 @@ if __name__ == '__main__':
 			'    Xs  - time in seconds. Default option',
 			'    Xm  - time in minutes',
 			'    Xh  - time in hours',
-			)).format(sys.argv[0], syntdir=_syntdir, synetsnum=_syntinum, netsdir=_netsdir, sepinst=_sepinst
-				, seppars=_seppars, extnetfile=_extnetfile))
+			)).format(sys.argv[0], syntdir=_SYNTDIR, synetsnum=_SYNTINUM, netsdir=_NETSDIR, sepinst=_SEPINST
+				, seppars=_SEPPARS, extnetfile=_EXTNETFILE))

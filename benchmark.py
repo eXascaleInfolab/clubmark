@@ -148,7 +148,7 @@ def parseParams(args):
 					if not syntdir.endswith('/'):
 						syntdir += '/'
 		elif arg[1] == 'a':
-			if not (arg[0:3] == '-a=' and len(arg) >= 4):
+			if not (arg[:3] == '-a=' and len(arg) >= 4):
 				raise ValueError('Unexpected argument: ' + arg)
 			algorithms = arg[3:].strip('"\'').split()
 		elif arg[1] == 'c':
@@ -672,7 +672,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 		if tracePath:
 			fpid.write('{}\t{}\n'.format(pathid[1:], ddir))  # Skip the separator symbol
 	for pathid, (asym, net) in enumerate(datafiles):
-		pathid = ''.join((_SEPPATHID, 'f', str(pathid)))
+		pathid = ''.join((_SEPPATHID, _PATHID_FILE, str(pathid)))
 		netname = os.path.split(net)[1]
 		ambiguous = False  # Net name is unambigues even without the dir
 		if netname not in filenames:
@@ -683,7 +683,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 		tnum = execute(net, asym, jobsnum, pathid if ambiguous else '')
 		jobsnum += tnum
 		netcount += tnum != 0
-	# Flush fesulting buffer
+	# Flush resulting buffer
 	if fpid:
 		fpid.flush()
 	filenames = None  # Free memory from filenames
@@ -747,10 +747,13 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 			asym  - network links weights are asymmetric (in/outbound weights can be different)
 			jobsnum  - accumulated number of scheduled jobs
 			pathid  - path id of the basefile to distinguish files with the same name located in different dirs
+				Note: pathid includes pathid separator
 
 			return
 				jobsnum  - updated accumulated number of scheduled jobs
 			"""
+			assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
+
 			for elgname in evalalgs:
 				try:
 					evalAlgorithm(_execpool, elgname, basefile, measure, timeout, pathid)
@@ -782,7 +785,7 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 					ambiguous = True
 				evaluate(measure, basefile, asym, jobsnum, pathid if ambiguous else '')
 		for pathid, (asym, basefile) in enumerate(datafiles):
-			pathid = ''.join((_SEPPATHID, 'f', str(pathid)))
+			pathid = ''.join((_SEPPATHID, _PATHID_FILE, str(pathid)))
 			# Use files with required extension
 			basefile = os.path.splitext(basefile)[0] + fileext
 			netname = os.path.split(basefile)[1]

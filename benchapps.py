@@ -17,13 +17,13 @@ from __future__ import print_function  # Required for stderr output, must be the
 import os
 import shutil
 import glob
-import subprocess
+#import subprocess
 import sys
 # Add algorithms modules
 #sys.path.insert(0, 'algorithms')  # Note: this operation might lead to ambiguity on paths resolving
 
-from algorithms.louvain_igraph import louvain
-from algorithms.randcommuns import randcommuns
+#from algorithms.louvain_igraph import louvain
+#from algorithms.randcommuns import randcommuns
 from benchcore import *
 from benchutils import *
 
@@ -45,6 +45,7 @@ _EXECNMI = './gecmi'  # Binary for NMI evaluation
 _SEPINST = '^'  # Network instances separator, must be a char
 _SEPPARS = '!'  # Network parameters separator, must be a char
 _SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs), must be a char
+_PATHID_FILE = 'f'  # File marker of the pathid (input file specified directly without the embracing dir), must be a char
 # Note: '.' is used as network shuffles separator
 #_netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
 
@@ -61,14 +62,15 @@ def	preparePath(taskpath):
 	# ATTENTION: do not use basePathExists(taskpath) here to avoid movement to the backup
 	# processing paths when xxx.mod.net is processed before the xxx.net (have the same base)
 	if os.path.exists(taskpath) and not dirempty(taskpath):
-		# Extract main task base name from instances, shuffles and params and process them all together
+		# Extract main task base name from instances, shuffles and params, and process them all together
 		mainpath, name = os.path.split(taskpath)
 		if name:
+			# Extract name suffix, skipping the extension
 			name = os.path.splitext(name)[0]
-			pos = filter(lambda x: x != -1, [name.rfind(c) for c in (_SEPINST, _SEPPARS)])  # Note: reverse direction to skip possible separator symbols in the name itself
+			# Find position of the separator symbol, considering that it can't be begin of the name
+			pos = filter(lambda x: x >= 1, [name.rfind(c) for c in (_SEPINST, _SEPPARS)])  # Note: reverse direction to skip possible separator symbols in the name itself
 			if pos:
 				pos = min(pos)
-				assert pos, 'Separators should not be the first symbol of the name'
 				name = name[:pos]
 			mainpath = '/'.join((mainpath, name))  # Note: reverse direction to skip possible separator symbols in the name itself
 		# Extract endings of multiple instances
@@ -96,56 +98,86 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 	evalname  - evaluating measure name
 	algname  - a name of the algorithm being under evaluation
 	basefile  - ground truth result, or initial network file or another measure-related file
+		Note: basefile itself never contains pathid
 	measdir  - measure-identifying directory to store results
 	timeout  - execution timeout for this task
 	evalfile  - file evaluation callback to define evaluation jobs, signature:
 		evalfile(jobs, cfile, jobname, task, taskoutp, ijobsuff, logsbase)
 	aggregate  - aggregation callback, called on the task completion, signature: aggregate(task)
-	pathid  - path id of the basefile to distinguish files with the same name located in different dirs
+	pathid  - path id of the basefile to distinguish files with the same name located in different dirs.
+		Note: pathid includes pathid separator
 	tidy  - delete previously existent resutls. Must be False if a few apps output results into the same dir
 	"""
 	assert execpool and basefile and evalname and algname, "Parameters must be defined"
+	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
 	# Fetch the task name and chose correct network filename
-	taskcapt = os.path.splitext(os.path.split(basefile)[1])[0]  # Name of the basefile
-	assert taskcapt, 'The file name must exists'
+	taskcapt = os.path.splitext(os.path.split(basefile)[1])[0]  # Name of the basefile (network or ground-truth clusters)
+	ishuf = os.path.splitext(taskcapt)[1]  # Separate shuffling index (with pathid if exists) if exists
+	assert taskcapt and not ishuf, 'The base file name must exists and should not be shuffled'
+	# Define index of the task suffix (identifier) start
+	tcapLen = len(taskcapt)  # Note: it never contains pathid
 
 	# Make dirs with logs & errors
 	# Directory of resulting community structures (clusters) for each network
 	# Note:
 	#  - consider possible parameters of the executed algorithm, embedded into the dir names with _SEPPARS
 	#  - base file never has '.' in the name except exception, so ext extraction is applicable
-	taskame, ishuf = os.path.splitext(taskcapt)  # Separate shuffling index if present
-	assert not ishuf, 'Base file should not be shuffled'
-	#print('basefile: {}, taskame: {}'.format(basefile, taskame))
+	#print('basefile: {}, taskcapt: {}'.format(basefile, taskcapt))
 
 	# Resource consumption profile file name
 	rcpoutp = ''.join((_RESDIR, algname, '/', evalname, _EXTEXECTIME))
-	# Task for all instances and shuffles each network [type] performs single postprocessing
-	itaskcapt = len(taskcapt)  # Index of the task identifier start
-	task = Task(name='_'.join((evalname, taskame, pathid, algname)), ondone=aggregate)  # , params=EvalState(taskame, )
+	task = Task(name='_'.join((evalname, taskcapt, pathid, algname)), ondone=aggregate)  # , params=EvalState(taskcapt, )
 	jobs = []
 	# Traverse over directories of clusters corresponding to the base network
-	for clsbase in glob.iglob(''.join((_RESDIR, algname, '/', _CLSDIR, escapePathWildcards(taskame), '*'))):
-		# Skip execution log files, leaving only dirs
+	for clsbase in glob.iglob(''.join((_RESDIR, algname, '/', _CLSDIR, escapePathWildcards(taskcapt), '*'))):
+		# Skip execution of log files, leaving only dirs
 		if not os.path.isdir(clsbase):
 			continue
-		# Skip instances of the base network traversed by iglob for the non-numbered instance
-		basename = os.path.split(clsbase)[1]  # Base name of the job, which is id part of the task name
-		bnameLen = len(basename)
-		if bnameLen > itaskcapt and basename[itaskcapt] == _SEPINST:
+		clsname = os.path.split(clsbase)[1]  # Processing clusters dir, which base name of the job, id part of the task name
+		clsnameLen = len(clsname)
+
+		# Skip cases when processing clusters does not have expected pathid
+		if pathid and not clsname.endswith(pathid):
 			continue
-		# Index of the base name without shuffling notation
-		# Note: generated folders corrponds to the input files/dirs that are controllable and do not contain '.' in name
-		ijobsuff = basename.rfind('.') + 1  # Remove shuffling part
-		if not ijobsuff:
-			ijobsuff = bnameLen + 1  # Skip level separator symbol
-		else:
-			# Validate that the suffix is a shuffling index
+		# Skip cases whtn processing clusters have unexpected pathid
+		elif not pathid:
+			icnpid = clsname.rfind('#')  # Index of pathid in clsname
+			if icnpid != -1 and icnpid + 1 < clsnameLen:
+				# Check whether this is a valid pathid considering possible pathid file mark
+				if clsname[icnpid + 1] == _PATHID_FILE:
+					icnpid += 1
+				# Validate pathid
+				try:
+					int(clsname[icnpid + 1:])
+				except ValueError as err:
+					# This is not the pathid, or this pathid has invalid format
+					print('WARNING, invalid pathid or file name uses pathid separator: {}. Exception: {}.'
+						' The processing is continued assuming that pathid is not exist for this file.'
+						.format(clsname, err))
+					# Continue processing as ordinary clusters wthout pathid
+				else:
+					# Skip this clusters having unexpected pathid
+					continue
+		icnpid = clsnameLen - len(pathid)  # Index of pathid in clsname
+
+		# Filter out unexpected instances of the network (when then instance without id is processed)
+		if clsnameLen > tcapLen and clsname[tcapLen] == _SEPINST:
+			continue
+
+		# Fetch shuffling index if exists
+		ish = clsname[:icnpid].rfind('.') + 1  # Note: reverse direction to skip possible separator symbols in the name itself
+		shuffle = clsname[ish:icnpid] if ish else ''
+		# Validate shufflng index
+		if shuffle:
 			try:
-				int(basename[ijobsuff:])
+				int(shuffle)
 			except ValueError as err:
-				raise ValueError('Shuffling suffix represents part of the filename: "{}". Error: {}'
-					.format(basename, err))
+				print('WARNING, invalid shuffling index or it represents a part of the filename: "{}". Exception: {}'
+					' The processing is continued assuming that sfhulling is not exist for this file.'
+					.format(clsname, err))
+				# Continue processing skipping such index
+				shuffle = ''
+
 		# Note: separate dir is created, because modularity is evaluated for all files in the target dir,
 		# which are different granularity / hierarchy levels
 		logsbase = clsbase.replace(_CLSDIR, measdir)
@@ -156,28 +188,36 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 			os.makedirs(logsbase)
 
 		# Skip shuffle indicator to accumulate values from all shuffles into the single file
-		taskoutp = '.'.join((os.path.splitext(logsbase)[0], evalname))  # evalext  # Name of the file with modularity values for each level
+		taskoutp = os.path.splitext(logsbase)[0] if shuffle else logsbase
+		# Recover lost pathid if required
+		if shuffle and pathid:
+			taskoutp += pathid
+		taskoutp = '.'.join((taskoutp, evalname))  # evalext  # Name of the file with modularity values for each level
 		if tidy and os.path.exists(taskoutp):
 			os.remove(taskoutp)
 
 		# Traverse over all resulting communities for each ground truth, log results
 		for cfile in glob.iglob(escapePathWildcards(clsbase) + '/*'):
-			if os.path.isdir(cfile):  # Skip dirs among the resulting clusters (extra/ generated by OSLOM)
+			if os.path.isdir(cfile):  # Skip dirs among the resulting clusters (extra/, generated by OSLOM)
 				continue
-			# Extract base name of the evaluating level
-			# Note: names of benchmarking algortihms output files are not controllable and can be any, unlike the embracing folders
-			jobcapt = os.path.splitext(os.path.split(cfile)[1])[0]
-			assert jobcapt, 'The clusters name should exists'
+			# Extract base name of the evaluating clusters level
+			# Note: benchmarking algortihm output file names are not controllable and can be any, unlike the embracing folders
+			jbasename = os.path.splitext(os.path.split(cfile)[1])[0]
+			assert jbasename, 'The clusters name should exists'
 			# Extand job caption with the executing task if not already contains and update the caption index
-			ibn = jobcapt.find(basename)
-			ijscorr = ijobsuff  # Corrected job suffix if required
-			if ibn != -1:
-				ijscorr += ibn
-			else:
-				jobcapt = '_'.join((basename, jobcapt))
-			jobname = '_'.join((evalname, jobcapt, algname))
-			logfilebase = '/'.join((logsbase, jobcapt))
-			evalfile(jobs, cfile, jobname, task, taskoutp, rcpoutp, jobcapt[ijscorr:], logfilebase)
+			jscorr = jbasename.find(clsname)
+			# Corrected job suffix if required
+			if jscorr == -1:
+				jscorr = 0
+				jbasename = '_'.join((clsname, jbasename))
+			jobcapt = jbasename[jscorr + clsnameLen + 1:]  # Skip also separator symbol
+			if shuffle:
+				jobcapt = '_'.join((shuffle, jobcapt))
+			#jobcapt = '  '.join((jbasename, clsname, pathid, basefile, '<<<', clsbase, '>>>', jobcapt))
+			jobname = '_'.join((evalname, clsname, algname))  # Note: pathid can be empty
+			logfilebase = '/'.join((logsbase, jbasename))
+			# pathid must be part of jobname, and  bun not of the jobsuff
+			evalfile(jobs, cfile, jobname, task, taskoutp, rcpoutp, jobcapt, logfilebase)
 	# Run all jobs after all of them were added to the task
 	if jobs:
 		for job in jobs:
@@ -188,7 +228,7 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 					.format(job.name, err), file=sys.stderr)
 	else:
 		print('WARNING, "{}" clusters "{}" do not exist to be evaluated'
-			.format(algname, basename), file=sys.stderr)
+			.format(algname, clsname), file=sys.stderr)
 
 
 def evalAlgorithm(execpool, algname, basefile, measure, timeout, pathid=''):
@@ -201,7 +241,9 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, pathid=''):
 	measure  - target measure to be evaluated: {nmi, nmi_s, mod}
 	timeout  - execution timeout for this task
 	pathid  - path id of the basefile to distinguish files with the same name located in different dirs
+		Note: pathid includes pathid separator
 	"""
+	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
 	print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
 
 	#evalname = None
@@ -243,7 +285,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, pathid=''):
 			# Find require value to be aggregated
 			targpref = 'mod: '
 			# Match float number
-			mod = parseFloat(result[len(targpref):]) if result.startswith(targpref) else None
+			mod = parseFloat(result[len(targpref):])[0] if result.startswith(targpref) else None
 			if mod is None:
 				print('ERROR, job "{}" has invalid output format. Moularity value is not found in:\n{}'
 					.format(job.name, result), file=sys.stderr)

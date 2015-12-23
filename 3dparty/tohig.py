@@ -47,7 +47,7 @@ def parseArgs(args):
 				continue
 			if arg[0] != '-':
 				raise ValueError('Unexpected argument: ' + arg)
-			
+
 			if arg[1] == 'f':
 				preflen = 3
 				if len(arg) <= preflen or arg[preflen - 1] != '=' or arg[preflen:] not in _inpfmts:
@@ -64,7 +64,7 @@ def parseArgs(args):
 				overwrite = arg[preflen]
 			else:
 				raise ValueError('Unexpected argument: ' + arg)
-	
+
 	return weighted, resdub, custfmt, overwrite
 
 
@@ -76,14 +76,14 @@ def saveNodes(fout, vertNum, startId=1):
 	if startId is not None:
 		fout.write('/Nodes {} {}\n'.format(vertNum, startId))
 	else:
-		fout.write('/Nodes {}\n'.format(vertNum))		
+		fout.write('/Nodes {}\n'.format(vertNum))
 
 
 def parseLink(link, weighted):
 	"""Parse single link in Pajek format
 	link  - string in the format: <src_id> <dst_id> [<weight>]
 	weighted  - wether to consider weight
-	
+
 	return (dest_id, weight)
 	"""
 	link = link.split()
@@ -110,7 +110,7 @@ def parseLinksList(links, weighted, resdub):
 			links = [(v, '1') for v in links]
 	elif resdub:
 		links = list(set(links))
-	
+
 	return links
 
 
@@ -172,7 +172,7 @@ def tohig(finpName, *args):
 				SECT_ARCS = 3
 				SECT_EDGL = 4  # Edges list
 				SECT_ARCL = 5  # Arcs list
-				
+
 				sectName = {
 					SECT_NONE: 'SECT_NONE',
 					SECT_VRTS: 'SECT_VRTS',
@@ -181,20 +181,20 @@ def tohig(finpName, *args):
 					SECT_EDGL: 'SECT_EDGL',
 					SECT_ARCL: 'SECT_ARCL'
 				}
-	
+
 				def sectionName(sect):
 					sections = ('<NONE>', 'vertices', 'edges', 'arcs', 'edgeslist', 'arcslist')
 					return sections[sect] if sect < len(sections) else '<UNDEFINED>'
-	
+
 				sect = SECT_NONE
 				vertNum = None  # Number of verteces
 				links = {}  # {src: [(dst, weight), ...]}
 				arcs = {}  # Selflinks in case of Edges processing
-	
+
 				# Outpurt sections
 				cmtmark = '%' if not custfmt else '#'
 				nodeshdr = False  # Nodes header is formed
-	
+
 				for ln in finp:
 					# Skip comments
 					ln = ln.lstrip()
@@ -235,7 +235,7 @@ def tohig(finpName, *args):
 									sect = SECT_ARCS
 									fout.write('\n/Arcs\n')
 							nodeshdr = True
-	
+
 						# Body of the links section
 						ln = ln.split(None, 1)
 						if len(ln) < 2:
@@ -248,17 +248,13 @@ def tohig(finpName, *args):
 							# Process self links separately
 							if sect == SECT_ARCS or link[0] != ln[0]:
 								# Fetch or construct node links
-								ndlinks = links.get(node, [] if not resdub else {})
+								ndlinks = links.setdefault(node, [] if not resdub else {})
 								if not resdub:
-									if not ndlinks:
-										links[node] = ndlinks
 									ndlinks.append(link)
 								else:
 									# Check existance of the back link for Edges
 									dest = None if sect != SECT_EDGS else links.get(int(link[0]))
 									if not dest or not dest.get(node):
-										if not ndlinks:
-											links[node] = ndlinks
 										ndlinks[link[0]] = link[1]
 							else:
 								# Always specify self weight via Arcs

@@ -41,7 +41,7 @@ import glob
 from datetime import datetime
 
 import benchapps  # Benchmarking apps (clustering algs)
-from benchcore import *
+from execpool import *
 from benchutils import *
 
 ## Add 3dparty modules
@@ -51,13 +51,15 @@ from benchutils import *
 
 #from functools import wraps
 from benchapps import PYEXEC
-from benchapps import evalAlgorithm
-from benchapps import _RESDIR
-from benchapps import _EXTEXECTIME
 from benchapps import _EXTCLNODES
-from benchapps import _SEPINST
 from benchapps import _SEPPARS
-from benchapps import _SEPPATHID
+
+from benchevals import evalAlgorithm
+from benchevals import EvalsAgg
+from benchevals import _RESDIR
+from benchevals import _EXTEXECTIME
+from benchevals import _SEPINST
+from benchevals import _SEPPATHID
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
@@ -88,6 +90,13 @@ def parseParams(args):
 				0b01 - convert only if this network is not exist
 				0b11 - force conversion (overwrite all)
 			0b100 - resolve duplicated links on conversion
+		runalgs  - execute algorithm or not
+		evalres  - resulting measures to be evaluated:
+			Note: all the employed measures are applicable for overlapping clusters
+			0  - nothing
+			0b001  - NMI
+			0b010  - NMI_s
+			0b100  - Q (modularity)
 		datas  - list of datasets to be run with asym flag (asymmetric / symmetric links weights):
 			[(<asym>, <path>, <gendir>), ...] , where path is either dir or file
 		timeout  - execution timeout in sec per each algorithm
@@ -100,7 +109,7 @@ def parseParams(args):
 	syntdir = _SYNTDIR  # Base directory for synthetic datasets
 	convnets = 0
 	runalgs = False
-	evalres = 0  # 1 - NMIs, 2 - Q, 3 - all measures
+	evalres = 0  # 1 - NMI, 2 - NMI_s, 4 - Q, 7 - all measures
 	datas = []  # list of pairs: (<asym>, <path>), where path is either dir or file
 	#asym = None  # Asymmetric dataset, per dataset
 	timeout = 36 * 60*60  # 36 hours
@@ -166,16 +175,22 @@ def parseParams(args):
 				raise ValueError('Unexpected argument: ' + arg)
 			runalgs = True
 		elif arg[1] == 'e':
-			for i in range(2,4):
-				if len(arg) > i and (arg[i] not in 'nm'):
-					raise ValueError('Unexpected argument: ' + arg)
-			if len(arg) in (2, 4):
-				evalres = 3  # all
-			# Here len(arg) >= 3
-			elif arg[2] == 'n':
-				evalres = 1  # NMIs
+			if len(arg) == 2:
+				evalres = 0b111  # All measures
 			else:
-				evalres = 2  # Q (modularity)
+				for i in range(2, min(len(arg), 6)):
+					if arg[i] not in 'nsem':
+						raise ValueError('Unexpected argument: ' + arg)
+					# Here len(arg) >= 3
+					if arg[i] == 'n':
+						evalres |= 0b1  # NMI
+					elif arg[i] == 's':
+						evalres |= 0b10  # NMI_s
+					elif arg[i] == 'e':
+						evalres |= 0b11  # All extrinsic measures - both NMIs
+					else:
+						assert arg[i] == 'm', 'Modularity is expected'
+						evalres |= 0b100  # Q (modularity)
 		elif arg[1] == 'd' or arg[1] == 'f':
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'gas=' or len(arg) == pos + 1:
@@ -694,7 +709,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 			' with {} sec ({} h {} m {:.4f} s) timeout'.format(jobsnum, netcount, timelim, *secondsToHms(timelim)))
 		_execpool.join(timelim)
 		_execpool = None
-	starttime -= time.time() - starttime
+	starttime = time.time() - starttime
 	print('The apps execution is successfully completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(starttime, *secondsToHms(starttime)))
 
@@ -702,7 +717,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
-	evalres  - evaluation flags: 0 - Skip evaluations, 1 - NMIs, 2 - Q (modularity), 3 - all measures
+	evalres  - evaluation flags: 0 - Skip evaluations, 1 - NMI, 2 - NMI_s, 4 - Q (modularity), 7 - all measures
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
 	algorithms  - list of the algorithms to be executed
 	datadirs  - directories with target networks to be processed
@@ -721,11 +736,24 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 		_execpool = ExecPool(max(cpu_count() - 1, 1))
 
 	# Measures is a dict with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
-	measures = {1: ['nmi', _EXTCLNODES, 'NMI'], 2: ['mod', '.hig', 'Q']}
-	for im in measures:
+	measures = {3: ['nmi', _EXTCLNODES, 'NMIs'], 4: ['mod', '.hig', 'Q']}
+	evaggs = []  # Evaluation results aggregators
+	for im, msr in measures.items():
 		# Evaluate only required measures
-		if evalres & im != im:
+		if evalres & im == 0:
 			continue
+		if im == 3:
+			# Exclude NMI if it is aplied, but evalres & 1 == 0
+			if evalres & 1 == 0:
+				msr[0] = 'nmi_s'
+				msr[2] = 'NMI_s'
+			elif evalres & 2 == 0:
+				msr[2] = 'NMI'
+			else:
+				evagg_s = EvalsAgg('nmi_s')  # Reserve also second results aggregator for nmi_s
+				evaggs.append(evagg_s)
+		evagg = EvalsAgg(msr[0])  # Evaluation results aggregator
+		evaggs.append(evagg)
 
 		if not algorithms:
 			#evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
@@ -754,23 +782,24 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 			"""
 			assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
 
-			for elgname in evalalgs:
+			for algname in evalalgs:
 				try:
-					evalAlgorithm(_execpool, elgname, basefile, measure, timeout, pathid)
-					# Evaluate also nmi_s for nmi
-					if measure == 'nmi':
-						evalAlgorithm(_execpool, elgname, basefile, 'nmi_s', timeout, pathid)
+					evalAlgorithm(_execpool, algname, basefile, measure, timeout, evagg, pathid)
+					## Evaluate also nmi_s besides nmi if required
+					if evalres & im == 3:
+					#if measure == 'nmi':
+						evalAlgorithm(_execpool, algname, basefile, 'nmi_s', timeout, evagg_s, pathid)
 				except StandardError as err:
 					print('WARNING, "{}" evaluation of "{}" is interrupted by the exception: {}'
-						.format(measure, elgname, err), file=sys.stderr)
+						.format(measure, algname, err), file=sys.stderr)
 				else:
 					jobsnum += 1
 			return jobsnum
 
-		print('Starting {} evaluation...'.format(measures[im][2]))
+		print('Starting {} evaluation...'.format(msr[2]))
 		jobsnum = 0
-		measure = measures[im][0]
-		fileext = measures[im][1]  # Initial networks in .hig formatare required for mod, clusters for NMIs
+		measure = msr[0]
+		fileext = msr[1]  # Initial networks in .hig formatare required for mod, clusters for NMIs
 		# Track processed file names to resolve cases when files with the same name present in different input dirs
 		filenames = set()
 		for pathid, (asym, ddir) in enumerate(datadirs):
@@ -795,14 +824,23 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 			else:
 				ambiguous = True
 			evaluate(basefile, asym, jobsnum, pathid if ambiguous else '')
-		print('{} evaluation is scheduled'.format(measures[im][2]))
+		print('{} evaluation is scheduled'.format(msr[2]))
 		filenames = None  # Free memory from filenames
+
 	if _execpool:
 		timelim = min(timeout * jobsnum, 5 * 24*60*60)  # Global timeout, up to N days
 		_execpool.join(max(timelim, exectime * 2))  # Twice the time of algorithms execution
 		_execpool = None
-	starttime -= time.time() - starttime
+	starttime = time.time() - starttime
 	print('Results evaluation is successfully completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
+		.format(starttime, *secondsToHms(starttime)))
+	# Aggregate results and output
+	starttime = time.time()
+	print('Starting processing of aggregated results ...')
+	for evagg in evaggs:
+		evagg.aggregate()
+	starttime = time.time() - starttime
+	print('Processing of aggregated results completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(starttime, *secondsToHms(starttime)))
 
 
@@ -815,7 +853,7 @@ def benchmark(*args):
 
 	gensynt, netins, shufnum, syntdir, convnets, runalgs, evalres, datas, timeout, algorithms = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tsyntdir: {}\n\tconvnets: 0b{:b}'
-		'\n\trunalgs: {}\n\tevalres: {}\n\tdatas: {}\n\ttimeout: {}\n\talgorithms: {}'
+		'\n\trunalgs: {}\n\tevalres: 0b{:b}\n\tdatas: {}\n\ttimeout: {}\n\talgorithms: {}'
 		.format(gensynt, syntdir, convnets, runalgs, evalres
 			, ', '.join(['{}{}{}'.format('' if not asym else 'asym: ', path, ' (gendir)' if gen else '')
 				for asym, path, gen in datas])
@@ -889,7 +927,7 @@ if __name__ == '__main__':
 		benchmark(*sys.argv[1:])
 	else:
 		print('\n'.join(('Usage: {0} [-g[f][=[<number>][.<shuffles_number>][=<outpdir>]] [-c[f][r]] [-a="app1 app2 ..."]'
-			' [-r] [-e[n][m]] [-d[g]{{a,s}}=<datasets_dir>] [-f[g]{{a,s}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
+			' [-r] [-e[n][s][e][m]] [-d[g]{{a,s}}=<datasets_dir>] [-f[g]{{a,s}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
 			'Parameters:',
 			'  -g[f][=[<number>][.<shuffles_number>][=<outpdir>]]  - generate <number> ({synetsnum} by default) >= 0'
 			' synthetic datasets in the <outpdir> ("{syntdir}" by default), shuffling each <shuffles_number>'
@@ -912,7 +950,9 @@ if __name__ == '__main__':
 			#'    Xf  - force execution even when the results already exists (existent datasets are moved to backup)',
 			'  -e[[X]  - evaluate quality of the results. Default: apply all measurements',
 			#'    Xf  - force execution even when the results already exists (existent datasets are moved to backup)',
-			'    Xn  - evaluate results accuracy using NMI measures for overlapping communities',
+			'    Xn  - evaluate results accuracy using NMI measure for overlapping communities',
+			'    Xs  - evaluate results accuracy using NMI_s measure for overlapping communities',
+			'    Xe  - evaluate results accuracy using extrinsic measures (both NMIs) for overlapping communities',
 			'    Xm  - evaluate results quality by modularity',
 			# TODO: customize extension of the network files (implement filters)
 			'  -d[X]=<datasets_dir>  - directory of the datasets.',

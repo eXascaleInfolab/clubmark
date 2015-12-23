@@ -22,6 +22,8 @@ import sys
 #sys.path.insert(0, 'algorithms')  # Note: this operation might lead to ambiguity on paths resolving
 
 from datetime import datetime
+from math import sqrt
+from math import copysign
 
 #from algorithms.louvain_igraph import louvain
 #from algorithms.randcommuns import randcommuns
@@ -52,6 +54,9 @@ class ItemsStatistic(object):
 		"""Constructor
 
 		name  - item name
+		min0  - initial minimal value
+		max0  - initial maximal value
+
 		sum  - sum of all values
 		sum2  - sum of squares of values
 		min  - min value
@@ -84,10 +89,10 @@ class ItemsStatistic(object):
 		assert not self.fixed, 'Only non-fixed items can be modified'
 		if val is not None:
 			self.sum += val
-			self.sum2 += val*val
+			self.sum2 += copysign(val*val, val)
 			if val < self.min:
 				self.min = val
-			elif val > self.max:
+			if val > self.max:
 				self.max = val
 			self.count += 1
 		else:
@@ -102,7 +107,7 @@ class ItemsStatistic(object):
 			self.sum2 += self.sum2
 			if val.min < self.min:
 				self.min = val.min
-			elif val.max > self.max:
+			if val.max > self.max:
 				self.max = val.max
 			self.count += val.count
 			self.invals += val.invals
@@ -118,7 +123,8 @@ class ItemsStatistic(object):
 		if self.count:
 			self.avg /= float(self.count)
 			if self.count >= 2:
-				self.sd = sqrt((self.sum * self.sum - self.sum2) / float(self.count - 1))  # Note: corrected deviation for samples is employed
+				count = float(self.count)
+				self.sd = sqrt(abs(self.sum2 * count - self.sum * self.sum)) / (count - 1)  # Note: corrected deviation for samples is employed
 
 
 class EvalsAgg(object):
@@ -137,9 +143,9 @@ class EvalsAgg(object):
 		self.netsev = {}  # Global network evaluations in the format: net_name: alg_eval
 		self.algs = set()
 
-		self.aevals = {}
-		#self.netsev = {}
-		self.networks = set()
+		#self.aevals = {}
+		##self.netsev = {}
+		#self.networks = set()
 
 
 	def aggregate(self):
@@ -189,10 +195,11 @@ class EvalsAgg(object):
 
 		# Order available algs names
 		self.algs = sorted(self.algs)
+		#print('Available algs: ' + ' '.join(self.algs))
 		# Output aggregated results for this measure for all algorithms
 		outfile = ''.join((_RESDIR, self.measure, _EXTAGGRES))
 		with open(outfile, 'a') as fmeasev:
-			fmeasev.write('# --- {}, output for each network: Q_avg, Q_min, Q_max, Q_sd;\n'
+			fmeasev.write('# --- {}, output for each network: Q_avg: Q_min Q_max, Q_sd count;\n'
 				.format(datetime.utcnow()))  # Write timestamp
 			header = True  # Output header
 			#? netsnum = None  # Verufy that each algorithm is executed on the same number of networks
@@ -203,7 +210,7 @@ class EvalsAgg(object):
 						fmeasev.write('\t{}'.format(alg))
 					fmeasev.write('\n')
 					header = False
-				algsev = iter(sorted(algsev, key=lambda x: x[0]))
+				algsev = iter(sorted(algsev.items(), key=lambda x: x[0]))
 				ialgs = iter(self.algs)
 				firstcol = True
 				# Output aggregated network evaluation for each algorithm
@@ -216,14 +223,16 @@ class EvalsAgg(object):
 						aev = algsev.next()
 					except StopIteration:
 						# Write separators till the end
-						fmeasev.write('\t')
+						fmeasev.write('\t;')
 						for alg in ialgs:
-							fmeasev.write('\t')
+							fmeasev.write('\t;')
 					else:
-						# Check whether the evaluated alg results are shown now or later
+						# Check whether to show evaluated alg results now or later
 						if aev[0] == alg:
-							val = aev[1].stat()
-							fmeasev.write('\t{}, {}, {}, {};'.format(val.avg, val.min, val.max, val.sd))
+							val = aev[1]
+							val.fix()  # Process aggregated resutls
+							fmeasev.write('\t{}: {} {}, {} {};'
+								.format(val.avg, val.min, val.max, val.sd, val.count))
 						else:
 							# Skip this alg
 							fmeasev.write('\t;')
@@ -336,7 +345,12 @@ class ShufflesAgg(object):
 					self.bestlev = (name, val)
 		self.fixed = True
 		if self.bestlev is None or self.bestlev[1].avg is None:
-			print('WARNING, "{}" has not defined results'.format(self.name))
+			print('WARNING, "{}" has no defined results'.format(self.name))
+		## Trace best lev value for debugging purposes
+		#else:
+		#	val = self.bestlev[1]
+		#	print('{} bestval is {}: {} (from {} up to {}, sd: {})'
+		#		.format(self.name, self.bestlev[0], val.avg, val.min, val.max, val.sd))
 
 
 def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfile, resagg, pathid='', tidy=True):
@@ -462,12 +476,12 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 			#	if not clslev:
 			#		clslev = jbasename[:pos].rstrip('_-.')
 			#	jbasename = clslev
-			if jscorr == -1:
-				jscorr = 0
+			if pos == -1:
+				pos = 0
 				jbasename = '_'.join((clsname, jbasename))
-			clslev = jbasename[jscorr + clsnameLen:].lstrip('_-.')
+			clslev = jbasename[pos + clsnameLen:].lstrip('_-.')
 			if not clslev:
-				clslev = jbasename[:jscorr].rstrip('_-.')  # Note: clslev can be empty if jbasename == clsname
+				clslev = jbasename[:pos].rstrip('_-.')  # Note: clslev can be empty if jbasename == clsname
 			#if shuffle:
 			#	clslev = '/'.join((clslev, shuffle))
 
@@ -551,6 +565,13 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 					.format(job.name, result), file=sys.stderr)
 				return
 
+			# Transfer resutls to the embracing task if exists
+			if job.task and job.task.params:
+				job.task.params.add(job, mod)
+			else:
+				print('WARNING, task "{}" of job "{}" has no results aggregator defined via params'
+					.format(job.name), file=sys.stderr)
+			# Log results
 			taskoutp = job.params['taskoutp']
 			with open(taskoutp, 'a') as tmod:  # Append to the end
 				if not os.path.getsize(taskoutp):
@@ -561,14 +582,6 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 				if job.params['shuffle']:
 					rescapt = '/'.join((rescapt, job.params['shuffle']))
 				tmod.write('{}\t{}\n'.format(mod, rescapt))
-				# Transfer resutls to the embracing task if exists
-				if job.task and job.task.params:
-					job.task.params.add(job, mod)
-				#if job.task and job.task.onjobdone:
-				#	job.task.onjobdone(job, mod)
-				else:
-					print('WARNING, task "{}" of job "{}" has no results aggregator defibed via params'
-						.format(job.name), file=sys.stderr)
 
 
 		jobs.append(Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout
@@ -625,12 +638,23 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 				print('ERROR, nmi evaluation failed for the job "{}": {}'
 					.format(job.name, result), file=sys.stderr)
 			else:
+				# Transfer resutls to the embracing task if exists
+				if job.task and job.task.params:
+					job.task.params.add(job, nmi)
+				else:
+					print('WARNING, task "{}" of job "{}" has no results aggregator defined via params'
+						.format(job.name), file=sys.stderr)
+				# Log results
 				taskoutp = job.params['taskoutp']
 				with open(taskoutp, 'a') as tnmi:  # Append to the end
 					if not os.path.getsize(taskoutp):
-						tnmi.write('# NMI\t[shuffle_]level\n')
+						tnmi.write('# NMI\tlevel[/shuffle]\n')
 						tnmi.flush()
-					tnmi.write('{}\t{}\n'.format(nmi, job.params['clslev']))
+					# Define result caption
+					rescapt = job.params['clslev']
+					if job.params['shuffle']:
+						rescapt = '/'.join((rescapt, job.params['shuffle']))
+					tnmi.write('{}\t{}\n'.format(nmi, rescapt))
 
 
 		jobs.append(Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout
@@ -664,12 +688,23 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 				print('ERROR, nmi_s evaluation failed for the job "{}": {}'
 					.format(job.name, result), file=sys.stderr)
 			else:
+				# Transfer resutls to the embracing task if exists
+				if job.task and job.task.params:
+					job.task.params.add(job, nmi)
+				else:
+					print('WARNING, task "{}" of job "{}" has no results aggregator defined via params'
+						.format(job.name), file=sys.stderr)
+				# Log results
 				taskoutp = job.params['taskoutp']
 				with open(taskoutp, 'a') as tnmi:  # Append to the end
 					if not os.path.getsize(taskoutp):
-						tnmi.write('# NMI_S\t[shuffle_]level\n')
+						tnmi.write('# NMI_s\tlevel[/shuffle]\n')
 						tnmi.flush()
-					tnmi.write('{}\t{}\n'.format(nmi, job.params['clslev']))
+					# Define result caption
+					rescapt = job.params['clslev']
+					if job.params['shuffle']:
+						rescapt = '/'.join((rescapt, job.params['shuffle']))
+					tnmi.write('{}\t{}\n'.format(nmi, rescapt))
 
 
 		jobs.append(Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout

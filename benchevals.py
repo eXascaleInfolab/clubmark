@@ -39,6 +39,7 @@ _NMIDIR = 'nmi/'
 _EXTERR = '.err'
 _EXTEXECTIME = '.rcp'  # Resource Consumption Profile
 _EXTAGGRES = '.res'  # Aggregated results
+_EXTAGGRESEXT = '.resx'  # Extended aggregated results
 #_extmod = '.mod'
 #_EXECNMI = './gecmi'  # Binary for NMI evaluation
 _SEPINST = '^'  # Network instances separator, must be a char
@@ -197,10 +198,14 @@ class EvalsAgg(object):
 		self.algs = sorted(self.algs)
 		#print('Available algs: ' + ' '.join(self.algs))
 		# Output aggregated results for this measure for all algorithms
-		outfile = ''.join((_RESDIR, self.measure, _EXTAGGRES))
-		with open(outfile, 'a') as fmeasev:
-			fmeasev.write('# --- {}, output for each network: Q_avg: Q_min Q_max, Q_sd count;\n'
-				.format(datetime.utcnow()))  # Write timestamp
+		resbase = _RESDIR + self.measure
+		with open(resbase + _EXTAGGRES, 'a') as fmeasev, open(resbase + _EXTAGGRESEXT, 'a') as fmeasevx:
+			# Append to the results and extended results
+			timestamp = datetime.utcnow()
+			fmeasev.write('# --- {}, output:  Q_avg\n'.format(timestamp))  # format = Q_avg: Q_min Q_max, Q_sd count;
+			# Extended output has notations in each row
+			fmeasevx.write('# --- {} ---\n'.format(timestamp))  # format = Q_avg: Q_min Q_max, Q_sd count;
+				  # Write timestamp
 			header = True  # Output header
 			#? netsnum = None  # Verufy that each algorithm is executed on the same number of networks
 			for net, algsev in self.netsev.iteritems():
@@ -209,6 +214,8 @@ class EvalsAgg(object):
 					for alg in self.algs:
 						fmeasev.write('\t{}'.format(alg))
 					fmeasev.write('\n')
+					# Brief header for the extended results
+					fmeasevx.write('# <network>\t<alg1_outp>;\t<alg2_outp>;\t...\n')
 					header = False
 				algsev = iter(sorted(algsev.items(), key=lambda x: x[0]))
 				ialgs = iter(self.algs)
@@ -218,59 +225,31 @@ class EvalsAgg(object):
 					# Output row header it required
 					if firstcol:
 						fmeasev.write(net)
+						fmeasevx.write(net)
 						firstcol = False
 					try:
 						aev = algsev.next()
 					except StopIteration:
 						# Write separators till the end
-						fmeasev.write('\t;')
+						fmeasev.write('\t')
+						fmeasevx.write('\t;')
 						for alg in ialgs:
-							fmeasev.write('\t;')
+							fmeasev.write('\t')
+							fmeasevx.write('\t;')
 					else:
 						# Check whether to show evaluated alg results now or later
 						if aev[0] == alg:
 							val = aev[1]
 							val.fix()  # Process aggregated resutls
-							fmeasev.write('\t{}: {} {}, {} {};'
-								.format(val.avg, val.min, val.max, val.sd, val.count))
+							fmeasev.write('\t{:.6f}'.format(val.avg))
+							fmeasevx.write('\t{}: Q = {.6f} ({.6f} .. {.6f}), s = {.6f}, count = {};'
+								.format(alg, val.avg, val.min, val.max, val.sd, val.count))
 						else:
 							# Skip this alg
-							fmeasev.write('\t;')
+							fmeasev.write('\t')
+							fmeasevx.write('\t;')
 				fmeasev.write('\n')
-
-
-		#		ialgs = iter(self.algs)
-		#		curnet = inets.next()
-		#		firstcol = True  # Output algorithm name
-		#		for netname, nstat in aeval:
-		#			if netname == curnet:
-		#				print()
-		#			else:
-		#				print()
-		#
-		## Sort network to align algorithms output
-		#self.networks = sorted(self.networks)
-		## Output aggregated results for this measure for all algorithms with timestamp
-		#outfile = ''.join((_RESDIR, self.measure, _EXTAGGRES))
-		#with open(outfile, 'a') as fmeasev:
-		#	fmeasev.write('# --- {} ---\n'.format(datetime.utcnow()))  # Write timestamp
-		#	header = True  # Output header
-		#	#? netsnum = None  # Verufy that each algorithm is executed on the same number of networks
-		#	for algname, aeval in self.aevals.items():
-		#		if header:
-		#			fmeasev.write('# <algname>')
-		#			for net in self.networks:
-		#				fmeasev.write('\t{}'.format(net))
-		#			header = False
-		#		aeval = sorted(aeval, key=lambda x: x[0])
-		#		inets = iter(self.networks)
-		#		curnet = inets.next()
-		#		firstcol = True  # Output algorithm name
-		#		for netname, nstat in aeval:
-		#			if netname == curnet:
-		#				print()
-		#			else:
-		#				print()
+				fmeasevx.write('\n')
 
 
 	def register(self, shfagg):

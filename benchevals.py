@@ -70,6 +70,10 @@ class ItemsStatistic(object):
 		avg  - average value for the finalized evaluations
 		sd  - standard deviation for the finalized evaluations
 			Note: sd = sqrt(var), avg +- sd covers 95% of the items in the normal distribution
+
+		statCount  - total number of items in the aggregated stat items
+		statDelta  - max stat delta (max - min)
+		statSD  - average weighted (by the number of items) weighted stat SD
 		"""
 		self.name = name
 		self.sum = 0
@@ -83,6 +87,10 @@ class ItemsStatistic(object):
 		self.fixed = False
 		self.avg = None
 		self.sd = None
+
+		self.statCount = 0
+		self.statDelta = None
+		self.statSD = None
 
 
 	def add(self, val):
@@ -112,6 +120,15 @@ class ItemsStatistic(object):
 				self.max = val.max
 			self.count += val.count
 			self.invals += val.invals
+
+			if self.statCount:
+				if self.statDelta < val.max - val.min:
+					self.statDelta = val.max - val.min
+				self.statSD = (self.statSD * self.statCount + val.sd * val.count) / (self.statCount + val.count)
+			else:
+				self.statDelta = val.max - val.min
+				self.statSD = val.sd
+			self.statCount += val.count
 		else:
 			self.invstats += 1
 
@@ -242,8 +259,10 @@ class EvalsAgg(object):
 							val = aev[1]
 							val.fix()  # Process aggregated resutls
 							fmeasev.write('\t{:.6f}'.format(val.avg))
-							fmeasevx.write('\t{}: Q = {.6f} ({.6f} .. {.6f}), s = {.6f}, count = {};'
-								.format(alg, val.avg, val.min, val.max, val.sd, val.count))
+							fmeasevx.write('\t{}: Q = {:.6f} ({:.6f} .. {:.6f}), s = {:.6f}, count = {}, fails = {},'
+								' d(shuf) = {:.6f}, s(shuf) = {:.6f}, count(shuf) = {}, fails(shuf) = {};'
+								.format(alg, val.avg, val.min, val.max, val.sd, val.count, val.invals
+								, val.statDelta, val.statSD, val.statCount, val.invstats))
 						else:
 							# Skip this alg
 							fmeasev.write('\t')

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-\descr:  Multi-process Execution Pool to schedule Jobs execution optionally grouping them
+\descr:  Multi-Process Execution Pool to schedule Jobs execution optionally grouping them
 	into Tasks and specifying execution paremeters:
 	- timeout per each Job, which was the main motivation to implemtent this module
 	- onstart/ondone callbacks, ondone is called only on successful completion (not termination)

@@ -33,26 +33,117 @@ import sys
 # Add algorithms modules
 #sys.path.insert(0, 'algorithms')  # Note: this operation might lead to ambiguity on paths resolving
 
+from datetime import datetime
+
 #from algorithms.louvain_igraph import louvain
 #from algorithms.randcommuns import randcommuns
-from execpool import *
+from contrib.mpepool import *
 from benchutils import *
 
 from sys import executable as PYEXEC  # Full path to the current Python interpreter
+from benchutils import _SEPPARS
 from benchevals import _ALGSDIR
 from benchevals import _RESDIR
 from benchevals import _CLSDIR
 from benchevals import _EXTERR
 from benchevals import _EXTEXECTIME
-from benchevals import _SEPINST
+from benchevals import _EXTAGGRES
+from benchevals import _EXTAGGRESEXT
 
 _EXTLOG = '.log'
 _EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
 #_extmod = '.mod'
 #_EXECNMI = './gecmi'  # Binary for NMI evaluation
-_SEPPARS = '!'  # Network parameters separator, must be a char
 ## Note: '.' is used as network shuffles separator
 ##_netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
+
+
+def aggexec(algs):
+	"""Aggregate execution statistics
+
+	Aggregate execution results of all networks instances and shuffles and output average,
+	and avg, min, max values for each network type per each algorithm.
+
+	Expected format of the aggregating files:
+	# ExecTime(sec)	CPU_time(sec)	CPU_usr(sec)	CPU_kern(sec)	RSS_RAM_peak(Mb)	TaskName
+	0.550262	0.526599	0.513438	0.013161	2.086	syntmix/1K10/1K10^1!k7.1#1
+	...
+
+	algs  - algorithms were executed, which resource consumption  should be aggregated
+	"""
+	#exectime = {}  # netname: [alg1_stat, alg2_stat, ...]
+	#cputime = {}
+	#rssmem = {}
+	mnames = ('exectime', 'cputime', 'rssmem')  # Measures names
+	measures = [{}, {}, {}]  # exectiem, cputime, rssmem
+	malgs = []  # Measured algs
+	ialg = 0  # Algorithm index
+	for alg in algs:
+		algesfile = ''.join((_RESDIR, alg, _EXTEXECTIME))
+		try:
+			with open(algesfile, 'r') as aest:
+				malgs.append(alg)
+				for ln in aest:
+					# Strip leading spaces
+					ln = ln.lstrip()
+					# Skip comments
+					if not ln or ln[0] == '#':
+						continue
+					# Parse the content
+					fields = ln.split(None, 5)
+					# Note: empty and spaces strings were already excluded
+					assert len(fields) == 6, (
+						'Invalid format of the resource consumption file "{}": {}'.format(algesfile, ln))
+					# Fetch and accumulate measures
+					net = delPathSuffix(os.path.split(fields[5])[1])  # Note: name might be a path here
+					assert net, 'Network name must exist'
+					etime = float(fields[0])
+					ctime = float(fields[1])
+					rmem = float(fields[4])
+					for imsr, val in enumerate((etime, ctime, rmem)):
+						netstats = measures[imsr].setdefault(net, [])
+						if len(netstats) <= ialg:
+							assert len(netstats) == ialg, 'Network statistics are not synced with algorithms'
+							netstats.append(ItemsStatistic('_'.join((alg, net)), val, val))
+						netstats[-1].add(val)
+		except IOError:
+			print('WARNING, execution results for "{}" do not exist, skipped.'.format(alg), file=sys.stderr)
+		else:
+			ialg += 1
+	# Check number of the algorithms to be outputted
+	if not malgs:
+		print('WARNING, there are no any algortihms execution results to be aggregated.', file=sys.stderr)
+		return
+	# Output resutls
+	for imsr, measure in enumerate(mnames):
+		resfile = ''.join((_RESDIR, measure, _EXTAGGRES))
+		resxfile = ''.join((_RESDIR, measure, _EXTAGGRESEXT))
+		timestamp = datetime.utcnow()
+		try:
+			with open(resfile, 'a') as outres, open(resxfile, 'a') as outresx:
+				# Output timestamp
+				outres.write('# --- {} ---\n'.format(timestamp))
+				outresx.write('# --- {} ---\n'.format(timestamp))
+				# Output header, which might differ for distinct runs by number of algs
+				outres.write('# <network>')
+				for alg in malgs:
+					outres.write('\t{}'.format(alg))
+				outres.write('\n')
+				outresx.write('# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n')  # ExecTime(sec), ExecTime_avg(sec), ExecTime_min\tExecTime_max
+				# Output results for each network
+				for netname, netstats in measures[imsr].iteritems():
+					outres.write(netname)
+					outresx.write(netname)
+					for ialg, stat in enumerate(netstats):
+						outres.write('\t{:.3f}'.format(stat.sum))
+						if not stat.fixed:
+							stat.fix()
+						outresx.write('\n\t{}>\ttotal_time: {:.3f}, item_time: {:.6f} ({:.6f} .. {:.6f})'
+							.format(malgs[ialg], stat.sum, stat.avg, stat.min, stat.max))
+					outres.write('\n')
+					outresx.write('\n')
+		except IOError as err:
+			print('ERROR, "{}" execution results output is failed: {}'.format(measure, err), file=sys.stderr)
 
 
 def	preparePath(taskpath):
@@ -64,31 +155,36 @@ def	preparePath(taskpath):
 	taskpath  - the path to be prepared
 	"""
 	# Backup existent files & dirs with such base only if this path exists and is not empty
-	# ATTENTION: do not use basePathExists(taskpath) here to avoid movement to the backup
+	# ATTENTION: do not use only basePathExists(taskpath) here to avoid movement to the backup
 	# processing paths when xxx.mod.net is processed before the xxx.net (have the same base)
 	if os.path.exists(taskpath) and not dirempty(taskpath):
-		# Extract main task base name from instances, shuffles and params, and process them all together
-		mainpath, name = os.path.split(taskpath)
-		if name:
-			# Extract name suffix, skipping the extension
-			name = os.path.splitext(name)[0]
-			# Find position of the separator symbol, considering that it can't be begin of the name
-			pos = filter(lambda x: x >= 1, [name.rfind(c) for c in (_SEPINST, _SEPPARS)])  # Note: reverse direction to skip possible separator symbols in the name itself
-			if pos:
-				pos = min(pos)
-				name = name[:pos]
-			mainpath = '/'.join((mainpath, name))  # Note: reverse direction to skip possible separator symbols in the name itself
-		# Extract endings of multiple instances
-		parts = mainpath.rsplit(_SEPINST, 1)
-		if len(parts) >= 2:
-			try:
-				int(parts[1])
-			except ValueError:
-				# It's not an instance name
-				pass
-			else:
-				# Instance name
-				mainpath = parts[0]
+		## Extract main task base name from instances, shuffles and params, and process them all together
+		#mainpath, name = os.path.split(taskpath)
+		#if len(name) >= 2:  # Separator can't be the first symbol in the name
+		#	# Extract name suffix, skipping the extension
+		#	name = os.path.splitext(name)[0]
+		#	# Find position of the separator symbol, considering that it can't be begin of the name
+		#	pos = name[1:].rfind(_SEPINST) + 1  # Note: reverse direction to skip possible separator symbols in the name itself
+		#	pos2 = name[1:].find(_SEPPARS) + 1  # Note: there can be a few parameters, position of the first one is requried
+		#	pos = filter(lambda x: x >= 1, [pos, pos2])  # Note: filter out -1 (not exists)
+		#	if pos:
+		#		pos = min(pos)
+		#		name = name[:pos]
+		#mainpath = '/'.join((mainpath, name))  # Note: reverse direction to skip possible separator symbols in the name itself
+		## Extract endings of multiple instances
+		#parts = mainpath.rsplit(_SEPINST, 1)
+		#if len(parts) >= 2:
+		#	try:
+		#		int(parts[1])
+		#	except ValueError as err:
+		#		# It's not an instance name
+		#		print('WARNING, invalid suffix or separator "{}" represents part of the path "{}", exception: {}. Skipped.'
+		#			.format(_SEPINST, netname, err), file=sys.stderr)
+		#		pass
+		#	else:
+		#		# Instance name
+		#		mainpath = parts[0]
+		mainpath = delPathSuffix(mainpath)
 		backupPath(mainpath, True)
 	# Create target path if not exists
 	if not os.path.exists(taskpath):
@@ -251,7 +347,7 @@ def execScp(execpool, netfile, asym, timeout, pathid=''):
 		steps = '10'  # Use 10 levels in the hierarchy Ganxis
 		resbase = ''.join(('../', taskpath, '/', ktask))  # Base name of the result
 		# scp.py netname k [start_linksnum end__linksnum numberofevaluations] [weight]
-		args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', ktask, pathid))
+		args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', ktask, pathid)), '-s=/etime_' + algname
 			, PYEXEC, ''.join(('./', algname, '.py')), '../' + netfile, kstr, steps, resbase + _EXTCLNODES)
 
 		def tidy(job):

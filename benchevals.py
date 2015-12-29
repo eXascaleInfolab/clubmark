@@ -22,13 +22,16 @@ import sys
 #sys.path.insert(0, 'algorithms')  # Note: this operation might lead to ambiguity on paths resolving
 
 from datetime import datetime
-from math import sqrt
-from math import copysign
 
 #from algorithms.louvain_igraph import louvain
 #from algorithms.randcommuns import randcommuns
-from execpool import *
+from contrib.mpepool import *
 from benchutils import *
+
+from benchutils import _SEPINST
+from benchutils import _SEPPATHID
+from benchutils import _PATHID_FILE
+
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 _ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
@@ -42,242 +45,7 @@ _EXTAGGRES = '.res'  # Aggregated results
 _EXTAGGRESEXT = '.resx'  # Extended aggregated results
 #_extmod = '.mod'
 #_EXECNMI = './gecmi'  # Binary for NMI evaluation
-_SEPINST = '^'  # Network instances separator, must be a char
-_SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs), must be a char
-_PATHID_FILE = 'f'  # File marker of the pathid (input file specified directly without the embracing dir), must be a char
-# Note: '.' is used as network shuffles separator
 #_netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
-
-
-class ItemsStatistic(object):
-	"""Accumulates statistics over the added integral items and items of accumulated statistics"""
-	def __init__(self, name, min0=1, max0=-1):
-		"""Constructor
-
-		name  - item name
-		min0  - initial minimal value
-		max0  - initial maximal value
-
-		sum  - sum of all values
-		sum2  - sum of squares of values
-		min  - min value
-		max  - max value
-		count  - number of valid values
-		invals  - number of invalid values
-		invstats  - number of invaled statistical aggregations
-
-		fixed  - whether all items are aggregated and summarization is performed
-		avg  - average value for the finalized evaluations
-		sd  - standard deviation for the finalized evaluations
-			Note: sd = sqrt(var), avg +- sd covers 95% of the items in the normal distribution
-
-		statCount  - total number of items in the aggregated stat items
-		statDelta  - max stat delta (max - min)
-		statSD  - average weighted (by the number of items) weighted stat SD
-		"""
-		self.name = name
-		self.sum = 0
-		self.sum2 = 0
-		self.min = min0
-		self.max = max0
-		self.count = 0
-		self.invals = 0
-		self.invstats = 0
-
-		self.fixed = False
-		self.avg = None
-		self.sd = None
-
-		self.statCount = 0
-		self.statDelta = None
-		self.statSD = None
-
-
-	def add(self, val):
-		"""Add integral value to the accumulating statistics"""
-		assert not self.fixed, 'Only non-fixed items can be modified'
-		if val is not None:
-			self.sum += val
-			self.sum2 += copysign(val*val, val)
-			if val < self.min:
-				self.min = val
-			if val > self.max:
-				self.max = val
-			self.count += 1
-		else:
-			self.invals += 1
-
-
-	def addstat(self, val):
-		"""Add accumulated statistics to the accumulating statistics"""
-		assert not self.fixed, 'Only non-fixed items can be modified'
-		if val is not None:
-			self.sum += val.sum
-			self.sum2 += self.sum2
-			if val.min < self.min:
-				self.min = val.min
-			if val.max > self.max:
-				self.max = val.max
-			self.count += val.count
-			self.invals += val.invals
-
-			if self.statCount:
-				if self.statDelta < val.max - val.min:
-					self.statDelta = val.max - val.min
-				self.statSD = (self.statSD * self.statCount + val.sd * val.count) / (self.statCount + val.count)
-			else:
-				self.statDelta = val.max - val.min
-				self.statSD = val.sd
-			self.statCount += val.count
-		else:
-			self.invstats += 1
-
-
-	def fix(self):
-		"""Fix (finalize) statistics accumulation and produce the summary of the results"""
-		assert self.count >=0, 'Count must be non-negative'
-		self.fixed = True
-		self.avg = self.sum
-		if self.count:
-			self.avg /= float(self.count)
-			if self.count >= 2:
-				count = float(self.count)
-				self.sd = sqrt(abs(self.sum2 * count - self.sum * self.sum)) / (count - 1)  # Note: corrected deviation for samples is employed
-
-
-class EvalsAgg(object):
-	"""Evaluations aggregator for the specified measure"""
-	def __init__(self, measure):
-		"""Constractor
-
-		measure  - target measure for this aggrigator
-
-		partaggs  - partial aggregators to be processed
-		aevals  - resulting algorithm evaluations
-		"""
-		self.measure = measure
-		self.partaggs = []
-
-		self.netsev = {}  # Global network evaluations in the format: net_name: alg_eval
-		self.algs = set()
-
-		#self.aevals = {}
-		##self.netsev = {}
-		#self.networks = set()
-
-
-	def aggregate(self):
-		"""Aggregate results over all partial aggregates and output them"""
-		# Show warning for all non-fixed registered instances over what the aggregation is performed.
-		# Evaluate max among all avg value among instances of each network with particular params. - 3rd element of the task name
-		# Evaluate avg and range over all network instances with the same base name (and params),
-		# #x and ^x are processed similary as instances.
-		for inst in self.partaggs:
-			if not inst.fixed:
-				print('WARNING, shuffles aggregator for task "{}" was not fixed on final aggregation'
-					.format(inst.name))
-				inst.fix()
-			measure, algname, netname, pathid = inst.name.split('/')  # Note: netname might include instance index
-			# Separate instance name into the base name of the network and instance id
-			iisep = netname.rfind(_SEPINST) + 1  # Skip the separator symbol
-			#instid = 0
-			if iisep:
-				# Validate that this is really index
-				try:
-					int(netname[iisep:])  # instid
-				except ValueError as err:
-					print('WARNING, invalid instance index or it represents a part of the filename: "{}". Exception: {}'
-						' The processing is continued assuming that instance index does not exist for this file.'
-						.format(netname, err))
-				else:
-					netname = netname[:iisep-1]
-					assert netname, 'Network name must be valid'
-			# Maintain list of all evaluated algs to output results in the table format
-			self.algs.add(algname)
-			# Update global network evaluation results
-			algsev = self.netsev.setdefault(netname, {})
-			netstat = algsev.get(algname)
-			if netstat is None:
-				netstat = ItemsStatistic(algname)
-				algsev[algname] = netstat
-			## Update global register of evaluations
-			#self.networks.add(netname)  # Maintain list of networks to output evaluation table
-			#aeval = self.aevals.setdefault(algname, {})  # Network evaluations for the algorithm
-			#nstat = aeval.get(netname)  # Aggregated resulting statistics for the network
-			#if not nstat:
-			#	nstat = ItemsStatistic(netname)
-			#	aeval[netname] = nstat
-			netstat.addstat(inst.stat())
-		# Remove partial aggregations
-		self.partaggs = None
-
-		# Order available algs names
-		self.algs = sorted(self.algs)
-		#print('Available algs: ' + ' '.join(self.algs))
-		# Output aggregated results for this measure for all algorithms
-		resbase = _RESDIR + self.measure
-		with open(resbase + _EXTAGGRES, 'a') as fmeasev, open(resbase + _EXTAGGRESEXT, 'a') as fmeasevx:
-			# Append to the results and extended results
-			timestamp = datetime.utcnow()
-			fmeasev.write('# --- {}, output:  Q_avg\n'.format(timestamp))  # format = Q_avg: Q_min Q_max, Q_sd count;
-			# Extended output has notations in each row
-			fmeasevx.write('# --- {} ---\n'.format(timestamp))  # format = Q_avg: Q_min Q_max, Q_sd count;
-				  # Write timestamp
-			header = True  # Output header
-			#? netsnum = None  # Verufy that each algorithm is executed on the same number of networks
-			for net, algsev in self.netsev.iteritems():
-				if header:
-					fmeasev.write('# <network>')
-					for alg in self.algs:
-						fmeasev.write('\t{}'.format(alg))
-					fmeasev.write('\n')
-					# Brief header for the extended results
-					fmeasevx.write('# <network>\t<alg1_outp>;\t<alg2_outp>;\t...\n')
-					header = False
-				algsev = iter(sorted(algsev.items(), key=lambda x: x[0]))
-				ialgs = iter(self.algs)
-				firstcol = True
-				# Output aggregated network evaluation for each algorithm
-				for alg in ialgs:
-					# Output row header it required
-					if firstcol:
-						fmeasev.write(net)
-						fmeasevx.write(net)
-						firstcol = False
-					try:
-						aev = algsev.next()
-					except StopIteration:
-						# Write separators till the end
-						fmeasev.write('\t')
-						fmeasevx.write('\t;')
-						for alg in ialgs:
-							fmeasev.write('\t')
-							fmeasevx.write('\t;')
-					else:
-						# Check whether to show evaluated alg results now or later
-						if aev[0] == alg:
-							val = aev[1]
-							val.fix()  # Process aggregated resutls
-							fmeasev.write('\t{:.6f}'.format(val.avg))
-							fmeasevx.write('\t{}: Q = {:.6f} ({:.6f} .. {:.6f}), s = {:.6f}, count = {}, fails = {},'
-								' d(shuf) = {:.6f}, s(shuf) = {:.6f}, count(shuf) = {}, fails(shuf) = {};'
-								.format(alg, val.avg, val.min, val.max, val.sd, val.count, val.invals
-								, val.statDelta, val.statSD, val.statCount, val.invstats))
-						else:
-							# Skip this alg
-							fmeasev.write('\t')
-							fmeasevx.write('\t;')
-				fmeasev.write('\n')
-				fmeasevx.write('\n')
-
-
-	def register(self, shfagg):
-		"""Register new partial aggregator, shuffles aggregator"""
-		measure = shfagg.name.split('/', 1)[0]
-		assert measure == self.measure, (
-			'This aggregator serves "{}" measure, but "{}" is registering'
-			.format(self.measure, measure))
-		self.partaggs.append(shfagg)
 
 
 class ShufflesAgg(object):
@@ -351,6 +119,138 @@ class ShufflesAgg(object):
 		#		.format(self.name, self.bestlev[0], val.avg, val.min, val.max, val.sd))
 
 
+class EvalsAgg(object):
+	"""Evaluations aggregator for the specified measure"""
+	def __init__(self, measure):
+		"""Constractor
+
+		measure  - target measure for this aggrigator
+
+		partaggs  - partial aggregators to be processed
+		aevals  - resulting algorithm evaluations
+		"""
+		self.measure = measure
+		self.partaggs = []
+
+		self.netsev = {}  # Global network evaluations in the format: net_name: alg_eval
+		self.algs = set()
+
+		#self.aevals = {}
+		##self.netsev = {}
+		#self.networks = set()
+
+
+	def aggregate(self):
+		"""Aggregate results over all partial aggregates and output them"""
+		# Show warning for all non-fixed registered instances over what the aggregation is performed.
+		# Evaluate max among all avg value among instances of each network with particular params. - 3rd element of the task name
+		# Evaluate avg and range over all network instances with the same base name (and params),
+		# #x and ^x are processed similary as instances.
+		for inst in self.partaggs:
+			if not inst.fixed:
+				print('WARNING, shuffles aggregator for task "{}" was not fixed on final aggregation'
+					.format(inst.name))
+				inst.fix()
+			measure, algname, netname, pathid = inst.name.split('/')  # Note: netname might include instance index
+			## Separate instance name into the base name of the network and instance id
+			#iisep = netname.rfind(_SEPINST) + 1  # Skip the separator symbol
+			##instid = 0
+			#if iisep:
+			#	# Validate that this is really index
+			#	try:
+			#		int(netname[iisep:])  # instid
+			#	except ValueError as err:
+			#		print('WARNING, invalid suffix or the separator "{}" represents part of the path "{}", exception: {}. Skipped.'
+			#		.format(_SEPINST, netname, err), file=sys.stderr)
+			#	else:
+			#		netname = netname[:iisep-1]
+			#		assert netname, 'Network name must be valid'
+			netname = delPathSuffix(netname, True)
+			# Maintain list of all evaluated algs to output results in the table format
+			self.algs.add(algname)
+			# Update global network evaluation results
+			algsev = self.netsev.setdefault(netname, {})
+			netstat = algsev.get(algname)
+			if netstat is None:
+				netstat = ItemsStatistic(algname)
+				algsev[algname] = netstat
+			## Update global register of evaluations
+			#self.networks.add(netname)  # Maintain list of networks to output evaluation table
+			#aeval = self.aevals.setdefault(algname, {})  # Network evaluations for the algorithm
+			#nstat = aeval.get(netname)  # Aggregated resulting statistics for the network
+			#if not nstat:
+			#	nstat = ItemsStatistic(netname)
+			#	aeval[netname] = nstat
+			netstat.addstat(inst.stat())
+		# Remove partial aggregations
+		self.partaggs = None
+
+		# Order available algs names
+		self.algs = sorted(self.algs)
+		#print('Available algs: ' + ' '.join(self.algs))
+		# Output aggregated results for this measure for all algorithms
+		resbase = _RESDIR + self.measure
+		with open(resbase + _EXTAGGRES, 'a') as fmeasev, open(resbase + _EXTAGGRESEXT, 'a') as fmeasevx:
+			# Append to the results and extended results
+			timestamp = datetime.utcnow()
+			fmeasev.write('# --- {}, output:  Q_avg\n'.format(timestamp))  # format = Q_avg: Q_min Q_max, Q_sd count;
+			# Extended output has notations in each row
+			fmeasevx.write('# --- {} ---\n'.format(timestamp))  # format = Q_avg: Q_min Q_max, Q_sd count;
+				  # Write timestamp
+			header = True  # Output header
+			#? netsnum = None  # Verufy that each algorithm is executed on the same number of networks
+			for net, algsev in self.netsev.iteritems():
+				if header:
+					fmeasev.write('# <network>')
+					for alg in self.algs:
+						fmeasev.write('\t{}'.format(alg))
+					fmeasev.write('\n')
+					# Brief header for the extended results
+					fmeasevx.write('# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n')
+					header = False
+				algsev = iter(sorted(algsev.items(), key=lambda x: x[0]))
+				ialgs = iter(self.algs)
+				firstcol = True
+				# Output aggregated network evaluation for each algorithm
+				for alg in ialgs:
+					# Output row header it required
+					if firstcol:
+						fmeasev.write(net)
+						fmeasevx.write(net)
+						firstcol = False
+					try:
+						aev = algsev.next()
+					except StopIteration:
+						# Write separators till the end
+						fmeasev.write('\t')
+						for alg in ialgs:
+							fmeasev.write('\t')
+					else:
+						# Check whether to show evaluated alg results now or later
+						if aev[0] == alg:
+							val = aev[1]
+							val.fix()  # Process aggregated resutls
+							fmeasev.write('\t{:.6f}'.format(val.avg))
+							fmeasevx.write('\n\t{}>\tQ: {:.6f} ({:.6f} .. {:.6f}), s: {:.6f}, count: {}, fails: {},'
+								' d(shuf): {:.6f}, s(shuf): {:.6f}, count(shuf): {}, fails(shuf): {}'
+								.format(alg, val.avg, val.min, val.max, val.sd, val.count, val.invals
+								, val.statDelta, val.statSD, val.statCount, val.invstats))
+						else:
+							# Skip this alg
+							fmeasev.write('\t')
+				fmeasev.write('\n')
+				fmeasevx.write('\n')
+
+
+	def register(self, shfagg):
+		"""Register new partial aggregator, shuffles aggregator"""
+		measure = shfagg.name.split('/', 1)[0]
+		assert measure == self.measure, (
+			'This aggregator serves "{}" measure, but "{}" is registering'
+			.format(self.measure, measure))
+		self.partaggs.append(shfagg)
+
+
 def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfile, resagg, pathid='', tidy=True):
 	"""Generic evaluation on the specidied file
 	NOTE: all paths are given relative to the root benchmark directory.
@@ -403,7 +303,7 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 			continue
 		# Skip cases whtn processing clusters have unexpected pathid
 		elif not pathid:
-			icnpid = clsname.rfind('#')  # Index of pathid in clsname
+			icnpid = clsname.rfind(_SEPPATHID)  # Index of pathid in clsname
 			if icnpid != -1 and icnpid + 1 < clsnameLen:
 				# Check whether this is a valid pathid considering possible pathid file mark
 				if clsname[icnpid + 1] == _PATHID_FILE:
@@ -413,9 +313,8 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 					int(clsname[icnpid + 1:])
 				except ValueError as err:
 					# This is not the pathid, or this pathid has invalid format
-					print('WARNING, invalid pathid or file name uses pathid separator: {}. Exception: {}.'
-						' The processing is continued assuming that pathid does not exist for this file.'
-						.format(clsname, err))
+					print('WARNING, invalid suffix or the separator "{}" represents part of the path "{}", exception: {}. Skipped.'
+					.format(_SEPPATHID, clsname, err), file=sys.stderr)
 					# Continue processing as ordinary clusters wthout pathid
 				else:
 					# Skip this clusters having unexpected pathid
@@ -434,9 +333,8 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 			try:
 				int(shuffle)
 			except ValueError as err:
-				print('WARNING, invalid shuffling index or it represents a part of the filename: "{}". Exception: {}'
-					' The processing is continued assuming that sfhulling does not exist for this file.'
-					.format(clsname, err))
+				print('WARNING, invalid suffix or the separator "{}" represents part of the path "{}", exception: {}. Skipped.'
+					.format('.', clsname, err), file=sys.stderr)
 				# Continue processing skipping such index
 				shuffle = ''
 

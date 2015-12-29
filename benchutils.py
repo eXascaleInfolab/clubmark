@@ -19,11 +19,177 @@ import tarfile
 import re
 
 from multiprocessing import Lock
+from math import sqrt
+from math import copysign
 
 
 _BCKDIR = 'backup/'  # Backup directory
 _REFLOAT = re.compile('[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')  # Regular expression to parse float
 _REINT = re.compile('[-+]?\d+(?=\W)')  # Regular expression to parse int
+_SEPINST = '^'  # Network instances separator, must be a char
+_SEPPARS = '!'  # Network parameters separator, must be a char
+_SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs), must be a char
+_PATHID_FILE = 'f'  # File marker of the pathid (input file specified directly without the embracing dir), must be a char
+# Note: '.' is used as network shuffles separator
+
+
+def delPathSuffix(path, nameonly=False):
+	"""Extracts base of the path skipping instance, shuffling and pathid suffixes
+
+	path  - path to be processed
+	nameonly  - process path as name only comonent (do not split the basedir)
+
+	return  base of the path
+
+	>>> delPathSuffix('1K10^1!k7.1#1')
+	'1K10'
+	>>> delPathSuffix("1K10^1.2#1") == '1K10'
+	True
+	>>> delPathSuffix('2K5^1') == '2K5'
+	True
+	>>> delPathSuffix('2K5.1') == '2K5'
+	True
+	>>> delPathSuffix('1K10!k5#1') == '1K10'
+	True
+	>>> delPathSuffix('1K10!k3') == '1K10'
+	True
+	>>> delPathSuffix('2K5') == "2K5"
+	True
+	>>> delPathSuffix('2K5.dhrh^1') == "2K5.dhrh"
+	True
+	"""
+	if not nameonly:
+		pdir, pname = os.path.split(path)
+	else:
+		pdir = None
+		pname = path
+	# Find position of the separator symbol, considering that it can't be begin of the name
+	if len(pname) >= 2:
+		poses = [pname[1:].rfind(c) + 1 for c in (_SEPINST, _SEPPATHID, '.')]  # Note: reverse direction to skip possible separator symbols in the name itself
+		poses.append(pname[1:].find(_SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is requried
+		# Filter out non-existent results: -1 -> 0
+		poses = sorted(filter(lambda x: x >= 1, poses))
+		#print('Initial poses: ', poses)
+		while poses:
+			pos = min(poses)
+			pose = poses[1] if len(poses) >= 2 else len(pname)  # Intex of the next separator or end of the name
+			# Note: parameters can be any, but another suffixes are strictly specified
+			# Valudate the suffix in case it is an instance or shuffle suffix
+			j = 0
+			if pname[pos] in (_SEPINST, _SEPPATHID, '.'):
+				# Consider file pname id
+				if pname[pos] == _SEPPATHID and len(pname) > pos + 1 and pname[pos + 1] == _PATHID_FILE:
+					j = 1
+				try:
+					int(pname[pos + j + 1:pose])
+				except ValueError as err:
+					print('WARNING, invalid suffix or separator "{}" represents part of the path name "{}", exception: {}. Skipped.'
+						.format(pname[pos], pname, err), file=sys.stderr)
+					# Remove this suffix from the processing ones
+					poses = poses[1:]
+					continue  # Check following separator candidate
+			# Note: threat param separator as alvays valid
+			pname = pname[:pos]
+			#print('pname: {}, pos: {}, poses: {}'.format(pname, pos, poses))
+			break  # Required pos is found
+
+	return pname if not pdir else '/'.join((pdir, pname))
+
+
+class ItemsStatistic(object):
+	"""Accumulates statistics over the added integral items and items of accumulated statistics"""
+	def __init__(self, name, min0=1, max0=-1):
+		"""Constructor
+
+		name  - item name
+		min0  - initial minimal value
+		max0  - initial maximal value
+
+		sum  - sum of all values
+		sum2  - sum of squares of values
+		min  - min value
+		max  - max value
+		count  - number of valid values
+		invals  - number of invalid values
+		invstats  - number of invaled statistical aggregations
+
+		fixed  - whether all items are aggregated and summarization is performed
+		avg  - average value for the finalized evaluations
+		sd  - standard deviation for the finalized evaluations
+			Note: sd = sqrt(var), avg +- sd covers 95% of the items in the normal distribution
+
+		statCount  - total number of items in the aggregated stat items
+		statDelta  - max stat delta (max - min)
+		statSD  - average weighted (by the number of items) weighted stat SD
+		"""
+		self.name = name
+		self.sum = 0
+		self.sum2 = 0
+		self.min = min0
+		self.max = max0
+		self.count = 0
+		self.invals = 0
+		self.invstats = 0
+
+		self.fixed = False
+		self.avg = None
+		self.sd = None
+
+		self.statCount = 0
+		self.statDelta = None
+		self.statSD = None
+
+
+	def add(self, val):
+		"""Add integral value to the accumulating statistics"""
+		assert not self.fixed, 'Only non-fixed items can be modified'
+		if val is not None:
+			self.sum += val
+			self.sum2 += copysign(val*val, val)
+			if val < self.min:
+				self.min = val
+			if val > self.max:
+				self.max = val
+			self.count += 1
+		else:
+			self.invals += 1
+
+
+	def addstat(self, val):
+		"""Add accumulated statistics to the accumulating statistics"""
+		assert not self.fixed, 'Only non-fixed items can be modified'
+		if val is not None:
+			self.sum += val.sum
+			self.sum2 += self.sum2
+			if val.min < self.min:
+				self.min = val.min
+			if val.max > self.max:
+				self.max = val.max
+			self.count += val.count
+			self.invals += val.invals
+
+			if self.statCount:
+				if self.statDelta < val.max - val.min:
+					self.statDelta = val.max - val.min
+				self.statSD = (self.statSD * self.statCount + val.sd * val.count) / (self.statCount + val.count)
+			else:
+				self.statDelta = val.max - val.min
+				self.statSD = val.sd
+			self.statCount += val.count
+		else:
+			self.invstats += 1
+
+
+	def fix(self):
+		"""Fix (finalize) statistics accumulation and produce the summary of the results"""
+		assert self.count >=0, 'Count must be non-negative'
+		self.fixed = True
+		self.avg = self.sum
+		if self.count:
+			self.avg /= float(self.count)
+			if self.count >= 2:
+				count = float(self.count)
+				self.sd = sqrt(abs(self.sum2 * count - self.sum * self.sum)) / (count - 1)  # Note: corrected deviation for samples is employed
 
 
 def envVarDefined(value, name=None, evar=None):
@@ -307,9 +473,10 @@ def backupPath(basepath, expand=False, synctime=None, compress=True, suffix=''):
 if __name__ == "__main__":
 	"""Doc tests execution"""
 	import doctest
+	#doctest.testmod()  # Detailed tests output
 	flags = doctest.REPORT_NDIFF | doctest.REPORT_ONLY_FIRST_FAILURE
 	failed, total = doctest.testmod(optionflags=flags)
 	if failed:
-		print("FAILED: {} failures out of {} tests".format(failed, total))
+		print("Doctest FAILED: {} failures out of {} tests".format(failed, total))
 	else:
-		print('PASSED')
+		print('Doctest PASSED')

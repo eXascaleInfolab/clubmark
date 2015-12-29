@@ -41,25 +41,27 @@ import glob
 from datetime import datetime
 
 import benchapps  # Benchmarking apps (clustering algs)
-from execpool import *
+
+from contrib.mpepool import *
 from benchutils import *
 
-## Add 3dparty modules
-##sys.path.insert(0, '3dparty')  # Note: this operation might lead to ambiguity on paths resolving
-#thirdparty = __import__('3dparty.tohig')
-#tohig = thirdparty.tohig.tohig  # ~ from 3dparty.tohig import tohig
+## Add 3party modules
+##sys.path.insert(0, '3party')  # Note: this operation might lead to ambiguity on paths resolving
+#thirdparty = __import__('3party.tohig')
+#tohig = thirdparty.tohig.tohig  # ~ from 3party.tohig import tohig
 
 #from functools import wraps
+from benchutils import _SEPPARS
+from benchutils import _SEPINST
+from benchutils import _SEPPATHID
+
 from benchapps import PYEXEC
 from benchapps import _EXTCLNODES
-from benchapps import _SEPPARS
 
 from benchevals import evalAlgorithm
 from benchevals import EvalsAgg
 from benchevals import _RESDIR
 from benchevals import _EXTEXECTIME
-from benchevals import _SEPINST
-from benchevals import _SEPPATHID
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
@@ -504,7 +506,7 @@ def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 
 		#	args.append('-r')
 		#tohig(inpnet, args)
 
-		args = [PYEXEC, '3dparty/tohig.py', inpnet, '-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
+		args = [PYEXEC, 'contrib/tohig.py', inpnet, '-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
 		if resdub:
 			args.append('-r')
 		_execpool.execute(Job(name=os.path.splitext(os.path.split(inpnet)[1])[0], args=args, timeout=timeout))
@@ -626,8 +628,12 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 		#algs = (execHirecsNounwrap,)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
 		# , execHirecsOtl, execHirecsAhOtl, execHirecsNounwrap)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
 		algs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
+		# Save algorithms to perform resutls aggregation after the execution
+		preflen = len(_PREFEXEC)
+		algorithms = [func[preflen:] for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
 	else:
 		algs = [getattr(appsmodule, _PREFEXEC + alg.capitalize(), unknownApp(_PREFEXEC + alg.capitalize())) for alg in algorithms]
+		#algorithms = [alg.lower() for alg in algorithms]
 	algs = tuple(algs)
 
 	def execute(net, asym, jobsnum, pathid=''):
@@ -712,6 +718,9 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 	starttime = time.time() - starttime
 	print('The apps execution is successfully completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(starttime, *secondsToHms(starttime)))
+	print('Aggregating execution statistics...')
+	aggexec(algorithms)
+	print('Execution statistics aggregated')
 
 
 def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
@@ -871,6 +880,10 @@ def benchmark(*args):
 	datas = None
 	#print('Datadirs: ', datadirs)
 
+	# Move existing results to backup if required
+	#if ... results/*.*:
+	#	moveToBck(...)
+
 	if gensynt and netins >= 1:
 		# gensynt:  0 - do not generate, 1 - only if not exists, 2 - forced generation
 		generateNets(benchpath, syntdir, gensynt == 2, netins)
@@ -954,7 +967,6 @@ if __name__ == '__main__':
 			'    Xs  - evaluate results accuracy using NMI_s measure for overlapping communities',
 			'    Xe  - evaluate results accuracy using extrinsic measures (both NMIs) for overlapping communities',
 			'    Xm  - evaluate results quality by modularity',
-			# TODO: customize extension of the network files (implement filters)
 			'  -d[X]=<datasets_dir>  - directory of the datasets.',
 			'  -f[X]=<dataset>  - dataset (network, graph) file name.',
 			'    Xg  - generate directory with the network file name without extension for each input network (*{extnetfile})'

@@ -16,15 +16,10 @@ from __future__ import print_function  # Required for stderr output, must be the
 import os
 import shutil
 import glob
-#import subprocess
 import sys
-# Add algorithms modules
-#sys.path.insert(0, 'algorithms')  # Note: this operation might lead to ambiguity on paths resolving
 
 from datetime import datetime
 
-#from algorithms.louvain_igraph import louvain
-#from algorithms.randcommuns import randcommuns
 from contrib.mpepool import *
 from benchutils import *
 
@@ -43,9 +38,6 @@ _EXTERR = '.err'
 _EXTEXECTIME = '.rcp'  # Resource Consumption Profile
 _EXTAGGRES = '.res'  # Aggregated results
 _EXTAGGRESEXT = '.resx'  # Extended aggregated results
-#_extmod = '.mod'
-#_EXECNMI = './gecmi'  # Binary for NMI evaluation
-#_netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
 
 
 class ShufflesAgg(object):
@@ -68,7 +60,6 @@ class ShufflesAgg(object):
 		bestlev  - cluster level with the best value, defined for the finalized evaluations
 		"""
 		self.name = name
-		#self.evagg = evagg
 		# Aggregation data
 		self.levels = {}  # Name: LevelStat
 
@@ -76,7 +67,7 @@ class ShufflesAgg(object):
 		self.bestlev = None
 
 		# Register this aggregator in the global results aggregator
-		evagg.register(self)  # sagg: isfixed  - dict
+		evagg.register(self)  # shufagg: isfixed  - dict
 
 
 	def add(self, job, val):
@@ -141,10 +132,6 @@ class EvalsAgg(object):
 		self.netsev = {}  # Global network evaluations in the format: net_name: alg_eval
 		self.algs = set()
 
-		#self.aevals = {}
-		##self.netsev = {}
-		#self.networks = set()
-
 
 	def aggregate(self):
 		"""Aggregate results over all partial aggregates and output them"""
@@ -158,19 +145,6 @@ class EvalsAgg(object):
 					.format(inst.name))
 				inst.fix()
 			measure, algname, netname, pathid = inst.name.split('/')  # Note: netname might include instance index
-			## Separate instance name into the base name of the network and instance id
-			#iisep = netname.rfind(_SEPINST) + 1  # Skip the separator symbol
-			##instid = 0
-			#if iisep:
-			#	# Validate that this is really index
-			#	try:
-			#		int(netname[iisep:])  # instid
-			#	except ValueError as err:
-			#		print('WARNING, invalid suffix or the separator "{}" represents part of the path "{}", exception: {}. Skipped.'
-			#		.format(_SEPINST, netname, err), file=sys.stderr)
-			#	else:
-			#		netname = netname[:iisep-1]
-			#		assert netname, 'Network name must be valid'
 			netname = delPathSuffix(netname, True)
 			# Maintain list of all evaluated algs to output results in the table format
 			self.algs.add(algname)
@@ -180,20 +154,12 @@ class EvalsAgg(object):
 			if netstat is None:
 				netstat = ItemsStatistic(algname)
 				algsev[algname] = netstat
-			## Update global register of evaluations
-			#self.networks.add(netname)  # Maintain list of networks to output evaluation table
-			#aeval = self.aevals.setdefault(algname, {})  # Network evaluations for the algorithm
-			#nstat = aeval.get(netname)  # Aggregated resulting statistics for the network
-			#if not nstat:
-			#	nstat = ItemsStatistic(netname)
-			#	aeval[netname] = nstat
 			netstat.addstat(inst.stat())
 		# Remove partial aggregations
 		self.partaggs = None
 
 		# Order available algs names
 		self.algs = sorted(self.algs)
-		#print('Available algs: ' + ' '.join(self.algs))
 		# Output aggregated results for this measure for all algorithms
 		resbase = _RESDIR + self.measure
 		with open(resbase + _EXTAGGRES, 'a') as fmeasev, open(resbase + _EXTAGGRESEXT, 'a') as fmeasevx:
@@ -202,9 +168,7 @@ class EvalsAgg(object):
 			fmeasev.write('# --- {}, output:  Q_avg\n'.format(timestamp))  # format = Q_avg: Q_min Q_max, Q_sd count;
 			# Extended output has notations in each row
 			fmeasevx.write('# --- {} ---\n'.format(timestamp))  # format = Q_avg: Q_min Q_max, Q_sd count;
-				  # Write timestamp
 			header = True  # Output header
-			#? netsnum = None  # Verufy that each algorithm is executed on the same number of networks
 			for net, algsev in self.netsev.iteritems():
 				if header:
 					fmeasev.write('# <network>')
@@ -286,13 +250,6 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 	assert taskcapt and not ishuf, 'The base file name must exists and should not be shuffled'
 	# Define index of the task suffix (identifier) start
 	tcapLen = len(taskcapt)  # Note: it never contains pathid
-
-	# Make dirs with logs & errors
-	# Directory of resulting community structures (clusters) for each network
-	# Note:
-	#  - consider possible parameters of the executed algorithm, embedded into the dir names with _SEPPARS
-	#  - base file never has '.' in the name except exception, so ext extraction is applicable
-	#print('basefile: {}, taskcapt: {}'.format(basefile, taskcapt))
 
 	# Resource consumption profile file name
 	rcpoutp = ''.join((_RESDIR, algname, '/', evalname, _EXTEXECTIME))
@@ -376,11 +333,6 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 			# Extand job caption with the executing task if not already contains and update the caption index
 			pos = jbasename.find(clsname)
 			# Define clusters level name as part of the jbasename
-			#if pos != -1:
-			#	clslev = jbasename[pos:].lstrip('_-.')
-			#	if not clslev:
-			#		clslev = jbasename[:pos].rstrip('_-.')
-			#	jbasename = clslev
 			if pos == -1:
 				pos = 0
 				jbasename = '_'.join((clsname, jbasename))
@@ -390,7 +342,6 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 			#if shuffle:
 			#	clslev = '/'.join((clslev, shuffle))
 
-			#clslev = '  '.join((jbasename, clsname, pathid, basefile, '<<<', clsbase, '>>>', clslev))
 			jobname = '/'.join((evalname, algname, clsname))
 			logfilebase = '/'.join((logsbase, jbasename))
 			# pathid must be part of jobname, and  bun not of the clslev
@@ -424,18 +375,6 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
 	print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
 
-	#evalname = None
-	#if measure == 'nmi_s':
-	#	# Evaluate by NMI_sum (onmi) instead of NMI_conv(gecmi)
-	#	evalname = measure
-	#	measure = 'nmi'
-	#eaname = measure + 'Algorithm'
-	#evalg = getattr(sys.modules[__name__], eaname, unknownApp(eaname))
-	#if not evalname:
-	#	evalg(execpool, algname, basefile, timeout)
-	#else:
-	#	evalg(execpool, algname, basefile, timeout, evalbin='./onmi_sum', evalname=evalname)
-
 	def modEvaluate(jobs, cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logsbase):
 		"""Add modularity evaluatoin job to the current jobs
 		NOTE: all paths are given relative to the root benchmark directory.
@@ -451,7 +390,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 		logsbase  - base part of the file name for the logs including errors
 		"""
 		#print('Starting modEvaluate with params:\t[basefile: {}]\n\tcfile: {}\n\tjobname: {}'
-		#	'\n\ttask.name: {}\n\ttaskoutp: {}\n\tjobsuff: {}\n\tlogsbase: {}\n'
+		#	'\n\ttask.name: {}\n\ttaskoutp: {}\n\tjobsuff: {}\n\tlogsbase: {}'
 		#	.format(basefile, cfile, jobname, task.name, taskoutp, clslev, logsbase), file=sys.stderr)
 
 		# Processing is performed from the algorithms dir
@@ -466,7 +405,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 			# Match float number
 			mod = parseFloat(result[len(targpref):])[0] if result.startswith(targpref) else None
 			if mod is None:
-				print('ERROR, job "{}" has invalid output format. Moularity value is not found in:\n{}'
+				print('ERROR, job "{}" has invalid output format. Moularity value is not found in: {}'
 					.format(job.name, result), file=sys.stderr)
 				return
 

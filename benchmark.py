@@ -37,7 +37,6 @@ import shutil
 import signal  # Intercept kill signals
 from math import sqrt
 import glob
-#from itertools import chain
 from datetime import datetime
 
 import benchapps  # Benchmarking apps (clustering algs)
@@ -45,12 +44,6 @@ import benchapps  # Benchmarking apps (clustering algs)
 from contrib.mpepool import *
 from benchutils import *
 
-## Add 3party modules
-##sys.path.insert(0, '3party')  # Note: this operation might lead to ambiguity on paths resolving
-#thirdparty = __import__('3party.tohig')
-#tohig = thirdparty.tohig.tohig  # ~ from 3party.tohig import tohig
-
-#from functools import wraps
 from benchutils import _SEPPARS
 from benchutils import _SEPINST
 from benchutils import _SEPPATHID
@@ -114,7 +107,6 @@ def parseParams(args):
 	runalgs = False
 	evalres = 0  # 1 - NMI, 2 - NMI_s, 4 - Q, 7 - all measures
 	datas = []  # list of pairs: (<asym>, <path>), where path is either dir or file
-	#asym = None  # Asymmetric dataset, per dataset
 	timeout = 36 * 60*60  # 36 hours
 	timemul = 1  # Time multiplier, sec by default
 	algorithms = None
@@ -500,13 +492,6 @@ def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 
 	timeout  - network conversion timeout
 	"""
 	try:
-		## Convert to .hig format
-		## Network in the tab separated weighted arcs format
-		#args = ['-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
-		#if resdub:
-		#	args.append('-r')
-		#tohig(inpnet, args)
-
 		args = [PYEXEC, 'contrib/tohig.py', inpnet, '-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
 		if resdub:
 			args.append('-r')
@@ -515,8 +500,8 @@ def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 
 	except StandardError as err:
 		print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(inpnet, err), file=sys.stderr)
 	#netnoext = os.path.splitext(net)[0]  # Remove the extension
-
-	## Confert to Louvain binaty input format
+	#
+	## Convert to Louvain binaty input format
 	#try:
 	#	# ./convert [-r] -i graph.txt -o graph.bin -w graph.weights
 	#	# r  - renumber nodes
@@ -525,21 +510,6 @@ def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 
 	#		, '-w', netnoext + '.liw'))
 	#except StandardError as err:
 	#	print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
-
-	## Make shuffled copies of the input networks for the Louvain_igraph
-	##if not os.path.exists(netnoext) or overwrite:
-	#print('Shuffling {} into {} {} times...'.format(net, netnoext, _netshuffles))
-	#if not os.path.exists(netnoext):
-	#	os.makedirs(netnoext)
-	#netname = os.path.split(netnoext)[1]
-	#assert netname, 'netname should be defined'
-	#for i in range(_netshuffles):
-	#	outpfile = ''.join((netnoext, '/', netname, '_', str(i), _EXTNETFILE))
-	#	if overwrite or not sys.path.exists(outpfile):
-	#		# sort -R pgp_udir.net -o pgp_udir_rand3.net
-	#		subprocess.call(('sort', '-R', net, '-o', outpfile))
-	##else:
-	##	print('The shuffling is skipped: {} is already exist'.format(netnoext))
 
 
 def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60):  # 30 min
@@ -566,26 +536,6 @@ def convertNets(datadir, asym, overwrite=False, resdub=False, convtimeout=30*60)
 		if not os.path.splitext(os.path.splitext(net)[0])[1]:
 			convertNet(net, asym, overwrite, resdub, convTimeMax)
 			netsnum += 1
-	## Convert network files to .hig format and .lig (Louvain Input Format)
-	#for net in glob.iglob('*'.join((datadir, _EXTNETFILE))):
-	#	# Check existence of the corresponding dir with shuffled files
-	#	netdir = os.path.splitext(net)[0]
-	#	if os.path.exists(netdir):
-	#		for net in glob.iglob('/*'.join((netdir, _EXTNETFILE))):
-	#			convertNet(net, asym, overwrite, resdub, convTimeMax)
-	#			netsnum += 1
-	#	else:
-	#		# Convert the original
-	#		convertNet(net, asym, overwrite, resdub, convTimeMax)
-	#		netsnum += 1
-	## Traverse direct subfolders if target networks are not directly in the folder
-	#if not netsnum:
-	#	for netdir in glob.iglob(datadir + '*'):
-	#		# Convert networks in subdirs
-	#		if os.path.isdir(netdir):
-	#			for net in glob.iglob('/*'.join((netdir, _EXTNETFILE))):
-	#				convertNet(net, asym, overwrite, resdub, convTimeMax)
-	#				netsnum += 1
 
 	if _execpool:
 		_execpool.join(max(convtimeout, netsnum * convTimeMax))  # 2 hours
@@ -623,11 +573,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 		return stub
 
 	# Run all algs if not specified the concrete algorithms to be run
-	#udatas = ['../snap/com-dblp.ungraph.txt', '../snap/com-amazon.ungraph.txt', '../snap/com-youtube.ungraph.txt']
 	if not algorithms:
-		#algs = (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
-		#algs = (execHirecsNounwrap,)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
-		# , execHirecsOtl, execHirecsAhOtl, execHirecsNounwrap)  # (execLouvain, execHirecs, execOslom2, execGanxis, execHirecsNounwrap)
 		algs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
 		# Save algorithms to perform resutls aggregation after the execution
 		preflen = len(_PREFEXEC)
@@ -766,10 +712,6 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 		evaggs.append(evagg)
 
 		if not algorithms:
-			#evalalgs = (evalLouvain, evalHirecs, evalOslom2, evalGanxis
-			#				, evalHirecsNS, evalOslom2NS, evalGanxisNS)
-			#evalalgs = (evalHirecs, evalHirecsOtl, evalHirecsAhOtl
-			#				, evalHirecsNS, evalHirecsOtlNS, evalHirecsAhOtlNS)
 			# Fetch available algorithms
 			ianame = len(_PREFEXEC)  # Index of the algorithm name start
 			evalalgs = [funcname[ianame:].lower() for funcname in dir(appsmodule) if func.startswith(_PREFEXEC)]
@@ -880,10 +822,6 @@ def benchmark(*args):
 	datadirs, datafiles = prepareInput(datas)
 	datas = None
 	#print('Datadirs: ', datadirs)
-
-	# Move existing results to backup if required
-	#if ... results/*.*:
-	#	moveToBck(...)
 
 	if gensynt and netins >= 1:
 		# gensynt:  0 - do not generate, 1 - only if not exists, 2 - forced generation

@@ -28,16 +28,11 @@ from __future__ import print_function  # Required for stderr output, must be the
 import os
 import shutil
 import glob
-#import subprocess
 import sys
-# Add algorithms modules
-#sys.path.insert(0, 'algorithms')  # Note: this operation might lead to ambiguity on paths resolving
 import inspect  # To automatically fetch algorithm name
 
 from datetime import datetime
 
-#from algorithms.louvain_igraph import louvain
-#from algorithms.randcommuns import randcommuns
 from contrib.mpepool import *
 from benchutils import *
 
@@ -53,10 +48,6 @@ from benchevals import _EXTAGGRESEXT
 
 _EXTLOG = '.log'
 _EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
-#_extmod = '.mod'
-#_EXECNMI = './gecmi'  # Binary for NMI evaluation
-## Note: '.' is used as network shuffles separator
-##_netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
 _APREFIX = 'exec'  # Prefix of the executing application / algorithm
 
 
@@ -77,8 +68,6 @@ def aggexec(algs):
 	#True
 	"""
 	#exectime = {}  # netname: [alg1_stat, alg2_stat, ...]
-	#cputime = {}
-	#rssmem = {}
 	mnames = ('exectime', 'cputime', 'rssmem')  # Measures names; ATTENTION: for the correct output memory must be the last one
 	measures = [{}, {}, {}]  # exectiem, cputime, rssmem
 	malgs = []  # Measured algs
@@ -100,8 +89,8 @@ def aggexec(algs):
 					assert len(fields) == 6, (
 						'Invalid format of the resource consumption file "{}": {}'.format(algesfile, ln))
 					# Fetch and accumulate measures
-					# Note: rstrip() is required, because fields[5] can ends with '\n'
-					net = delPathSuffix(os.path.split(fields[5].rstrip())[1])  # Note: name might be a path here
+					# Note: rstrip() is required, because fields[5] can ends with '\n';  os.path.split(...)[1]
+					net = delPathSuffix(fields[5].rstrip(), True)  # Note: name can't be a path here
 					#print('> net: >>>{}<<< from >{}<'.format(net, fields[5]), file=sys.stderr)
 					assert net, 'Network name must exist'
 					etime = float(fields[0])
@@ -111,7 +100,7 @@ def aggexec(algs):
 						netstats = measures[imsr].setdefault(net, [])
 						if len(netstats) <= ialg:
 							assert len(netstats) == ialg, 'Network statistics are not synced with algorithms: ialg={}, net: {}, netstats: {}'.format(ialg, net, netstats)
-							netstats.append(ItemsStatistic(alg, val, val))
+							netstats.append(ItemsStatistic('_'.join((alg, net)), val, val))
 						netstats[-1].add(val)
 		except IOError:
 			print('WARNING, execution results for "{}" do not exist, skipped.'.format(alg), file=sys.stderr)
@@ -122,10 +111,10 @@ def aggexec(algs):
 		print('WARNING, there are no any algortihms execution results to be aggregated.', file=sys.stderr)
 		return
 	# Output resutls
+	timestamp = datetime.utcnow()
 	for imsr, measure in enumerate(mnames):
 		resfile = ''.join((_RESDIR, measure, _EXTAGGRES))
 		resxfile = ''.join((_RESDIR, measure, _EXTAGGRESEXT))
-		timestamp = datetime.utcnow()
 		try:
 			with open(resfile, 'a') as outres, open(resxfile, 'a') as outresx:
 				# The header is unified for multiple outputs only for the outresx
@@ -169,32 +158,6 @@ def	preparePath(taskpath):
 	# ATTENTION: do not use only basePathExists(taskpath) here to avoid movement to the backup
 	# processing paths when xxx.mod.net is processed before the xxx.net (have the same base)
 	if os.path.exists(taskpath) and not dirempty(taskpath):
-		## Extract main task base name from instances, shuffles and params, and process them all together
-		#mainpath, name = os.path.split(taskpath)
-		#if len(name) >= 2:  # Separator can't be the first symbol in the name
-		#	# Extract name suffix, skipping the extension
-		#	name = os.path.splitext(name)[0]
-		#	# Find position of the separator symbol, considering that it can't be begin of the name
-		#	pos = name[1:].rfind(_SEPINST) + 1  # Note: reverse direction to skip possible separator symbols in the name itself
-		#	pos2 = name[1:].find(_SEPPARS) + 1  # Note: there can be a few parameters, position of the first one is requried
-		#	pos = filter(lambda x: x >= 1, [pos, pos2])  # Note: filter out -1 (not exists)
-		#	if pos:
-		#		pos = min(pos)
-		#		name = name[:pos]
-		#mainpath = '/'.join((mainpath, name))  # Note: reverse direction to skip possible separator symbols in the name itself
-		## Extract endings of multiple instances
-		#parts = mainpath.rsplit(_SEPINST, 1)
-		#if len(parts) >= 2:
-		#	try:
-		#		int(parts[1])
-		#	except ValueError as err:
-		#		# It's not an instance name
-		#		print('WARNING, invalid suffix or separator "{}" represents part of the path "{}", exception: {}. Skipped.'
-		#			.format(_SEPINST, netname, err), file=sys.stderr)
-		#		pass
-		#	else:
-		#		# Instance name
-		#		mainpath = parts[0]
 		mainpath = delPathSuffix(mainpath)
 		backupPath(mainpath, True)
 	# Create target path if not exists
@@ -220,6 +183,8 @@ def	preparePath(taskpath):
 #	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 #		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 #		.format(execpool, netfile, asym, timeout))
+#	# ATTENTION: for the correct execution algname must be always the same as func lower case name without the prefix "exec"
+#	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
 #	return 0
 
 
@@ -320,20 +285,6 @@ def execLouvain_igraph(execpool, netfile, asym, timeout, pathid='', selfexec=Fal
 	#		execLouvain_ig(execpool, netfile, asym, timeout, selfexec)
 	#		execnum += 1
 	return execnum
-#
-#
-#def evalLouvain_ig(execpool, cnlfile, timeout):
-#	#print('Applying {} to {}'.format('louvain_igraph', cnlfile))
-#	evalAlgorithm(execpool, cnlfile, timeout, 'louvain_igraph')
-#
-#
-#def evalLouvain_igNS(execpool, basefile, measure, timeout):
-#	"""Evaluate Louvain_igraph by NMI_sum (onmi) instead of NMI_conv(gecmi)"""
-#	evalAlgorithm(execpool, cnlfile, timeout, 'louvain_igraph', evalbin='./onmi_sum', evalname='nmi_s')
-#
-#
-#def modLouvain_ig(execpool, netfile, timeout):
-#	modAlgorithm(execpool, netfile, timeout, 'louvain_igraph')
 
 
 # SCP (Sequential algorithm for fast clique percolation)
@@ -412,6 +363,7 @@ def execRandcommuns(execpool, netfile, asym, timeout, pathid='', instances=5):  
 	return 1
 
 
+# HiReCS
 def execHirecs(execpool, netfile, asym, timeout, pathid=''):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'

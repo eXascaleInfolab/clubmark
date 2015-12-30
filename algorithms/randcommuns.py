@@ -23,7 +23,7 @@ resnum = 1
 
 def parseParams(args):
 	"""Parse user-specified parameters
-	
+
 	return
 		groundtruth  - flile name of the ground truth clustering
 		network  - flile name of the input network
@@ -47,7 +47,7 @@ def parseParams(args):
 		preflen = 3
 		if arg[0] != '-' or len(arg) <= preflen:
 			raise ValueError('Unexpected argument: ' + arg)
-			
+
 		if arg[1] == 'g':
 			groundtruth = arg[preflen:]
 			outext = os.path.splitext(groundtruth)[1]
@@ -63,14 +63,14 @@ def parseParams(args):
 				raise ValueError('Invalid network name (is a directory): ' + network)
 		elif arg[1] == 'n':
 			outnum = int(arg[preflen:])
-			assert outnum >= 1, "outnum must be a natural number" 
+			assert outnum >= 1, "outnum must be a natural number"
 		elif arg[1] == 'r':
 			randseed = arg[preflen:]
 		elif arg[1] == 'o':
 			outdir = arg[preflen:]
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
-		
+
 	if not (groundtruth and network):
 		raise ValueError('Input network and groundtruth file names must be specified')
 	if not outdir:
@@ -80,7 +80,7 @@ def parseParams(args):
 			randseed = ''.join([str(ord(c)) for c in os.urandom(8)])
 		except NotImplementedError:
 			randseed = str(rand.random())
-	
+
 	return groundtruth, network, dirnet, outnum, randseed, outdir, outname, outext
 
 
@@ -95,7 +95,7 @@ def randcommuns(*args):
 			, outnum, outname + outext, outdir, randseed))
 	# Load Data from simple real-world networks
 	graph = ig.Graph.Read_Ncol(network, directed=dirnet)  # , weights=False
-	
+
 	# Load statistics from the ground thruth
 	groundstat = []
 	with open(groundtruth, 'r') as fground:
@@ -136,17 +136,22 @@ def randcommuns(*args):
 					ind = rand.sample(actnodes, 1)[0]
 					actnodes.remove(ind)
 					nodes.append(ind)
-					
+
 			# Use original labels of the nodes
 			clusters.append([graph.vs[ind]['name'] for ind in nodes])
 		# Output resulting clusters
-		with open(os.path.join(outdir, ''.join((outname, '_', str(outnum), outext))), 'w') as fout:
+		with open('/'.join((outdir, ''.join((outname, '_', str(outnum), outext)))), 'w') as fout:
 			for cl in clusters:
 				fout.write(' '.join(cl))
 				fout.write('\n')
 
 	# Output randseed used for the generated clusterings
-	with open(os.path.join(outdir, (outname + '.rseed')), 'w') as fout:
+	# Output to the dir above if possible to not mix cluster levels with rand seed
+	if outdir:
+		basedir = os.path.split(outdir)[0]
+		if basedir:
+			outdir = basedir
+	with open('/'.join((outdir, (outname + '.rseed'))), 'w') as fout:
 		fout.write(randseed)
 	print('Random clusterings are successfully generated')
 

@@ -403,7 +403,8 @@ def execRandcommuns(execpool, netfile, asym, timeout, pathid='', instances=5):  
 
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
 	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
-		, PYEXEC, ''.join(('./', algname, '.py')), ''.join(('-g=../', netfile, _EXTCLNODES))
+		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
+		, 'python', ''.join(('./', algname, '.py')), ''.join(('-g=../', os.path.splitext(netfile)[0], _EXTCLNODES))
 		, ''.join(('-i=../', netfile, netext)), ''.join(('-o=../', taskpath))
 		, ''.join(('-n=', str(instances))))
 	execpool.execute(Job(name='/'.join(( algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout

@@ -32,8 +32,6 @@ from benchutils import _PATHID_FILE
 _ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
 _RESDIR = 'results/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm, specified RELATIVE to _ALGSDIR
 _CLSDIR = 'clusters/'  # Clusters directory for the resulting clusters of algorithms execution
-_MODDIR = 'mod/'
-_NMIDIR = 'nmi/'
 _EXTERR = '.err'
 _EXTEXECTIME = '.rcp'  # Resource Consumption Profile
 _EXTAGGRES = '.res'  # Aggregated results
@@ -558,10 +556,10 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 
 
 	if measure == 'mod':
-		evalGeneric(execpool, measure, algname, basefile, _MODDIR, timeout, modEvaluate, resagg, pathid)
+		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, modEvaluate, resagg, pathid)
 	elif measure == 'nmi':
-		evalGeneric(execpool, measure, algname, basefile, _NMIDIR, timeout, nmiEvaluate, resagg, pathid)
+		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, nmiEvaluate, resagg, pathid)
 	elif measure == 'nmi_s':
-		evalGeneric(execpool, measure, algname, basefile, _NMIDIR, timeout, nmisEvaluate, resagg, pathid, tidy=False)
+		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, nmisEvaluate, resagg, pathid, tidy=False)
 	else:
 		raise ValueError('Unexpected measure: ' + measure)

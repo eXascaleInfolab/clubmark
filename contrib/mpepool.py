@@ -359,9 +359,9 @@ class ExecPool(object):
 				if job.startdelay > 0:
 					time.sleep(job.startdelay)
 		except StandardError as err:  # Should not occur: subprocess.CalledProcessError
-			if fstdout:
+			if fstdout and hasattr(fstdout, 'close'):
 				fstdout.close()
-			if fstderr:
+			if fstderr and hasattr(fstderr, 'close'):
 				fstderr.close()
 			print('ERROR on "{}" execution occurred: {}, skipping the job'.format(job.name, err), file=sys.stderr)
 			job.complete(False)

@@ -70,11 +70,14 @@ def aggexec(algs):
 	...
 
 	algs  - algorithms were executed, which resource consumption  should be aggregated
+
+	#>>> aggexec(['scp', 'ganxis']) is None
+	#True
 	"""
 	#exectime = {}  # netname: [alg1_stat, alg2_stat, ...]
 	#cputime = {}
 	#rssmem = {}
-	mnames = ('exectime', 'cputime', 'rssmem')  # Measures names
+	mnames = ('exectime', 'cputime', 'rssmem')  # Measures names; ATTENTION: for the correct output memory must be the last one
 	measures = [{}, {}, {}]  # exectiem, cputime, rssmem
 	malgs = []  # Measured algs
 	ialg = 0  # Algorithm index
@@ -95,7 +98,9 @@ def aggexec(algs):
 					assert len(fields) == 6, (
 						'Invalid format of the resource consumption file "{}": {}'.format(algesfile, ln))
 					# Fetch and accumulate measures
-					net = delPathSuffix(os.path.split(fields[5])[1])  # Note: name might be a path here
+					# Note: rstrip() is required, because fields[5] can ends with '\n'
+					net = delPathSuffix(os.path.split(fields[5].rstrip())[1])  # Note: name might be a path here
+					#print('> net: >>>{}<<< from >{}<'.format(net, fields[5]), file=sys.stderr)
 					assert net, 'Network name must exist'
 					etime = float(fields[0])
 					ctime = float(fields[1])
@@ -103,8 +108,8 @@ def aggexec(algs):
 					for imsr, val in enumerate((etime, ctime, rmem)):
 						netstats = measures[imsr].setdefault(net, [])
 						if len(netstats) <= ialg:
-							assert len(netstats) == ialg, 'Network statistics are not synced with algorithms'
-							netstats.append(ItemsStatistic('_'.join((alg, net)), val, val))
+							assert len(netstats) == ialg, 'Network statistics are not synced with algorithms: ialg={}, net: {}, netstats: {}'.format(ialg, net, netstats)
+							netstats.append(ItemsStatistic(alg, val, val))
 						netstats[-1].add(val)
 		except IOError:
 			print('WARNING, execution results for "{}" do not exist, skipped.'.format(alg), file=sys.stderr)
@@ -121,6 +126,9 @@ def aggexec(algs):
 		timestamp = datetime.utcnow()
 		try:
 			with open(resfile, 'a') as outres, open(resxfile, 'a') as outresx:
+				# The header is unified for multiple outputs only for the outresx
+				if not os.path.getsize(resxfile):
+					outresx.write('# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n')  # ExecTime(sec), ExecTime_avg(sec), ExecTime_min\tExecTime_max
 				# Output timestamp
 				outres.write('# --- {} ---\n'.format(timestamp))
 				outresx.write('# --- {} ---\n'.format(timestamp))
@@ -129,17 +137,18 @@ def aggexec(algs):
 				for alg in malgs:
 					outres.write('\t{}'.format(alg))
 				outres.write('\n')
-				outresx.write('# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n')  # ExecTime(sec), ExecTime_avg(sec), ExecTime_min\tExecTime_max
 				# Output results for each network
 				for netname, netstats in measures[imsr].iteritems():
 					outres.write(netname)
 					outresx.write(netname)
 					for ialg, stat in enumerate(netstats):
-						outres.write('\t{:.3f}'.format(stat.sum))
 						if not stat.fixed:
 							stat.fix()
-						outresx.write('\n\t{}>\ttotal_time: {:.3f}, item_time: {:.6f} ({:.6f} .. {:.6f})'
-							.format(malgs[ialg], stat.sum, stat.avg, stat.min, stat.max))
+						# Output sum for time, but avg for mem
+						val = stat.sum if imsr < len(mnames) - 1 else stat.avg
+						outres.write('\t{:.3f}'.format(val))
+						outresx.write('\n\t{}>\ttotal: {:.3f}, per_item: {:.6f} ({:.6f} .. {:.6f})'
+							.format(malgs[ialg], val, stat.avg, stat.min, stat.max))
 					outres.write('\n')
 					outresx.write('\n')
 		except IOError as err:
@@ -563,3 +572,9 @@ def execGanxis(execpool, netfile, asym, timeout, pathid=''):
 	execpool.execute(Job(name='/'.join(( algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout, ondone=tidy
 		, stdout=taskpath + _EXTLOG, stderr=taskpath + _EXTERR))
 	return 1
+
+
+#if __name__ == "__main__":
+#	"""Doc tests execution"""
+#	import doctest
+#	doctest.testmod()  # Detailed tests output

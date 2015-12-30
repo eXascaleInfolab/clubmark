@@ -56,6 +56,7 @@ from benchutils import _SEPINST
 from benchutils import _SEPPATHID
 
 from benchapps import PYEXEC
+from benchapps import aggexec
 from benchapps import _EXTCLNODES
 
 from benchevals import evalAlgorithm

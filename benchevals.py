@@ -204,8 +204,9 @@ class EvalsAgg(object):
 							# Q is taken as weighted average for best values per each instance,
 							# where best is defined as higest average value among all levels in the shuffles.
 							# Min is min best avg among shuffles for each instance, max is max best avg.
-							fmeasevx.write('\n\t{}>\tQ: {:.6f} ({:.6f} .. {:.6f}), s: {:.6f}, count: {}, fails: {},'
-								' d(shuf): {:.6f}, s(shuf): {:.6f}, count(shuf): {}, fails(shuf): {}'
+							# ATTENTION: values that can be None can't be represented as .6f, but can be as .6
+							fmeasevx.write('\n\t{}>\tQ: {:.6f} ({:.6f} .. {:.6f}), s: {:.6}, count: {}, fails: {},'
+								' d(shuf): {:.6}, s(shuf): {:.6}, count(shuf): {}, fails(shuf): {}'
 								.format(alg, val.avg, val.min, val.max, val.sd, val.count, val.invals
 								, val.statDelta, val.statSD, val.statCount, val.invstats))
 						else:

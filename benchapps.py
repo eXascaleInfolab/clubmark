@@ -251,7 +251,7 @@ def	preparePath(taskpath):
 #	return
 
 
-def execLouvain_ig(execpool, netfile, asym, timeout, pathid='', selfexec=False):
+def execLouvain_igraph(execpool, netfile, asym, timeout, pathid='', selfexec=False):
 	"""Execute Louvain
 	Results are not stable => multiple execution is desirable.
 
@@ -267,6 +267,7 @@ def execLouvain_ig(execpool, netfile, asym, timeout, pathid='', selfexec=False):
 	#if tasknum:
 	#	task = '_'.join((task, str(tasknum)))
 
+	# ATTENTION: for the correct execution algname must be always the same as func lower case name without the prefix "exec"
 	algname = 'louvain_igraph'
 	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -ol=louvain_igoutp/1K5/1K5.cnl
 	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))

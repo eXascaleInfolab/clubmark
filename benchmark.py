@@ -957,7 +957,7 @@ if __name__ == '__main__':
 			'    Xr  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used',
 			'  NOTE: files with {extnetfile} are looked for in the specified dirs to be converted',
 			'  -a="app1 app2 ..."  - apps (clustering algorithms) to run/benchmark among the implemented.'
-			' Available: scp louvain_ig randcommuns hirecs oslom2 ganxis.'
+			' Available: scp louvain_igraph randcommuns hirecs oslom2 ganxis.'
 			' Impacts {{r, e}} options. Optional, all apps are executed by default.',
 			'  NOTE: output results are stored in the "algorithms/<algname>outp/" directory',
 			'  -r  - run the benchmarking apps on the prepared data',

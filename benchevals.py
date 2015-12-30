@@ -395,8 +395,8 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 				print('WARNING, "{}" job is interrupted by the exception: {}'
 					.format(job.name, err), file=sys.stderr)
 	else:
-		print('WARNING, "{}" clusters "{}" do not exist to be evaluated'
-			.format(algname, clsname), file=sys.stderr)
+		print('WARNING, "{}" clusters from "{}" do not exist to be evaluated'
+			.format(algname, basefile), file=sys.stderr)
 
 
 def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=''):

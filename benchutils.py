@@ -171,7 +171,8 @@ class ItemsStatistic(object):
 			if self.statCount:
 				if self.statDelta < val.max - val.min:
 					self.statDelta = val.max - val.min
-				self.statSD = (self.statSD * self.statCount + val.sd * val.count) / (self.statCount + val.count)
+				if val.sd is not None:
+					self.statSD = (self.statSD * self.statCount + val.sd * val.count) / (self.statCount + val.count)
 			else:
 				self.statDelta = val.max - val.min
 				self.statSD = val.sd

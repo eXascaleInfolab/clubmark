@@ -49,7 +49,13 @@ _EXTAGGRESEXT = '.resx'  # Extended aggregated results
 
 
 class ShufflesAgg(object):
-	"""Shuffles evaluations aggregator"""
+	"""Shuffles evaluations aggregator
+
+	1. Best avg per level is defined as for all shuffles:
+		sum value per each level is taken, highest sum / count is selected.
+	2. For all instances average weighted among best levels (1) is taken
+		(considering number of items in each best value).
+	"""
 	def __init__(self, evagg, name):
 		"""Constructor
 
@@ -64,7 +70,7 @@ class ShufflesAgg(object):
 		self.name = name
 		#self.evagg = evagg
 		# Aggregation data
-		self.levels = {}  # Name, LevelStat
+		self.levels = {}  # Name: LevelStat
 
 		self.fixed = False  # All related jobs have been aggregated
 		self.bestlev = None
@@ -231,6 +237,9 @@ class EvalsAgg(object):
 							val = aev[1]
 							val.fix()  # Process aggregated resutls
 							fmeasev.write('\t{:.6f}'.format(val.avg))
+							# Q is taken as weighted average for best values per each instance,
+							# where best is defined as higest average value among all levels in the shuffles.
+							# Min is min best avg among shuffles for each instance, max is max best avg.
 							fmeasevx.write('\n\t{}>\tQ: {:.6f} ({:.6f} .. {:.6f}), s: {:.6f}, count: {}, fails: {},'
 								' d(shuf): {:.6f}, s(shuf): {:.6f}, count(shuf): {}, fails(shuf): {}'
 								.format(alg, val.avg, val.min, val.max, val.sd, val.count, val.invals
@@ -471,7 +480,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 			taskoutp = job.params['taskoutp']
 			with open(taskoutp, 'a') as tmod:  # Append to the end
 				if not os.path.getsize(taskoutp):
-					tmod.write('# Q\t[ShuffleIndex_]Level\n')
+					tmod.write('# Q\tlevel[/shuffle]\n')
 					tmod.flush()
 				# Define result caption
 				rescapt = job.params['clslev']

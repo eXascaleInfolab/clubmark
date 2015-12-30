@@ -32,6 +32,7 @@ import glob
 import sys
 # Add algorithms modules
 #sys.path.insert(0, 'algorithms')  # Note: this operation might lead to ambiguity on paths resolving
+import inspect  # To automatically fetch algorithm name
 
 from datetime import datetime
 
@@ -56,6 +57,7 @@ _EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
 #_EXECNMI = './gecmi'  # Binary for NMI evaluation
 ## Note: '.' is used as network shuffles separator
 ##_netshuffles = 4  # Number of shuffles for each input network for Louvain_igraph (non determenistic algorithms)
+_APREFIX = 'exec'  # Prefix of the executing application / algorithm
 
 
 def aggexec(algs):
@@ -221,6 +223,12 @@ def	preparePath(taskpath):
 #	return 0
 
 
+def funcToAppName(funcname):
+	"""Fetch name of the execution application by the function name"""
+	assert funcname.startswith(_APREFIX), 'Executing appliation is expected instead of "{}"'.format(functname)
+	return funcname[len(_APREFIX):].lower()
+
+
 # Louvain
 ## Original Louvain
 #def execLouvain(execpool, netfile, asym, timeout, pathid='', tasknum=0):
@@ -237,7 +245,7 @@ def	preparePath(taskpath):
 #		task = '-'.join((task, str(tasknum)))
 #	netfile = '../' + netfile  # Use network in the required format
 #
-#	algname = 'louvain'
+#	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain'
 #	# ./community graph.bin -l -1 -w graph.weights > graph.tree
 #	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 #		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
@@ -268,7 +276,7 @@ def execLouvain_igraph(execpool, netfile, asym, timeout, pathid='', selfexec=Fal
 	#	task = '_'.join((task, str(tasknum)))
 
 	# ATTENTION: for the correct execution algname must be always the same as func lower case name without the prefix "exec"
-	algname = 'louvain_igraph'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
 	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -ol=louvain_igoutp/1K5/1K5.cnl
 	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
 
@@ -338,7 +346,7 @@ def execScp(execpool, netfile, asym, timeout, pathid=''):
 	task = os.path.split(task)[1]  # Base name of the network
 	assert task, 'The network name should exists'
 
-	algname = 'scp'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'scp'
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 8  # Max clique size (~ min node degree to be considered)
 	# Run for range of clique sizes
@@ -387,7 +395,7 @@ def execRandcommuns(execpool, netfile, asym, timeout, pathid='', instances=5):  
 	netfile, netext = os.path.splitext(netfile)  # Remove the extension
 	task = os.path.split(netfile)[1]  # Base name of the network
 	assert task, 'The network name should exists'
-	algname = 'randcommuns'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
 	# Backup previous results if exist
 	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
 
@@ -412,7 +420,7 @@ def execHirecs(execpool, netfile, asym, timeout, pathid=''):
 	task = os.path.split(netfile)[1]  # Base name of the network
 	assert task, 'The network name should exists'
 	netfile += '.hig'  # Use network in the required format
-	algname = 'hirecs'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'hirecs'
 	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
 
 	preparePath(taskpath)
@@ -436,7 +444,7 @@ def execHirecsOtl(execpool, netfile, asym, timeout, pathid=''):
 	task = os.path.split(netfile)[1]  # Base name of the network
 	assert task, 'The network name should exists'
 	netfile += '.hig'  # Use network in the required format
-	algname = 'hirecsotl'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'hirecsotl'
 	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
 
 	preparePath(taskpath)
@@ -460,7 +468,7 @@ def execHirecsAhOtl(execpool, netfile, asym, timeout, pathid=''):
 	task = os.path.split(netfile)[1]  # Base name of the network
 	assert task, 'The network name should exists'
 	netfile += '.hig'  # Use network in the required format
-	algname = 'hirecsahotl'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'hirecsahotl'
 	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
 
 	preparePath(taskpath)
@@ -484,7 +492,7 @@ def execHirecsNounwrap(execpool, netfile, asym, timeout, pathid=''):
 	task = os.path.split(netfile)[1]  # Base name of the network
 	assert task, 'The network name should exists'
 	netfile += '.hig'  # Use network in the required format
-	algname = 'hirecshfold'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # Or 'hirecshfold'
 	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
 
 	preparePath(taskpath)
@@ -507,7 +515,7 @@ def execOslom2(execpool, netfile, asym, timeout, pathid=''):
 	task, netext = os.path.splitext(task)
 	assert task, 'The network name should exists'
 
-	algname = 'oslom2'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'oslom2'
 	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
 	# Note: wighted networks (-w) stands for the used null model, not for the input file format.
 	# Link weight is set to 1 if not specified in the file for weighted network.
@@ -554,7 +562,7 @@ def execGanxis(execpool, netfile, asym, timeout, pathid=''):
 	task = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network
 	assert task, 'The network name should exists'
 
-	algname = 'ganxis'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'ganxis'
 	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
 	args = ['../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 		, 'java', '-jar', './GANXiSw.jar', '-i', '../' + netfile, '-d', '../' + taskpath]

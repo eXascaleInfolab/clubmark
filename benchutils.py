@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-\descr:  Common routines for the benchmarking framework.
+\descr:  Common routines of the modular benchmark (Python Clustering Algorithms BenchMark).
 
 \author: (c) Artem Lutov <artem@exascale.info>
 \organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>

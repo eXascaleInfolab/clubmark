@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
-\descr:  Multi-Process Execution Pool to schedule Jobs execution optionally grouping them
-	into Tasks and specifying execution paremeters:
-	- timeout per each Job, which was the main motivation to implemtent this module
+\descr:  Multi-Process Execution Pool to schedule Jobs execution with per-Job timeout,
+	optionally grouping them into Tasks and specifying execution paremeters:
+	- timeout per each Job (it was the main motivation to implemtent this module)
 	- onstart/ondone callbacks, ondone is called only on successful completion (not termination)
 	- stdout/err output, which can be a custom file of a PIPE
 	- custom parameters for each job and task besides the name/id

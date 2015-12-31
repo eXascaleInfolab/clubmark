@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
-\descr: List of the clustering algorithms to be executed by the benchmark
+\descr: List of the clustering algorithms to be executed by the benchmark and accessory routines.
 
-	Execution function for each algorithm must be named: exec<Algname>
+	Execution function for each algorithm must be named "exec<Algname>" and have the following signature:
 
 	def execAlgorithm(execpool, netfile, asym, timeout, pathid='', selfexec=False):
 		Execute the algorithm (stub)

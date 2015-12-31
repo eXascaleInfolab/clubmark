@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 """
-\descr: Evaluations of results produced by each executed app
+\descr: Evaluation of results produced by each executed application.
 
 	Resulting cluster/community structure is evluated using extrinsic (NMI, NMI_s)
-	and intrinsic (Q - modularity) measures considering overlaps
+	and intrinsic (Q - modularity) measures considering overlaps.
 
 \author: (c) Artem Lutov <artem@exascale.info>
 \organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>

@@ -1,26 +1,32 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-\descr: The benchmark, winch optionally generates or preprocesses datasets using specified executable,
-	optionally executes specified apps with the specified params on the specified datasets,
-	and optionally evaluates results of the execution using specified executable(s).
+\descr: A modular benchmark, wich optionally generates and preprocesses (shuffles,
+	i.e. reorder nodes in the networks) datasets using specified executable,
+	optionally executes specified applications (clustering algorithms) with
+	specified parameters on the specified datasets,	and optionally evaluates
+	results of the execution using specified executable(s).
 
-	All executions are traced and logged also as resources consumption: CPU (user, kernel, etc.) and memory (RSS RAM).
+	All executions are traced and logged also as resources consumption:
+	CPU (user, kernel, etc.) and memory (RSS RAM).
 	Traces are saved even in case of internal / external interruptions and crashes.
 
 	= Overlapping Hierarchical Clustering Benchmark =
 	Implemented:
 	- synthetic datasets are generated using extended LFR Framework (origin: https://sites.google.com/site/santofortunato/inthepress2,
 		which is "Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities"
-		by Andrea Lancichinetti 1 and Santo Fortunato)
+		by Andrea Lancichinetti 1 and Santo Fortunato) and producing specified number of instances per each set of parameters (there
+		can be varying network instances for the same set of generating parameters);
+	- networks are shuffled (nodes are reordered) to evaluate stability / determinism of the clsutering algorithm;
 	- executes HiReCS (www.lumais.com/hirecs), Louvain (original https://sites.google.com/site/findcommunities/ and igraph implementations),
-		Oslom2 (http://www.oslom.org/software.htm) and Ganxis/SLPA (https://sites.google.com/site/communitydetectionslpa/) clustering algorithms
-		on the generated synthetic networks
+		Oslom2 (http://www.oslom.org/software.htm)m Ganxis/SLPA (https://sites.google.com/site/communitydetectionslpa/) and
+		SCP (http://www.lce.hut.fi/~mtkivela/kclique.html) clustering algorithms on the generated synthetic networks and real world networks;
 	- evaluates results using NMI for overlapping communities, extended versions of:
-		* gecmi (https://bitbucket.org/dsign/gecmi/wiki/Home, "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall)
-		* onmi (https://github.com/aaronmcdaid/Overlapping-NMI, "Normalized Mutual Information to evaluate overlapping community finding algorithms"
-		  by  Aaron F. McDaid, Derek Greene, Neil Hurley)
-	- resources consumption is evaluated using exectime profiler (https://bitbucket.org/lumais/exectime/)
+		* gecmi (https://bitbucket.org/dsign/gecmi/wiki/Home, "Comparing network covers using mutual information"
+			by Alcides Viamontes Esquivel, Martin Rosvall),
+		* onmi (https://github.com/aaronmcdaid/Overlapping-NMI, "Normalized Mutual Information to evaluate overlapping
+			community finding algorithms" by  Aaron F. McDaid, Derek Greene, Neil Hurley);
+	- resources consumption is evaluated using exectime profiler (https://bitbucket.org/lumais/exectime/).
 
 \author: (c) Artem Lutov <artem@exascale.info>
 \organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>
@@ -653,9 +659,10 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 		netcount += tnum != 0
 	# Flush resulting buffer
 	if fpid:
-		fpid.flush()
 		if fpid is not sys.stdout:
 			fpid.close()
+		else:
+			fpid.flush()
 	filenames = None  # Free memory from filenames
 
 	if _execpool:

@@ -378,7 +378,7 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 			except StopIteration:
 				pass
 		if not exists:
-			print('WARNING: specified path is not exist empty', file=sys.stderr)
+			print('WARNING: specified path is not exist', file=sys.stderr)
 			return name + suffix
 	# Process existing path
 	if synctime is not None:

@@ -32,6 +32,9 @@ from subprocess import PIPE
 from subprocess import STDOUT
 
 
+DEBUG_TRACE = False  # Trace start / stop and other events to stderr
+
+
 def secondsToHms(seconds):
 	"""Convert seconds to hours, mins, secs
 
@@ -235,7 +238,8 @@ class Job(object):
 					os.rmdir(tpath)
 				except OSError:
 					pass  # The dir is not empty, just skip it
-			print('"{}" #{} is completed'.format(self.name, self.proc.pid if self.proc else -1), file=sys.stderr)
+			if DEBUG_TRACE:
+				print('"{}" #{} is completed'.format(self.name, self.proc.pid if self.proc else -1), file=sys.stderr)
 		# Check whether the job is associated with any task
 		if self.task:
 			self.task = self.task.delJob(graceful)
@@ -275,15 +279,15 @@ class ExecPool(object):
 		if not self._jobs and not self._workers:
 			return
 
-		print('Terminating the workers pool ...')
+		print('WARNING: terminating the workers pool ...')
 		for job in self._jobs:
 			job.complete(False)
-			print('Scheduled "{}" is removed'.format(job.name))
+			print('  Scheduled "{}" is removed'.format(job.name))
 		self._jobs.clear()
 		while self._workers:
 			procs = self._workers.keys()
 			for proc in procs:
-				print('Terminating "{}" #{} ...'.format(self._workers[proc].name, proc.pid), file=sys.stderr)
+				print('  Terminating "{}" #{} ...'.format(self._workers[proc].name, proc.pid), file=sys.stderr)
 				proc.terminate()
 			# Wait a few sec for the successful process termitaion before killing it
 			i = 0
@@ -299,7 +303,7 @@ class ExecPool(object):
 			if active:
 				for proc in procs:
 					if proc.poll() is None:
-						print('Killing the worker #{} ...'.format(proc.pid), file=sys.stderr)
+						print('  Killing the worker #{} ...'.format(proc.pid), file=sys.stderr)
 						proc.kill()
 			# Tidy jobs
 			for job in self._workers.values():
@@ -320,14 +324,15 @@ class ExecPool(object):
 			raise AssertionError('Free workers must be available ({} busy workers of {})'
 				.format(len(self._workers), self._workersLim))
 
-		print('Starting "{}"{}...'.format(job.name, '' if async else ' in sync mode'), file=sys.stderr)
+		if DEBUG_TRACE:
+			print('Starting "{}"{}...'.format(job.name, '' if async else ' in sync mode'), file=sys.stderr)
 		job.tstart = time.time()
 		if job.onstart:
 			#print('Starting onstart() for job {}: {}'.format(job.name), file=sys.stderr)
 			try:
 				job.onstart()
 			except StandardError as err:
-				print('ERROR in onstart callback of "{}": {}'.format(job.name, err), file=sys.stderr)
+				print('ERROR in onstart() callback of "{}": {}'.format(job.name, err), file=sys.stderr)
 				return -1
 		# Consider custom output channels for the job
 		fstdout = None
@@ -365,7 +370,6 @@ class ExecPool(object):
 				print('"{}" output channels:\n\tstdout: {}\n\tstderr: {}'.format(job.name
 					, str(job.stdout), str(job.stderr)))
 			if(job.args):
-				#print('>>> Opening the process', file=sys.stderr)
 				#print('Opening proc with:\n\tjob.args: {},\n\tcwd: {}'.format(' '.join(job.args), job.workdir), file=sys.stderr)
 				job.proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
 				# Wait a little bit to start the process besides it's scheduling
@@ -409,7 +413,7 @@ class ExecPool(object):
 			if proc.poll() is None:
 				proc.kill()
 			del self._workers[proc]
-			print('"{}" #{} is terminated by the timeout ({:.4f} sec): {:.4f} sec ({} h {} m {:.4f} s)'
+			print('WARNING, "{}" #{} is terminated by the timeout ({:.4f} sec): {:.4f} sec ({} h {} m {:.4f} s)'
 				.format(job.name, proc.pid, job.timeout, exectime, *secondsToHms(exectime)), file=sys.stderr)
 			# Restart the job if required
 			if job.ontimeout:

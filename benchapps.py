@@ -158,7 +158,7 @@ def	preparePath(taskpath):
 	# ATTENTION: do not use only basePathExists(taskpath) here to avoid movement to the backup
 	# processing paths when xxx.mod.net is processed before the xxx.net (have the same base)
 	if os.path.exists(taskpath) and not dirempty(taskpath):
-		mainpath = delPathSuffix(mainpath)
+		mainpath = delPathSuffix(taskpath)
 		backupPath(mainpath, True)
 	# Create target path if not exists
 	if not os.path.exists(taskpath):

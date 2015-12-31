@@ -1,6 +1,6 @@
 # PyCABeM (former HiCBeM) - Python Benchmarking Framework for the Clustering Algorithms Evaluation
-\brief Uses extrinsic (NMIs) and intrinsic (Q) measures for the clusters quality evaluation considering overlaps (nodes membership in multiple clusters)  
-\author: (c) [Artem Lutov](artem@exascale.info)  
+\brief Uses extrinsic (NMIs) and intrinsic (Q) measures for the clusters quality evaluation considering overlaps (nodes membership by multiple clusters)  
+\author: (c) Artem Lutov <artem@exascale.info>  
 \organizations: [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
 \keywords: overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
 
@@ -16,51 +16,58 @@
 
 ## Functionality
 ### Generic Benchmarking Framework
-- optionally generates or preprocesses datasets using specified executable(s) (by default uses LFR framework for overlapping weightted networks)
-- optionally executes specified apps (clustering algorithms; can be a binary, any script or java executable) with the specified params on the specified datasets (networks, graphs)
-- optionally evaluates results of the execution using specified executable(s) (by default performs NMIs and Q evaluation)
-- batch apps execution / evaluation is performed with per-task timeout (for an app execution on a single dataset) using specified number of CPU cores (workers) for the task pool
-- per-task and accumulative execution tracing and resutls logging is performed even in case of internal / external interruptions and crashes:
+- optionally *generates or preprocesses datasets* using specified executable(s) (by default uses LFR framework for overlapping weightted networks)
+- optionally *executes specified apps* (clustering algorithms; can be a binary, any script or java executable) with the specified params on the specified datasets (networks)
+- optionally *evaluates results* of the execution using specified executable(s) (by default performs NMIs and Q evaluation) and *performs unified aggregation* of results from multiple apps on multiple datasets into the single file by the specified measure
+- *per-task and global timeouts* (for an app execution on a single dataset) and specified number of CPU cores (workers) are set for the *batch apps execution / evaluation* using the multi-process task execution pool (mpepool)
+- per-task and accumulative *execution tracing and resutls logging* is performed even in case of internal / external interruptions and crashes:
   * all stdout/err output is logged
-  * resources consumption: CPU (user, kernel, etc.) and memory (RAM RSS) is traced
+  * resources consumption, i. e. time: execution (wall-clock) and CPU concumption (user, kernel, total), memory (RAM RSS) are traced
+
+In case of the measured application crash, the crash is logged and has no any impact on the exectuion of the remaining applications.
 
 
-### Hierarchical Overlapping Clustering Benchmark
-The benchmark is implemented as customization of the Generic Benchmarking Framework to evaluate *Hierarchical Overlapping  Clustering Algorithms*, which:
-- produces synthetic datasets, generating them by the extended [LFR Framework](https://sites.google.com/site/santofortunato/inthepress2) ("Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti and Santo Fortunato)
+### Benchmark of the Hierarchical Overlapping Clustering Algorithms
+The benchmark is implemented as customization of the Generic Benchmarking Framework to evaluate *Hierarchical Overlapping  Clustering Algorithms*:
+- produces synthetic networks with specified number of instances for each set of parameters, generating them by the extended [LFR Framework](https://sites.google.com/site/santofortunato/inthepress2) ("Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti and Santo Fortunato)
+- shuffles (reorders nodes) specified networks specified number of times, which is required to evaluate stability / determinism of the clsutering algorithms
 - executes
 	* [HiReCS](http://www.lumais.com/hirecs) (www.lumais.com/hirecs)
 	* [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) ([Sequential algorithm for fast clique percolation](http://www.lce.hut.fi/research/mm/complex/software/))
 	* [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations)
 	* [Oslom2](http://www.oslom.org/software.htm)
 	* [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*; *deterministic algorithm LabelRankT* is a modification of GANXiS, but LabelRankT is not publicly available)
+	* [Randcommuns](/algorithms/randcommuns.py)  - generation of random communities (clusters) with struture of clusters similar to the ground-truth: the same number of random connected nodes in the number of clusters taken from the ground-truth
 
-	clustering algorithms on the generated synthetic networks (or on any specified directories and files). Output results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
+	clustering algorithms on the generated synthetic networks (or on any specified directories and files). Outputs results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
 	
 	Features \ Algs | *HiReCS* | SCP | Louvain | Oslom2 | GANXiS
 	            --- | --- | --- | --- | --- | ---
-	Hierarchical    | + | + | + | + |
+	Hierarchical    | + | | + | + |
 	Multi-scale     | + | + | + | + | + 
 	Deterministic   | + | + | | | 
 	With Overlaps   | + | + | | + | +
 	Parameter-Free  | + | | + | | 
 
-- evaluates results using NMI for overlapping communities, extended versions (to have uniform input / output formats) of:
-  * `gecmi` (https://bitbucket.org/dsign/gecmi/wiki/Home, "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall)
-  * `onmi` (https://github.com/aaronmcdaid/Overlapping-NMI, "Normalized Mutual Information to evaluate overlapping community finding algorithms" by Aaron F. McDaid, Derek Greene, Neil Hurley)
+- evaluates results using:
+  - extrinsic measures  - NMIs for overlapping communities, extended to have uniform input / output formats:
+    * NMI  - `gecmi` (https://bitbucket.org/dsign/gecmi/wiki/Home, "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall)
+    * NMI_s  - `onmi` (https://github.com/aaronmcdaid/Overlapping-NMI, "Normalized Mutual Information to evaluate overlapping community finding algorithms" by Aaron F. McDaid, Derek Greene, Neil Hurley)
+  - intrinsic measure  - Q (standard modularity value, but applicable for overlapping communities), evaluated by `HiReCS` (http://www.lumais.com/hirecs)
 - resources consumption is evaluated using `exectime` profiler (https://bitbucket.org/lumais/exectime/)
-- modularity of the clustering (compatible to the standard modularity value, but applicable for overlapping clusters) is evaluated by `HiReCS` (http://www.lumais.com/hirecs)
 
 All results and traces are stored into the corresponding files even in case of internal (crash) / external termination of the benchmarking applications or the whole framework.
 
- > Note: valuable extensions of the employed external applications are uploaded into ./3dparty/
+ > Note: valuable extensions of the employed external applications are uploaded into ./contrib/
 
-Basically the framework executes a set of algorithms on the specified datasets in interactive or daemon mode, logging the resources consumption, output and exceptions, providing workflow management (termination by timeout, resistance to exceptions, etc.).
+Basically the framework executes a set of applications on the specified datasets in interactive or daemon mode, logging the resources consumption, output and exceptions, providing workflow management (termination by timeout, resistance to exceptions, etc.) and results aggregation.
 
 
 ## Dependencies
 ### Fundamental
-- Python (or [pypy](http://pypy.org/) for the fast execution)
+- Python 2.7+ (or [PyPy](http://pypy.org/) JIT for the fast execution).
+ 
+> Note: It is recommended to run the benchmark itself under PyPy. The measured algorithms can be ran either using the same python or under the dedicated interpreter / script / executable.
 
 ### Libraries
 - [hirecs](http://www.lumais.com/hirecs/) for modularity evaluation of overlapping community structure with results compatible to the standard modularity. It depends on:
@@ -85,7 +92,7 @@ $ sudo apt-get install libstdc++6
 
 
 ### External tools that are used as executables
-- [Extended LFR Benchmark](3dparty/lfrbench_weight-undir-ovp) for the undirected weighted networks with overlaps (origins are here: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files)
+- [Extended LFR Benchmark](contrib/lfrbench_weight-undir-ovp) for the undirected weighted networks with overlaps (origins are here: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files)
 - [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption: https://bitbucket.org/lumais/exectime/
 - Clustering algorithms, used in the benchmarking: [HiReCS](http://www.lumais.com/hirecs) [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations) [Oslom2](http://www.oslom.org/software.htm) and [Ganxis/SLPA](https://sites.google.com/site/communitydetectionslpa/)
  
@@ -127,7 +134,7 @@ Usage: ./benchmark.py [-g[f] [-c[f][r]] [-r] [-e[n][m]] [-d{a,s}=<datasets_dir>]
 ```
 
 ## Benchmark Structure
-- ./3dparty/  - contains valuable patches to the external open source tools used as binaries
+- ./contrib/  - contains valuable patches to the external open source tools used as binaries
 - ./algorithms/  - contains benchmarking algorithms
 	* ./algorithms/<algname>outp/  - detailed results of the algorithm evaluation:
 		- `*.log`  - `stdout` of the executed algorithm

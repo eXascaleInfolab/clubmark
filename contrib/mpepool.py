@@ -366,7 +366,7 @@ class ExecPool(object):
 					else:
 						raise ValueError('Ivalid output stream buffer: ' + str(joutp))
 
-			if fstdout or fstderr:
+			if DEBUG_TRACE and (fstdout or fstderr):
 				print('"{}" output channels:\n\tstdout: {}\n\tstderr: {}'.format(job.name
 					, str(job.stdout), str(job.stderr)))
 			if(job.args):
@@ -443,7 +443,8 @@ class ExecPool(object):
 		assert len(self._workers) <= self._workersLim, 'Number of workers exceeds the limit'
 		assert job.name, "Job parameters must be defined"  #  and job.workdir and job.args
 
-		print('Scheduling the job "{}" with timeout {}'.format(job.name, job.timeout))
+		if DEBUG_TRACE:
+			print('Scheduling the job "{}" with timeout {}'.format(job.name, job.timeout))
 		if async:
 			# Start the execution timer
 			if self._tstart is None:

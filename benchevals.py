@@ -372,7 +372,8 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 		Note: pathid includes pathid separator
 	"""
 	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
-	print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
+	if DEBUG_TRACE:
+		print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
 
 	def modEvaluate(jobs, cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logsbase):
 		"""Add modularity evaluatoin job to the current jobs

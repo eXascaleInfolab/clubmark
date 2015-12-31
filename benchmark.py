@@ -574,33 +574,33 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 
 	# Run all algs if not specified the concrete algorithms to be run
 	if not algorithms:
-		algs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
+		execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
 		# Save algorithms to perform resutls aggregation after the execution
 		preflen = len(_PREFEXEC)
 		algorithms = [func[preflen:] for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
 	else:
-		algs = [getattr(appsmodule, _PREFEXEC + alg.capitalize(), unknownApp(_PREFEXEC + alg.capitalize())) for alg in algorithms]
+		execalgs = [getattr(appsmodule, _PREFEXEC + alg.capitalize(), unknownApp(_PREFEXEC + alg.capitalize())) for alg in algorithms]
 		#algorithms = [alg.lower() for alg in algorithms]
-	algs = tuple(algs)
+	execalgs = tuple(execalgs)
 
-	def execute(net, asym, jobsnum, pathid=''):
+	def execute(net, asym, pathid=''):
 		"""Execute algorithms on the specified network counting number of ran jobs
 
 		net  - network to be processed
 		asym  - network links weights are asymmetric (in/outbound weights can be different)
-		jobsnum  - accumulated number of scheduled jobs
 		pathid  - path id of the net to distinguish nets with the same name located in different dirs
 
 		return
-			jobsnum  - updated accumulated number of scheduled jobs
+			jobsnum  - number of scheduled jobs
 		"""
-		for alg in algs:
+		for ealg in execalgs:
 			try:
-				jobsnum += alg(_execpool, net, asym, timeout, pathid)
+				jobsnum = ealg(_execpool, net, asym, timeout, pathid)
 			except StandardError as err:
+				jobsnum = 0
 				errexectime = time.time() - exectime
 				print('WARNING, the "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
-					.format(alg.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
+					.format(ealg.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
 		return jobsnum
 
 	# Desribe paths mapping if required
@@ -619,7 +619,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 		if not os.path.getsize(pathidsMap):
 			fpid.write('# ID(#)\tPath\n')  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
 		fpid.write('# --- {} ---\n'.format(datetime.utcnow()))  # Write timestamp
-	jobsnum = 1  # Number of networks jobs to be processed (can be a few per each algorithm per each network)
+	jobsnum = 0  # Number of the processed network jobs (can be a few per each algorithm per each network)
 	netcount = 0  # Number of networks to be processed
 	# Track processed file names to resolve cases when files with the same name present in different input dirs
 	filenames = set()
@@ -634,7 +634,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 			else:
 				ambiguous = True
 				tracePath = True
-			tnum = execute(net, asym, jobsnum, pathid if ambiguous else '')
+			tnum = execute(net, asym, pathid if ambiguous else '')
 			jobsnum += tnum
 			netcount += tnum != 0
 		if tracePath:
@@ -648,7 +648,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 		else:
 			ambiguous = True
 			fpid.write('{}\t{}\n'.format(pathid[1:], net))  # Skip the separator symbol
-		tnum = execute(net, asym, jobsnum, pathid if ambiguous else '')
+		tnum = execute(net, asym, pathid if ambiguous else '')
 		jobsnum += tnum
 		netcount += tnum != 0
 	# Flush resulting buffer
@@ -660,12 +660,12 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 
 	if _execpool:
 		timelim = min(timeout * jobsnum, 5 * 24*60*60)  # Global timeout, up to N days
-		print('Waiting for the algorithms execution on {} jobs from {} networks'
-			' with {} sec ({} h {} m {:.4f} s) timeout'.format(jobsnum, netcount, timelim, *secondsToHms(timelim)))
+		print('Waiting for the apps execution on {} jobs from {} networks'
+			' with {} sec ({} h {} m {:.4f} s) timeout ...'.format(jobsnum, netcount, timelim, *secondsToHms(timelim)))
 		_execpool.join(timelim)
 		_execpool = None
 	starttime = time.time() - starttime
-	print('The apps execution is successfully completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
+	print('The apps execution is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(starttime, *secondsToHms(starttime)))
 	print('Aggregating execution statistics...')
 	aggexec(algorithms)
@@ -786,7 +786,7 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 		_execpool.join(max(timelim, exectime * 2))  # Twice the time of algorithms execution
 		_execpool = None
 	starttime = time.time() - starttime
-	print('Results evaluation is successfully completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
+	print('Results evaluation is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(starttime, *secondsToHms(starttime)))
 	# Aggregate results and output
 	starttime = time.time()
@@ -794,7 +794,7 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 	for evagg in evaggs:
 		evagg.aggregate()
 	starttime = time.time() - starttime
-	print('Processing of aggregated results completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
+	print('Processing of aggregated results completed in {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(starttime, *secondsToHms(starttime)))
 
 
@@ -853,7 +853,7 @@ def benchmark(*args):
 		evalResults(evalres, benchapps, algorithms, datadirs, datafiles, exectime, timeout)
 
 	exectime = time.time() - exectime
-	print('The benchmark is completed, it took {:.4f} sec ({} h {} m {:.4f} s)'
+	print('The benchmark is completed in{:.4f} sec ({} h {} m {:.4f} s)'
 		.format(exectime, *secondsToHms(exectime)))
 
 

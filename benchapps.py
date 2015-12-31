@@ -178,7 +178,7 @@ def	preparePath(taskpath):
 #	selfexec=False  - current execution is the external or internal self call
 #	kwargs  - optional algorithm-specific keyword agguments
 #
-#	return  - number of executions
+#	return  - number of executions (executed jobs)
 #	"""
 #	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 #		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'

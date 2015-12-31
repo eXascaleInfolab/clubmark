@@ -14,10 +14,10 @@
 		asym  - network links weights are assymetric (in/outbound weights can be different)
 		timeout  - execution timeout for this task
 		pathid  - path id of the net to distinguish nets with the same name located in different dirs.
-			Note: pathid already pretended with the separator symbol
+			Note: pathid is prepended with the separator symbol
 		selfexec  - current execution is the external or internal self call
 
-		return  - number of executions
+		return  - number of executions (jobs) made
 
 \author: (c) Artem Lutov <artem@exascale.info>
 \organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>
@@ -174,7 +174,7 @@ def	preparePath(taskpath):
 #	asym  - network links weights are assymetric (in/outbound weights can be different)
 #	timeout  - execution timeout for this task
 #	pathid  - path id of the net to distinguish nets with the same name located in different dirs.
-#		Note: pathid already pretended with the separator symbol
+#		Note: pathid is prepended with the separator symbol
 #	selfexec=False  - current execution is the external or internal self call
 #	kwargs  - optional algorithm-specific keyword agguments
 #

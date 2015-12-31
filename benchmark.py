@@ -654,6 +654,8 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 	# Flush resulting buffer
 	if fpid:
 		fpid.flush()
+		if fpid is not sys.stdout:
+			fpid.close()
 	filenames = None  # Free memory from filenames
 
 	if _execpool:

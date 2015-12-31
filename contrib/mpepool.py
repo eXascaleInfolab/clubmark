@@ -190,6 +190,9 @@ class Job(object):
 		self.tstop = None  # SyncValue()  # Termination / completion time after ondone
 		# Private attributes
 		self.proc = None  # Process of the job, can be used in the ondone() to read it's PIPE
+		# Process-related file descriptors to be closed
+		self._fstdout = None
+		self._fstderr = None
 
 
 	def complete(self, graceful=True):
@@ -199,6 +202,14 @@ class Job(object):
 
 		graceful  - the job is successfully completed or it was terminated
 		"""
+		# Close process-related file descriptors
+		for fd in (self._fstdout, self._fstderr):
+			if fd and hasattr(fd, 'close'):
+				fd.close()
+		self._fstdout = None
+		self._fstderr = None
+
+		# Job-related post execution
 		if graceful:
 			if self.ondone:
 				try:
@@ -228,7 +239,7 @@ class Job(object):
 		# Check whether the job is associated with any task
 		if self.task:
 			self.task = self.task.delJob(graceful)
-		## Updated execution status
+		# Updated execution status
 		self.tstop = time.time()
 
 
@@ -330,10 +341,12 @@ class ExecPool(object):
 						os.makedirs(basedir)
 					try:
 						if joutp == job.stdout:
-							fstdout = open(joutp, 'a')
+							self._fstdout = open(joutp, 'a')
+							fstdout = self._fstdout
 							outcapt = 'stdout'
 						elif joutp == job.stderr:
-							fstderr = open(joutp, 'a')
+							self._fstderr = open(joutp, 'a')
+							fstderr = self._fstderr
 							outcapt = 'stderr'
 						else:
 							raise ValueError('Ivalid output stream value: ' + joutp)
@@ -359,11 +372,8 @@ class ExecPool(object):
 				if job.startdelay > 0:
 					time.sleep(job.startdelay)
 		except StandardError as err:  # Should not occur: subprocess.CalledProcessError
-			if fstdout and hasattr(fstdout, 'close'):
-				fstdout.close()
-			if fstderr and hasattr(fstderr, 'close'):
-				fstderr.close()
 			print('ERROR on "{}" execution occurred: {}, skipping the job'.format(job.name, err), file=sys.stderr)
+			# Note: process-associated file descriptors are closed in complete()
 			job.complete(False)
 		else:
 			if async:

@@ -19,7 +19,7 @@ outpfile = "clusters.cnl"  # Default file for the communities output
 
 def parseParams(args):
 	"""Parse user-specified parameters
-	
+
 	return
 		network  - input network
 		dirnet  - whether the input network is directed (links are asymmetric,
@@ -39,7 +39,7 @@ def parseParams(args):
 		# Validate input format
 		if arg[0] != '-':
 			raise ValueError('Unexpected argument: ' + arg)
-		
+
 		if arg[1] == 'i':
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'as=' or len(arg) == pos + 1:
@@ -73,17 +73,17 @@ def parseParams(args):
 				outpcoms = os.path.join(outpcoms, netname)
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
-		
+
 	if not network:
 		raise ValueError('Input network file name must be specified')
-			
+
 	return network, netfmt, dirnet, perlev, outpcoms, outpext
 
 
 def louvain(*args):
 	"""Execute Louvain algorithm on the specified network and output resulting communities to the specified file"""
 	network, netfmt, dirnet, perlev, outpcoms, outpext = parseParams(args)
-	
+
 	print('Starting Louvain (igraph) clustering:'
 		'\n\t{} network: {}'
 		'\n\tnetwork format: {}'
@@ -98,16 +98,16 @@ def louvain(*args):
 		graph = ig.Graph.Read_Pajek(network)
 	else:
 		raise ValueError('Unknown network format: ' + netfmt)
-		
+
 	hier = graph.community_multilevel(return_levels=True)
 	# Output levels
 	#fname = 'level'
-	
+
 	communs = []  # All distinct communities of the hierarchy
 	descrs = set()  # Communs descriptors for the fast comparison
 	props = 0  # Number of propagated (duplicated communities)
-	
-	
+
+
 	# Create output dir if not exists
 	outdir = os.path.split(outpcoms)[0]
 	if outdir and not os.path.exists(outdir):
@@ -119,7 +119,7 @@ def louvain(*args):
 		if perlev:
 			with open('{}_{}{}'.format(outpcoms, i, outpext), 'w') as fout:
 				for cl in lev:
-					fout.write(' '.join([str(nid) for nid in cl]))
+					fout.write(' '.join([graph.vs[nid]['name'] for nid in cl]))
 					fout.write('\n')
 		else:
 			# Merge all hier levels excluding identical communities, use idNums comparison (len, sum, sum2)
@@ -144,7 +144,7 @@ def louvain(*args):
 				+ str(props), file=sys.stderr)
 		with open(outpcoms + outpext, 'w') as fout:
 			for cl in communs:
-				fout.write(' '.join([str(nid) for nid in cl]))
+				fout.write(' '.join([graph.vs[nid]['name'] for nid in cl]))
 				fout.write('\n')
 	print('Hierarchy levels have been successfully outputted')
 
@@ -153,7 +153,7 @@ if __name__ == '__main__':
 	if len(sys.argv) > 1:
 		louvain(*sys.argv[1:])
 	else:
-		print('\n'.join(('Usage: {} -i[{{u, d}}]=<input_network> [-f={{ncol, pajek}}] [-o[l]=<output_communities>]',
+		print('\n'.join(('Usage: {} -i[{{a, s}}]=<input_network> [-f={{ncol, pajek}}] [-o[l]=<output_communities>]',
 			'  -i[X]=<input_network>  - file of the input network in the format: <src_id> <dst_id> [<weight>]',
 			'    Xa  - asymmetric network links (in/outbound weights of the link migh differ), arcs',
 			'    Xs  - symmetric network links, edges (but both directions can be specified in the input file). Default option.',

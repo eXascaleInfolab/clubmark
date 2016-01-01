@@ -6,10 +6,10 @@
 	optionally grouping them into Tasks and specifying execution paremeters:
 	- timeout per each Job (it was the main motivation to implemtent this module)
 	- onstart/ondone callbacks, ondone is called only on successful completion (not termination)
-	- stdout/err output, which can be a custom file of a PIPE
+	- stdout/err output, which can be redireted to any custom file or PIPE
 	- custom parameters for each job and task besides the name/id
 
-	Flexible API allows optional automatic restart of jobs on timeout, access to job's process,
+	Flexible API provides optional automatic restart of jobs on timeout, access to job's process,
 	parent task, start and stop execution time and much more...
 
 \author: (c) Artem Lutov <artem@exascale.info>
@@ -53,7 +53,7 @@ class Task(object):
 	""" Container of Jobs"""
 	#TODO: Implement timeout support in add/delJob
 	def __init__(self, name, timeout=0, onstart=None, ondone=None, params=None, stdout=sys.stdout, stderr=sys.stderr):
-		"""Initialize task, which is a number of jobs to be executed
+		"""Initialize task, which is a group of jobs to be executed
 
 		name  - task name
 		timeout  - execution timeout. Default: 0, means infinity
@@ -255,6 +255,10 @@ class ExecPool(object):
 	'''
 
 	def __init__(self, workers=cpu_count()):
+		"""Execution Pool constructor
+
+		workers  - number of resident worker processes
+		"""
 		assert workers >= 1, 'At least one worker should be managed by the pool'
 
 		self._workersLim = workers  # Max number of workers

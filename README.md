@@ -19,11 +19,13 @@
 - optionally *generates or preprocesses datasets* using specified executable(s) (by default uses LFR framework for overlapping weightted networks)
 - optionally *executes specified apps* (clustering algorithms; can be a binary, any script or java executable) with the specified params on the specified datasets (networks)
 - optionally *evaluates results* of the execution using specified executable(s) (by default performs NMIs and Q evaluation) and *performs unified aggregation* of results from multiple apps on multiple datasets into the single file by the specified measure
-- *per-task and global timeouts* (for an app execution on a single dataset) and specified number of CPU cores (workers) are set for the *batch apps execution / evaluation* using the multi-process task execution pool (mpepool)
+- *per-task and global timeouts* (for an app execution on a single dataset) and specified number of CPU cores (workers) are set for the *batch apps execution / evaluation* using the multi-process task execution pool ([mpepool](//github.com/XI-lab/PyExPool))
 - per-task and accumulative *execution tracing and resutls logging* is performed even in case of internal / external interruptions and crashes:
 	* all stdout/err output is logged
 	* resources consumption, i. e. time: execution (wall-clock) and CPU concumption (user, kernel, total), memory (RAM RSS) are traced
 - *automatic extension / backup* of the previously existent results to .gzip with the timestamp on the benchmarking reexecution
+
+It is possible to have multiple input directories with similary named files inside, which represent different instances / snapshots of the datasets. In such case, the output results are provided per each snapshot, plus aggregated weighted average over all snapshots. This is useful to avoid occasional bias to the specific instance or to analize evolving networks.
 
 In case of the measured application crash, the crash is logged and has no any impact on the exectuion of the remaining applications.
 
@@ -85,12 +87,15 @@ $ sudo apt-get install libstdc++6
 	* `libz` and `libxml2`, which are installed in Linux Ubuntu executing:  
 	`$ sudo apt-get install lib32z1-dev libxml2-dev`
 
-- `gecmi`, which is used for the NMI_ovp evaluation depends on:
+- [`gecmi`](https://bitbucket.org/dsign/gecmi/wiki/Home) for the NMI_ovp evaluation, it depends on:
 	* `libboost_program_options.so.1.54.0`, to install execute: `$ sudo apt-get install libboost-program-options1.54.0`
 	* `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
 	
   > Note: gecmi dependencies are uploaded to `./algorithms/gecmi_deps/`.
 
+- [PyExPool](//github.com/XI-lab/PyExPool) for asynchronious jobs execution and results aggregation via tasks of jobs
+	
+  > Note: it is uploaded to `./contrib/`.
 
 ### External tools that are used as executables
 - [Extended LFR Benchmark](contrib/lfrbench_weight-undir-ovp) for the undirected weighted networks with overlaps (origins are here: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files)

@@ -439,9 +439,9 @@ class ExecPool(object):
 		"""Schecule the job for the execution
 
 		job  - the job to be executed, instance of Job
-		async  - async execution or wait intill execution completed
+		async  - async execution or wait until execution completed
 		  NOTE: sync tasks are started at once
-		return  - 0 on successful execution, proc.returncode otherwise
+		return  - 0 on successful execution, proc. returncode otherwise
 		"""
 		assert isinstance(job, Job), 'job type is invalid'
 		assert len(self._workers) <= self._workersLim, 'Number of workers exceeds the limit'

@@ -258,6 +258,8 @@ def parseInt(text):
 
 def escapePathWildcards(path):
 	"""Escape wildcards in the path"""
+	# TODO: Implement this manually if not supported by the current vresion of Python.
+	# Though, it is not very important, because occurs extremely seldom
 	return glob.escape(path) if hasattr(glob, 'escape') else path
 
 

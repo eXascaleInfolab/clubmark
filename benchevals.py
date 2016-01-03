@@ -26,6 +26,7 @@ from benchutils import *
 from benchutils import _SEPINST
 from benchutils import _SEPPATHID
 from benchutils import _PATHID_FILE
+from benchutils import _SEPPARS
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
@@ -74,10 +75,28 @@ class ShufflesAgg(object):
 		job  - the job produced the val
 		val  - the integral value to be aggregated
 		"""
-		# Aggregate over cluster levels by shuffles
+		# Aggregate over cluster levels by shuffles distinguishing each set of algorithm params (if exists)
 		# [Evaluate max avg among the aggregated level and transfer it to teh instagg as final result]
 		assert not self.fixed,  'Only non-fixed aggregator can be modified'
+		# Extract algorithm params if exist from the 'taskoutp' job param
+		taskname = job.params['taskoutp']
+		taskname = os.path.splitext(os.path.split(taskname)[1])[0]
+		algpars = ''  # Algorithm params
+		ipb = taskname.find(_SEPPARS, 1)  # Index of params begin. Params separator can't be the first symbol of the name
+		if ipb != -1 and ipb != len(taskname) - 1:
+			# Find end of the params
+			ipe = filter(lambda x: x >= 0, [taskname[ipb:].find(c) for c in (_SEPINST, _SEPPATHID, '.')])
+			if ipe:
+				ipe = min(ipe) + ipb  # Conside ipb offset
+			else:
+				ipe = len(taskname)
+			algpars = taskname[ipb:ipe]
+
+		# Ipdate statiscits
 		levname = job.params['clslev']
+		if algpars:
+			levname = '_'.join((algpars, levname))
+		#print('Params & Level: ' + levname)
 		levstat = self.levels.get(levname)
 		if levstat is None:
 			levstat = ItemsStatistic(levname)
@@ -109,9 +128,10 @@ class ShufflesAgg(object):
 			print('WARNING, "{}" has no defined results'.format(self.name))
 		## Trace best lev value for debugging purposes
 		#else:
-		#	val = self.bestlev[1]
-		#	print('{} bestval is {}: {} (from {} up to {}, sd: {})'
-		#		.format(self.name, self.bestlev[0], val.avg, val.min, val.max, val.sd))
+		#	print('Best lev: {} = {}'.format(self.bestlev[0], self.bestlev[1].avg))
+		##	val = self.bestlev[1]
+		##	print('{} bestval is {}: {} (from {} up to {}, sd: {})'
+		##		.format(self.name, self.bestlev[0], val.avg, val.min, val.max, val.sd))
 
 
 class EvalsAgg(object):
@@ -143,6 +163,7 @@ class EvalsAgg(object):
 					.format(inst.name))
 				inst.fix()
 			measure, algname, netname, pathid = inst.name.split('/')  # Note: netname might include instance index
+			# Remove instance id if exists (initial name does not contain params and pathid)
 			netname = delPathSuffix(netname, True)
 			# Maintain list of all evaluated algs to output results in the table format
 			self.algs.add(algname)
@@ -223,7 +244,7 @@ class EvalsAgg(object):
 		self.partaggs.append(shfagg)
 
 
-def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfile, resagg, pathid='', tidy=True):
+def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evaljob, resagg, pathid='', tidy=True):
 	"""Generic evaluation on the specidied file
 	NOTE: all paths are given relative to the root benchmark directory.
 
@@ -234,8 +255,8 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 		Note: basefile itself never contains pathid
 	measdir  - measure-identifying directory to store results
 	timeout  - execution timeout for this task
-	evalfile  - file evaluation callback to define evaluation jobs, signature:
-		evalfile(jobs, cfile, jobname, task, taskoutp, ijobsuff, logsbase)
+	evaljob  - evaluatoin job to be performed on the evaluating file, signature:
+		evaljob(cfile, jobname, task, taskoutp, ijobsuff, logsbase)
 	resagg  - results aggregator
 	pathid  - path id of the basefile to distinguish files with the same name located in different dirs.
 		Note: pathid includes pathid separator
@@ -260,7 +281,8 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 		# Skip execution of log files, leaving only dirs
 		if not os.path.isdir(clsbase):
 			continue
-		clsname = os.path.split(clsbase)[1]  # Processing clusters dir, which base name of the job, id part of the task name
+		# Note: algorithm parameters are present in dirs and handled here together with shuffles and sinstance / pathid
+		clsname = os.path.split(clsbase)[1]  # Processing a cluster dir, which is a base name of the job, id part of the task name
 		clsnameLen = len(clsname)
 
 		# Skip cases when processing clusters does not have expected pathid
@@ -344,7 +366,7 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evalfil
 			jobname = '/'.join((evalname, algname, clsname))
 			logfilebase = '/'.join((logsbase, jbasename))
 			# pathid must be part of jobname, and  bun not of the clslev
-			evalfile(jobs, cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logfilebase)
+			jobs.append(evaljob(cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logfilebase))
 	# Run all jobs after all of them were added to the task
 	if jobs:
 		for job in jobs:
@@ -375,11 +397,10 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 	if DEBUG_TRACE:
 		print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
 
-	def modEvaluate(jobs, cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logsbase):
-		"""Add modularity evaluatoin job to the current jobs
+	def evaljobMod(cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logsbase):
+		"""Produce modularity evaluation job
 		NOTE: all paths are given relative to the root benchmark directory.
 
-		jobs  - list of jobs
 		cfile  - clusters file to be evaluated
 		jobname  - name of the creating job
 		task  - task to wich the job belongs
@@ -388,8 +409,11 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 		clslev  - clusters level name
 		shuffle  - shuffle index as string or ''
 		logsbase  - base part of the file name for the logs including errors
+
+		return
+			job  - resulting evaluating job
 		"""
-		#print('Starting modEvaluate with params:\t[basefile: {}]\n\tcfile: {}\n\tjobname: {}'
+		#print('Starting evaljobMod with params:\t[basefile: {}]\n\tcfile: {}\n\tjobname: {}'
 		#	'\n\ttask.name: {}\n\ttaskoutp: {}\n\tjobsuff: {}\n\tlogsbase: {}'
 		#	.format(basefile, cfile, jobname, task.name, taskoutp, clslev, logsbase), file=sys.stderr)
 
@@ -427,17 +451,15 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 					rescapt = '/'.join((rescapt, job.params['shuffle']))
 				tmod.write('{}\t{}\n'.format(mod, rescapt))
 
-
-		jobs.append(Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout
+		return Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout
 			, ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle}
 			# Output modularity to the proc PIPE buffer to be aggregated on postexec to avoid redundant files
-			, stdout=PIPE, stderr=logsbase + _EXTERR))
+			, stdout=PIPE, stderr=logsbase + _EXTERR)
 
 
-	def nmiEvaluate(jobs, cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logsbase):
-		"""Add nmi evaluatoin job to the current jobs
+	def evaljobNmi(cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logsbase):
+		"""Produce nmi evaluation job
 
-		jobs  - list of jobs
 		cfile  - clusters file to be evaluated
 		jobname  - name of the creating job
 		task  - task to wich the job belongs
@@ -447,7 +469,11 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 		shuffle  - shuffle index as string or ''
 		logsbase  - base part of the file name for the logs including errors
 
-		Example:
+		return
+			job  - resulting evaluating job
+
+
+		Args example:
 		[basefile: syntnets/networks/1K10/1K10.cnl]
 		cfile: results/scp/clusters/1K10!k3/1K10!k3_1.cnl
 		jobname: nmi_1K10!k3_1_scp
@@ -500,14 +526,13 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 						rescapt = '/'.join((rescapt, job.params['shuffle']))
 					tnmi.write('{}\t{}\n'.format(nmi, rescapt))
 
-
-		jobs.append(Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout
+		return Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout
 			, ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle}
-			, stdout=PIPE, stderr=logsbase + _EXTERR))
+			, stdout=PIPE, stderr=logsbase + _EXTERR)
 
 
-	def nmisEvaluate(jobs, cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logsbase):
-		"""Add nmi evaluatoin job to the current jobs
+	def evaljobNmiS(cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logsbase):
+		"""Produce nmi_s evaluation job
 
 		jobs  - list of jobs
 		cfile  - clusters file to be evaluated
@@ -518,6 +543,9 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 		clslev  - clusters level name
 		shuffle  - shuffle index as string or ''
 		logsbase  - base part of the file name for the logs including errors
+
+		return
+			job  - resulting evaluating job
 		"""
 		# Processing is performed from the algorithms dir
 		args = ('../exectime', '-o=../' + rcpoutp, '-n=' + jobname, './onmi_sum', '../' + basefile, '../' + cfile)
@@ -550,17 +578,16 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 						rescapt = '/'.join((rescapt, job.params['shuffle']))
 					tnmi.write('{}\t{}\n'.format(nmi, rescapt))
 
-
-		jobs.append(Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout
+		return Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout
 			, ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle}
-			, stdout=PIPE, stderr=logsbase + _EXTERR))
+			, stdout=PIPE, stderr=logsbase + _EXTERR)
 
 
 	if measure == 'mod':
-		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, modEvaluate, resagg, pathid)
+		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, evaljobMod, resagg, pathid)
 	elif measure == 'nmi':
-		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, nmiEvaluate, resagg, pathid)
+		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, evaljobNmi, resagg, pathid)
 	elif measure == 'nmi_s':
-		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, nmisEvaluate, resagg, pathid, tidy=False)
+		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, evaljobNmiS, resagg, pathid, tidy=False)
 	else:
 		raise ValueError('Unexpected measure: ' + measure)

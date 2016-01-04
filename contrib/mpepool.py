@@ -25,6 +25,7 @@ import collections
 import os
 import ctypes  # Required for the multiprocessing Value definition
 import types  # Required for instance methods definition
+import traceback  # Stacktrace
 
 from multiprocessing import cpu_count
 from multiprocessing import Value
@@ -218,7 +219,8 @@ class Job(object):
 				try:
 					self.ondone()
 				except StandardError as err:
-					print('ERROR in ondone callback of "{}": {}'.format(self.name, err), file=sys.stderr)
+					print('ERROR in ondone callback of "{}": {}. {}'.format(
+						self.name, err, traceback.format_exc()), file=sys.stderr)
 			# Clean up
 			# Remove empty logs skipping the system devnull
 			tpaths = []  # Base dir of the output
@@ -336,7 +338,8 @@ class ExecPool(object):
 			try:
 				job.onstart()
 			except StandardError as err:
-				print('ERROR in onstart() callback of "{}": {}'.format(job.name, err), file=sys.stderr)
+				print('ERROR in onstart() callback of "{}": {}. {}'.format(
+					job.name, err, traceback.format_exc()), file=sys.stderr)
 				return -1
 		# Consider custom output channels for the job
 		fstdout = None
@@ -380,7 +383,8 @@ class ExecPool(object):
 				if job.startdelay > 0:
 					time.sleep(job.startdelay)
 		except StandardError as err:  # Should not occur: subprocess.CalledProcessError
-			print('ERROR on "{}" execution occurred: {}, skipping the job'.format(job.name, err), file=sys.stderr)
+			print('ERROR on "{}" execution occurred: {}, skipping the job. {}'.format(
+				job.name, err, traceback.format_exc()), file=sys.stderr)
 			# Note: process-associated file descriptors are closed in complete()
 			job.complete(False)
 		else:

@@ -44,6 +44,7 @@ import signal  # Intercept kill signals
 from math import sqrt
 import glob
 from datetime import datetime
+import traceback  # Stacktrace
 
 import benchapps  # Benchmarking apps (clustering algs)
 
@@ -59,6 +60,7 @@ from benchapps import aggexec
 from benchapps import _EXTCLNODES
 
 from benchevals import evalAlgorithm
+from benchevals import aggEvaluations
 from benchevals import EvalsAgg
 from benchevals import _RESDIR
 from benchevals import _EXTEXECTIME
@@ -115,7 +117,8 @@ def parseParams(args):
 	datas = []  # list of pairs: (<asym>, <path>), where path is either dir or file
 	timeout = 36 * 60*60  # 36 hours
 	timemul = 1  # Time multiplier, sec by default
-	algorithms = None
+	algorithms = []
+	aggrespaths = []  # Paths for the evaluated resutls aggregation (to be done for already existent evaluations)
 
 	for arg in args:
 		# Validate input format
@@ -207,7 +210,11 @@ def parseParams(args):
 				asym = True
 			elif val == 's':
 				asym = False
-			datas.append((asym, arg[pos+1:].strip('"\''), gen))
+			datas.append((asym, arg[pos+1:].strip('"\''), gen))  # Remove quotes if exist
+		elif arg[1] == 's':
+			if len(arg) <= 3 or arg[2] != '=':
+				raise ValueError('Unexpected argument: ' + arg)
+			aggrespaths.append(arg[3:].strip('"\''))  # Remove quotes if exist
 		elif arg[1] == 't':
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'smh=' or len(arg) == pos + 1:
@@ -221,7 +228,7 @@ def parseParams(args):
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
 
-	return gensynt, netins, shufnum, syntdir, convnets, runalgs, evalres, datas, timeout, algorithms
+	return gensynt, netins, shufnum, syntdir, convnets, runalgs, evalres, datas, timeout, algorithms, aggrespaths
 
 
 def prepareInput(datas):
@@ -502,9 +509,9 @@ def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 
 		if resdub:
 			args.append('-r')
 		_execpool.execute(Job(name=os.path.splitext(os.path.split(inpnet)[1])[0], args=args, timeout=timeout))
-
 	except StandardError as err:
-		print('ERROR on "{}" conversion into .hig, the network is skipped: {}'.format(inpnet, err), file=sys.stderr)
+		print('ERROR on "{}" conversion into .hig, the network is skipped: {}. {}'
+			.format(inpnet, err, traceback.format_exc()), file=sys.stderr)
 	#netnoext = os.path.splitext(net)[0]  # Remove the extension
 	#
 	## Convert to Louvain binaty input format
@@ -605,8 +612,8 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
 			except StandardError as err:
 				jobsnum = 0
 				errexectime = time.time() - exectime
-				print('WARNING, the "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s)'
-					.format(ealg.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
+				print('WARNING, the "{}" is interrupted by the exception: {}. {} on {:.4f} sec ({} h {} m {:.4f} s)'
+					.format(ealg.__name__, err, errexectime, traceback.format_exc(), *secondsToHms(errexectime)), file=sys.stderr)
 		return jobsnum
 
 	# Desribe paths mapping if required
@@ -751,8 +758,8 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 					#if measure == 'nmi':
 						evalAlgorithm(_execpool, algname, basefile, 'nmi_s', timeout, evagg_s, pathid)
 				except StandardError as err:
-					print('WARNING, "{}" evaluation of "{}" is interrupted by the exception: {}'
-						.format(measure, algname, err), file=sys.stderr)
+					print('WARNING, "{}" evaluation of "{}" is interrupted by the exception: {}. {}'
+						.format(measure, algname, err, traceback.format_exc()), file=sys.stderr)
 				else:
 					jobsnum += 1
 			return jobsnum
@@ -790,7 +797,12 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 
 	if _execpool:
 		timelim = min(timeout * jobsnum, 5 * 24*60*60)  # Global timeout, up to N days
-		_execpool.join(max(timelim, exectime * 2))  # Twice the time of algorithms execution
+		try:
+			_execpool.join(max(timelim, exectime * 2))  # Twice the time of algorithms execution
+		except StandardError as err:
+			print('Results evaluation execution pol is interrupted by: {}. {}'
+				.format(err, traceback.format_exc()), file=sys.stderr)
+			raise
 		_execpool = None
 	starttime = time.time() - starttime
 	print('Results evaluation is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
@@ -812,13 +824,13 @@ def benchmark(*args):
 	"""
 	exectime = time.time()  # Benchmarking start time
 
-	gensynt, netins, shufnum, syntdir, convnets, runalgs, evalres, datas, timeout, algorithms = parseParams(args)
+	gensynt, netins, shufnum, syntdir, convnets, runalgs, evalres, datas, timeout, algorithms, aggrespaths = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tsyntdir: {}\n\tconvnets: 0b{:b}'
-		'\n\trunalgs: {}\n\tevalres: 0b{:b}\n\tdatas: {}\n\ttimeout: {}\n\talgorithms: {}'
+		'\n\trunalgs: {}\n\tevalres: 0b{:b}\n\tdatas: {}\n\ttimeout: {}\n\talgorithms: {},\n\taggrespaths: {}'
 		.format(gensynt, syntdir, convnets, runalgs, evalres
 			, ', '.join(['{}{}{}'.format('' if not asym else 'asym: ', path, ' (gendir)' if gen else '')
 				for asym, path, gen in datas])
-			, timeout, ', '.join(algorithms)))
+			, timeout, ', '.join(algorithms), ', '.join(aggrespaths)))
 	# Make syntdir and link there lfr benchmark bin if required
 	bmname = 'lfrbench_udwov'  # Benchmark name
 	benchpath = syntdir + bmname  # Benchmark path
@@ -859,6 +871,9 @@ def benchmark(*args):
 	if evalres:
 		evalResults(evalres, benchapps, algorithms, datadirs, datafiles, exectime, timeout)
 
+	if aggrespaths:
+		aggEvaluations(aggrespaths)
+
 	exectime = time.time() - exectime
 	print('The benchmark is completed in{:.4f} sec ({} h {} m {:.4f} s)'
 		.format(exectime, *secondsToHms(exectime)))
@@ -888,7 +903,7 @@ if __name__ == '__main__':
 		benchmark(*sys.argv[1:])
 	else:
 		print('\n'.join(('Usage: {0} [-g[f][=[<number>][.<shuffles_number>][=<outpdir>]] [-c[f][r]] [-a="app1 app2 ..."]'
-			' [-r] [-e[n][s][e][m]] [-d[g]{{a,s}}=<datasets_dir>] [-f[g]{{a,s}}=<dataset>] [-t[{{s,m,h}}]=<timeout>]',
+			' [-r] [-e[n][s][e][m]] [-d[g]{{a,s}}=<datasets_dir>] [-f[g]{{a,s}}=<dataset>] [-s=<eval_path>] [-t[{{s,m,h}}]=<timeout>]',
 			'Parameters:',
 			'  -g[f][=[<number>][.<shuffles_number>][=<outpdir>]]  - generate <number> ({synetsnum} by default) >= 0'
 			' synthetic datasets in the <outpdir> ("{syntdir}" by default), shuffling each <shuffles_number>'
@@ -896,8 +911,8 @@ if __name__ == '__main__':
 			' should be performed including the <outpdir>/{netsdir}/*.',
 			'    Xf  - force the generation even when the data already exists (existent datasets are moved to backup)',
 			'  NOTE:',
-			'    - shuffled datasets have the following naming format:'
-			' <base_name>[{sepinst}<instance_index>][(seppars)<param1>...][.<shuffle_index>].<net_extension>',
+			'    - shuffled datasets have the following naming format:\n'
+			'\t<base_name>[{sepinst}<instance_index>][(seppars)<param1>...][.<shuffle_index>].<net_extension>',
 			'    - use "-g0" to execute existing synthetic networks not changing them',
 			'  -c[X]  - convert existing networks into the .hig, .lig, etc. formats',
 			'    Xf  - force the conversion even when the data is already exist',
@@ -923,14 +938,18 @@ if __name__ == '__main__':
 			'    Xa  - the dataset is specified by asymmetric links (in/outbound weights of the link might differ), arcs',
 			'    Xs  - the dataset is specified by symmetric links, edges. Default option',
 			'    NOTE:',
-			'	 - datasets file names must not contain "." (besides the extension),'
+			'    - datasets file names must not contain "." (besides the extension),'
 			' because it is used as indicator of the shuffled datasets',
-			'    - paths can contain wildcards: *, ?, +'
+			'    - paths can contain wildcards: *, ?, +',
 			'    - multiple directories and files can be specified via multiple -d/f options (one per the item)',
 			'    - datasets should have the following format: <node_src> <node_dest> [<weight>]',
 			'    - {{a,s}} is considered only if the network file has no corresponding metadata (formats like SNAP, ncol, nsa, ...)',
 			'    - ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
 			' is up to the clustering algorithm',
+			'  -s=<eval_path>  - perform aggregation of the specified evaluation results without the evaluation itself',
+			'    NOTE:',
+			'    - paths can contain wildcards: *, ?, +'
+			'    - multiple paths can be specified via multiple -s options (one per the item)',
 			'  -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network'
 			' in sec, min or hours. Default: 0 sec  - no timeout',
 			'    Xs  - time in seconds. Default option',

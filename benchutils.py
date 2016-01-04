@@ -97,7 +97,7 @@ def delPathSuffix(path, nameonly=False):
 
 
 class ItemsStatistic(object):
-	"""Accumulates statistics over the added integral items and items of accumulated statistics"""
+	"""Accumulates statistics over the added items of real values or their accumulated statistics"""
 	def __init__(self, name, min0=1, max0=-1):
 		"""Constructor
 
@@ -141,11 +141,11 @@ class ItemsStatistic(object):
 
 
 	def add(self, val):
-		"""Add integral value to the accumulating statistics"""
+		"""Add real value to the accumulating statistics"""
 		assert not self.fixed, 'Only non-fixed items can be modified'
 		if val is not None:
 			self.sum += val
-			self.sum2 += copysign(val*val, val)
+			self.sum2 += copysign(val*val, val)  # Note: copysign() also implicitly validates that val is a number
 			if val < self.min:
 				self.min = val
 			if val > self.max:
@@ -266,7 +266,9 @@ def escapePathWildcards(path):
 def dirempty(dirpath):
 	"""Whether specified directory is empty"""
 	dirpath = escapePathWildcards(dirpath)
-	assert os.path.isdir(dirpath), 'Existent directory is expected'
+	if not os.path.isdir(dirpath):
+		print('ERROR, Existent directory is expected instead of: ' + dirpath, file=sys.stderr)
+		raise ValueError('Existent directory is expected')
 	if not dirpath.endswith('/'):
 		dirpath += '/'
 	try:

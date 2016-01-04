@@ -30,6 +30,7 @@ import shutil
 import glob
 import sys
 import inspect  # To automatically fetch algorithm name
+import traceback  # Stacktrace
 
 from datetime import datetime
 
@@ -38,6 +39,7 @@ from benchutils import *
 
 from sys import executable as PYEXEC  # Full path to the current Python interpreter
 from benchutils import _SEPPARS
+from benchevals import _SEPNAMEPART
 from benchevals import _ALGSDIR
 from benchevals import _RESDIR
 from benchevals import _CLSDIR
@@ -143,7 +145,8 @@ def aggexec(algs):
 					outres.write('\n')
 					outresx.write('\n')
 		except IOError as err:
-			print('ERROR, "{}" execution results output is failed: {}'.format(measure, err), file=sys.stderr)
+			print('ERROR, "{}" results output execution is failed: {}. {}'
+				.format(measure, err, traceback.format_exc()), file=sys.stderr)
 
 
 def	preparePath(taskpath):
@@ -214,7 +217,7 @@ def funcToAppName(funcname):
 #	# ./community graph.bin -l -1 -w graph.weights > graph.tree
 #	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 #		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
-#	execpool.execute(Job(name='/'.join(( algname, task)), workdir=_ALGSDIR, args=args
+#	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args
 #		, timeout=timeout, stdout=''.join((_RESDIR, algname, '/', task, '.loc'))
 #		, stderr=''.join((_RESDIR, algname, '/', task, _EXTLOG))))
 #	return 1
@@ -270,7 +273,7 @@ def execLouvain_igraph(execpool, netfile, asym, timeout, pathid='', selfexec=Fal
 		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 		, 'python', ''.join(('./', algname, '.py')), ''.join(('-i=../', netfile, netext))
 		, ''.join(('-ol=../', taskpath, _EXTCLNODES)))
-	execpool.execute(Job(name='/'.join(( algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout
 		#, ondone=postexec
 		, stdout=os.devnull, stderr=''.join((taskpath, _EXTLOG))))
 
@@ -323,11 +326,11 @@ def execScp(execpool, netfile, asym, timeout, pathid=''):
 			"""Remove empty resulting folders"""
 			# Note: GANXiS leaves empty ./output dir in the _ALGSDIR, which should be deleted
 			path = os.path.split(job.args[-1])[0][3:]  # Skip '../' prefix
-			if dirempty(path):
+			if os.path.exists(path) and dirempty(path):
 				os.rmdir(path)
 
 		#print('> Starting job {} with args: {}'.format('_'.join((ktask, algname, kstrex)), args + [kstr]))
-		execpool.execute(Job(name='/'.join((algname, ktask)), workdir=_ALGSDIR, args=args, timeout=timeout
+		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ktask)), workdir=_ALGSDIR, args=args, timeout=timeout
 			, ondone=tidy, stderr=taskpath + _EXTLOG))
 
 	return kmax + 1 - kmin
@@ -358,7 +361,7 @@ def execRandcommuns(execpool, netfile, asym, timeout, pathid='', instances=5):  
 		, 'python', ''.join(('./', algname, '.py')), ''.join(('-g=../', os.path.splitext(netfile)[0], _EXTCLNODES))
 		, ''.join(('-i=../', netfile, netext)), ''.join(('-o=../', taskpath))
 		, ''.join(('-n=', str(instances))))
-	execpool.execute(Job(name='/'.join(( algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout
 		, stdout=os.devnull, stderr=taskpath + _EXTLOG))
 	return 1
 
@@ -381,7 +384,7 @@ def execHirecs(execpool, netfile, asym, timeout, pathid=''):
 	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 		, './hirecs', '-oc', ''.join(('-cls=../', taskpath, '/', task, '_', algname, _EXTCLNODES))
 		, '../' + netfile)
-	execpool.execute(Job(name='/'.join(( algname, task)), workdir=_ALGSDIR, args=args
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args
 		, timeout=timeout, stdout=os.devnull, stderr=taskpath + _EXTLOG))
 	return 1
 
@@ -405,7 +408,7 @@ def execHirecsOtl(execpool, netfile, asym, timeout, pathid=''):
 	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 		, './hirecs', '-oc', ''.join(('-cols=../', taskpath, '/', task, '_', algname, _EXTCLNODES))
 		, '../' + netfile)
-	execpool.execute(Job(name='/'.join(( algname, task)), workdir=_ALGSDIR, args=args
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args
 		, timeout=timeout, stdout=os.devnull, stderr=taskpath + _EXTLOG))
 	return 1
 
@@ -429,7 +432,7 @@ def execHirecsAhOtl(execpool, netfile, asym, timeout, pathid=''):
 	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 		, './hirecs', '-oc', ''.join(('-coas=../', taskpath, '/', task, '_', algname, _EXTCLNODES))
 		, '../' + netfile)
-	execpool.execute(Job(name='/'.join(( algname, task)), workdir=_ALGSDIR, args=args
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args
 		, timeout=timeout, stdout=os.devnull, stderr=taskpath + _EXTLOG))
 	return 1
 
@@ -452,7 +455,7 @@ def execHirecsNounwrap(execpool, netfile, asym, timeout, pathid=''):
 
 	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 		, './hirecs', '-oc', '../' + netfile)
-	execpool.execute(Job(name='/'.join(( algname, task)), workdir=_ALGSDIR, args=args
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args
 		, timeout=timeout, stdout=''.join((taskpath, '.hoc'))
 		, stderr=taskpath + _EXTLOG))
 	return 1
@@ -499,7 +502,7 @@ def execOslom2(execpool, netfile, asym, timeout, pathid=''):
 		if os.path.exists(fname):
 			os.remove(fname)
 
-	execpool.execute(Job(name='/'.join(( algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout, ondone=postexec
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout, ondone=postexec
 		, stdout=taskpath + _EXTLOG, stderr=taskpath + _EXTERR))
 	return 1
 
@@ -531,7 +534,7 @@ def execGanxis(execpool, netfile, asym, timeout, pathid=''):
 			#os.rmdir(tmp)
 			shutil.rmtree(tmp)
 
-	execpool.execute(Job(name='/'.join(( algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout, ondone=tidy
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout, ondone=tidy
 		, stdout=taskpath + _EXTLOG, stderr=taskpath + _EXTERR))
 	return 1
 

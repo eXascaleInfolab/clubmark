@@ -9,6 +9,7 @@
 [Functionality](#functionality)  
 [Dependencies](#dependencies)  
 [Usage](#usage)  
+&emsp;[Usage Examples](#usage-examples)  
 [Benchmark Structure](#benchmark-structure)  
 [Extension](#extension)  
 [Related Projects](#related-projects)  
@@ -148,6 +149,27 @@ Parameters:
     Xh  - time in hours
 ```
 
+### Usage Examples
+
+#### Synthetic networks generation, clustering algorithms execution and evaluation
+```
+$ pypy ./benchmark.py -g=3.2=syntnets_i3_s4 -cr -a="scp oslom2" -r -emn -tm=90
+```
+Run the benchmark under PyPy.  
+Generate synthetic networks producing 3 instances of each network with 2 shuffles (random reordering of network nodes) of each instance, having 3*2=6 sythetic networks of each type (for each set of network generation parameters). Generated networks are stored in the ./syntnets_i3_s4/ directory.  
+Convert all networks into the .hig format resolving dulicated links. This conversion is required to be able to evaluate modularity measure.  
+Run `scp` and `oslom2` clustering algorithms for each generated network and evaluate modularity and NMI measures for these algorithms.  
+TImeout is 90 min for each task of each network processing, where the tasks are: networks generation, clustering and evaluation by each specified measure. The network is each shuffle of each instance of each network type.  
+
+#### Shuffling existing network instances, clustering algorithm execution and evaluation
+```
+$ ./benchmark.py -g=.4 -d=syntnets_i3_s4 -a=oslom2 -es -th=1
+```
+Run the benchmark for the networks located in ./syntnets_i3_s4/ directory.  
+Produce 4 shuffles of the specified networks, previously existed shuffles are backed up.  
+Run `oslom2` clusterng algorithm for the specified networks with their shuffles and evaluate NMI_s measure.  
+Timeout is 1 hour for each task on each network.  
+
 ## Benchmark Structure
 - ./contrib/  - valuable patches to the external open source tools used as binaries
 - ./algorithms/  - benchmarking algorithms
@@ -234,7 +256,7 @@ Example of the `<net_instance>.mod` format:
 To add custom apps / algorithms to be benchmarked just add corresponding function for "myalgorithm" app to `benchapps.py`:
 
 ```python
-def execMyalgorithm(execpool, netfile, asym, timeout, pathid='', selfexec=False)`
+def execMyalgorithm(execpool, netfile, asym, timeout, pathid='', selfexec=False)
 	"""Execute the algorithm (stub)
 
 	execpool  - execution pool to perform execution of current task

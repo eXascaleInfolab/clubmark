@@ -826,11 +826,11 @@ def benchmark(*args):
 
 	gensynt, netins, shufnum, syntdir, convnets, runalgs, evalres, datas, timeout, algorithms, aggrespaths = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tsyntdir: {}\n\tconvnets: 0b{:b}'
-		'\n\trunalgs: {}\n\tevalres: 0b{:b}\n\tdatas: {}\n\ttimeout: {}\n\talgorithms: {},\n\taggrespaths: {}'
+		'\n\trunalgs: {}\n\tevalres: 0b{:b}\n\tdatas: {}\n\ttimeout (h, min, sec): {}\n\talgorithms: {},\n\taggrespaths: {}'
 		.format(gensynt, syntdir, convnets, runalgs, evalres
 			, ', '.join(['{}{}{}'.format('' if not asym else 'asym: ', path, ' (gendir)' if gen else '')
 				for asym, path, gen in datas])
-			, timeout, ', '.join(algorithms), ', '.join(aggrespaths)))
+			, secondsToHms(timeout), ', '.join(algorithms), ', '.join(aggrespaths)))
 	# Make syntdir and link there lfr benchmark bin if required
 	bmname = 'lfrbench_udwov'  # Benchmark name
 	benchpath = syntdir + bmname  # Benchmark path

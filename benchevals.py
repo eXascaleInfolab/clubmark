@@ -53,13 +53,15 @@ class ShufflesAgg(object):
 		"""Constructor
 
 		evagg  - global evaluations aggregator, which traces this partial aggrigator
-		name  - aggregator name, which should correspond to the task name over the jobs
+		name  - aggregator name in the format:  <measure>/<algname>/<netname>,
+			<netname> includes pathid
 
 		levels  - resulting aggregated evaluations for the cluster / community levels
 
 		fixed  - whether all items are aggregated and summarization is performed
 		bestlev  - cluster level with the best value, defined for the finalized evaluations
 		"""
+		assert name.count(_SEPNAMEPART) == 2, 'Name format validatoin failed: ' + name
 		self.name = name
 		# Aggregation data
 		self.levels = {}  # Name: LevelStat
@@ -74,8 +76,8 @@ class ShufflesAgg(object):
 	def addraw(self, resfile, lev, val):
 		"""Add subsequent value to the aggregation
 
-		resfile  - file name of the processing evaluation result
-		lev  - processing level including shuffle
+		resfile  - full file name of the processing evaluation result
+		lev  - processing level (can be any string, which is a part of the file name)
 		val  - the real value to be aggregated
 		"""
 		# Aggregate over cluster levels by shuffles distinguishing each set of algorithm params (if exists)
@@ -86,11 +88,14 @@ class ShufflesAgg(object):
 
 		# Extract algorithm params if exist from the 'taskoutp' job param
 		taskname = os.path.splitext(os.path.split(resfile)[1])[0]
+		# Validate taskname, i.e. validate that shuffles aggregator is called for it's network
+		assert taskname == self.name[self.name.rfind('/') + 1:], (
+			'taskname validation failed: "{}" does not belong to "{}"'.format(taskname, self.name))
 		algpars = ''  # Algorithm params
 		ipb = taskname.find(_SEPPARS, 1)  # Index of params begin. Params separator can't be the first symbol of the name
 		if ipb != -1 and ipb != len(taskname) - 1:
 			# Find end of the params
-			ipe = filter(lambda x: x >= 0, [taskname[ipb:].find(c) for c in (_SEPINST, _SEPPATHID, '.')])
+			ipe = filter(lambda x: x >= 0, [taskname[ipb:].rfind(c) for c in (_SEPINST, _SEPPATHID, '.')])
 			if ipe:
 				ipe = min(ipe) + ipb  # Conside ipb offset
 			else:
@@ -99,22 +104,22 @@ class ShufflesAgg(object):
 		# Update statiscit
 		levname = lev
 		if algpars:
-			levname = _SEPNAMEPART.join((algpars, levname))
-		#print('Params & Level: ' + levname)
+			levname = _SEPNAMEPART.join((levname, algpars))  # Note: _SEPNAMEPART never occurs in the filename, levname
+		#print('addraw lev: {}, aps: {}, taskname: {}'.format(levname, algpars, taskname))
 		levstat = self.levels.get(levname)
 		if levstat is None:
 			levstat = ItemsStatistic(levname)
 			self.levels[levname] = levstat
 		levstat.add(val)
-
-
-	def add(self, job, val):
-		"""Add subsequent value to the aggregation
-
-		job  - the job produced the val
-		val  - the real value to be aggregated
-		"""
-		self.addraw(job.params['taskoutp'], job.params['clslev'], val)
+	#
+	#
+	#def add(self, job, val):
+	#	"""Add subsequent value to the aggregation
+	#
+	#	job  - the job produced the val
+	#	val  - the real value to be aggregated
+	#	"""
+	#	self.addraw(job.params['taskoutp'], job.params['clslev'], val)
 
 
 	def stat(self):
@@ -139,9 +144,9 @@ class ShufflesAgg(object):
 		self.fixed = True
 		if self.bestlev is None or self.bestlev[1].avg is None:
 			print('WARNING, "{}" has no defined results'.format(self.name))
-		## Trace best lev value for debugging purposes
-		#else:
-		#	print('Best lev: {} = {}'.format(self.bestlev[0], self.bestlev[1].avg))
+		# Trace best lev value for debugging purposes
+		else:
+			print('Best lev: {} = {}'.format(self.bestlev[0], self.bestlev[1].avg))
 		##	val = self.bestlev[1]
 		##	print('{} bestval is {}: {} (from {} up to {}, sd: {})'
 		##		.format(self.name, self.bestlev[0], val.avg, val.min, val.max, val.sd))
@@ -173,11 +178,16 @@ class EvalsAgg(object):
 		for inst in self.partaggs:
 			if not inst.fixed:
 				print('WARNING, shuffles aggregator for task "{}" was not fixed on final aggregation'
-					.format(inst.name))
+					.format(inst.name), file=sys.stderr)
 				inst.fix()
-			measure, algname, netname, pathid = inst.name.split(_SEPNAMEPART)  # Note: netname might include instance index
+			measure, algname, netname = inst.name.split(_SEPNAMEPART)
+			#print('Final aggregate over net: {}, pathid: {}'.format(netname, pathid))
 			# Remove instance id if exists (initial name does not contain params and pathid)
-			netname = delPathSuffix(netname, True)
+			netname, insid, apars, shid, pathid = parseName(netname, True)
+			assert not shid, 'Shuffles should already be aggregated'
+			# Take average over instances and shuffles for each set of alg params
+			# and the max for alg params among the obtained results
+			netname += apars
 			# Maintain list of all evaluated algs to output results in the table format
 			self.algs.add(algname)
 			# Update global network evaluation results
@@ -282,17 +292,7 @@ def aggEvaluations(respaths):
 			algname, measure, netname = resfile.rsplit('/', 2)
 			algname = os.path.split(algname)[1]
 			netname = os.path.splitext(netname)[0]
-			# Extract pathid from netname if exists
 			assert measure in ('mod', 'nmi', 'nmi_s'), 'Invalid evaluation measure "{}" from file: {}'.format(measure, resfile)
-			pos = netname.rfind(_SEPPATHID)
-			if pos != -1:
-				# Validate pathid
-				int(netname[pos + 1:])  # Skip path separator
-				pathid = netname[pos:]
-			else:
-				pathid = ''
-			# Remove instance index, alg params and pathid from the netname
-			netname = delPathSuffix(netname, True)
 
 			# Fetch corresponding evaluations aggregator
 			eagg = evalaggs.get(measure)
@@ -300,7 +300,7 @@ def aggEvaluations(respaths):
 				eagg = EvalsAgg(measure)
 				evalaggs[measure] = eagg
 			with open(resfile, 'r') as finp:
-				partagg = ShufflesAgg(eagg, _SEPNAMEPART.join((measure, algname, netname, pathid)))
+				partagg = ShufflesAgg(eagg, _SEPNAMEPART.join((measure, algname, netname)))
 				#print('Aggregating partial: ' + partagg.name)
 				for ln in finp:
 					# Skip header
@@ -318,12 +318,12 @@ def aggEvaluations(respaths):
 	print('Evaluation results aggregation is finished.')
 
 
-def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evaljob, resagg, pathid='', tidy=True):
+def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob, resagg, pathid='', tidy=True):
 	"""Generic evaluation on the specidied file
 	NOTE: all paths are given relative to the root benchmark directory.
 
 	execpool  - execution pool of worker processes
-	evalname  - evaluating measure name
+	measure  - evaluating measure name
 	algname  - a name of the algorithm being under evaluation
 	basefile  - ground truth result, or initial network file or another measure-related file
 		Note: basefile itself never contains pathid
@@ -336,7 +336,7 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evaljob
 		Note: pathid includes pathid separator
 	tidy  - delete previously existent resutls. Must be False if a few apps output results into the same dir
 	"""
-	assert execpool and basefile and evalname and algname, "Parameters must be defined"
+	assert execpool and basefile and measure and algname, "Parameters must be defined"
 	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
 	# Fetch the task name and chose correct network filename
 	taskcapt = os.path.splitext(os.path.split(basefile)[1])[0]  # Name of the basefile (network or ground-truth clusters)
@@ -348,9 +348,7 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evaljob
 	#print('Processing {}, pathid: {}'.format(taskcapt, pathid))
 
 	# Resource consumption profile file name
-	rcpoutp = ''.join((_RESDIR, algname, '/', evalname, _EXTEXECTIME))
-	shuffagg = ShufflesAgg(resagg, name=_SEPNAMEPART.join((evalname, algname, taskcapt, pathid)));
-	task = Task(name=shuffagg.name, params=shuffagg, ondone=shuffagg.fix)  # , params=EvalState(taskcapt, )
+	rcpoutp = ''.join((_RESDIR, algname, '/', measure, _EXTEXECTIME))
 	jobs = []
 	# Traverse over directories of clusters corresponding to the base network
 	for clsbase in glob.iglob(''.join((_RESDIR, algname, '/', _CLSDIR, escapePathWildcards(taskcapt), '*'))):
@@ -415,10 +413,14 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evaljob
 		# Recover lost pathid if required
 		if shuffle and pathid:
 			taskoutp += pathid
-		taskoutp = '.'.join((taskoutp, evalname))  # evalext  # Name of the file with modularity values for each level
+		taskoutp = '.'.join((taskoutp, measure))  # evalext  # Name of the file with modularity values for each level
 		if tidy and os.path.exists(taskoutp):
 			os.remove(taskoutp)
 
+		#shuffagg = ShufflesAgg(resagg, name=_SEPNAMEPART.join((measure, algname, taskcapt, pathid)))  # Note: taskcapt here without alg params
+		taskname = os.path.splitext(os.path.split(taskoutp)[1])[0]
+		shagg = ShufflesAgg(resagg, _SEPNAMEPART.join((measure, algname, taskname)))
+		task = Task(name=taskname, params=shagg, ondone=shagg.fix)  # , params=EvalState(taskcapt, )
 		# Traverse over all resulting communities for each ground truth, log results
 		for cfile in glob.iglob(escapePathWildcards(clsbase) + '/*'):
 			if os.path.isdir(cfile):  # Skip dirs among the resulting clusters (extra/, generated by OSLOM)
@@ -429,26 +431,23 @@ def evalGeneric(execpool, evalname, algname, basefile, measdir, timeout, evaljob
 			assert jbasename, 'The clusters name should exists'
 			# Extand job caption with the executing task if not already contains and update the caption index
 			# Skip pathid in clsname, because it is not present in jbasename
-			ipid = clsname.find(_SEPPATHID)
-			if ipid == -1:
-				ipid = len(clsname)
-				pidlen = 0
-			else:
-				pidlen = clsnameLen - ipid
-			pos = jbasename.find(clsname[:ipid])
+			pos = jbasename.find(clsname[:icnpid])
 			# Define clusters level name as part of the jbasename
 			if pos == -1:
 				pos = 0
-				jbasename = '_'.join((clsname[:ipid], jbasename))
-			clslev = jbasename[pos + clsnameLen - pidlen:].lstrip('_-.')  # Note: clslev can be empty if jbasename == clsname[:ipid]
+				jbasename = '_'.join((clsname[:icnpid], jbasename))  # Note: pathid is already included into clsname
+			#elif pathid:
+			#	jbasename += pathid
+			clslev = jbasename[pos + icnpid:].lstrip('_-.')  # Note: clslev can be empty if jbasename == clsname[:icnpid]
+			#print('Lev naming: clslev = {}, jbasename = {}'.format(clslev, jbasename))
 			# Note: it's better to path clsname and shuffle separately to avoid redundant cut on evaluations processing
 			#if shuffle:
 			#	clslev = _SEPNAMEPART.join((clslev, shuffle))
 
-			jobname = _SEPNAMEPART.join((evalname, algname, clsname))
+			#jobname = _SEPNAMEPART.join((measure, algname, clsname))
 			logfilebase = '/'.join((logsbase, jbasename))
 			# pathid must be part of jobname, and  bun not of the clslev
-			jobs.append(evaljob(cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logfilebase))
+			jobs.append(evaljob(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logfilebase))
 	# Run all jobs after all of them were added to the task
 	if jobs:
 		for job in jobs:
@@ -479,17 +478,16 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 	if DEBUG_TRACE:
 		print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
 
-	def evaljobMod(cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logsbase):
+	def evaljobMod(cfile, taskoutp, clslev, shuffle, rcpoutp, logsbase):
 		"""Produce modularity evaluation job
 		NOTE: all paths are given relative to the root benchmark directory.
 
 		cfile  - clusters file to be evaluated
-		jobname  - name of the creating job
 		task  - task to wich the job belongs
 		taskoutp  - accumulative output file for all jobs of the current task
-		rcpoutp  - file name for the aggregated output of the jobs resources consumption
 		clslev  - clusters level name
 		shuffle  - shuffle index as string or ''
+		rcpoutp  - file name for the aggregated output of the jobs resources consumption
 		logsbase  - base part of the file name for the logs including errors
 
 		return
@@ -516,24 +514,21 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 				return
 
 			# Transfer resutls to the embracing task if exists
-			if job.task and job.task.params:
-				job.task.params.add(job, mod)
-			else:
-				print('WARNING, task "{}" of job "{}" has no results aggregator defined via params'
-					.format(job.name), file=sys.stderr)
-			# Log results
 			taskoutp = job.params['taskoutp']
+			clslev = job.params['clslev']
+			task.params.addraw(taskoutp, clslev, mod)  # Note: task.params is shuffles aggregator
+			# Log results
 			with open(taskoutp, 'a') as tmod:  # Append to the end
 				if not os.path.getsize(taskoutp):
 					tmod.write('# Q\tlevel[/shuffle]\n')
 					tmod.flush()
 				# Define result caption
-				rescapt = job.params['clslev']
-				if job.params['shuffle']:
-					rescapt = _SEPNAMEPART.join((rescapt, job.params['shuffle']))
-				tmod.write('{}\t{}\n'.format(mod, rescapt))
+				shuffle = job.params['shuffle']
+				if shuffle:
+					clslev = _SEPNAMEPART.join((clslev, shuffle))
+				tmod.write('{}\t{}\n'.format(mod, clslev))
 
-		return Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout
+		return Job(name='.'.join((task.name, shuffle)), workdir=_ALGSDIR, args=args, timeout=timeout
 			, ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle}
 			# Output modularity to the proc PIPE buffer to be aggregated on postexec to avoid redundant files
 			, stdout=PIPE, stderr=logsbase + _EXTERR)

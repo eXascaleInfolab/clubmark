@@ -36,18 +36,18 @@ _PATHID_FILE = 'f'  # File marker of the pathid (input file specified directly w
 def delPathSuffix(path, nameonly=False):
 	"""Extracts base of the path skipping instance, shuffling and pathid suffixes
 
-	path  - path to be processed
+	path  - path to be processed WITHOUT the file extension
 	nameonly  - process path as name only comonent (do not split the basedir)
 
-	return  base of the path
+	return  base of the path without suffixes
 
 	>>> delPathSuffix('1K10^1!k7.1#1')
 	'1K10'
 	>>> delPathSuffix("1K10^1.2#1") == '1K10'
 	True
-	>>> delPathSuffix('2K5^1') == '2K5'
+	>>> delPathSuffix('2K5^1', False) == '2K5'
 	True
-	>>> delPathSuffix('2K5.1') == '2K5'
+	>>> delPathSuffix('scp/mod/2K5.1', True) == 'scp/mod/2K5'
 	True
 	>>> delPathSuffix('1K10!k5#1') == '1K10'
 	True
@@ -57,7 +57,13 @@ def delPathSuffix(path, nameonly=False):
 	True
 	>>> delPathSuffix('2K5.dhrh^1') == "2K5.dhrh"
 	True
+
+	#>>> delPathSuffix('2K5.dhrh^1.1.cnl', True) == '2K5.dhrh'
+	#True
+	#>>> delPathSuffix('scp/mod/1K10^1!k5#1.mod') == 'scp/mod/1K10'
+	#True
 	"""
+	# Separate path into base dir and name
 	if not nameonly:
 		pdir, pname = os.path.split(path)
 	else:
@@ -65,14 +71,23 @@ def delPathSuffix(path, nameonly=False):
 		pname = path
 	# Find position of the separator symbol, considering that it can't be begin of the name
 	if len(pname) >= 2:
+		# Note: +1 compensates start from the symbol at index 1. Also a separator can't be the first symbol
 		poses = [pname[1:].rfind(c) + 1 for c in (_SEPINST, _SEPPATHID, '.')]  # Note: reverse direction to skip possible separator symbols in the name itself
+		## Consider possible extension of the filename
+		## Note: this handling is fine, but not reliable (part of the name of file extensoin can be handled as a shuffle index
+		#pos = pname[1:].rfind('.') + 1
+		#if pos and pos > max(poses):
+		#	poses.append(pos)
+		#	pos = pname[1:pos].rfind('.') + 1
+		#	if pos:
+		#		poses.append(pos)
 		poses.append(pname[1:].find(_SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is requried
 		# Filter out non-existent results: -1 -> 0
 		poses = sorted(filter(lambda x: x >= 1, poses))
 		#print('Initial poses: ', poses)
 		while poses:
-			pos = min(poses)
-			pose = poses[1] if len(poses) >= 2 else len(pname)  # Intex of the next separator or end of the name
+			pos = poses.pop(0)
+			pose = poses[0] if poses else len(pname)  # Intex of the next separator or end of the name
 			# Note: parameters can be any, but another suffixes are strictly specified
 			# Valudate the suffix in case it is an instance or shuffle suffix
 			j = 0
@@ -83,17 +98,98 @@ def delPathSuffix(path, nameonly=False):
 				try:
 					int(pname[pos + j + 1:pose])
 				except ValueError as err:
-					print('WARNING, invalid suffix or separator "{}" represents part of the path name "{}", exception: {}. Skipped.'
-						.format(pname[pos], pname, err), file=sys.stderr)
-					# Remove this suffix from the processing ones
-					poses = poses[1:]
+					print('WARNING, invalid suffix or separator "{}" represents part of the path name "{}"'
+						', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
 					continue  # Check following separator candidate
 			# Note: threat param separator as alvays valid
 			pname = pname[:pos]
-			#print('pname: {}, pos: {}, poses: {}'.format(pname, pos, poses))
+			#print('path: {}, pname: {}, pos: {}, poses: {}'.format(path, pname, pos, poses), file=sys.stderr)
 			break  # Required pos is found
 
 	return pname if not pdir else '/'.join((pdir, pname))
+
+
+def parseName(path, nameonly=False):
+	"""Fetch basename, instance id, algorithm params, shuffle id and path id
+
+	path  - path to be processed WITHOUT the file extension
+	nameonly  - process path as name only comonent (do not split the basedir)
+
+	return
+		basepath  - base path without suffixes, same as delPathSuffix(path, nameonly)
+		insid  - instance id with separator or empty string
+		apars  - algorithm parameters with separators or empty string
+		shid  - shuffle id with separator or empty string
+		pathid  - path id with separator or empty string
+
+	>>> parseName('1K10^1!k7.1#1')
+	('1K10', '^1', '!k7', '.1', '#1')
+	>>> parseName("1K10^1.2#1") == ('1K10', '^1', '', '.2', '#1')
+	True
+	>>> parseName('2K5^1', False) == ('2K5', '^1', '', '', '')
+	True
+	>>> parseName('scp/mod/2K5.1', True) == ('scp/mod/2K5', '', '', '.1', '')
+	True
+	>>> parseName('1K10!k5#1') == ('1K10', '', '!k5', '', '#1')
+	True
+	>>> parseName('1K10!k3') == ('1K10', '', '!k3', '', '')
+	True
+	>>> parseName('2K5') == ("2K5", '', '', '', '')
+	True
+	>>> parseName('2K5.dhrh^1') == ("2K5.dhrh", '^1', '', '', '')
+	True
+	"""
+	# Separate path into base dir and name
+	if not nameonly:
+		pdir, pname = os.path.split(path)
+	else:
+		pdir = None
+		pname = path
+	basename = pname
+	insid = ''
+	apars = ''
+	shid = ''
+	pathid = ''
+	# Find position of the separator symbol, considering that it can't be begin of the name
+	if len(pname) >= 2:
+		# Note: +1 compensates start from the symbol at index 1. Also a separator can't be the first symbol
+		poses = [pname[1:].rfind(c) + 1 for c in (_SEPINST, _SEPPATHID, '.')]  # Note: reverse direction to skip possible separator symbols in the name itself
+		poses.append(pname[1:].find(_SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is requried
+		# Filter out non-existent results: -1 -> 0
+		poses = sorted(filter(lambda x: x >= 1, poses))
+		#print('Initial poses: ', poses)
+		while poses:
+			pos = poses.pop(0)
+			pose = poses[0] if poses else len(pname)  # Intex of the next separator or end of the name
+			# Note: parameters can be any, but another suffixes are strictly specified
+			# Valudate the suffix in case it is an instance or shuffle suffix
+			j = 0
+			if pname[pos] in (_SEPINST, _SEPPATHID, '.'):
+				# Consider file pname id
+				if pname[pos] == _SEPPATHID and len(pname) > pos + 1 and pname[pos + 1] == _PATHID_FILE:
+					j = 1
+				try:
+					int(pname[pos + j + 1:pose])
+				except ValueError as err:
+					print('WARNING, invalid suffix or separator "{}" represents part of the path name "{}"'
+						', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
+					continue  # Check following separator candidate
+			# Note: threat param separator as alvays valid
+			if basename is pname:
+				basename = pname[:pos]
+			val = pname[pos:pose]
+			if pname[pos] == _SEPINST:
+				insid = val
+			elif pname[pos] == _SEPPARS:
+				apars = val
+			elif pname[pos] == '.':
+				shid = val
+			else:
+				assert pname[pos] == _SEPPATHID, 'pathid separator is expected instead of: {}'.format(val)
+				pathid = val
+		#print('path: {}, pname: {}, pos: {}, poses: {}'.format(path, pname, pos, poses), file=sys.stderr)
+
+	return (basename if not pdir else '/'.join((pdir, basename)), insid, apars, shid, pathid)
 
 
 class ItemsStatistic(object):

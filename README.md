@@ -170,6 +170,12 @@ Produce 4 shuffles of the specified networks, previously existed shuffles are ba
 Run `oslom2` clusterng algorithm for the specified networks with their shuffles and evaluate NMI_s measure.  
 Timeout is 1 hour for each task on each network.  
 
+#### Aggregation of the specified evaluation results
+```
+$ pypy benchmark.py -s=results/scp/mod/*.mod
+```
+Results aggregation is performed with automatic identification of the target clustering algorithm and evaluation measure by the specified path. It is performed automatically as the last step of the algorithm evaluation, but also can be called manually for the modified scope.
+
 ## Benchmark Structure
 - ./contrib/  - valuable patches to the external open source tools used as binaries
 - ./algorithms/  - benchmarking algorithms

@@ -277,6 +277,17 @@ class ItemsStatistic(object):
 			self.invstats += 1
 
 
+	#def __lt__(self, stat):
+	#	"""Operator <
+	#
+	#	stat  - comparing object
+	#
+	#	return  - True if the instance less than stat
+	#	"""
+	#	assert self.fixed and stat.fixed, 'Comparison should be called only for the fixed objects'
+	#	return self.avg < stat.avg or (self.avg == stat.avg and self.sd is not None and self.sd < stat.sd)
+
+
 	def fix(self):
 		"""Fix (finalize) statistics accumulation and produce the summary of the results"""
 		assert self.count >=0, 'Count must be non-negative'

@@ -67,7 +67,7 @@ class ShufflesAgg(object):
 		self.levels = {}  # Name: LevelStat
 
 		self.fixed = False  # All related jobs have been aggregated
-		self.bestlev = None
+		self.bestlev = None  # Best level, format: (name, value)
 
 		# Register this aggregator in the global results aggregator
 		evagg.register(self)  # shufagg: isfixed  - dict
@@ -111,15 +111,6 @@ class ShufflesAgg(object):
 			levstat = ItemsStatistic(levname)
 			self.levels[levname] = levstat
 		levstat.add(val)
-	#
-	#
-	#def add(self, job, val):
-	#	"""Add subsequent value to the aggregation
-	#
-	#	job  - the job produced the val
-	#	val  - the real value to be aggregated
-	#	"""
-	#	self.addraw(job.params['taskoutp'], job.params['clslev'], val)
 
 
 	def stat(self):
@@ -145,8 +136,10 @@ class ShufflesAgg(object):
 		if self.bestlev is None or self.bestlev[1].avg is None:
 			print('WARNING, "{}" has no defined results'.format(self.name))
 		# Trace best lev value for debugging purposes
-		else:
-			print('Best lev: {} = {}'.format(self.bestlev[0], self.bestlev[1].avg))
+		elif DEBUG_TRACE:
+		#else:
+			print('Best lev of {}:\t{} = {:.6f}'.format(
+				self.name[self.name.rfind('/') + 1:], self.bestlev[0], self.bestlev[1].avg))
 		##	val = self.bestlev[1]
 		##	print('{} bestval is {}: {} (from {} up to {}, sd: {})'
 		##		.format(self.name, self.bestlev[0], val.avg, val.min, val.max, val.sd))
@@ -175,6 +168,7 @@ class EvalsAgg(object):
 		# Evaluate max among all avg value among instances of each network with particular params. - 3rd element of the task name
 		# Evaluate avg and range over all network instances with the same base name (and params),
 		# #x and ^x are processed similary as instances.
+		nameps = False  # Parameters are used in the name
 		for inst in self.partaggs:
 			if not inst.fixed:
 				print('WARNING, shuffles aggregator for task "{}" was not fixed on final aggregation'
@@ -187,7 +181,9 @@ class EvalsAgg(object):
 			assert not shid, 'Shuffles should already be aggregated'
 			# Take average over instances and shuffles for each set of alg params
 			# and the max for alg params among the obtained results
-			netname += apars
+			if apars:
+				nameps = True
+				netname = _SEPNAMEPART.join((netname, apars))
 			# Maintain list of all evaluated algs to output results in the table format
 			self.algs.add(algname)
 			# Update global network evaluation results
@@ -196,7 +192,32 @@ class EvalsAgg(object):
 			if netstat is None:
 				netstat = ItemsStatistic(algname)
 				algsev[algname] = netstat
-			netstat.addstat(inst.stat())
+			netstat.addstat(inst.stat())  # Note: best result for each network with the same alg params can correspond to different levels
+		# For each network retain only best result among all algorithm parameters
+		naparams = {}  # Algorithm parameters for the network that correspond to the best result, format:  AlgName: AlgParams
+		if nameps:
+			netsev = {}
+			for net, algsev in self.netsev.iteritems():
+				# Cut params from the network name
+				pos = net.find(_SEPNAMEPART)
+				if pos != -1:
+					apars = net[pos+1:]
+					net = net[:pos]
+				else:
+					apars = None
+				# Sync processing network and alg params
+				napars = naparams.setdefault(net, {})
+				# Retain only the highest value among params
+				uaev = netsev.setdefault(net, {})
+				for alg, netstat in algsev.iteritems():
+					netstat.fix()  # Process aggregated results
+					uns = uaev.get(alg)
+					#print('uns.avg: {:.6}, netstat.avg: {:.6}'.format(uns.avg if uns else None, netstat.avg))
+					if not uns or uns.avg < netstat.avg:
+						uaev[alg] = netstat
+						napars[alg] = apars
+
+			self.netsev = netsev
 		# Remove partial aggregations
 		self.partaggs = None
 
@@ -220,9 +241,11 @@ class EvalsAgg(object):
 					# Brief header for the extended results
 					fmeasevx.write('# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n')
 					header = False
-				algsev = iter(sorted(algsev.items(), key=lambda x: x[0]))
+				algsev = iter(sorted(algsev.iteritems(), key=lambda x: x[0]))
 				ialgs = iter(self.algs)
 				firstcol = True
+				# Algorithms and their params for the best values on this network
+				algspars = naparams.get(net)
 				# Output aggregated network evaluation for each algorithm
 				for alg in ialgs:
 					# Output row header it required
@@ -241,15 +264,21 @@ class EvalsAgg(object):
 						# Check whether to show evaluated alg results now or later
 						if aev[0] == alg:
 							val = aev[1]
-							val.fix()  # Process aggregated resutls
+							if not val.fixed:
+								val.fix()  # Process aggregated resutls
 							fmeasev.write('\t{:.6f}'.format(val.avg))
+							if algspars:
+								napars = algspars.get(alg)
+							else:
+								napars = None
 							# Q is taken as weighted average for best values per each instance,
 							# where best is defined as higest average value among all levels in the shuffles.
 							# Min is min best avg among shuffles for each instance, max is max best avg.
 							# ATTENTION: values that can be None can't be represented as .6f, but can be as .6
 							fmeasevx.write('\n\t{}>\tQ: {:.6f} ({:.6f} .. {:.6f}), s: {:.6}, count: {}, fails: {},'
 								' d(shuf): {:.6}, s(shuf): {:.6}, count(shuf): {}, fails(shuf): {}'
-								.format(alg, val.avg, val.min, val.max, val.sd, val.count, val.invals
+								.format(alg + (napars.join((' (', ')')) if napars else '')
+								, val.avg, val.min, val.max, val.sd, val.count, val.invals
 								, val.statDelta, val.statSD, val.statCount, val.invstats))
 						else:
 							# Skip this alg

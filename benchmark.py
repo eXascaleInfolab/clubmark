@@ -853,15 +853,16 @@ def benchmark(*args):
 	if gensynt or (not datadirs and not datafiles):
 		datadirs.append((False, _NETSDIR.join((syntdir, '*/'))))  # asym, ddir
 
-	if shufnum:
-		shuffleNets(datadirs, datafiles, shufnum, gensynt == 2)
-
 	# convnets: 0 - do not convert, 0b01 - only if not exists, 0b11 - forced conversion, 0b100 - resolve duplicated links
 	if convnets:
 		for asym, ddir in datadirs:
 			convertNets(ddir, asym, convnets&0b11 == 0b11, convnets&0b100)
 		for asym, dfile in datafiles:
 			convertNet(dfile, asym, convnets&0b11 == 0b11, convnets&0b100)
+
+	# Conversion should be performed after the shuffling because there is no need to convert shuffles
+	if shufnum:
+		shuffleNets(datadirs, datafiles, shufnum, gensynt == 2)
 
 	# Run the algorithms and measure their resource consumption
 	if runalgs:

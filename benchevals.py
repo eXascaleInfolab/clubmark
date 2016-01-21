@@ -359,7 +359,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 	measdir  - measure-identifying directory to store results
 	timeout  - execution timeout for this task
 	evaljob  - evaluatoin job to be performed on the evaluating file, signature:
-		evaljob(cfile, jobname, task, taskoutp, ijobsuff, logsbase)
+		evaljob(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logsbase)
 	resagg  - results aggregator
 	pathid  - path id of the basefile to distinguish files with the same name located in different dirs.
 		Note: pathid includes pathid separator
@@ -507,7 +507,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 	if DEBUG_TRACE:
 		print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
 
-	def evaljobMod(cfile, taskoutp, clslev, shuffle, rcpoutp, logsbase):
+	def evaljobMod(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logsbase):
 		"""Produce modularity evaluation job
 		NOTE: all paths are given relative to the root benchmark directory.
 
@@ -563,16 +563,15 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 			, stdout=PIPE, stderr=logsbase + _EXTERR)
 
 
-	def evaljobNmi(cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logsbase):
+	def evaljobNmi(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logsbase):
 		"""Produce nmi evaluation job
 
 		cfile  - clusters file to be evaluated
-		jobname  - name of the creating job
 		task  - task to wich the job belongs
 		taskoutp  - accumulative output file for all jobs of the current task
-		rcpoutp  - file name for the aggregated output of the jobs resources consumption
 		clslev  - clusters level name
 		shuffle  - shuffle index as string or ''
+		rcpoutp  - file name for the aggregated output of the jobs resources consumption
 		logsbase  - base part of the file name for the logs including errors
 
 		return
@@ -602,6 +601,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 			os.environ[ldpname] = ldpath
 
 		# Processing is performed from the algorithms dir
+		jobname = '.'.join((task.name, shuffle))  # Name of the creating job
 		args = ('../exectime', '-o=../' + rcpoutp, '-n=' + jobname, './gecmi', '../' + basefile, '../' + cfile)
 
 		# Job postprocessing
@@ -615,45 +615,41 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 					.format(job.name, result), file=sys.stderr)
 			else:
 				# Transfer resutls to the embracing task if exists
-				if job.task and job.task.params:
-					job.task.params.add(job, nmi)
-				else:
-					print('WARNING, task "{}" of job "{}" has no results aggregator defined via params'
-						.format(job.name), file=sys.stderr)
-				# Log results
 				taskoutp = job.params['taskoutp']
+				clslev = job.params['clslev']
+				task.params.addraw(taskoutp, clslev, nmi)  # Note: task.params is shuffles aggregator
+				# Log results
 				with open(taskoutp, 'a') as tnmi:  # Append to the end
 					if not os.path.getsize(taskoutp):
 						tnmi.write('# NMI\tlevel[/shuffle]\n')
 						tnmi.flush()
 					# Define result caption
-					rescapt = job.params['clslev']
-					if job.params['shuffle']:
-						rescapt = _SEPNAMEPART.join((rescapt, job.params['shuffle']))
-					tnmi.write('{}\t{}\n'.format(nmi, rescapt))
+					shuffle = job.params['shuffle']
+					if shuffle:
+						clslev = _SEPNAMEPART.join((clslev, shuffle))
+					tnmi.write('{}\t{}\n'.format(nmi, clslev))
 
 		return Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout
 			, ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle}
 			, stdout=PIPE, stderr=logsbase + _EXTERR)
 
 
-	def evaljobNmiS(cfile, jobname, task, taskoutp, rcpoutp, clslev, shuffle, logsbase):
+	def evaljobNmiS(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logsbase):
 		"""Produce nmi_s evaluation job
 
-		jobs  - list of jobs
 		cfile  - clusters file to be evaluated
-		jobname  - name of the creating job
 		task  - task to wich the job belongs
 		taskoutp  - accumulative output file for all jobs of the current task
-		rcpoutp  - file name for the aggregated output of the jobs resources consumption
 		clslev  - clusters level name
 		shuffle  - shuffle index as string or ''
+		rcpoutp  - file name for the aggregated output of the jobs resources consumption
 		logsbase  - base part of the file name for the logs including errors
 
 		return
 			job  - resulting evaluating job
 		"""
 		# Processing is performed from the algorithms dir
+		jobname = '.'.join((task.name, shuffle))  # Name of the creating job
 		args = ('../exectime', '-o=../' + rcpoutp, '-n=' + jobname, './onmi_sum', '../' + basefile, '../' + cfile)
 
 		# Job postprocessing
@@ -667,22 +663,19 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 					.format(job.name, result), file=sys.stderr)
 			else:
 				# Transfer resutls to the embracing task if exists
-				if job.task and job.task.params:
-					job.task.params.add(job, nmi)
-				else:
-					print('WARNING, task "{}" of job "{}" has no results aggregator defined via params'
-						.format(job.name), file=sys.stderr)
-				# Log results
 				taskoutp = job.params['taskoutp']
+				clslev = job.params['clslev']
+				task.params.addraw(taskoutp, clslev, nmi)  # Note: task.params is shuffles aggregator
+				# Log results
 				with open(taskoutp, 'a') as tnmi:  # Append to the end
 					if not os.path.getsize(taskoutp):
 						tnmi.write('# NMI_s\tlevel[/shuffle]\n')
 						tnmi.flush()
 					# Define result caption
-					rescapt = job.params['clslev']
-					if job.params['shuffle']:
-						rescapt = _SEPNAMEPART.join((rescapt, job.params['shuffle']))
-					tnmi.write('{}\t{}\n'.format(nmi, rescapt))
+					shuffle = job.params['shuffle']
+					if shuffle:
+						clslev = _SEPNAMEPART.join((clslev, shuffle))
+					tnmi.write('{}\t{}\n'.format(nmi, clslev))
 
 		return Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout
 			, ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle}

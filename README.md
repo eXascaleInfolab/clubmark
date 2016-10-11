@@ -8,6 +8,7 @@
 ## Content
 [Functionality](#functionality)  
 [Dependencies](#dependencies)  
+&emsp;[Prerequisites](#prerequisites)  
 [Usage](#usage)  
 &emsp;[Usage Examples](#usage-examples)  
 [Benchmark Structure](#benchmark-structure)  
@@ -68,6 +69,23 @@ Basically the framework executes a set of applications on the specified datasets
 
 
 ## Dependencies
+### Prerequisites
+Be sure that the operational system allows to work with lots of opened files. Recommended values are:
+- Max number of the opened files in the system`$ sysctl fs.file-max` should be at least `1048576`
+- Max number of the opened files per a process`$ ulimit -n` should be at least `262144`
+
+To setup `fs.file-max` permanently in the system add the following line to the `/etc/sysctl.conf`:
+```
+fs.file-max = 1048576
+```
+and then reload it by `# sysctl -p`.  
+To setup the `ulimit` permanently add the following lines to the `/etc/security/limits.conf`:
+```
+*               hard    nofile          524288
+*               soft    nofile          262144  
+```
+And then execute `ulimit -n 262144`.
+
 ### Fundamental
 - Python 2.7+ (or [PyPy](http://pypy.org/) JIT for the fast execution).
  

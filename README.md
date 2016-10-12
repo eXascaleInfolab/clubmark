@@ -70,9 +70,9 @@ Basically the framework executes a set of applications on the specified datasets
 
 ## Dependencies
 ### Prerequisites
-Be sure that the operational system allows to work with lots of opened files. Recommended values are:
+Be sure that the operational system allows to work with lots of opened files:
 - Max number of the opened files in the system`$ sysctl fs.file-max` should be at least `1048576`
-- Max number of the opened files per a process`$ ulimit -n` should be at least `262144`
+- Max number of the opened files per a process`$ ulimit -n` should be at least `4096`, may be higher depending on the evaluating datasets and algorithms.
 
 To setup `fs.file-max` permanently in the system add the following line to the `/etc/sysctl.conf`:
 ```
@@ -82,9 +82,9 @@ and then reload it by `# sysctl -p`.
 To setup the `ulimit` permanently add the following lines to the `/etc/security/limits.conf`:
 ```
 *               hard    nofile          524288
-*               soft    nofile          262144  
+*               soft    nofile          4096  
 ```
-And then execute `ulimit -n 262144`.
+And then execute `ulimit -n 65536` to set this value for the current process.
 
 ### Fundamental
 - Python 2.7+ (or [PyPy](http://pypy.org/) JIT for the fast execution).
@@ -106,8 +106,8 @@ $ sudo apt-get install libstdc++6
 	* `libz` and `libxml2`, which are installed in Linux Ubuntu executing:  
 	`$ sudo apt-get install lib32z1-dev libxml2-dev`
 
-- [`gecmi`](https://bitbucket.org/dsign/gecmi/wiki/Home) for the NMI_ovp evaluation, it depends on:
-	* `libboost_program_options.so.1.54.0`, to install execute: `$ sudo apt-get install libboost-program-options1.54.0`
+- [`gecmi`](https://bitbucket.org/dsign/gecmi/wiki/Home) for the NMI_ovp evaluation depends on:
+	* `libboost_program_options`, to install execute: `$ sudo apt-get install libboost-program-options`. The older version of gecmi compiled under Ubuntu 14 depends on `libboost_program_options.so.1.54.0`, the newer one compiled under Ubuntu 16 depends on `libboost_program_options.so.1.58.0`.
 	* `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
 	
   > Note: gecmi dependencies are uploaded to `./algorithms/gecmi_deps/`.

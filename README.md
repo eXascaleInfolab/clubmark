@@ -1,5 +1,5 @@
 # PyCABeM (former HiCBeM) - Python Benchmarking Framework for the Clustering Algorithms Evaluation
-\brief Uses extrinsic (NMIs) and intrinsic (Q) measures for the clusters quality evaluation considering overlaps (nodes membership by multiple clusters)  
+\brief Uses extrinsic (NMIs - normalized [mutual information](https://en.wikipedia.org/wiki/Mutual_information) for overlapping clusters) and intrinsic (Q - [modularity](https://en.wikipedia.org/wiki/Modularity_(networks))) measures for the clusters quality evaluation considering overlaps (nodes membership by multiple clusters)  
 \author: (c) Artem Lutov <artem@exascale.info>  
 \organizations: [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
 \keywords: overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
@@ -37,7 +37,7 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 - produces synthetic networks with specified number of instances for each set of parameters, generating them by the extended [LFR Framework](https://sites.google.com/site/santofortunato/inthepress2) ("Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti and Santo Fortunato)
 - shuffles (reorders nodes) specified networks specified number of times, which is required to evaluate stability / determinism of the clustering algorithms
 - executes
-	* [HiReCS](http://www.lumais.com/hirecs) (www.lumais.com/hirecs)
+	* DAOC (former [HiReCS](http://www.lumais.com/hirecs), www.lumais.com/hirecs)
 	* [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) ([Sequential algorithm for fast clique percolation](http://www.lce.hut.fi/research/mm/complex/software/))
 	* [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations)
 	* [Oslom2](http://www.oslom.org/software.htm)
@@ -46,19 +46,22 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 
 	clustering algorithms on the generated synthetic networks (or on any specified directories and files). Outputs results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
 	
-	Features \ Algs | *HiReCS* | SCP | Louvain | Oslom2 | GANXiS
-	            --- | --- | --- | --- | --- | ---
-	Hierarchical    | + | | + | + |
-	Multi-scale     | + | + | + | + | + 
-	Deterministic   | + | + | | | 
-	With Overlaps   | + | + | | + | +
-	Parameter-Free  | + | | + | | 
+	Features \ Algs | *DAOC* | SCP | Louvain | Oslom2 | GANXiS | pSCAN | CGGCi_RG
+	            --- | --- | --- | --- | --- | --- | --- | ---
+	Hierarchical    | + | | + | + | | | |
+	Multi-scale     | + | + | + | + | + | | |
+	Deterministic   | + | + | | | | ? | |
+	With Overlaps   | + | + | | + | + | + | * |
+	Parameter-Free  | + | | + | * | * | | *
+	Consensus/Ensemble | + | | | + | | | + 
+> *With Overlaps* marked with `*` means non-overlapping clusters as a result, but the algorithm can be modified to output overlapping clusters.  
+*Parameter-Free* marked with `*` means availability of default values for all parameters.
 
 - evaluates results using:
 	- extrinsic measures  - NMIs for overlapping communities, extended to have uniform input / output formats:
 		* NMI  - `gecmi` (https://bitbucket.org/dsign/gecmi/wiki/Home, "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall)
 		* NMI_s  - `onmi` (https://github.com/aaronmcdaid/Overlapping-NMI, "Normalized Mutual Information to evaluate overlapping community finding algorithms" by Aaron F. McDaid, Derek Greene, Neil Hurley)
-	- intrinsic measure  - Q (standard modularity value, but applicable for overlapping communities), evaluated by `HiReCS` (http://www.lumais.com/hirecs)
+	- intrinsic measure  - Q (standard modularity value, but applicable for overlapping communities), evaluated by `DAOC`
 - resources consumption is evaluated using `exectime` profiler (https://bitbucket.org/lumais/exectime/)
 
 All results and traces are stored into the corresponding files even in case of internal (crash) / external termination of the benchmarking applications or the whole framework.
@@ -92,15 +95,13 @@ And then execute `ulimit -n 65536` to set this value for the current process.
 > Note: It is recommended to run the benchmark itself under PyPy. The measured algorithms can be ran either using the same python or under the dedicated interpreter / script / executable.
 
 ### Libraries
-- [hirecs](http://www.lumais.com/hirecs/) for modularity evaluation of overlapping community structure with results compatible to the standard modularity value. It depends on:
+- daoc (former [hirecs](http://www.lumais.com/hirecs/)) for modularity evaluation of overlapping community structure with results compatible to the standard modularity value. It depends on:
   * `libstdc++.so.6`: version GLIBCXX_3.4.20 (precompiled version for modularity evaluation). To install it on Ubuntu use: `sudo apt-get install libstdc++6` or
 ```sh
 $ sudo add-apt-repository ppa:ubuntu-toolchain-r/test 
 $ sudo apt-get update
 $ sudo apt-get install libstdc++6
 ```
-	
-  > Note: This functionality is available in the dev version of the HiReCS 2 and have not been pushed to the public hirecs repository yet. Please write me if you need it.
 
 - [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`. It depends on:
 	* `libz` and `libxml2`, which are installed in Linux Ubuntu executing:  
@@ -119,7 +120,7 @@ $ sudo apt-get install libstdc++6
 ### External tools that are used as executables
 - [Extended LFR Benchmark](contrib/lfrbench_weight-undir-ovp) for the undirected weighted networks with overlaps (origins are here: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files)
 - [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption: https://bitbucket.org/lumais/exectime/
-- Clustering algorithms, used in the benchmarking: [HiReCS](http://www.lumais.com/hirecs), [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm) and [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/)
+- Clustering algorithms, used in the benchmarking: DAOC (former [HiReCS](http://www.lumais.com/hirecs)), [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm), [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/), pScan (binaries provided by the [author](http://www.cse.unsw.edu.au/~ljchang/)) and [CGGCi_RG](http://www.umiacs.umd.edu/~mov/).
  
 ## Usage
 - `./install_depends.sh`  - install dependencies (using apt-get)
@@ -142,7 +143,7 @@ Parameters:
     Xf  - force the conversion even when the data is already exist
     Xr  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used
   NOTE: files with .nsa are looked for in the specified dirs to be converted
-  -a="app1 app2 ..."  - apps (clustering algorithms) to run/benchmark among the implemented. Available: scp louvain_igraph randcommuns hirecs oslom2 ganxis. Impacts {r, e} options. Optional, all apps are executed by default.
+  -a="app1 app2 ..."  - apps (clustering algorithms) to run/benchmark among the implemented. Available: scp louvain_igraph randcommuns daoc oslom2 ganxis. Impacts {r, e} options. Optional, all apps are executed by default.
   NOTE: output results are stored in the "algorithms/<algname>outp/" directory
   -r  - run the benchmarking apps on the prepared data
   -e[X]  - evaluate quality of the results. Default: apply all measurements
@@ -262,7 +263,7 @@ Example of the `<net_instance>.mod` format:
 ...
 ```
 
-- ./realnets/  - simple gold standard networks with available ground truth value of the modularity for non-overlapping clustering (from [DIMACS 10th](http://www.cc.gatech.edu/dimacs10/), "Modularity Maximization in Networks by Variable Neighborhood Search" by Daniel Aloise et al)
+- ./realnets/  - simple gold standard networks with available ground truth value of the modularity for non-overlapping clustering (from [10th DIMACS](http://www.cc.gatech.edu/dimacs10/) '13, "Modularity Maximization in Networks by Variable Neighborhood Search" by Daniel Aloise et al)
 - ./syntnets/  - synthetic networks produced by the extended LFR framework: undirected weighted complex networks with overlaps, both mixing parameters are set for the topology and weights, both exponential nodes degree and weights distributions are set
 	* `*.ngp`  - network generation parameters
 	* `time_seed.dat`  - used time seed on batch generation
@@ -299,6 +300,6 @@ All the evaluatoins will be performed automatically, the algorithm should just f
 
 
 ## Related Projects
-* [HiReCS](https://github.com/XI-lab/hirecs) - High Resolution Hierarchical Clustering with Stable State: https://github.com/XI-lab/hirecs
+* DAOC (former [HiReCS](https://github.com/XI-lab/hirecs) - High Resolution Hierarchical Clustering with Stable State: https://github.com/XI-lab/hirecs)
 
 If you are interested in this benchmark, please visit <a href="http://exascale.info/">eXascale Infolab</a> where you can find another projects and research papers related to Big Data!

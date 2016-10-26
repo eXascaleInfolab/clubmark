@@ -92,10 +92,18 @@ def louvain(*args):
 			, perlev, outpcoms + outpext))
 	# Load Data from simple real-world networks
 	graph = None
-	if netfmt == 'ncol':
+	if netfmt == 'ncol':  # Note: it's not clear whether .nce/.snap can be correctly readed as .ncol
 		graph = ig.Graph.Read_Ncol(network, directed=dirnet)  # , weights=False
 	elif netfmt == 'pajek':
 		graph = ig.Graph.Read_Pajek(network)
+	elif netfmt == 'nsl':
+		raise NotImplementedError(".nsl/snap parsing has not been implemented yet")
+		#edges, weights = [], []
+		#for line in open("input_file.txt"):
+		#	u, v, weight = line.split()
+		#	edges.append((int(u), int(v)))
+		#	weights.append(float(weight))
+		#g = Graph(edges, edge_attrs={"weight": weights})
 	else:
 		raise ValueError('Unknown network format: ' + netfmt)
 

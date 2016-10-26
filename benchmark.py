@@ -77,13 +77,14 @@ _PREFEXEC = 'exec'  # Execution prefix for the apps functions in benchapps
 _execpool = None  # Pool of executors to process jobs
 
 
-def parseParams(args):
-	"""Parse user-specified parameters
+class Params(object):
+	"""Input parameters"""
+	def __init__(self):
+		"""Sets default values for the input parameters
 
-	return
 		gensynt  - generate synthetic networks:
 			0 - do not generate
-			1 - generate only if this network is not exist
+			1 - generate only if the network is not exist
 			2 - force geration (overwrite all)
 		netins  - number of network instances for each network type to be generated, >= 1
 		shufnum  - number of shuffles of each network instance to be produced, >= 0
@@ -105,28 +106,36 @@ def parseParams(args):
 			[(<asym>, <path>, <gendir>), ...] , where path is either dir or file
 		timeout  - execution timeout in sec per each algorithm
 		algorithms  - algorithms to be executed (just names as in the code)
+		"""
+		self.gensynt = 0
+		self.netins = _SYNTINUM  # Number of network instances to generate, >= 1
+		self.shufnum = 0  # Number of shuffles for each network instance to be produced, >=0
+		self.syntdir = _SYNTDIR  # Base directory for synthetic datasets
+		self.convnets = 0
+		self.runalgs = False
+		self.evalres = 0  # 1 - NMI, 2 - NMI_s, 4 - Q, 7 - all measures
+		self.datas = []  # list of pairs: (<asym>, <path>), where path is either dir or file
+		self.timeout = 36 * 60*60  # 36 hours
+		self.algorithms = []
+		self.aggrespaths = []  # Paths for the evaluated resutls aggregation (to be done for already existent evaluations)
+
+
+def parseParams(args):
+	"""Parse user-specified parameters
+
+	return params
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
-	gensynt = 0
-	netins = _SYNTINUM  # Number of network instances to generate, >= 1
-	shufnum = 0  # Number of shuffles for each network instance to be produced, >=0
-	syntdir = _SYNTDIR  # Base directory for synthetic datasets
-	convnets = 0
-	runalgs = False
-	evalres = 0  # 1 - NMI, 2 - NMI_s, 4 - Q, 7 - all measures
-	datas = []  # list of pairs: (<asym>, <path>), where path is either dir or file
-	timeout = 36 * 60*60  # 36 hours
-	timemul = 1  # Time multiplier, sec by default
-	algorithms = []
-	aggrespaths = []  # Paths for the evaluated resutls aggregation (to be done for already existent evaluations)
+	opts = Params()
 
+	timemul = 1  # Time multiplier, sec by default
 	for arg in args:
 		# Validate input format
 		if arg[0] != '-':
 			raise ValueError('Unexpected argument: ' + arg)
 
 		if arg[1] == 'g':
-			gensynt = 1  # Generate if not exists
+			opts.gensynt = 1  # Generate if not exists
 			alen = len(arg)
 			if alen == 2:
 				continue
@@ -134,7 +143,7 @@ def parseParams(args):
 			if arg[2] not in 'f=' or alen == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
 			if arg[2] == 'f':
-				gensynt = 2  # Forced generation (overwrite)
+				opts.gensynt = 2  # Forced generation (overwrite)
 			if pos != -1:
 				# Parse number of instances, shuffles and outpdir:  [<instances>][.<shuffles>][=<outpdir>]
 				val = arg[pos+1:].split('=', 1)
@@ -143,63 +152,63 @@ def parseParams(args):
 					nums = val[0].split('.', 1)
 					# Now [instances][shuffles][outpdir]
 					if nums[0]:
-						netins = int(nums[0])
+						opts.netins = int(nums[0])
 					else:
-						netins = 0  # Zero if omitted in case of shuffles are specified
+						opts.netins = 0  # Zero if omitted in case of shuffles are specified
 					# Parse shuffles
 					if len(nums) > 1:
-						shufnum = int(nums[1])
-					if netins < 0 or shufnum < 0:
-						raise ValueError('Value is out of range:  netins: {netins} >= 1, shufnum: {shufnum} >= 0'
-							.format(netins=netins, shufnum=shufnum))
+						opts.shufnum = int(nums[1])
+					if opts.netins < 0 or opts.shufnum < 0:
+						raise ValueError('Value is out of range:  opts.netins: {opts.netins} >= 1, opts.shufnum: {opts.shufnum} >= 0'
+							.format(opts.netins=opts.netins, opts.shufnum=opts.shufnum))
 				# Parse outpdir
 				if len(val) > 1:
 					if not val[1]:  # arg ended with '=' symbol
 						raise ValueError('Unexpected argument: ' + arg)
-					syntdir = val[1]
-					syntdir = syntdir.strip('"\'')
-					if not syntdir.endswith('/'):
-						syntdir += '/'
+					opts.syntdir = val[1]
+					opts.syntdir = opts.syntdir.strip('"\'')
+					if not opts.syntdir.endswith('/'):
+						opts.syntdir += '/'
 		elif arg[1] == 'a':
 			if not (arg[:3] == '-a=' and len(arg) >= 4):
 				raise ValueError('Unexpected argument: ' + arg)
-			algorithms = arg[3:].strip('"\'').split()
+			opts.algorithms = arg[3:].strip('"\'').split()
 		elif arg[1] == 'c':
-			convnets = 1
+			opts.convnets = 1
 			for i in range(2,4):
 				if len(arg) > i and (arg[i] not in 'fr'):
 					raise ValueError('Unexpected argument: ' + arg)
 			arg = arg[2:]
 			if 'f' in arg:
-				convnets |= 0b10
+				opts.convnets |= 0b10
 			if 'r' in arg:
-				convnets |= 0b100
+				opts.convnets |= 0b100
 		elif arg[1] == 'r':
 			if arg != '-r':
 				raise ValueError('Unexpected argument: ' + arg)
-			runalgs = True
+			opts.runalgs = True
 		elif arg[1] == 'e':
 			if len(arg) == 2:
-				evalres = 0b111  # All measures
+				opts.evalres = 0b111  # All measures
 			else:
 				for i in range(2, min(len(arg), 6)):
 					if arg[i] not in 'nsem':
 						raise ValueError('Unexpected argument: ' + arg)
 					# Here len(arg) >= 3
 					if arg[i] == 'n':
-						evalres |= 0b1  # NMI
+						opts.evalres |= 0b1  # NMI
 					elif arg[i] == 's':
-						evalres |= 0b10  # NMI_s
+						opts.evalres |= 0b10  # NMI_s
 					elif arg[i] == 'e':
-						evalres |= 0b11  # All extrinsic measures - both NMIs
+						opts.evalres |= 0b11  # All extrinsic measures - both NMIs
 					else:
 						assert arg[i] == 'm', 'Modularity is expected'
-						evalres |= 0b100  # Q (modularity)
+						opts.evalres |= 0b100  # Q (modularity)
 		elif arg[1] == 'd' or arg[1] == 'f':
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'gas=' or len(arg) == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
-			# Extend weighted / unweighted dataset, default is unweighted
+			# Extend weighted / unweighted opts.dataset, default is unweighted
 			val = arg[2]
 			gen = False  # Generate dir for this network or not
 			if val == 'g':
@@ -210,11 +219,11 @@ def parseParams(args):
 				asym = True
 			elif val == 's':
 				asym = False
-			datas.append((asym, arg[pos+1:].strip('"\''), gen))  # Remove quotes if exist
+			opts.datas.append((asym, arg[pos+1:].strip('"\''), gen))  # Remove quotes if exist
 		elif arg[1] == 's':
 			if len(arg) <= 3 or arg[2] != '=':
 				raise ValueError('Unexpected argument: ' + arg)
-			aggrespaths.append(arg[3:].strip('"\''))  # Remove quotes if exist
+			opts.aggrespaths.append(arg[3:].strip('"\''))  # Remove quotes if exist
 		elif arg[1] == 't':
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'smh=' or len(arg) == pos + 1:
@@ -224,11 +233,11 @@ def parseParams(args):
 				timemul = 60  # Minutes
 			elif arg[2] == 'h':
 				timemul = 3600  # Hours
-			timeout = float(arg[pos:]) * timemul
+			opts.timeout = float(arg[pos:]) * timemul
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
 
-	return gensynt, netins, shufnum, syntdir, convnets, runalgs, evalres, datas, timeout, algorithms, aggrespaths
+	return opts
 
 
 def prepareInput(datas):
@@ -824,57 +833,57 @@ def benchmark(*args):
 	"""
 	exectime = time.time()  # Benchmarking start time
 
-	gensynt, netins, shufnum, syntdir, convnets, runalgs, evalres, datas, timeout, algorithms, aggrespaths = parseParams(args)
+	opts = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tsyntdir: {}\n\tconvnets: 0b{:b}'
 		'\n\trunalgs: {}\n\tevalres: 0b{:b}\n\tdatas: {}\n\ttimeout (h, min, sec): {}\n\talgorithms: {},\n\taggrespaths: {}'
-		.format(gensynt, syntdir, convnets, runalgs, evalres
+		.format(opts.gensynt, opts.syntdir, opts.convnets, opts.runalgs, opts.evalres
 			, ', '.join(['{}{}{}'.format('' if not asym else 'asym: ', path, ' (gendir)' if gen else '')
-				for asym, path, gen in datas])
-			, secondsToHms(timeout), ', '.join(algorithms) if algorithms else ''
-			, ', '.join(aggrespaths) if aggrespaths else ''))
-	# Make syntdir and link there lfr benchmark bin if required
-	bmname = 'lfrbench_udwov'  # Benchmark name
-	benchpath = syntdir + bmname  # Benchmark path
-	if not os.path.exists(syntdir):
-		os.makedirs(syntdir)
+				for asym, path, gen in opts.datas])
+			, secondsToHms(opts.timeout), ', '.join(opts.algorithms) if opts.algorithms else ''
+			, ', '.join(opts.aggrespaths) if opts.aggrespaths else ''))
+	# Make opts.syntdir and link there lfr benchmark bin if required
+	bmname = 'lfrbench_udwov'  # Benchmark name for the synthetic networks generation
+	benchpath = opts.syntdir + bmname  # Benchmark path
+	if not os.path.exists(opts.syntdir):
+		os.makedirs(opts.syntdir)
 		# Symlink is used to work even when target file is on another file system
-		os.symlink(os.path.relpath(_SYNTDIR + bmname, syntdir), benchpath)
+		os.symlink(os.path.relpath(_SYNTDIR + bmname, opts.syntdir), benchpath)
 
-	# Extract dirs and files from datas, generate dirs structure and shuffles if required
-	datadirs, datafiles = prepareInput(datas)
-	datas = None
+	# Extract dirs and files from opts.datas, generate dirs structure and shuffles if required
+	datadirs, datafiles = prepareInput(opts.datas)
+	opts.datas = None
 	#print('Datadirs: ', datadirs)
 
-	if gensynt and netins >= 1:
-		# gensynt:  0 - do not generate, 1 - only if not exists, 2 - forced generation
-		generateNets(benchpath, syntdir, gensynt == 2, netins)
+	if opts.gensynt and opts.netins >= 1:
+		# opts.gensynt:  0 - do not generate, 1 - only if not exists, 2 - forced generation
+		generateNets(benchpath, opts.syntdir, opts.gensynt == 2, opts.netins)
 
-	# Update datasets with sythetic generated
+	# Update opts.datasets with sythetic generated
 	# Note: should be done only after the genertion, because new directories can be created
-	if gensynt or (not datadirs and not datafiles):
-		datadirs.append((False, _NETSDIR.join((syntdir, '*/'))))  # asym, ddir
+	if opts.gensynt or (not datadirs and not datafiles):
+		datadirs.append((False, _NETSDIR.join((opts.syntdir, '*/'))))  # asym, ddir
 
-	# convnets: 0 - do not convert, 0b01 - only if not exists, 0b11 - forced conversion, 0b100 - resolve duplicated links
-	if convnets:
+	# opts.convnets: 0 - do not convert, 0b01 - only if not exists, 0b11 - forced conversion, 0b100 - resolve duplicated links
+	if opts.convnets:
 		for asym, ddir in datadirs:
-			convertNets(ddir, asym, convnets&0b11 == 0b11, convnets&0b100)
+			convertNets(ddir, asym, opts.convnets&0b11 == 0b11, opts.convnets&0b100)
 		for asym, dfile in datafiles:
-			convertNet(dfile, asym, convnets&0b11 == 0b11, convnets&0b100)
+			convertNet(dfile, asym, opts.convnets&0b11 == 0b11, opts.convnets&0b100)
 
 	# Conversion should be performed after the shuffling because there is no need to convert shuffles
-	if shufnum:
-		shuffleNets(datadirs, datafiles, shufnum, gensynt == 2)
+	if opts.shufnum:
+		shuffleNets(datadirs, datafiles, opts.shufnum, opts.gensynt == 2)
 
-	# Run the algorithms and measure their resource consumption
-	if runalgs:
-		runApps(benchapps, algorithms, datadirs, datafiles, exectime, timeout)
+	# Run the opts.algorithms and measure their resource consumption
+	if opts.runalgs:
+		runApps(benchapps, opts.algorithms, datadirs, datafiles, exectime, opts.timeout)
 
 	# Evaluate results
-	if evalres:
-		evalResults(evalres, benchapps, algorithms, datadirs, datafiles, exectime, timeout)
+	if opts.evalres:
+		evalResults(opts.evalres, benchapps, opts.algorithms, datadirs, datafiles, exectime, opts.timeout)
 
-	if aggrespaths:
-		aggEvaluations(aggrespaths)
+	if opts.aggrespaths:
+		aggEvaluations(opts.aggrespaths)
 
 	exectime = time.time() - exectime
 	print('The benchmark is completed in{:.4f} sec ({} h {} m {:.4f} s)'

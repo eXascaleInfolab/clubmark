@@ -52,7 +52,7 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 	Multi-scale     | + | + | + | + | + | | |
 	Deterministic   | + | + | | | | ? | |
 	With Overlaps   | + | + | | + | + | + | * |
-	Parameter-Free  | + | | + | * | * | | *
+	Parameter-Free  | + | | + | * | * |  | *
 	Consensus/Ensemble | + | | | + | | | + 
 > *With Overlaps* marked with `*` means non-overlapping clusters as a result, but the algorithm can be modified to output overlapping clusters.  
 *Parameter-Free* marked with `*` means availability of default values for all parameters.
@@ -120,7 +120,7 @@ $ sudo apt-get install libstdc++6
 ### External tools that are used as executables
 - [Extended LFR Benchmark](contrib/lfrbench_weight-undir-ovp) for the undirected weighted networks with overlaps (origins are here: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files)
 - [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption: https://bitbucket.org/lumais/exectime/
-- Clustering algorithms, used in the benchmarking: DAOC (former [HiReCS](http://www.lumais.com/hirecs)), [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm), [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/), pScan (binaries provided by the [author](http://www.cse.unsw.edu.au/~ljchang/)) and [CGGCi_RG](http://www.umiacs.umd.edu/~mov/).
+- Clustering algorithms, used in the benchmarking: DAOC (former [HiReCS](http://www.lumais.com/hirecs)), [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm), [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/), pScan (binaries provided by the [author](http://www.cse.unsw.edu.au/~ljchang/)) and [CGGCi_RG](https://github.com/eXascaleInfolab/CGGC).
  
 ## Usage
 - `./install_depends.sh`  - install dependencies (using apt-get)

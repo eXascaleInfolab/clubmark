@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 
 """
@@ -337,7 +337,7 @@ def aggEvaluations(respaths):
 					if not ln or ln[0] == '#':
 						continue
 					# Process values:  <value>\t<lev_with_shuffle>
-					val, levname = ln.split()
+					val, levname = ln.split(None, 1)
 					levname = levname.split(_SEPNAMEPART, 1)[0]  # Remove shuffle part from the levname if exists
 					partagg.addraw(resfile, levname, float(val))
 				partagg.fix()
@@ -365,7 +365,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 		Note: pathid includes pathid separator
 	tidy  - delete previously existent resutls. Must be False if a few apps output results into the same dir
 	"""
-	assert execpool and basefile and measure and algname, "Parameters must be defined"
+	assert execpool and basefile and measure and algname, 'Parameters must be defined'
 	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
 	# Fetch the task name and chose correct network filename
 	taskcapt = os.path.splitext(os.path.split(basefile)[1])[0]  # Name of the basefile (network or ground-truth clusters)

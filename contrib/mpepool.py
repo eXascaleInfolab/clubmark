@@ -449,7 +449,7 @@ class ExecPool(object):
 		"""
 		assert isinstance(job, Job), 'job type is invalid'
 		assert len(self._workers) <= self._workersLim, 'Number of workers exceeds the limit'
-		assert job.name, "Job parameters must be defined"  #  and job.workdir and job.args
+		assert job.name, 'Job parameters must be defined'  #  and job.workdir and job.args
 
 		if DEBUG_TRACE:
 			print('Scheduling the job "{}" with timeout {}'.format(job.name, job.timeout))

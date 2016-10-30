@@ -172,7 +172,7 @@ def parseParams(args):
 		elif arg[1] == 'a':
 			if not (arg[:3] == '-a=' and len(arg) >= 4):
 				raise ValueError('Unexpected argument: ' + arg)
-			opts.algorithms = arg[3:].strip('"\'').split()
+			opts.algorithms = arg[3:].strip('"\'').split()  # Note: argparse automatically performs this escaping
 		elif arg[1] == 'c':
 			opts.convnets = 1
 			for i in range(2,4):
@@ -321,7 +321,7 @@ def generateNets(genbin, basedir, overwrite=False, count=_SYNTINUM, gentimeout=2
 	# Store all instances of each network with generation parameters in the dedicated directory
 	assert count >= 1, 'Number of the network instances to be generated must be positive'
 	assert (basedir[-1] == '/' and paramsdir[-1] == '/' and seedsdir[-1] == '/' and netsdir[-1] == '/'
-		), "Directory name must have valid terminator"
+		), 'Directory name must have valid terminator'
 
 	paramsdirfull = basedir + paramsdir
 	seedsdirfull = basedir + seedsdir

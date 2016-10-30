@@ -10,104 +10,110 @@
 from __future__ import print_function  # Required for stderr output, must be the first import
 import sys
 import os  # Pathes processing
-import igraph as ig
+import argparse
+from igraph import Graph
 
 
-inpfmt = 'ncol'  # NCOL input format
-outpfile = "clusters.cnl"  # Default file for the communities output
+def loadNsl(network, netfmt):
+	"""Load the graph from NSL(nse, nsa) file"""
+	assert netfmt in ('nsa', 'nse')
+
+	graph = None
+	with open(network) as finp:
+		# Prase the header if exists
+		ndsnum = 0  # The number of nodes
+		lnsnum = 0  # The number of links (edges or arcs)
+		weighted = None  # The network is weighted
+		directed = netfmt == 'nsa'
+		for ln in finp:
+			ln = ln.lstrip()
+			if not ln:
+				continue
+			if ln[0] == '#':
+				ln = ln[1:].split(None, 6)
+				if len(ln) >= 2 and ln[0].lower() == 'nodes:':
+					ndsnum = int(ln[1])
+				if len(ln) >= 4 and ln[2].lower() == ('arcs:' if directed else 'edges:'):
+					lnsnum = int(ln[3])
+				if len(ln) >= 6 and ln[4].lower() == 'weighted:':
+					weighted = bool(int(ln[5]))  # Note: int() is required because bool('0') is True
+			break
+
+		links = []
+		weights = []
+		nodes = set()
+		nodename = None
+		for ln in finp:
+			# Skip empty lines and comments
+			ln = ln.lstrip()
+			if not ln or ln[0] == '#':
+				continue
+			parts = ln.split(None, 2)
+			if weighted is not None:
+				if len(parts) != 2 + weighted:
+					raise ValueError('Weights are inconsistent; weighted: {}, line: {}'.format(weighted, ' '.join(parts)))
+			else:
+				weighted = len(parts) == 3
+
+			if nodename != parts[0]:
+				nodename = parts[0]
+				nodes.add(nodename)
+			links.append((parts[0], parts[1]))
+			if len(parts) > 2:
+				weights.append(float(parts[2]))
+
+		assert not ndsnum or len(nodes) == ndsnum, 'Validation of the number of nodes failed'
+		if not ndsnum:
+			ndsnum = len(nodes)
+		#nodes = list(nodes)
+		#nodes.sort()
+		nodes = tuple(nodes)
+
+		graph = Graph(n=ndsnum, directed=directed)
+		graph.vs["name"] = nodes
+		ndsmap = {name: i for i, name in enumerate(nodes)}
+		graph.add_edges([(ndsmap[ln[0]], ndsmap[ln[1]]) for ln in links])
+		if weights:
+			graph.es["weight"] = weights
+	return graph
 
 
-def parseParams(args):
-	"""Parse user-specified parameters
+def louvain(args):
+	"""Execute Louvain algorithm on the specified network and output resulting communities to the specified file
 
-	return
-		network  - input network
-		dirnet  - whether the input network is directed (links are asymmetric,
-			i.e. can have different in/outbound weights)
-		perlev  - output communities per level instead of the solid hierarchy
-		outpcoms  - base name of the output file
-		outpext  - extension of the output file
+	args.network  - input network
+	args.inpfmt  - format of the input network
+	args.outpfile  - output file name WITHOUT extension
+	args.outpext  - extension of the output file
 	"""
-	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
-	network = None
-	netfmt = inpfmt
-	dirnet = False  # ~ Asymmetric links
-	perlev = None
-	outpcoms, outpext = os.path.splitext(outpfile)
 
-	for arg in args:
-		# Validate input format
-		if arg[0] != '-':
-			raise ValueError('Unexpected argument: ' + arg)
-
-		if arg[1] == 'i':
-			pos = arg.find('=', 2)
-			if pos == -1 or arg[2] not in 'as=' or len(arg) == pos + 1:
-				raise ValueError('Unexpected argument: ' + arg)
-			pos += 1
-			dirnet = arg[2] == 'a'
-			network = arg[pos:]
-			ext = os.path.splitext(network)[1]
-			if ext and ext[1:] in ('pjk', 'pajek'):
-				netfmt = 'pajek'
-		elif arg[1] == 'f':
-			pos = arg.find('=', 2)
-			if pos == -1 or arg[2] != '=' or len(arg) == pos + 1:
-				raise ValueError('Unexpected argument: ' + arg)
-			pos += 1
-			netfmt = arg[pos:]
-			if netfmt not in ('ncol', 'pajek'):
-				raise ValueError('Unknown network format: ' + netfmt)
-		elif arg[1] == 'o':
-			pos = arg.find('=', 2)
-			if pos == -1 or arg[2] not in 'l=' or len(arg) == pos + 1:
-				raise ValueError('Unexpected argument: ' + arg)
-			pos += 1
-			perlev = arg[2] == 'l'
-			outpcoms, outpext = os.path.splitext(arg[pos:])
-			# Create files in the folder if required
-			if perlev:
-				netname = os.path.split(outpcoms)[1]
-				if not netname:
-					raise ValueError('Unexpected argument: ' + arg)
-				outpcoms = os.path.join(outpcoms, netname)
-		else:
-			raise ValueError('Unexpected argument: ' + arg)
-
-	if not network:
-		raise ValueError('Input network file name must be specified')
-
-	return network, netfmt, dirnet, perlev, outpcoms, outpext
-
-
-def louvain(*args):
-	"""Execute Louvain algorithm on the specified network and output resulting communities to the specified file"""
-	network, netfmt, dirnet, perlev, outpcoms, outpext = parseParams(args)
-
+	#args.inpfmt = args.inpfmt.lower()  # It should be already in the lower case
 	print('Starting Louvain (igraph) clustering:'
-		'\n\t{} network: {}'
-		'\n\tnetwork format: {}'
+		'\n\tnetwork: {}, format: {}'
 		'\n\tperlev output: {}, communities: {}'
-		.format('directed' if dirnet else 'undirected', network, netfmt
-			, perlev, outpcoms + outpext))
+		.format(args.network, args.inpfmt, args.perlev, args.outpfile + args.outpext))
 	# Load Data from simple real-world networks
 	graph = None
-	if netfmt == 'ncol':  # Note: it's not clear whether .nce/.snap can be correctly readed as .ncol
-		graph = ig.Graph.Read_Ncol(network, directed=dirnet)  # , weights=False
-	elif netfmt == 'pajek':
-		graph = ig.Graph.Read_Pajek(network)
-	elif netfmt == 'nsl':
-		raise NotImplementedError(".nsl/snap parsing has not been implemented yet")
-		#edges, weights = [], []
-		#for line in open("input_file.txt"):
-		#	u, v, weight = line.split()
-		#	edges.append((int(u), int(v)))
-		#	weights.append(float(weight))
-		#g = Graph(edges, edge_attrs={"weight": weights})
+	if args.inpfmt == 'ncol':  # Note: it's not clear whether .nce/.snap can be correctly readed as .ncol
+		graph = Graph.Read_Ncol(args.network, directed=False)  # Weight are considered if present; .ncol format is always undirected
+	elif args.inpfmt == 'pjk':
+		graph = Graph.Read_Pajek(args.network)
+	elif args.inpfmt == 'nse':
+		graph = loadNsl(args.network, args.inpfmt)
 	else:
-		raise ValueError('Unknown network format: ' + netfmt)
+		raise ValueError('Unknown network format: ' + args.inpfmt)
 
-	hier = graph.community_multilevel(return_levels=True)
+	#community_multilevel(self, weights=None, return_levels=False)
+	#@param weights: edge attribute name or a list containing edge
+	#  weights
+	#@param return_levels: if C{True}, the communities at each level are
+	#  returned in a list. If C{False}, only the community structure with
+	#  the best modularity is returned.
+	#@return: a list of L{VertexClustering} objects, one corresponding to
+	#  each level (if C{return_levels} is C{True}), or a L{VertexClustering}
+	#  corresponding to the best modularity.
+	#edges, weights = [], []
+	hier = graph.community_multilevel(weights='weight' if graph.is_weighted() else None, return_levels=True)
 	# Output levels
 	#fname = 'level'
 
@@ -115,19 +121,22 @@ def louvain(*args):
 	descrs = set()  # Communs descriptors for the fast comparison
 	props = 0  # Number of propagated (duplicated communities)
 
-
 	# Create output dir if not exists
-	outdir = os.path.split(outpcoms)[0]
+	outdir = os.path.split(args.outpfile)[0]
 	if outdir and not os.path.exists(outdir):
 		os.makedirs(outdir)
 
+	named = 'name' in graph.vertex_attributes()
 	for i, lev in enumerate(hier):
 		# Output statistics to the stderr
 		print('Q: {:.6f}, lev: {}. {}.'.format(hier[i].q, i, hier[i].summary()), file=sys.stderr)
-		if perlev:
-			with open('{}_{}{}'.format(outpcoms, i, outpext), 'w') as fout:
+		if args.perlev:
+			with open('{}_{}{}'.format(args.outpfile, i, args.outpext), 'w') as fout:
 				for cl in lev:
-					fout.write(' '.join([graph.vs[nid]['name'] for nid in cl]))
+					if named:
+						fout.write(' '.join([graph.vs[nid]['name'] for nid in cl]))
+					else:
+						fout.write(' '.join([str(nid) for nid in cl]))
 					fout.write('\n')
 		else:
 			# Merge all hier levels excluding identical communities, use idNums comparison (len, sum, sum2)
@@ -146,31 +155,65 @@ def louvain(*args):
 					props += 1
 	# Output communs
 	del descrs
-	if not perlev:
+	if not args.perlev:
 		if props:
-			print('Number of propagated (duplicated) communities in the hieratchy: '
+			print('The number of propagated (duplicated) communities in the hieratchy: '
 				+ str(props), file=sys.stderr)
-		with open(outpcoms + outpext, 'w') as fout:
+		with open(args.outpfile + args.outpext, 'w') as fout:
 			for cl in communs:
-				fout.write(' '.join([graph.vs[nid]['name'] for nid in cl]))
+				if named:
+					fout.write(' '.join([graph.vs[nid]['name'] for nid in cl]))
+				else:
+					fout.write(' '.join([str(nid) for nid in cl]))
 				fout.write('\n')
-	print('Hierarchy levels have been successfully outputted')
+	print('The hierarchy has been successfully outputted')
+
+
+def parseArgs(params=None):
+	"""Parse input parameters (arguments)
+
+	params  - the list of arguments to be parsed (argstr.split()), sys.argv is used if args is None
+
+	return args  - parsed arguments
+	"""
+	inpfmts = ('nse', 'pjk', 'ncol')  # Note: louvain_igraph supports only undirected input graph
+	parser = argparse.ArgumentParser(description='Louvain Clustering of the undirected graph.')
+
+	ipars = parser.add_argument_group('Input Network (Graph)')
+	ipars.add_argument('network', help='input network (graph) filename.'
+		' The following formats are supported: {{{inpfmts}}}.'
+		' If the file has another extension then the format should be specified'
+		' explicitly.'.format(inpfmts=' '.join(inpfmts)))
+	ipars.add_argument('-i', '--inpfmt', dest='inpfmt', choices=inpfmts, help='input network (graph) format')
+
+	outpext = '.cnl'  # Default extension of the output file
+	opars = parser.add_argument_group('Output Network (Graph)')
+	opars.add_argument('-o', '--outpfile', dest='outpfile'
+		, help='output all distinct resulting communities to the <outpfile>'
+		', default value is <network_name>{}'.format(outpext))
+	opars.add_argument('-l', '--perlev', dest='perlev', action='store_true'
+		, help='output communities of each hierarchy level to the separate file'
+		' <outpfile_name>/<outpfile_name>_<lev_num>{}'.format(outpext))
+
+	args = parser.parse_args()
+
+	# Consider implicit default values
+	netname, netext = os.path.splitext(args.network)
+
+	if args.inpfmt is None and netext:
+		args.inpfmt = netext[1:]  # Skip the leading point
+	args.inpfmt = args.inpfmt.lower()
+	if args.inpfmt not in inpfmts:
+		raise ValueError('Invalid format of the input network "{}" specified: {}'.format(args.network, args.inpfmt))
+
+	if args.outpfile is None:
+		args.outpfile = netname
+		args.outpext = outpext
+	else:
+		args.outpfile, args.outpext = os.path.splitext(args.outpfile)
+
+	return args
 
 
 if __name__ == '__main__':
-	if len(sys.argv) > 1:
-		louvain(*sys.argv[1:])
-	else:
-		print('\n'.join(('Usage: {} -i[{{a, s}}]=<input_network> [-f={{ncol, pajek}}] [-o[l]=<output_communities>]',
-			'  -i[X]=<input_network>  - file of the input network in the format: <src_id> <dst_id> [<weight>]',
-			'    Xa  - asymmetric network links (in/outbound weights of the link migh differ), arcs',
-			'    Xs  - symmetric network links, edges (but both directions can be specified in the input file). Default option.',
-			'    Note:'
-			'      - {{a, s}} are used only if the network file has no corresponding metadata (ncol format)',
-			'      - Louvain igraph implementation does not support asymmetric clustering (directed network)',
-			'  -f=<file_format>  - file format of the input network. Default: {}',
-			'    ncol  - ncol format: <src_id> <dst_id> [<weight>]',
-			'    pajek  - pajek format',
-			'  -o[l]=<output_communities>  - output all distinct communities of the hierarchy to the <output_communities>. Default: {}',
-			'    ol  - output all communities in each hier level to the seaparate file <output_communities>/<output_communities>_<lev_num>'
-		)).format(sys.argv[0], inpfmt, outpfile))
+	louvain(parseArgs())

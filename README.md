@@ -45,7 +45,7 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 	* [Randcommuns](/algorithms/randcommuns.py)  - generation of random communities (clusters) with struture of clusters similar to the ground-truth: the same number of random connected nodes in the number of clusters taken from the ground-truth
 
 	clustering algorithms on the generated synthetic networks (or on any specified directories and files). Outputs results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
-	
+
 	Features \ Algs | *DAOC* | SCP | Louvain | Oslom2 | GANXiS | pSCAN | CGGCi_RG
 	            --- | --- | --- | --- | --- | --- | --- | ---
 	Hierarchical    | + | | + | + | | | |
@@ -53,7 +53,7 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 	Deterministic   | + | + | | | | ? | |
 	With Overlaps   | + | + | | + | + | + | * |
 	Parameter-Free  | + | | + | * | * |  | *
-	Consensus/Ensemble | + | | | + | | | + 
+	Consensus/Ensemble | + | | | + | | | +
 > *With Overlaps* marked with `*` means non-overlapping clusters as a result, but the algorithm can be modified to output overlapping clusters.  
 *Parameter-Free* marked with `*` means availability of default values for all parameters.
 
@@ -91,37 +91,37 @@ And then execute `ulimit -n 65536` to set this value for the current process.
 
 ### Fundamental
 - Python 2.7+ (or [PyPy](http://pypy.org/) JIT for the fast execution).
- 
+
 > Note: It is recommended to run the benchmark itself under PyPy. The measured algorithms can be ran either using the same python or under the dedicated interpreter / script / executable.
 
 ### Libraries
 - daoc (former [hirecs](http://www.lumais.com/hirecs/)) for modularity evaluation of overlapping community structure with results compatible to the standard modularity value. It depends on:
   * `libstdc++.so.6`: version GLIBCXX_3.4.20 (precompiled version for modularity evaluation). To install it on Ubuntu use: `sudo apt-get install libstdc++6` or
 ```sh
-$ sudo add-apt-repository ppa:ubuntu-toolchain-r/test 
+$ sudo add-apt-repository ppa:ubuntu-toolchain-r/test
 $ sudo apt-get update
 $ sudo apt-get install libstdc++6
 ```
 
 - [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`. It depends on:
-	* `libz` and `libxml2`, which are installed in Linux Ubuntu executing:  
-	`$ sudo apt-get install lib32z1-dev libxml2-dev`
+	* `libxml2` (and `libz` on Ubuntu 14), which are installed in Linux Ubuntu executing:  
+	`$ sudo apt-get install libxml2-dev`  (`lib32z1-dev` might be also required)
 
 - [`gecmi`](https://bitbucket.org/dsign/gecmi/wiki/Home) for the NMI_ovp evaluation depends on:
 	* `libboost_program_options`, to install execute: `$ sudo apt-get install libboost-program-options`. The older version of gecmi compiled under Ubuntu 14 depends on `libboost_program_options.so.1.54.0`, the newer one compiled under Ubuntu 16 depends on `libboost_program_options.so.1.58.0`.
 	* `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
-	
+
   > Note: gecmi dependencies are uploaded to `./algorithms/gecmi_deps/`.
 
 - [PyExPool](//github.com/XI-lab/PyExPool) for asynchronious jobs execution and results aggregation via tasks of jobs
-	
+
   > Note: it is uploaded to `./contrib/`.
 
 ### External tools that are used as executables
 - [Extended LFR Benchmark](contrib/lfrbench_weight-undir-ovp) for the undirected weighted networks with overlaps (origins are here: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files)
 - [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption: https://bitbucket.org/lumais/exectime/
 - Clustering algorithms, used in the benchmarking: DAOC (former [HiReCS](http://www.lumais.com/hirecs)), [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm), [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/), pScan (binaries provided by the [author](http://www.cse.unsw.edu.au/~ljchang/)) and [CGGCi_RG](https://github.com/eXascaleInfolab/CGGC).
- 
+
 ## Usage
 - `./install_depends.sh`  - install dependencies (using apt-get)
 - `./benchmark.py`  - run the benchmark in the terminal (interactive mode)
@@ -131,7 +131,7 @@ $ sudo apt-get install libstdc++6
 
 To see possible input parameters run the benchmark without arguments: `$ ./benchmark.py`:  
 ```
-$ ./benchmark.py 
+$ ./benchmark.py
 Usage: ./benchmark.py [-g[f][=[<number>][.<shuffles_number>][=<outpdir>]] [-c[f][r]] [-a="app1 app2 ..."] [-r] [-e[n][s][e][m]] [-d[g]{a,s}=<datasets_dir>] [-f[g]{a,s}=<dataset>] [-t[{s,m,h}]=<timeout>]
 Parameters:
   -g[f][=[<number>][.<shuffles_number>][=<outpdir>]]  - generate <number> (5 by default) >= 0 synthetic datasets in the <outpdir> ("syntnets/" by default), shuffling each <shuffles_number> (0 by default) >= 0 times. If <number> is omitted or set to 0 then ONLY shuffling of the specified datasets should be performed including the <outpdir>/networks//*.

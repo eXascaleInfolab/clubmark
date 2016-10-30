@@ -63,7 +63,7 @@ def parseParams(args):
 				raise ValueError('Invalid network name (is a directory): ' + network)
 		elif arg[1] == 'n':
 			outnum = int(arg[preflen:])
-			assert outnum >= 1, "outnum must be a natural number"
+			assert outnum >= 1, 'outnum must be a natural number'
 		elif arg[1] == 'r':
 			randseed = arg[preflen:]
 		elif arg[1] == 'o':

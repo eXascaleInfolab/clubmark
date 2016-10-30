@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 
 """
@@ -539,7 +539,7 @@ def execGanxis(execpool, netfile, asym, timeout, pathid=''):
 	return 1
 
 
-#if __name__ == "__main__":
+#if __name__ == '__main__':
 #	"""Doc tests execution"""
 #	import doctest
 #	doctest.testmod()  # Detailed tests output

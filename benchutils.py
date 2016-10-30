@@ -584,7 +584,7 @@ def backupPath(basepath, expand=False, synctime=None, compress=True, suffix=''):
 			shutil.move(path, '/'.join((basename, os.path.split(path)[1])))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__'
 	"""Doc tests execution"""
 	import doctest
 	#doctest.testmod()  # Detailed tests output

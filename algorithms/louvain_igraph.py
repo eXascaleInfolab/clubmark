@@ -22,20 +22,23 @@ def loadNsl(network, netfmt):
 	with open(network) as finp:
 		# Prase the header if exists
 		ndsnum = 0  # The number of nodes
-		lnsnum = 0  # The number of links (edges or arcs)
+		#lnsnum = 0  # The number of links (edges or arcs)
 		weighted = None  # The network is weighted
 		directed = netfmt == 'nsa'
 		for ln in finp:
-			ln = ln.lstrip()
+			#ln = ln.lstrip()
 			if not ln:
 				continue
 			if ln[0] == '#':
 				ln = ln[1:].split(None, 6)
 				if len(ln) >= 2 and ln[0].lower() == 'nodes:':
 					ndsnum = int(ln[1])
-				if len(ln) >= 4 and ln[2].lower() == ('arcs:' if directed else 'edges:'):
-					lnsnum = int(ln[3])
-				if len(ln) >= 6 and ln[4].lower() == 'weighted:':
+				# Parse arcs/edges number optionally
+				i = 2
+				if len(ln) >= i+2 and ln[i].lower() == ('arcs:' if directed else 'edges:'):
+					#lnsnum = int(ln[3])
+					i += 2
+				if len(ln) >= i+2 and ln[i].lower() == 'weighted:':
 					weighted = bool(int(ln[5]))  # Note: int() is required because bool('0') is True
 			break
 
@@ -45,7 +48,7 @@ def loadNsl(network, netfmt):
 		nodename = None
 		for ln in finp:
 			# Skip empty lines and comments
-			ln = ln.lstrip()
+			#ln = ln.lstrip()
 			if not ln or ln[0] == '#':
 				continue
 			parts = ln.split(None, 2)

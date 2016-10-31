@@ -71,6 +71,7 @@ def loadNsl(network, netfmt):
 
 		graph = Graph(n=ndsnum, directed=directed)
 		graph.vs["name"] = nodes
+		# Make a map from the input ids to the internal ids of the vertices
 		ndsmap = {name: i for i, name in enumerate(nodes)}
 		graph.add_edges([(ndsmap[ln[0]], ndsmap[ln[1]]) for ln in links])
 		if weights:

@@ -15,7 +15,7 @@ from __future__ import print_function, division  # Required for stderr output, m
 import argparse
 import sys
 import os  # fstat
-from math import sqrt, log10
+from math import sqrt
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -74,13 +74,16 @@ def comstat(communs, plotstat):
 	# Though, actually each item migh occur multiple times.
 	magn = 10  # Decimal ids magnitude
 	reminder = cmsbytes % magn
-	elsnum = reminder / 2  # Consider delimiter after each item
+	# TODO: Before estimating the number of nodes and clusters, the exact values might be read
+	# from the header and then the remained files is parced cycling over communs.readline() instead of communs
+	img = 1  # Index of the magnitude (10^1); img digits + 1 delimiter for each element
+	img += 1 # img digits + 1 delimiter for each element
+	elsnum = reminder / img
 	while cmsbytes >= magn:
 		magn *= 10
-		elsnum += (cmsbytes - reminder) % magn / 2
+		img += 1 # img digits + 1 delimiter for each element
+		elsnum += (cmsbytes - reminder) % magn / img
 		reminder = cmsbytes % magn
-	magn = log10(magn) / 4  # Consider repeating node ids in each cluster to some extend
-	elsnum = round(elsnum / magn)
 
 	topn = 7  # Number of top sizes of the communities to be listes
 	etype = np.uint32  # Type of the elements in the array

@@ -161,15 +161,15 @@ def comstat(communs, plotstat):
 	if comsnum:
 		mbsmean = mbsnum / comsnum
 		mbssd = sqrt((mbsnum2 - mbsmean * mbsmean) / comsnum)
-	print('Communities (lines): {comsnum}\nMembers: {mbsnum},  min: {mbsmin} ({mmpart:.4%}), mean: {mbsmean:.2f}'
+	print('Communities (lines): {comsnum}\nMembers: {mbsnum},  min: {mbsmin} ({mmpart:.3%}), mean: {mbsmean:.2f}'
 		', max: {mbsmax},  SD: {mbssd:.5G},  largest {topn} communities: {tcs}'
 		.format(comsnum=comsnum, mbsnum=mbsnum, mbsmin=mbsmin, mmpart=mbsminNum/comsnum, mbsmean=mbsmean
 		, mbsmax=mbsmax, mbssd=mbssd, topn=topn, tcs=np.array_str(topcms.data)
 		))
 	if plotstat:
 		ndsnum = nodes.size
-		print('Nodes: {ndsnum}, overlaps: {ovp:.4%}, min freq: {ndfmin} ({nmpart:.4%}), max freq: {ndfmax}'
-			.format(ndsnum=ndsnum, ovp=(mbsnum-ndsnum)/ndsnum, ndfmin=ndscounts[0],
+		print('Nodes: {ndsnum}, avg occurrence: {aocr:.4}, min freq: {ndfmin} ({nmpart:.3%}), max freq: {ndfmax}'
+			.format(ndsnum=ndsnum, aocr=mbsnum/ndsnum, ndfmin=ndscounts[0],  # Average ocurrance in communities, >= 1; > 1 means overlaps exists or input data is given on different resolutions
 			nmpart=np.unique(ndscounts, return_counts=True)[1][0] / ndsnum, ndfmax=ndscounts[-1]))  # Note: it's fine that the nodes overlaps can be > 100%
 	#if plotstat:
 	#	top10min7 = OrderedRingBuffer(topn, etype=etype, inverse=True)

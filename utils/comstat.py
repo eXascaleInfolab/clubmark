@@ -89,6 +89,7 @@ def comstat(communs, plotstat):
 	mbsnum = 0  # The accumulated number of member nodes in all communities
 	mbsnum2 = 0  # Accumulated squared number of member nodes in all communities
 	mbsmin = sys.maxsize
+	mbsminNum = 0  # The number of communities with min number of members
 	mbsmax = 0
 	# Preallocate space for all nodes
 	# Do not zeroise since each item will be filled with id and the number of filled items is stored
@@ -112,8 +113,11 @@ def comstat(communs, plotstat):
 		# Aggregate statistics
 		mbsnum += comnds.size
 		mbsnum2 += comnds.size*comnds.size
-		if comnds.size < mbsmin:
-			mbsmin = comnds.size
+		if comnds.size <= mbsmin:
+			mbsminNum += 1
+			if comnds.size < mbsmin:
+				mbsmin = comnds.size
+				mbsminNum = 1
 		#if comnds.size > mbsmax:
 		#	mbsmax = comnds.size
 		topcms.add(comnds.size)
@@ -157,15 +161,16 @@ def comstat(communs, plotstat):
 	if comsnum:
 		mbsmean = mbsnum / comsnum
 		mbssd = sqrt((mbsnum2 - mbsmean * mbsmean) / comsnum)
-	print('Communities (lines): {comsnum}\nMembers: {mbsnum},  min: {mbsmin}, mean: {mbsmean:.2f}'
+	print('Communities (lines): {comsnum}\nMembers: {mbsnum},  min: {mbsmin} ({mmpart:.4%}), mean: {mbsmean:.2f}'
 		', max: {mbsmax},  SD: {mbssd:.5G},  largest {topn} communities: {tcs}'
-		.format(comsnum=comsnum, mbsnum=mbsnum, mbsmin=mbsmin, mbsmean=mbsmean
+		.format(comsnum=comsnum, mbsnum=mbsnum, mbsmin=mbsmin, mmpart=mbsminNum/comsnum, mbsmean=mbsmean
 		, mbsmax=mbsmax, mbssd=mbssd, topn=topn, tcs=np.array_str(topcms.data)
 		))
-	ndsnum = nodes.size if plotstat else None
-	if ndsnum:
-		print('Nodes: {ndsnum}, overlaps: {ovp:.4%}'.format(ndsnum=ndsnum
-			, ovp=(mbsnum-ndsnum)/ndsnum))  # Note: it's fine that the nodes overlaps can be > 100%
+	if plotstat:
+		ndsnum = nodes.size
+		print('Nodes: {ndsnum}, overlaps: {ovp:.4%}, min freq: {ndfmin} ({nmpart:.4%}), max freq: {ndfmax}'
+			.format(ndsnum=ndsnum, ovp=(mbsnum-ndsnum)/ndsnum, ndfmin=ndscounts[0],
+			nmpart=np.unique(ndscounts, return_counts=True)[1][0] / ndsnum, ndfmax=ndscounts[-1]))  # Note: it's fine that the nodes overlaps can be > 100%
 	#if plotstat:
 	#	top10min7 = OrderedRingBuffer(topn, etype=etype, inverse=True)
 	#	for nd in comsizes[-10:]:

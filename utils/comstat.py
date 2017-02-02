@@ -78,11 +78,11 @@ def comstat(communs, plotstat):
 	# from the header and then the remained files is parced cycling over communs.readline() instead of communs
 	img = 1  # Index of the magnitude (10^1); img digits + 1 delimiter for each element
 	img += 1 # img digits + 1 delimiter for each element
-	elsnum = reminder / img
+	elsnum = round(reminder / img)
 	while cmsbytes >= magn:
 		magn *= 10
 		img += 1 # img digits + 1 delimiter for each element
-		elsnum += (cmsbytes - reminder) % magn / img
+		elsnum += round((cmsbytes - reminder) % magn / img)
 		reminder = cmsbytes % magn
 
 	topn = 7  # Number of top sizes of the communities to be listes

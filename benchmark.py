@@ -33,7 +33,8 @@
 \date: 2015-04
 """
 
-from __future__ import print_function  # Required for stderr output, must be the first import
+from __future__ import print_function, division  # Required for stderr output, must be the first import
+import atexit  # At exit termination handleing
 import sys
 import time
 import subprocess
@@ -48,7 +49,7 @@ import traceback  # Stacktrace
 
 import benchapps  # Benchmarking apps (clustering algs)
 
-from contrib.mpepool import *
+from utils.mpepool import *
 from benchutils import *
 
 from benchutils import _SEPPARS
@@ -69,9 +70,11 @@ from benchevals import _EXTEXECTIME
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 _SYNTDIR = 'syntnets/'  # Default directory for the synthetic datasets
 _NETSDIR = 'networks/'  # Networks directory inside syntnets
-_SYNTINUM = 5  # Default number of instances of each synthetic network
-_EXTNETFILE = '.nsa'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated arcs
+_SYNTINUM = 3  # Default number of instances of each synthetic network, >= 1
+_TIMEOUT = 36 * 60*60  # Default timeout: 36 hours
+_EXTNETFILE = '.nse'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated edges (.nsa - arcs)
 #_algseeds = 9  # TODO: Implement
+_EVALDFL = 'd'  # Default evaluation measures: d - default extrinsic eval measures (NMI_max, F1h, F1p)
 _PREFEXEC = 'exec'  # Execution prefix for the apps functions in benchapps
 
 _execpool = None  # Pool of executors to process jobs
@@ -99,9 +102,17 @@ class Params(object):
 		evalres  - resulting measures to be evaluated:
 			Note: all the employed measures are applicable for overlapping clusters
 			0  - nothing
-			0b001  - NMI
-			0b010  - NMI_s
-			0b100  - Q (modularity)
+			0b00000001  - NMI_max
+			0b00000011  - all NMIs (max, min, avg, sqrt)
+			0b00000100  - ONMI_max
+			0b00001100  - all ONMIs (max, avg, lfk)
+			0b00010000  - Average F1h Score
+			0b00100000  - F1p measure
+			0b01110000  - All F1s (F1p, F1h, F1s)
+			0b10000000  - Default extrinsic measures (NMI_max, F1h and F1p)
+			0b11111111  - All extrinsic measures (NMI-s, ONMI-s, F1-s)
+			0x1FF  - Q (modularity)
+			0xFFF  - All extrincis and intrinsic measures
 		datas  - list of datasets to be run with asym flag (asymmetric / symmetric links weights):
 			[(<asym>, <path>, <gendir>), ...] , where path is either dir or file
 		timeout  - execution timeout in sec per each algorithm
@@ -109,6 +120,7 @@ class Params(object):
 		"""
 		self.gensynt = 0
 		self.netins = _SYNTINUM  # Number of network instances to generate, >= 1
+		assert self.netins >= 1, 'The number of network instances to generate should be positive'
 		self.shufnum = 0  # Number of shuffles for each network instance to be produced, >=0
 		self.syntdir = _SYNTDIR  # Base directory for synthetic datasets
 		self.convnets = 0
@@ -159,8 +171,8 @@ def parseParams(args):
 					if len(nums) > 1:
 						opts.shufnum = int(nums[1])
 					if opts.netins < 0 or opts.shufnum < 0:
-						raise ValueError('Value is out of range:  opts.netins: {opts.netins} >= 1, opts.shufnum: {opts.shufnum} >= 0'
-							.format(opts.netins=opts.netins, opts.shufnum=opts.shufnum))
+						raise ValueError('Value is out of range:  opts.netins: {netins} >= 1, opts.shufnum: {shufnum} >= 0'
+							.format(netins=opts.netins, shufnum=opts.shufnum))
 				# Parse outpdir
 				if len(val) > 1:
 					if not val[1]:  # arg ended with '=' symbol
@@ -188,23 +200,45 @@ def parseParams(args):
 				raise ValueError('Unexpected argument: ' + arg)
 			opts.runalgs = True
 		elif arg[1] == 'e':
+			#0b00000001  - NMI_max
+			#0b00000011  - all NMIs (max, min, avg, sqrt)
+			#0b00000100  - ONMI_max
+			#0b00001100  - all ONMIs (max, avg, lfk)
+			#0b00010000  - Average F1h Score
+			#0b00100000  - F1p measure
+			#0b01110000  - All F1s (F1p, F1h, F1s)
+			#0b10000000  - Default extrinsic measures (NMI_max, F1h and F1p)
+			#0b11111111  - All extrinsic measures (NMI-s, ONMI-s, F1-s)
+			#0x1FF  - Q (modularity)
+			#0xFFF  - All extrincis and intrinsic measures
 			if len(arg) == 2:
-				opts.evalres = 0b111  # All measures
+				opts.evalres = 0xFF  # All measures
+			elif arg[2] == 'n':
+				if len(arg) == 3:
+					opts.evalres |= 0b11  # All NMIs
+				elif arg[3] == 'x':
+					opts.evalres |= 0b01  # NMI_max
+				else:
+					raise ValueError('Unexpected argument: ' + arg)
+			elif arg[2] == 'o':
+				if len(arg) == 3:
+					opts.evalres |= 0b1100  # All ONMIs
+				elif arg[3] == 'x':
+					opts.evalres |= 0b0100  # ONMI_max
+				else:
+					raise ValueError('Unexpected argument: ' + arg)
+			elif arg[2] == 'f':
+				if len(arg) == 3:
+					opts.evalres |= 0b1110000  # All F1s
+				elif arg[3] == 'h':
+					opts.evalres |= 0b0010000  # F1h
+				elif arg[3] == 'p':
+					opts.evalres |= 0b0100000  # F1p
+				else:
+					raise ValueError('Unexpected argument: ' + arg)
 			else:
-				for i in range(2, min(len(arg), 6)):
-					if arg[i] not in 'nsem':
-						raise ValueError('Unexpected argument: ' + arg)
-					# Here len(arg) >= 3
-					if arg[i] == 'n':
-						opts.evalres |= 0b1  # NMI
-					elif arg[i] == 's':
-						opts.evalres |= 0b10  # NMI_s
-					elif arg[i] == 'e':
-						opts.evalres |= 0b11  # All extrinsic measures - both NMIs
-					else:
-						assert arg[i] == 'm', 'Modularity is expected'
-						opts.evalres |= 0b100  # Q (modularity)
-		elif arg[1] == 'd' or arg[1] == 'f':
+				raise ValueError('Unexpected argument: ' + arg)
+		elif arg[1] == 'i':  # arg[1] == 'd' or arg[1] == 'f'
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'gas=' or len(arg) == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
@@ -220,7 +254,7 @@ def parseParams(args):
 			elif val == 's':
 				asym = False
 			opts.datas.append((asym, arg[pos+1:].strip('"\''), gen))  # Remove quotes if exist
-		elif arg[1] == 's':
+		elif arg[1] == 'a':
 			if len(arg) <= 3 or arg[2] != '=':
 				raise ValueError('Unexpected argument: ' + arg)
 			opts.aggrespaths.append(arg[3:].strip('"\''))  # Remove quotes if exist
@@ -904,50 +938,52 @@ def terminationHandler(signal, frame):
 
 
 if __name__ == '__main__':
-	if len(sys.argv) > 1:
-		# Set handlers of external signals
-		signal.signal(signal.SIGTERM, terminationHandler)
-		signal.signal(signal.SIGHUP, terminationHandler)
-		signal.signal(signal.SIGINT, terminationHandler)
-		signal.signal(signal.SIGQUIT, terminationHandler)
-		signal.signal(signal.SIGABRT, terminationHandler)
-		benchmark(*sys.argv[1:])
-	else:
+	if len(sys.argv) <= 1 or (len(sys.argv) == 2 and sys.argv[1] == '-h'):
 		print('\n'.join(('Usage: {0} [-g[f][=[<number>][.<shuffles_number>][=<outpdir>]] [-c[f][r]] [-a="app1 app2 ..."]'
-			' [-r] [-e[n][s][e][m]] [-d[g]{{a,s}}=<datasets_dir>] [-f[g]{{a,s}}=<dataset>] [-s=<eval_path>] [-t[{{s,m,h}}]=<timeout>]',
+			' [-r] [-e[{{n[x],o[x],f[{{h,p}}],d,e,m}}] [-i[g]{{a,s}}=<datasets_{{dir, file}}> [-a=<eval_path>] [-t[{{s,m,h}}]=<timeout>]',
 			'Parameters:',
 			'  -g[f][=[<number>][.<shuffles_number>][=<outpdir>]]  - generate <number> ({synetsnum} by default) >= 0'
-			' synthetic datasets in the <outpdir> ("{syntdir}" by default), shuffling each <shuffles_number>'
-			' (0 by default) >= 0 times. If <number> is omitted or set to 0 then ONLY shuffling of the specified datasets'
+			' synthetic datasets (networks) in the <outpdir> ("{syntdir}" by default), shuffling each <shuffles_number>'
+			'  >= 0 times (default: 0). If <number> is omitted or set to 0 then ONLY shuffling of the specified datasets'
 			' should be performed including the <outpdir>/{netsdir}/*.',
-			'    Xf  - force the generation even when the data already exists (existent datasets are moved to backup)',
+			'    f  - force the generation even when the data already exists (existent datasets are moved to backup)',
 			'  NOTE:',
 			'    - shuffled datasets have the following naming format:\n'
 			'\t<base_name>[{sepinst}<instance_index>][(seppars)<param1>...][.<shuffle_index>].<net_extension>',
-			'    - use "-g0" to execute existing synthetic networks not changing them',
-			'  -c[X]  - convert existing networks into the .hig, .lig, etc. formats',
-			'    Xf  - force the conversion even when the data is already exist',
-			'    Xr  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used',
+			'    - use "-g0" to execute existing synthetic datasets not changing them',
+			'  -c[X]  - convert existing networks into the .rcg].hig], .lig, etc. formats',
+			'    f  - force the conversion even when the data is already exist',
+			'    r  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used',
 			'  NOTE: files with {extnetfile} are looked for in the specified dirs to be converted',
 			'  -a="app1 app2 ..."  - apps (clustering algorithms) to run/benchmark among the implemented.'
 			' Available: scp louvain_igraph randcommuns hirecs oslom2 ganxis.'
 			' Impacts {{r, e}} options. Optional, all apps are executed by default.',
 			'  NOTE: output results are stored in the "algorithms/<algname>outp/" directory',
-			'  -r  - run the benchmarking apps on the prepared data',
-			#'    Xf  - force execution even when the results already exists (existent datasets are moved to backup)',
-			'  -e[X]  - evaluate quality of the results. Default: apply all measurements',
-			#'    Xf  - force execution even when the results already exists (existent datasets are moved to backup)',
-			'    Xn  - evaluate results accuracy using NMI measure for overlapping communities',
-			'    Xs  - evaluate results accuracy using NMI_s measure for overlapping communities',
-			'    Xe  - evaluate results accuracy using extrinsic measures (both NMIs) for overlapping communities (same as Xns)',
-			'    Xm  - evaluate results quality by modularity',
-			'  -d[X]=<datasets_dir>  - directory of the datasets.',
-			'  -f[X]=<dataset>  - dataset (network, graph) file name.',
-			'    Xg  - generate directory with the network file name without extension for each input network (*{extnetfile})'
+			'  -r  - run the benchmarking apps on the specified networks',
+			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
+			'  -e[X]  - evaluate quality of the results. Default: {evaldfl}',
+			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
+			'    n[Y]  - evaluate results accuracy using NMI measure(s) for overlapping and multi-level communities: max, avg, min, sqrt',
+			'     x  - NMI_max,',
+			#'     a  - NMI_avg (also known as NMI_sum),',
+			#'     n  - NMI_min,',
+			#'     r  - NMI_sqrt',
+			'    o[Y]  - evaluate results accuracy using overlapping NMI measure(s) for overlapping communities'
+			' that are not multi-level (much faster than "-en"): max, sum, lfk',
+			'     x  - NMI_max',
+			'    f[Y]  - evaluate results accuracy using avg F1-Score(s) for overlapping and multi-level communities: avg, hmean, pprob',
+			#'     a  - avg F1-Score',
+			'     h  - harmonic mean of F1-Score',
+			'     p  - F1p measure (harmonic mean of the weighted average of partial probabilities)',
+			'    d  - evaluate results accuracy using default extrinsic measures (NMI_max, F1_h, F1_p) for overlapping communities',
+			'    e  - evaluate results accuracy using extrinsic measures (all NMIs and F1s) for overlapping communities',
+			'    m  - evaluate results quality by modularity',
+			'  -i[X]=<datasets_dir>  - input dataset(s), directory with datasets or a single dataset file',
+			'    g  - generate directory with the network file name without extension for each input network (*.{extnetfile})'
 			' when shuffling is performed (to avoids flooding of the base directory with network shuffles). Previously'
 			' existed shuffles are backuped',
-			'    Xa  - the dataset is specified by asymmetric links (in/outbound weights of the link might differ), arcs',
-			'    Xs  - the dataset is specified by symmetric links, edges. Default option',
+			'    a  - the dataset is specified by asymmetric links (in/outbound weights of the link might differ), arcs',
+			'    s  - the dataset is specified by symmetric links, edges. Default option',
 			'    NOTE:',
 			'    - datasets file names must not contain "." (besides the extension),'
 			' because it is used as indicator of the shuffled datasets',
@@ -957,14 +993,30 @@ if __name__ == '__main__':
 			'    - {{a,s}} is considered only if the network file has no corresponding metadata (formats like SNAP, ncol, nsa, ...)',
 			'    - ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
 			' is up to the clustering algorithm',
-			'  -s=<eval_path>  - perform aggregation of the specified evaluation results without the evaluation itself',
+			'  -a=<eval_path>  - perform aggregation of the specified evaluation results without the evaluation itself',
 			'    NOTE:',
 			'    - paths can contain wildcards: *, ?, +'
 			'    - multiple paths can be specified via multiple -s options (one per the item)',
 			'  -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network'
-			' in sec, min or hours. Default: 0 sec  - no timeout',
-			'    Xs  - time in seconds. Default option',
-			'    Xm  - time in minutes',
-			'    Xh  - time in hours',
+			' in sec, min or hours; 0 sec - no timeout, Default: {th} h {tm} min {ts} sec',
+			'    s  - time in seconds. Default option',
+			'    m  - time in minutes',
+			'    h  - time in hours',
 			)).format(sys.argv[0], syntdir=_SYNTDIR, synetsnum=_SYNTINUM, netsdir=_NETSDIR, sepinst=_SEPINST
-				, seppars=_SEPPARS, extnetfile=_EXTNETFILE))
+				, seppars=_SEPPARS, extnetfile=_EXTNETFILE, evaldfl=_EVALDFL, th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60))
+	else:
+		# Set handlers of external signals
+		signal.signal(signal.SIGTERM, terminationHandler)
+		signal.signal(signal.SIGHUP, terminationHandler)
+		signal.signal(signal.SIGINT, terminationHandler)
+		signal.signal(signal.SIGQUIT, terminationHandler)
+		signal.signal(signal.SIGABRT, terminationHandler)
+
+		# Set termination handler for the internal termination
+		atexit.register(terminationHandler)
+
+		benchmark(*sys.argv[1:])
+
+
+# Extrenal API (exporting functions)
+__all__ = [generateNets, shuffleNets, convertNet, convertNets, runApps, evalResults, benchmark]

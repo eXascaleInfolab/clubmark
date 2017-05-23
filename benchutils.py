@@ -9,7 +9,7 @@
 \date: 2015-11
 """
 
-from __future__ import print_function  # Required for stderr output, must be the first import
+from __future__ import print_function, division  # Required for stderr output, must be the first import
 import sys
 import os
 import glob
@@ -28,7 +28,7 @@ _REFLOAT = re.compile('[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')  # Regular expressi
 _REINT = re.compile('[-+]?\d+(?=\W)')  # Regular expression to parse int
 _SEPINST = '^'  # Network instances separator, must be a char
 _SEPPARS = '!'  # Network parameters separator, must be a char
-_SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs), must be a char
+_SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
 _PATHID_FILE = 'f'  # File marker of the pathid (input file specified directly without the embracing dir), must be a char
 # Note: '.' is used as network shuffles separator
 
@@ -584,7 +584,7 @@ def backupPath(basepath, expand=False, synctime=None, compress=True, suffix=''):
 			shutil.move(path, '/'.join((basename, os.path.split(path)[1])))
 
 
-if __name__ == '__main__'
+if __name__ == '__main__':
 	"""Doc tests execution"""
 	import doctest
 	#doctest.testmod()  # Detailed tests output

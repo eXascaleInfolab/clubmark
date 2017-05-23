@@ -7,7 +7,7 @@
 \organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
 \date: 2015-07
 """
-from __future__ import print_function  # Required for stderr output, must be the first import
+from __future__ import print_function, division  # Required for stderr output, must be the first import
 import sys
 import os  # Pathes processing
 import argparse

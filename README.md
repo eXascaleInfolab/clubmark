@@ -4,13 +4,14 @@
 \organizations: [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
 \keywords: overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
 
+Author (c)  Artem Lutov <artem@exascale.info>
 
 ## Content
 [Functionality](#functionality)  
 [Dependencies](#dependencies)  
-&emsp;[Prerequisites](#prerequisites)  
+  [Prerequisites](#prerequisites)  
 [Usage](#usage)  
-&emsp;[Usage Examples](#usage-examples)  
+  [Usage Examples](#usage-examples)  
 [Benchmark Structure](#benchmark-structure)  
 [Extension](#extension)  
 [Related Projects](#related-projects)  
@@ -18,18 +19,18 @@
 
 ## Functionality
 ### Generic Benchmarking Framework
-- optionally *generates or preprocesses datasets* using specified executable(s) (by default uses LFR framework for overlapping weightted networks)
+- optionally *generates or preprocesses datasets* using specified executable(s) (by default uses LFR framework for overlapping weighted networks)
 - optionally *executes specified apps* (clustering algorithms; can be a binary, any script or java executable) with the specified params on the specified datasets (networks)
 - optionally *evaluates results* of the execution using specified executable(s) (by default performs NMIs and Q evaluation) and *performs unified aggregation* of results from multiple apps on multiple datasets into the single file by the specified measure
 - *per-task and global timeouts* (for an app execution on a single dataset) and specified number of CPU cores (workers) are set for the *batch apps execution / evaluation* using the multi-process task execution pool ([mpepool](//github.com/XI-lab/PyExPool))
-- per-task and accumulative *execution tracing and resutls logging* is performed even in case of internal / external interruptions and crashes:
+- per-task and accumulative *execution tracing and results logging* is performed even in case of internal / external interruptions and crashes:
 	* all stdout/err output is logged
-	* resources consumption, i. e. time: execution (wall-clock) and CPU concumption (user, kernel, total), memory (RAM RSS) are traced
+	* resources consumption, i. e. time: execution (wall-clock) and CPU consumption (user, kernel, total), memory (RAM RSS) are traced
 - *automatic extension / backup* of the previously existent results to .gzip with the timestamp on the benchmarking reexecution
 
-It is possible to have multiple input directories with similary named files inside, which represent different instances / snapshots of the datasets. In such case, the output results are provided per each snapshot, plus aggregated weighted average over all snapshots. This is useful to avoid occasional bias to the specific instance or to analize evolving networks.
+It is possible to have multiple input directories with similarly named files inside, which represent different instances / snapshots of the datasets. In such case, the output results are provided per each snapshot, plus aggregated weighted average over all snapshots. This is useful to avoid occasional bias to the specific instance or to analyze evolving networks.
 
-In case of the measured application crash, the crash is logged and has no any impact on the exectuion of the remaining applications.
+In case of the measured application crash, the crash is logged and has no any impact on the execution of the remaining applications.
 
 
 ### Benchmark of the Hierarchical Overlapping Clustering Algorithms
@@ -41,8 +42,9 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 	* [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) ([Sequential algorithm for fast clique percolation](http://www.lce.hut.fi/research/mm/complex/software/))
 	* [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations)
 	* [Oslom2](http://www.oslom.org/software.htm)
-	* [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*; *deterministic algorithm LabelRankT* is a modification of GANXiS, but LabelRankT is not publicly available)
-	* [Randcommuns](/algorithms/randcommuns.py)  - generation of random communities (clusters) with struture of clusters similar to the ground-truth: the same number of random connected nodes in the number of clusters taken from the ground-truth
+	* [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*; *deterministic algorithm LabelRankT* is a modification of GANXiS, but LabelRankT is not publicly available)  
+	  > GANXiS requires preliminary created output directory if it is specified in the options, but GANXiS always creates also default "./output/" directory, which is empty if the custom one is used.
+	* [Randcommuns](/algorithms/randcommuns.py)  - generation of random communities (clusters) with structure of clusters similar to the ground-truth: the same number of random connected nodes in the number of clusters taken from the ground-truth
 
 	clustering algorithms on the generated synthetic networks (or on any specified directories and files). Outputs results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
 
@@ -58,10 +60,14 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 *Parameter-Free* marked with `*` means availability of default values for all parameters.
 
 - evaluates results using:
-	- extrinsic measures  - NMIs for overlapping communities, extended to have uniform input / output formats:
-		* NMI  - `gecmi` (https://bitbucket.org/dsign/gecmi/wiki/Home, "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall)
-		* NMI_s  - `onmi` (https://github.com/aaronmcdaid/Overlapping-NMI, "Normalized Mutual Information to evaluate overlapping community finding algorithms" by Aaron F. McDaid, Derek Greene, Neil Hurley)
-	- intrinsic measure  - Q (standard modularity value, but applicable for overlapping communities), evaluated by `DAOC`
+	- extrinsic measures :
+		* F1_gwah for overlapping communities on multiple resolutions and standard NMI for hard partitioning only (non-overlapping singe resolution clustering)  - `xmeasures` (https://github.com/eXascaleInfolab/xmeasures)
+		* NMI (NMI_max compatile with the standard NMI)  - `gecmi` (https://bitbucket.org/dsign/gecmi/wiki/Home, "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall)
+		* NMIs (NMI_max, NMI_lfr, NMI_avg)  - `onmi` (https://github.com/aaronmcdaid/Overlapping-NMI, "Normalized Mutual Information to evaluate overlapping community finding algorithms" by Aaron F. McDaid, Derek Greene, Neil Hurley)
+	- intrinsic measures evaluated by `DAOC`:
+	  * Q (standard modularity value, but applicable for overlapping communities)
+		* f (conductance applicable for overlapping communities)
+- resulting clusterings on multiple resolutions are merged using `resmerge` (https://github.com/eXascaleInfolab/resmerge) with node base synchronization to the ground truth communities on Large real-world networks from [SNAP](https://snap.stanford.edu/data/#communities), which have less nodes in the ground-truth communities than in the input networks and clusters on multiple resolutions in the single ground-truth collection
 - resources consumption is evaluated using `exectime` profiler (https://bitbucket.org/lumais/exectime/)
 
 All results and traces are stored into the corresponding files even in case of internal (crash) / external termination of the benchmarking applications or the whole framework.
@@ -72,10 +78,38 @@ Basically the framework executes a set of applications on the specified datasets
 
 
 ## Dependencies
+### Overview
+There are some prerequisites related to the Operational System Environment, dependencies for the benchmarking itself and for each of the executing algorithms. Target OS is Ubuntu 16.04 x64, other OSes also can be used to run the benchmark itself, but there might be issues with the evaluation algorithms and evaluation utilities builds.
+
+
+Full list of dependencies for execution:
+- Required for the clustering algorithms:
+  - GANXiS:
+  $ sudo apt-get install openjdk-8-jre
+
+  - ...
+  pypy
+
+- Required for the evaluation applications:
+  - gecmi:
+  $ sudo sudo apt-get install libboost-program-options1.58.0 libtbb2
+
+Full list of dependencies for build and execution:
+  - Required for the clustering algorithms:
+    - GANXiS:
+    $ sudo apt-get install openjdk-8-jdk
+
+  - Required for the evaluation applications:
+    - gecmi:
+    $ sudo sudo apt-get install libboost-program-options1.58-dev libtbb-dev
+
+  - Required for the debugging:
+    $ sudo apt install gdb
+
 ### Prerequisites
 Be sure that the operational system allows to work with lots of opened files:
-- Max number of the opened files in the system`$ sysctl fs.file-max` should be at least `1048576`
-- Max number of the opened files per a process`$ ulimit -n` should be at least `4096`, may be higher depending on the evaluating datasets and algorithms.
+- Max number of the opened files in the system`$ sysctl fs.file-max` should be large enough, the recommended value is `1048576`.
+- Max number of the opened files per a process`$ ulimit -n` should be at least `4096`, may be higher depending on the evaluating datasets and algorithms. The recommended value is `65536`.
 
 To setup `fs.file-max` permanently in the system add the following line to the `/etc/sysctl.conf`:
 ```
@@ -90,7 +124,7 @@ To setup the `ulimit` permanently add the following lines to the `/etc/security/
 And then execute `ulimit -n 65536` to set this value for the current process.
 
 ### Fundamental
-- Python 2.7+ (or [PyPy](http://pypy.org/) JIT for the fast execution).
+- Python 2.7+ (optionally [PyPy](http://pypy.org/) JIT for the fast execution).
 
 > Note: It is recommended to run the benchmark itself under PyPy. The measured algorithms can be ran either using the same python or under the dedicated interpreter / script / executable.
 
@@ -113,7 +147,7 @@ $ sudo apt-get install libstdc++6
 
   > Note: gecmi dependencies are uploaded to `./algorithms/gecmi_deps/`.
 
-- [PyExPool](//github.com/XI-lab/PyExPool) for asynchronious jobs execution and results aggregation via tasks of jobs
+- [PyExPool](//github.com/XI-lab/PyExPool) for asynchronous jobs execution and results aggregation via tasks of jobs
 
   > Note: it is uploaded to `./contrib/`.
 
@@ -176,9 +210,9 @@ $ pypy ./benchmark.py -g=3.2=syntnets_i3_s4 -cr -a="scp oslom2" -r -emn -tm=90
 ```
 Run the benchmark under PyPy.  
 Generate synthetic networks producing 3 instances of each network with 2 shuffles (random reordering of network nodes) of each instance, having 3*2=6 sythetic networks of each type (for each set of network generation parameters). Generated networks are stored in the ./syntnets_i3_s4/ directory.  
-Convert all networks into the .hig format resolving dulicated links. This conversion is required to be able to evaluate modularity measure.  
+Convert all networks into the .hig format resolving duзlicated links. This conversion is required to be able to evaluate modularity measure.  
 Run `scp` and `oslom2` clustering algorithms for each generated network and evaluate modularity and NMI measures for these algorithms.  
-TImeout is 90 min for each task of each network processing, where the tasks are: networks generation, clustering and evaluation by each specified measure. The network is each shuffle of each instance of each network type.  
+Tшmeout is 90 min for each task of each network processing, where the tasks are: networks generation, clustering and evaluation by each specified measure. The network is each shuffle of each instance of each network type.  
 
 #### Shuffling existing network instances, clustering algorithm execution and evaluation
 ```
@@ -186,7 +220,7 @@ $ ./benchmark.py -g=.4 -d=syntnets_i3_s4 -a=oslom2 -es -th=1
 ```
 Run the benchmark for the networks located in ./syntnets_i3_s4/ directory.  
 Produce 4 shuffles of the specified networks, previously existed shuffles are backed up.  
-Run `oslom2` clusterng algorithm for the specified networks with their shuffles and evaluate NMI_s measure.  
+Run `oslom2` clusterшng algorithm for the specified networks with their shuffles and evaluate NMI_s measure.  
 Timeout is 1 hour for each task on each network.  
 
 #### Aggregation of the specified evaluation results
@@ -201,7 +235,7 @@ Results aggregation is performed with automatic identification of the target clu
 - ./resutls/  - aggregated and per-algorithm execution and evaluation results (brief `*.res` and extended `*.resx`): timings (execution and CPU), memory consumption, NMIs, Q, per-algorithm resources consumption profile (`*.rcp`)
 	- `<algname>.rcp`  - resource consumption profile for all executions of the algorithm even in case of crashes / interruptions
 	- `<measure>.res[x]`  - aggregated value of the measure: average is evaluated for each level / scale for all shuffles of the each network instance, then the weighted best average among all levels is taken for all instances as a final result
-	* <algname>/clusters/  - algorithm execution results produced hierachies of communities for each network instance shuffle
+	* <algname>/clusters/  - algorithm execution results produced hierarchies of communities for each network instance shuffle
 		- `*.cnl`  - resulting clusters unwrapped to nodes (community nodes list) for NMIs evaluation. `*.cnl` are generated either per each level of the resulting hierarchy of communities or for the whole hierarchy (parameterized inside the benchmark)
 	* <algname>/mod/  - algorithm evaluation modularity for each produced hierarchical/scale level
 		- `<net_instance>.mod`  - modularity value aggregated per network instances (results for all shuffles on the network instance are aggregated in the same file)
@@ -263,7 +297,9 @@ Example of the `<net_instance>.mod` format:
 ...
 ```
 
-- ./realnets/  - simple gold standard networks with available ground truth value of the modularity for non-overlapping clustering (from [10th DIMACS](http://www.cc.gatech.edu/dimacs10/) '13, "Modularity Maximization in Networks by Variable Neighborhood Search" by Daniel Aloise et al)
+- ./realnets/  - simple gold standard networks with available ground-truth
+	- dimacs/  - [10th DIMACS'13](http://www.cc.gatech.edu/dimacs10/) networks with the ground-truth modularity value for non-overlapping clustering (see "Modularity Maximization in Networks by Variable Neighborhood Search" by Daniel Aloise et al, 10th DIMACS'13)
+	- snap/  - Stanford SNAP large networks with available ground-truth communities (see "Defining and Evaluating Network Communities based on Ground-truth" by J. Yang and J. Leskovec., ICDM'12)
 - ./syntnets/  - synthetic networks produced by the extended LFR framework: undirected weighted complex networks with overlaps, both mixing parameters are set for the topology and weights, both exponential nodes degree and weights distributions are set
 	* `*.ngp`  - network generation parameters
 	* `time_seed.dat`  - used time seed on batch generation
@@ -296,10 +332,11 @@ def execMyalgorithm(execpool, netfile, asym, timeout, pathid='', selfexec=False)
 	"""
 ```
 
-All the evaluatoins will be performed automatically, the algorithm should just follow convension of the execution results output.
+All the evaluations will be performed automatically, the algorithm should just follow conversion of the execution results output.
 
 
 ## Related Projects
 * DAOC (former [HiReCS](https://github.com/XI-lab/hirecs) - High Resolution Hierarchical Clustering with Stable State: https://github.com/XI-lab/hirecs)
 
-If you are interested in this benchmark, please visit <a href="http://exascale.info/">eXascale Infolab</a> where you can find another projects and research papers related to Big Data!
+If you are interested in this benchmark, please visit <a href="http://exascale.info/">eXascale Infolab</a> where you can find another projects and research papers related to Big Data!  
+Please, [star this project](https://github.com/eXascaleInfolab/PyCABeM) if you use it.

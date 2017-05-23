@@ -12,7 +12,7 @@
 \date: 2015-12
 """
 
-from __future__ import print_function  # Required for stderr output, must be the first import
+from __future__ import print_function, division  # Required for stderr output, must be the first import
 import os
 import shutil
 import glob
@@ -21,7 +21,7 @@ import traceback  # Stacktrace
 
 from datetime import datetime
 
-from contrib.mpepool import *
+from utils.mpepool import *
 from benchutils import *
 
 from benchutils import _SEPINST

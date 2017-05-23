@@ -32,7 +32,7 @@ fi
 
 for f in `find $3 -type f`
 do
-	echo `LD_LIBRARY_PATH=. $1 $2 $f 2> /dev/null` "\t$f" >> $FOUTP
+	echo `LD_LIBRARY_PATH=. $1 $2 $f 2> /dev/null | tail -n 1` "\t$f" >> $FOUTP
 done
 
 BESTVAL=`sort -g -r $FOUTP | head -n 1`

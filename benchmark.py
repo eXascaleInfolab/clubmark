@@ -68,13 +68,14 @@ from benchevals import _EXTEXECTIME
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
-_SYNTDIR = 'syntnets/'  # Default directory for the synthetic datasets
-_NETSDIR = 'networks/'  # Networks directory inside syntnets
+_SYNTDIR = 'syntnets/'  # Default base directory for the synthetic datasets (both networks, params and seeds)
+_NETSDIR = 'networks/'  # Networks directory of the synthetic networks (inside _SYNTDIR)
+_SEEDFILE = 'seed.txt'
 _SYNTINUM = 3  # Default number of instances of each synthetic network, >= 1
 _TIMEOUT = 36 * 60*60  # Default execution timeout for each algorithm for a single network instance
 _EXTNETFILE = '.nse'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated edges (.nsa - arcs)
 #_algseeds = 9  # TODO: Implement
-_EVALDFL = 'd'  # Default evaluation measures: d - default extrinsic eval measures (NMI_max, F1h, F1p)
+#_EVALDFL = 'd'  # Default evaluation measures: d - default extrinsic eval measures (NMI_max, F1h, F1p)
 _PREFEXEC = 'exec'  # Execution prefix for the apps functions in benchapps
 
 _execpool = None  # Pool of executors to process jobs
@@ -126,16 +127,17 @@ class Params(object):
 			0b00100000  - F1p measure
 			0b01110000  - All F1s (F1p, F1h, F1s)
 			0b10000000  - Default extrinsic measures (NMI_max, F1h and F1p)
-			0b11111111  - All extrinsic measures (NMI-s, ONMI-s, F1-s)
-			0x1FF  - Q (modularity)
-			0xFFF  - All extrincis and intrinsic measures
+			0b1111'1111  - All extrinsic measures (NMI-s, ONMI-s, F1-s)
+			0x1xx  - Q (modularity)
+			0x2xx  - f (conductance)
+			0xFxx  - All intrinsic measures
 		datas: PathOpts  - list of datasets to be run with asym flag (asymmetric / symmetric links weights):
 			[PathOpts, ...] , where path is either dir or file [wildcard]
 		netext  - network file extension, should have the leading '.'
 		timeout  - execution timeout in sec per each algorithm
 		algorithms  - algorithms to be executed (just names as in the code)
 		aggrespaths = paths for the evaluated resutls aggregation (to be done for already existent evaluations)
-		seed  - seed value for the synthetic networks generation and stochastic algorithms
+		seed  - seed value for the synthetic networks generation and stochastic algorithms, integer
 		"""
 		self.gensynt = 0
 		self.netins = _SYNTINUM  # Number of network instances to generate, >= 1
@@ -151,7 +153,7 @@ class Params(object):
 		self.timeout = _TIMEOUT
 		self.algorithms = []
 		self.aggrespaths = []  # Paths for the evaluated resutls aggregation (to be done for already existent evaluations)
-		self.seed = None  # Seed value for the synthetic networks generation and stochastic algorithms
+		self.seed = None  # Seed value for the synthetic networks generation and stochastic algorithms, integer
 
 
 # Input зarameters processing --------------------------------------------------
@@ -231,34 +233,51 @@ def parseParams(args):
 			#0b00100000  - F1p measure
 			#0b01110000  - All F1s (F1p, F1h, F1s)
 			#0b10000000  - Default extrinsic measures (NMI_max, F1h and F1p)
-			#0b11111111  - All extrinsic measures (NMI-s, ONMI-s, F1-s)
-			#0x1FF  - Q (modularity)
-			#0xFFF  - All extrincis and intrinsic measures
-			if len(arg) == 2:
-				opts.evalres = 0xFF  # All measures
-			elif arg[2] == 'n':
-				if len(arg) == 3:
-					opts.evalres |= 0b11  # All NMIs
-				elif arg[3] == 'x':
-					opts.evalres |= 0b01  # NMI_max
-				else:
-					raise ValueError('Unexpected argument: ' + arg)
-			elif arg[2] == 'o':
-				if len(arg) == 3:
-					opts.evalres |= 0b1100  # All ONMIs
-				elif arg[3] == 'x':
-					opts.evalres |= 0b0100  # ONMI_max
-				else:
-					raise ValueError('Unexpected argument: ' + arg)
-			elif arg[2] == 'f':
-				if len(arg) == 3:
-					opts.evalres |= 0b1110000  # All F1s
-				elif arg[3] == 'h':
-					opts.evalres |= 0b0010000  # F1h
-				elif arg[3] == 'p':
-					opts.evalres |= 0b0100000  # F1p
-				else:
-					raise ValueError('Unexpected argument: ' + arg)
+			#0b1111'1111  - All extrinsic measures (NMI-s, ONMI-s, F1-s)
+			#0x1xx  - Q (modularity)
+			#0x2xx  - f (conductance)
+			#0xFxx  - All intrinsic measures
+			evalres = 0  # Evaluation results bitmask
+			pos = 2
+			if len(arg) == pos:
+				evalres = 0xFFF  # All extrinsic and intrinsic measures
+			elif arg[pos] == 'e':
+				pos += 1
+				if len(arg) == pos:
+					evalres |= 0xFF  # All extrinsic measures
+				elif arg[pos] == 'n':
+					pos += 1
+					if len(arg) == pos:
+						evalres |= 0b11  # All NMIs
+					elif arg[pos] == 'x':
+						evalres |= 0b01  # NMI_max
+				elif arg[pos] == 'o':
+					pos += 1
+					if len(arg) == pos:
+						evalres |= 0b1100  # All ONMIs
+					elif arg[pos] == 'x':
+						evalres |= 0b0100  # ONMI_max
+				elif arg[pos] == 'f':
+					pos += 1
+					if len(arg) == pos:
+						evalres |= 0b1110000  # All F1s
+					elif arg[pos] == 'h':
+						evalres |= 0b0010000  # F1h
+					elif arg[pos] == 'p':
+						evalres |= 0b0100000  # F1p
+				elif arg[pos] == 'd':  # Default extrinsic measures
+					evalres |= 0b0110001  # NMI_max, F1h, F1p
+			elif arg[pos] == 'i':
+				pos += 1
+				if len(arg) == pos:
+					evalres |= 0xF00  # All intrinsic measures
+				elif arg[pos] == 'm':
+					evalres |= 0x100  # Modularity
+				elif arg[pos] == 'c':
+					evalres |= 0x200  # Conductance
+
+			if evalres:
+				opts.evalres |= evalres
 			else:
 				raise ValueError('Unexpected argument: ' + arg)
 		elif arg[1] == 'i':  # arg[1] == 'd' or arg[1] == 'f'
@@ -303,7 +322,7 @@ def parseParams(args):
 		elif arg[1] == 's':
 			if len(arg) <= 3 or arg[2] != '=':
 				raise ValueError('Unexpected argument: ' + arg)
-			opts.seed = int(arg[3:])  # Remove quotes if exist
+			opts.seed = int(arg[3:])  # Integer is expected like 20170525132915
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
 
@@ -378,11 +397,11 @@ def prepareInput(datas, netext=_EXTNETFILE):
 
 
 # Networks processing ----------------------------------------------------------
-def generateNets(genbin, basedir, netsdir=_SYNTDIR, netext=_EXTEXECTIME, overwrite=False, count=_SYNTINUM, gentimeout=2*60*60, seed=None):  # 2 hours
+def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME, overwrite=False, count=_SYNTINUM, seed=None, gentimeout=2*60*60):  # 2 hours
 	"""Generate synthetic networks with ground-truth communities and save generation params.
 	Previously existed paths with the same name are backuped.
 
-	genbin  - the binary used to generate the data
+	genbin  - the binary used to generate the data (full relative path)
 	basedir  - base directory where data will be generated
 	netsdir  - relative directory for the synthetic networks, contains subdirs,
 		each contains all instances of each network and all shuffles of each instance
@@ -401,6 +420,7 @@ def generateNets(genbin, basedir, netsdir=_SYNTDIR, netext=_EXTEXECTIME, overwri
 	assert ((basedir == '' or basedir[-1] == '/') and paramsdir[-1] == '/' and seedsdir[-1] == '/' and netsdir[-1] == '/'
 		), 'Directory name must have valid terminator'
 	assert netext and netext[0] == '.', 'A file extension should have the leading "."'
+	assert seed is None or isinstance(seed, int), 'Integer seed is expected'
 
 	paramsdirfull = basedir + paramsdir
 	seedsdirfull = basedir + seedsdir
@@ -414,8 +434,8 @@ def generateNets(genbin, basedir, netsdir=_SYNTDIR, netext=_EXTEXECTIME, overwri
 
 	# Create dirs if required
 	if not os.path.exists(basedir):
-		os.mkdir(basedir)
-	for dirname in (paramsdirfull, seedsdirfull, netsdirfull):
+		os.mkdir(basedir)  # Note: mkdir does not create intermediate (non-leaf) dirs
+	for dirname in (basedir, paramsdirfull, seedsdirfull, netsdirfull):
 		if not os.path.exists(dirname):
 			os.mkdir(dirname)
 
@@ -445,14 +465,15 @@ def generateNets(genbin, basedir, netsdir=_SYNTDIR, netext=_EXTEXECTIME, overwri
 	netgenTimeout = 30 * 60  # 30 min per a network instance (50K nodes on K=75 takes ~15 min)
 	#shuftimeout = 1 * 60  # 1 min per each shuffling
 	bmname =  os.path.split(genbin)[1]  # Benchmark name
-	bmbin = './' + bmname  # Benchmark binary
-	timeseed = basedir + 'seed.txt'
+	genbin = os.path.relpath(genbin, basedir)  # Update path to the executable relative to the job workdir
+	#bmbin = './' + bmname  # Benchmark binary
+	randseed = basedir + 'seed.txt'  # Random seed file name
 
 	# Check whether time seed exists and create it if required
-	if not os.path.exists(timeseed):  # Note: overwrite is not relevant here
-		proc = subprocess.Popen((bmbin), bufsize=-1, cwd=basedir)
-		proc.wait()
-		assert os.path.exists(timeseed), timeseed + ' must be created'
+	if seed is None:
+		seed = timeSeed()  # time.gmtime()
+	with open(randseed) as frs:
+		frs.write('{}\n'.format(seed));
 	for nm in varNmul:
 		N = nm * N0
 		for k in vark:
@@ -483,10 +504,10 @@ def generateNets(genbin, basedir, netsdir=_SYNTDIR, netext=_EXTEXECTIME, overwri
 					netfile = netpath + name
 					if count and overwrite or not os.path.exists(netfile.join((basedir, netext))):
 						args = ('../exectime', '-n=' + name, ''.join(('-o=', bmname, netext))  # Output .rcp in the current dir, basedir
-							, bmbin, '-f', netparams, '-name', netfile)
+							, genbin, '-f', netparams, '-name', netfile)
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 						_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
-							, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
+							, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 							#, ondone=shuffle if shufnum > 0 else None
 							, startdelay=startdelay))
 					for i in range(1, count):
@@ -494,18 +515,18 @@ def generateNets(genbin, basedir, netsdir=_SYNTDIR, netext=_EXTEXECTIME, overwri
 						netfile = netpath + namext
 						if overwrite or not os.path.exists(netfile.join((basedir, netext))):
 							args = ('../exectime', '-n=' + namext, ''.join(('-o=', bmname, netext))
-								, bmbin, '-f', netparams, '-name', netfile)
+								, genbin, '-f', netparams, '-name', netfile)
 							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 							_execpool.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
-								, onstart=lambda job: shutil.copy2(timeseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
+								, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 								#, ondone=shuffle if shufnum > 0 else None
 								, startdelay=startdelay))
 			else:
 				print('ERROR: network parameters file "{}" is not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')
 	if _execpool:
-		_execpool.join(max(gentimeout, count * (netgenTimeout  #+ (shufnum * shuftimeout)
-			)))  # 2 hours
+		_execpool.join(max(gentimeout, count * (netgenTimeout  #+ (shufnum * shuftimeout)  # Note: consider only the time required for the largest instances generation
+			)))  # 2 hours vs inst_count * inst_timeout
 		_execpool = None
 	print('Synthetic networks files generation is completed')
 
@@ -947,7 +968,7 @@ def benchmark(*args):
 
 	if opts.gensynt and opts.netins >= 1:
 		# opts.gensynt:  0 - do not generate, 1 - only if not exists, 2 - forced generation
-		generateNets(benchpath, opts.syntdir, opts.gensynt == 2, opts.netins)
+		generateNets(benchpath, opts.syntdir, _NETSDIR, opts.netext, opts.gensynt == 2, opts.netins, opts.seed)
 
 	# Update opts.datasets with sythetic generated
 	# Note: should be done only after the genertion, because new directories can be created
@@ -999,7 +1020,7 @@ if __name__ == '__main__':
 		print('\n'.join(('Usage:',
 			'  {0} [-g[f][=[<number>][.<shuffles_number>][=<outpdir>]] [-c[f][r]] [-a="app1 app2 ..."]'
 			' [-r] [-e[{{n[x],o[x],f[{{h,p}}],d,e,m}}] [-i[f]{{a,e}}=<datasets_{{dir, file}}_wildcard>'
-			' [-a=<eval_path>] [-x=<extension>] [-t[{{s,m,h}}]=<timeout>] [-s=<seed>] | -h',
+			' [-a=<eval_path>] [-x=<extension>] [-t[{{s,m,h}}]=<timeout>] [-s=<seed_file>] | -h',
 			'',
 			'Example:',
 			'  {0} -g=3.5 -r -e -th=2.5 1> bench.log 2> bench.err',
@@ -1015,33 +1036,35 @@ if __name__ == '__main__':
 			'    - shuffled datasets have the following naming format:\n'
 			'\t<base_name>[{sepinst}<instance_index>][(seppars)<param1>...][.<shuffle_index>].<net_extension>',
 			'    - use "-g0" to execute existing synthetic datasets not changing them',
-			'  -c[X]  - convert existing networks into the .rcg].hig], .lig, etc. formats',
+			'  -c[X]  - convert existing networks into the required formats (.rcg[.hig], .lig, etc.)',
 			'    f  - force the conversion even when the data is already exist',
-			'    r  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used',
+			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
 			'  NOTE: files with {extnetfile} are looked for in the specified dirs to be converted',
 			'  -a="app1 app2 ..."  - apps (clustering algorithms) to run/benchmark among the implemented.'
 			' Available: scp louvain_igraph randcommuns hirecs oslom2 ganxis.'
 			' Impacts {{r, e}} options. Optional, all apps are executed by default.',
-			'  NOTE: output results are stored in the "algorithms/<algname>outp/" directory',
+			'  NOTE: output results are stored in the "{resdir}<algname>/" directory',
 			'  -r  - run the benchmarking apps on the specified networks',
 			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
-			'  -e[X]  - evaluate quality of the results. Default: {evaldfl}',
+			'  -e[X]  - evaluate quality of the results, default: all',
 			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
-			'    n[Y]  - evaluate results accuracy using NMI measure(s) for overlapping and multi-level communities: max, avg, min, sqrt',
-			'     x  - NMI_max,',
-			#'     a  - NMI_avg (also known as NMI_sum),',
-			#'     n  - NMI_min,',
-			#'     r  - NMI_sqrt',
-			'    o[Y]  - evaluate results accuracy using overlapping NMI measure(s) for overlapping communities'
-			' that are not multi-level (much faster than "-en"): max, sum, lfk',
-			'     x  - NMI_max',
-			'    f[Y]  - evaluate results accuracy using avg F1-Score(s) for overlapping and multi-level communities: avg, hmean, pprob',
-			#'     a  - avg F1-Score',
-			'     h  - harmonic mean of F1-Score',
-			'     p  - F1p measure (harmonic mean of the weighted average of partial probabilities)',
-			'    d  - evaluate results accuracy using default extrinsic measures (NMI_max, F1_h, F1_p) for overlapping communities',
-			'    e  - evaluate results accuracy using extrinsic measures (all NMIs and F1s) for overlapping communities',
-			'    m  - evaluate results quality by modularity',
+			'    e[Y]  - extrinsic measures for overlapping communities, default: all',
+			'     n[Z]  - NMI measure(s) for overlapping and multi-level communities: max, avg, min, sqrt',
+			'      x  - NMI_max,',
+			#'      a  - NMI_avg (also known as NMI_sum),',
+			#'      n  - NMI_min,',
+			#'      r  - NMI_sqrt',
+			'     o[Z]  - overlapping NMI measure(s) for overlapping communities'
+			' that are not multi-level: max, sum, lfk. Note: it is much faster than generalized NMI',
+			'      x  - NMI_max',
+			'     f[Y]  - avg F1-Score(s) for overlapping and multi-level communities: avg, hmean, pprob',
+			#'      a  - avg F1-Score',
+			'      h  - harmonic mean of F1-Score',
+			'      p  - F1p measure (harmonic mean of the weighted average of partial probabilities)',
+			'     d  - default extrinsic measures (NMI_max, F1_h, F1_p) for overlapping communities',
+			'    i[Y]  - intrinsic measures for overlapping communities',
+			'     m  - modularity Q',
+			'     c  - conductance f',
 			'  -i[X]=<datasets_dir>  - input dataset(s), directory with datasets or a single dataset file, wildcards allowed',
 			'    f  - use flat derivatives on shuffling instead of generating the dedicted directory (havng the file base name)'
 			' for each input network when shuffling is performed to avoid flooding of the base directory with network shuffles.'
@@ -1067,9 +1090,11 @@ if __name__ == '__main__':
 			'    s  - time in seconds. Default option',
 			'    m  - time in minutes',
 			'    h  - time in hours',
-			'  -s=<seed>  - seed value for the synthetic networks generation and stochastic algorithms, uint64_t',
-			)).format(sys.argv[0], syntdir=_SYNTDIR, synetsnum=_SYNTINUM, netsdir=_NETSDIR, sepinst=_SEPINST
-				, seppars=_SEPPARS, extnetfile=_EXTNETFILE, evaldfl=_EVALDFL, th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60))
+			'  -s=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms'
+			', contains uint64_t value. Default: {seedfile}'
+			)).format(sys.argv[0], syntdir=_SYNTDIR, synetsnum=_SYNTINUM, netsdir=_NETSDIR
+				, sepinst=_SEPINST, seppars=_SEPPARS, extnetfile=_EXTNETFILE, resdir=_RESDIR
+				, th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60, seedfile=_RESDIR + _SEEDFILE))
 	else:
 		# Set handlers of external signals
 		signal.signal(signal.SIGTERM, terminationHandler)

@@ -3,10 +3,10 @@
 # This is internal script to sync benchmarking components to the latest version
 
 # Make target dirs if have not been existed yet
-mkdir -pv utils/louvain/ algorithms/daoc/
+mkdir -pv utils/louvain/ algorithms/daoc/ algorithms/ganxis/
 
-# Utilities
-rsync -aLhv ../../system/ExecTime/bin/Release/exectime\
+# Utilities --------------------------------------------------------------------
+rsync -aLh ../../system/ExecTime/bin/Release/exectime\
 	\
 	../daoc/common/convert.py\
 	../daoc/common/remlinks.py\
@@ -24,15 +24,15 @@ rsync -aLhv ../../system/ExecTime/bin/Release/exectime\
 	utils/
 
 # Louvain accessory utils
-rsync -aLhv ../oslom/OSLOM2/convert\
+rsync -aLh ../oslom/OSLOM2/convert\
 	 ../oslom/OSLOM2/hierarchy\
 	 \
 	 utils/louvain/
 
-# Custering algorithms
+# Custering algorithms ---------------------------------------------------------
 # Note: oslom_undir can be used for the symmetric networks specified with the arcs
 #	../oslom/OSLOM2/oslom_dir
-rsync -aLhv\
+rsync -aLh\
 	/home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/GANXiS_v3.0.2/GANXiS_v3.0.2/commons-collections-3.2.1.jar\
 	/home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/GANXiS_v3.0.2/GANXiS_v3.0.2/GANXiSw.jar\
 	\
@@ -44,7 +44,14 @@ rsync -aLhv\
 	algorithms/
 	
 # SCP
-rsync -aLhv ../scp_0.1/kclique.py algorithms/scp.py
+rsync -aLh ../scp_0.1/kclique.py algorithms/scp.py
+
+# GANXiS
+rsync -aLh\
+	/home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/GANXiS_v3.0.2/GANXiS_v3.0.2/commons-collections-3.2.1.jar\
+	/home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/GANXiS_v3.0.2/GANXiS_v3.0.2/GANXiSw.jar\
+	\
+	algorithms/ganxis/
 
 # DAOC
 rsync -aLhv\

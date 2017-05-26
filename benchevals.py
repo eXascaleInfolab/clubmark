@@ -25,6 +25,7 @@ from utils.mpepool import *
 from benchutils import *
 
 from benchutils import _SEPINST
+from benchutils import _SEPSHF
 from benchutils import _SEPPATHID
 from benchutils import _PATHID_FILE
 from benchutils import _SEPPARS
@@ -95,7 +96,7 @@ class ShufflesAgg(object):
 		ipb = taskname.find(_SEPPARS, 1)  # Index of params begin. Params separator can't be the first symbol of the name
 		if ipb != -1 and ipb != len(taskname) - 1:
 			# Find end of the params
-			ipe = filter(lambda x: x >= 0, [taskname[ipb:].rfind(c) for c in (_SEPINST, _SEPPATHID, '.')])
+			ipe = filter(lambda x: x >= 0, [taskname[ipb:].rfind(c) for c in (_SEPINST, _SEPPATHID, _SEPSHF)])
 			if ipe:
 				ipe = min(ipe) + ipb  # Conside ipb offset
 			else:
@@ -369,7 +370,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
 	# Fetch the task name and chose correct network filename
 	taskcapt = os.path.splitext(os.path.split(basefile)[1])[0]  # Name of the basefile (network or ground-truth clusters)
-	ishuf = os.path.splitext(taskcapt)[1]  # Separate shuffling index (with pathid if exists) if exists
+	ishuf = None if taskcapt.find(_SEPSHF) == -1 else taskcapt.rsplit(_SEPSHF, 1)[1]  # Separate shuffling index (with possible pathid) if exists
 	assert taskcapt and not ishuf, 'The base file name must exists and should not be shuffled, file: {}, ishuf: {}'.format(
 		taskcapt, ishuf)
 	# Define index of the task suffix (identifier) start
@@ -416,7 +417,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 			continue
 
 		# Fetch shuffling index if exists
-		ish = clsname[:icnpid].rfind('.') + 1  # Note: reverse direction to skip possible separator symbols in the name itself
+		ish = clsname[:icnpid].rfind(_SEPSHF) + 1  # Note: reverse direction to skip possible separator symbols in the name itself
 		shuffle = clsname[ish:icnpid] if ish else ''
 		# Validate shufflng index
 		if shuffle:
@@ -424,7 +425,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 				int(shuffle)
 			except ValueError as err:
 				print('WARNING, invalid suffix or the separator "{}" represents part of the path "{}", exception: {}. Skipped.'
-					.format('.', clsname, err), file=sys.stderr)
+					.format(_SEPSHF, clsname, err), file=sys.stderr)
 				# Continue processing skipping such index
 				shuffle = ''
 
@@ -438,10 +439,12 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 			os.makedirs(logsbase)
 
 		# Skip shuffle indicator to accumulate values from all shuffles into the single file
-		taskoutp = os.path.splitext(logsbase)[0] if shuffle else logsbase
-		# Recover lost pathid if required
-		if shuffle and pathid:
-			taskoutp += pathid
+		taskoutp = logsbase
+		if shuffle:
+			taskoutp = taskoutp.rsplit(_SEPSHF, 1)[0]
+			# Recover lost pathid if required
+			if pathid:
+				taskoutp += pathid
 		taskoutp = '.'.join((taskoutp, measure))  # evalext  # Name of the file with modularity values for each level
 		if tidy and os.path.exists(taskoutp):
 			os.remove(taskoutp)
@@ -557,7 +560,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 					clslev = _SEPNAMEPART.join((clslev, shuffle))
 				tmod.write('{}\t{}\n'.format(mod, clslev))
 
-		return Job(name='.'.join((task.name, shuffle)), workdir=_ALGSDIR, args=args, timeout=timeout
+		return Job(name=_SEPSHF.join((task.name, shuffle)), workdir=_ALGSDIR, args=args, timeout=timeout
 			, ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle}
 			# Output modularity to the proc PIPE buffer to be aggregated on postexec to avoid redundant files
 			, stdout=PIPE, stderr=logsbase + _EXTERR)
@@ -601,7 +604,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 			os.environ[ldpname] = ldpath
 
 		# Processing is performed from the algorithms dir
-		jobname = '.'.join((task.name, shuffle))  # Name of the creating job
+		jobname = _SEPSHF.join((task.name, shuffle))  # Name of the creating job
 		args = ('../exectime', '-o=../' + rcpoutp, '-n=' + jobname, './gecmi', '../' + basefile, '../' + cfile)
 
 		# Job postprocessing
@@ -649,7 +652,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 			job  - resulting evaluating job
 		"""
 		# Processing is performed from the algorithms dir
-		jobname = '.'.join((task.name, shuffle))  # Name of the creating job
+		jobname = _SEPSHF.join((task.name, shuffle))  # Name of the creating job
 		args = ('../exectime', '-o=../' + rcpoutp, '-n=' + jobname, './onmi_sum', '../' + basefile, '../' + cfile)
 
 		# Job postprocessing

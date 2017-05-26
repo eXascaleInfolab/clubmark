@@ -28,9 +28,9 @@ _REFLOAT = re.compile('[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')  # Regular expressi
 _REINT = re.compile('[-+]?\d+(?=\W)')  # Regular expression to parse int
 _SEPINST = '^'  # Network instances separator, must be a char
 _SEPPARS = '!'  # Network parameters separator, must be a char
+_SEPSHF = '*'  # Network shuffles separator, must be a char
 _SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
 _PATHID_FILE = 'f'  # File marker of the pathid (input file specified directly without the embracing dir), must be a char
-# Note: '.' is used as network shuffles separator
 
 
 def delPathSuffix(path, nameonly=False):
@@ -41,13 +41,13 @@ def delPathSuffix(path, nameonly=False):
 
 	return  base of the path without suffixes
 
-	>>> delPathSuffix('1K10^1!k7.1#1')
+	>>> delPathSuffix('1K10^1!k7*1#1')
 	'1K10'
-	>>> delPathSuffix("1K10^1.2#1") == '1K10'
+	>>> delPathSuffix("1K10^1*2#1") == '1K10'
 	True
 	>>> delPathSuffix('2K5^1', False) == '2K5'
 	True
-	>>> delPathSuffix('scp/mod/2K5.1', True) == 'scp/mod/2K5'
+	>>> delPathSuffix('scp/mod/2K5*1', True) == 'scp/mod/2K5'
 	True
 	>>> delPathSuffix('1K10!k5#1') == '1K10'
 	True
@@ -58,7 +58,7 @@ def delPathSuffix(path, nameonly=False):
 	>>> delPathSuffix('2K5.dhrh^1') == "2K5.dhrh"
 	True
 
-	#>>> delPathSuffix('2K5.dhrh^1.1.cnl', True) == '2K5.dhrh'
+	#>>> delPathSuffix('2K5.dhrh^1*1.cnl', True) == '2K5.dhrh'
 	#True
 	#>>> delPathSuffix('scp/mod/1K10^1!k5#1.mod') == 'scp/mod/1K10'
 	#True
@@ -72,7 +72,7 @@ def delPathSuffix(path, nameonly=False):
 	# Find position of the separator symbol, considering that it can't be begin of the name
 	if len(pname) >= 2:
 		# Note: +1 compensates start from the symbol at index 1. Also a separator can't be the first symbol
-		poses = [pname[1:].rfind(c) + 1 for c in (_SEPINST, _SEPPATHID, '.')]  # Note: reverse direction to skip possible separator symbols in the name itself
+		poses = [pname[1:].rfind(c) + 1 for c in (_SEPINST, _SEPPATHID, _SEPSHF)]  # Note: reverse direction to skip possible separator symbols in the name itself
 		## Consider possible extension of the filename
 		## Note: this handling is fine, but not reliable (part of the name of file extensoin can be handled as a shuffle index
 		#pos = pname[1:].rfind('.') + 1
@@ -91,7 +91,7 @@ def delPathSuffix(path, nameonly=False):
 			# Note: parameters can be any, but another suffixes are strictly specified
 			# Valudate the suffix in case it is an instance or shuffle suffix
 			j = 0
-			if pname[pos] in (_SEPINST, _SEPPATHID, '.'):
+			if pname[pos] in (_SEPINST, _SEPPATHID, _SEPSHF):
 				# Consider file pname id
 				if pname[pos] == _SEPPATHID and len(pname) > pos + 1 and pname[pos + 1] == _PATHID_FILE:
 					j = 1
@@ -122,13 +122,13 @@ def parseName(path, nameonly=False):
 		shid  - shuffle id with separator or empty string
 		pathid  - path id with separator or empty string
 
-	>>> parseName('1K10^1!k7.1#1')
-	('1K10', '^1', '!k7', '.1', '#1')
-	>>> parseName("1K10^1.2#1") == ('1K10', '^1', '', '.2', '#1')
+	>>> parseName('1K10^1!k7*1#1')
+	('1K10', '^1', '!k7', '*1', '#1')
+	>>> parseName("1K10^1*2#1") == ('1K10', '^1', '', '*2', '#1')
 	True
 	>>> parseName('2K5^1', False) == ('2K5', '^1', '', '', '')
 	True
-	>>> parseName('scp/mod/2K5.1', True) == ('scp/mod/2K5', '', '', '.1', '')
+	>>> parseName('scp/mod/2K5*1', True) == ('scp/mod/2K5', '', '', '*1', '')
 	True
 	>>> parseName('1K10!k5#1') == ('1K10', '', '!k5', '', '#1')
 	True
@@ -153,7 +153,7 @@ def parseName(path, nameonly=False):
 	# Find position of the separator symbol, considering that it can't be begin of the name
 	if len(pname) >= 2:
 		# Note: +1 compensates start from the symbol at index 1. Also a separator can't be the first symbol
-		poses = [pname[1:].rfind(c) + 1 for c in (_SEPINST, _SEPPATHID, '.')]  # Note: reverse direction to skip possible separator symbols in the name itself
+		poses = [pname[1:].rfind(c) + 1 for c in (_SEPINST, _SEPPATHID, _SEPSHF)]  # Note: reverse direction to skip possible separator symbols in the name itself
 		poses.append(pname[1:].find(_SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is requried
 		# Filter out non-existent results: -1 -> 0
 		poses = sorted(filter(lambda x: x >= 1, poses))
@@ -164,7 +164,7 @@ def parseName(path, nameonly=False):
 			# Note: parameters can be any, but another suffixes are strictly specified
 			# Valudate the suffix in case it is an instance or shuffle suffix
 			j = 0
-			if pname[pos] in (_SEPINST, _SEPPATHID, '.'):
+			if pname[pos] in (_SEPINST, _SEPPATHID, _SEPSHF):
 				# Consider file pname id
 				if pname[pos] == _SEPPATHID and len(pname) > pos + 1 and pname[pos + 1] == _PATHID_FILE:
 					j = 1
@@ -182,7 +182,7 @@ def parseName(path, nameonly=False):
 				insid = val
 			elif pname[pos] == _SEPPARS:
 				apars = val
-			elif pname[pos] == '.':
+			elif pname[pos] == _SEPSHF:
 				shid = val
 			else:
 				assert pname[pos] == _SEPPATHID, 'pathid separator is expected instead of: {}'.format(val)

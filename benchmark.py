@@ -53,6 +53,7 @@ from utils.mpepool import *
 from benchutils import *
 
 from benchutils import _SEPPARS
+from benchutils import _SEPSHF
 from benchutils import _SEPINST
 from benchutils import _SEPPATHID
 
@@ -401,7 +402,7 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	"""Generate synthetic networks with ground-truth communities and save generation params.
 	Previously existed paths with the same name are backuped.
 
-	genbin  - the binary used to generate the data (full relative path)
+	genbin  - the binary used to generate the data (full path or relative to the base benchmark dir)
 	basedir  - base directory where data will be generated
 	netsdir  - relative directory for the synthetic networks, contains subdirs,
 		each contains all instances of each network and all shuffles of each instance
@@ -409,7 +410,7 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	overwrite  - whether to overwrite existing networks or use them
 	count  - number of insances of each network to be generated, >= 1
 	seed  - seed value, integer
-	gentimeout  - timeout for all networks generation
+	gentimeout  - timeout for all networks generation in parallel mode
 	"""
 	paramsdir = 'params/'  # Contains networks generation parameters per each network type
 	seedsdir = 'seeds/'  # Contains network generation seeds per each network instance
@@ -565,18 +566,19 @@ basenet = '{jobname}' + '{netext}'
 #print('basenet: ' + basenet, file=sys.stderr)
 for i in range(1, {shufnum} + 1):
 	# sort -R pgp_udir.net -o pgp_udir_rand3.net
-	netfile = ''.join(('{jobname}', '.', str(i), '{netext}'))
+	netfile = ''.join(('{jobname}', {sepshf}, str(i), '{netext}'))
 	if {overwrite} or not os.path.exists(netfile):
 		subprocess.call(('sort', '-R', basenet, '-o', netfile))
 # Remove existent redundant shuffles if any
 #i = {shufnum} + 1
 #while i < 100:  # Max number of shuffles
-#	netfile = ''.join(('{jobname}', '.', str(i), '{netext}'))
+#	netfile = ''.join(('{jobname}', {sepshf}, str(i), '{netext}'))
 #	if not os.path.exists(netfile):
 #		break
 #	else:
 #		os.remove(netfile)
-""".format(jobname=job.name, netext=netext, shufnum=shufnum, overwrite=overwrite))
+""".format(jobname=job.name, sepshf=_SEPSHF, netext=netext, shufnum=shufnum
+, overwrite=overwrite))
 		_execpool.execute(Job(name=job.name + '_shf', workdir=job.workdir
 			, args=args, timeout=timeout * shufnum))
 
@@ -589,11 +591,10 @@ for i in range(1, {shufnum} + 1):
 		# Remove existent shuffles if required
 		path, name = os.path.split(netfile)
 		name = os.path.splitext(name)[0]
-		ext2 = os.path.splitext(name)[1]  # Second part of the name (second extension)
-		# Omit shuffling of the shuffles
-		if ext2:
-			# Remove redundant shuffles
-			if int(ext2[1:]) > shufnum:
+		if name.find(_SEPSHF) != -1:
+			shf = name.rsplit(_SEPSHF, 1)[1]
+			# Omit shuffling of the shuffles, remove redundant shuffles
+			if int(shf[1:]) > shufnum:
 				os.remove(netfile)
 			return 0
 		shuffle(Job(name=name, workdir=path + '/'))
@@ -665,7 +666,7 @@ def convertNets(datadir, netext=_EXTNETFILE, asym=False, overwrite=False, resdub
 	# Convert network files to .hig format and .lig (Louvain Input Format)
 	for net in glob.iglob('*'.join((datadir, netext))):  # Allow wildcards
 		# Skip shuffles
-		if not os.path.splitext(os.path.splitext(net)[0])[1]:
+		if os.path.splitext(net)[0].find(_SEPSHF) == -1:
 			convertNet(net, asym, overwrite, resdub, convTimeMax)
 			netsnum += 1
 
@@ -1024,6 +1025,7 @@ if __name__ == '__main__':
 			'',
 			'Example:',
 			'  {0} -g=3.5 -r -e -th=2.5 1> bench.log 2> bench.err',
+			'Note: should be executed exclusively from the current directory (./)',
 			'',
 			'Parameters:',
 			'  -h  - show this usage description',
@@ -1034,7 +1036,7 @@ if __name__ == '__main__':
 			'    f  - force the generation even when the data already exists (existent datasets are moved to backup)',
 			'  NOTE:',
 			'    - shuffled datasets have the following naming format:\n'
-			'\t<base_name>[{sepinst}<instance_index>][(seppars)<param1>...][.<shuffle_index>].<net_extension>',
+			'\t<base_name>[{sepinst}<instance_index>][(seppars)<param1>...][{sepshf}<shuffle_index>].<net_extension>',
 			'    - use "-g0" to execute existing synthetic datasets not changing them',
 			'  -c[X]  - convert existing networks into the required formats (.rcg[.hig], .lig, etc.)',
 			'    f  - force the conversion even when the data is already exist',
@@ -1065,7 +1067,8 @@ if __name__ == '__main__':
 			'    i[Y]  - intrinsic measures for overlapping communities',
 			'     m  - modularity Q',
 			'     c  - conductance f',
-			'  -i[X]=<datasets_dir>  - input dataset(s), directory with datasets or a single dataset file, wildcards allowed',
+			'  -i[X]=<datasets_dir>  - input dataset(s), directory with datasets or a single dataset file, wildcards allowed.'
+			' Default: -ie={syntdir}{netsdir}*/',  # Note: corresponds to the _EXTNETFILE=.'.nse'
 			'    f  - use flat derivatives on shuffling instead of generating the dedicted directory (havng the file base name)'
 			' for each input network when shuffling is performed to avoid flooding of the base directory with network shuffles.'
 			' Used when the number of instances*shuffles is small. Existed shuffles are backuped',
@@ -1093,7 +1096,7 @@ if __name__ == '__main__':
 			'  -s=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms'
 			', contains uint64_t value. Default: {seedfile}'
 			)).format(sys.argv[0], syntdir=_SYNTDIR, synetsnum=_SYNTINUM, netsdir=_NETSDIR
-				, sepinst=_SEPINST, seppars=_SEPPARS, extnetfile=_EXTNETFILE, resdir=_RESDIR
+				, sepinst=_SEPINST, seppars=_SEPPARS, sepshf=_SEPSHF, extnetfile=_EXTNETFILE, resdir=_RESDIR
 				, th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60, seedfile=_RESDIR + _SEEDFILE))
 	else:
 		# Set handlers of external signals

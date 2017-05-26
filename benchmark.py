@@ -69,6 +69,7 @@ from benchevals import _EXTEXECTIME
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
+_UTILDIR = 'utils/'  # Utilities directory
 _SYNTDIR = 'syntnets/'  # Default base directory for the synthetic datasets (both networks, params and seeds)
 _NETSDIR = 'networks/'  # Networks sub-directory of the synthetic networks (inside _SYNTDIR)
 assert _RESDIR.endswith('/'), 'A directory should have valid terminator'
@@ -79,6 +80,7 @@ _EXTNETFILE = '.nse'  # Extension of the network files to be executed by the alg
 #_algseeds = 9  # TODO: Implement
 #_EVALDFL = 'd'  # Default evaluation measures: d - default extrinsic eval measures (NMI_max, F1h, F1p)
 _PREFEXEC = 'exec'  # Execution prefix for the apps functions in benchapps
+_WPROCSMIN = 1  # Minimal number of the worker processes, maximal number is cpu_num-1 or core_num-1 for the single CPU with multiple cores
 
 _execpool = None  # Pool of executors to process jobs
 
@@ -471,7 +473,7 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	global _execpool
 
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, 1))
+		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN))
 	netgenTimeout = 30 * 60  # 30 min per a network instance (50K nodes on K=75 takes ~15 min)
 	#shuftimeout = 1 * 60  # 1 min per each shuffling
 	bmname =  os.path.split(genbin)[1]  # Benchmark name
@@ -560,7 +562,7 @@ def shuffleNets(datadirs, datafiles, shufnum, netext=_EXTNETFILE, overwrite=Fals
 	global _execpool
 
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, 1))
+		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN))
 
 	timeout = 5 * 60  # 5 min per each shuffling
 
@@ -634,9 +636,9 @@ def convertNet(inpnet, asym, overwrite=False, resdub=False, timeout=3*60):  # 3 
 	timeout  - network conversion timeout
 	"""
 	try:
-		args = [PYEXEC, 'contrib/tohig.py', inpnet, '-f=ns' + ('a' if asym else 'e'), '-o' + ('f' if overwrite else 's')]
+		args = [PYEXEC, _UTILDIR + 'convert.py', inpnet, '-o rcg', '-r ' + ('o' if overwrite else 's')]
 		if resdub:
-			args.append('-r')
+			args.append('-d')
 		_execpool.execute(Job(name=os.path.splitext(os.path.split(inpnet)[1])[0], args=args, timeout=timeout))
 	except StandardError as err:
 		print('ERROR on "{}" conversion into .hig, the network is skipped: {}. {}'
@@ -670,7 +672,7 @@ def convertNets(datadir, netext=_EXTNETFILE, asym=False, overwrite=False, resdub
 	global _execpool
 
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, 1))
+		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN))
 
 	convTimeMax = 3 * 60  # 3 min
 	netsnum = 0  # Number of converted networks
@@ -706,7 +708,7 @@ def runApps(appsmodule, algorithms, datadirs, datafiles, netext, exectime, timeo
 	assert not _execpool, '_execpool should be clear on algs execution'
 	starttime = time.time()  # Procedure start time
 	if not _execpool:
-		_execpool = ExecPool(max(min(4, cpu_count() - 1), 1))
+		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN))
 
 	def unknownApp(name):
 		"""A stub for the unknown / not implemented apps (algorithms) to be benchmaked
@@ -838,7 +840,7 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 	assert not _execpool, '_execpool should be clear on algs evaluation'
 	starttime = time.time()  # Procedure start time
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, 1))
+		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN))
 
 	# Measures is a dict with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
 	measures = {3: ['nmi', _EXTCLNODES, 'NMIs'], 4: ['mod', '.hig', 'Q']}
@@ -984,12 +986,11 @@ def benchmark(*args):
 
 	# Update opts.datasets with sythetic generated
 	# Note: should be done only after the genertion, because new directories can be created
-	assert _EXTNETFILE
 	asym = asymnet(opts.netext)  # Whether the network is asymetric (directed)
 	if opts.gensynt or (not datadirs and not datafiles):
-		PathOpts(_NETSDIR.join((opts.syntdir, '*/')), False, )  # path, flat, asym
-		datadirs.append((False, ))  # asym, ddir
+		datadirs.append(PathOpts(_NETSDIR.join((opts.syntdir, '*/')), False, asym))  # path, flat, asym
 
+	# Note: conversion should not be used typically
 	# opts.convnets: 0 - do not convert, 0b01 - only if not exists, 0b11 - forced conversion, 0b100 - resolve duplicated links
 	if opts.convnets:
 		for asym, ddir in datadirs:

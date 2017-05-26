@@ -1035,7 +1035,7 @@ if __name__ == '__main__':
 			' [-a=<eval_path>] [-x=<extension>] [-t[{{s,m,h}}]=<timeout>] [-s=<seed_file>] | -h',
 			'',
 			'Example:',
-			'  {0} -g=3.5 -r -e -th=2.5 1> bench.log 2> bench.err',
+			'  {0} -g=3.5 -r -e -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
 			'Note: should be executed exclusively from the current directory (./)',
 			'',
 			'Parameters:',

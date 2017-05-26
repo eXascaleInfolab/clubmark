@@ -1036,7 +1036,7 @@ if __name__ == '__main__':
 			'    f  - force the generation even when the data already exists (existent datasets are moved to backup)',
 			'  NOTE:',
 			'    - shuffled datasets have the following naming format:\n'
-			'\t<base_name>[{sepinst}<instance_index>][(seppars)<param1>...][{sepshf}<shuffle_index>].<net_extension>',
+			'\t<base_name>[(seppars)<param1>...][{sepinst}<instance_index>][{sepshf}<shuffle_index>].<net_extension>',
 			'    - use "-g0" to execute existing synthetic datasets not changing them',
 			'  -c[X]  - convert existing networks into the required formats (.rcg[.hig], .lig, etc.)',
 			'    f  - force the conversion even when the data is already exist',

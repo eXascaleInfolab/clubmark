@@ -309,13 +309,9 @@ def execScp(execpool, netfile, asym, timeout, pathid=''):
 		kstr = str(k)
 		kstrex = 'k' + kstr
 		# Embed params into the task name
-		if task.find(_SEPSHF) != -1:
-			taskbasex, taskshuf = task.rsplit(_SEPSHF, 1)
-			taskshuf = '.' + taskshuf
-		else:
-			taskbasex = task
-			taskshuf = ''
-		ktask = ''.join((taskbasex, _SEPPARS, kstrex, taskshuf))
+		taskbasex = delPathSuffix(task, True)
+		tasksuf = task[len(taskbasex):]
+		ktask = ''.join((taskbasex, _SEPPARS, kstrex, tasksuf))
 		# Backup previous results if exist
 		taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, ktask, pathid))
 

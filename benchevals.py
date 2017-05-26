@@ -178,7 +178,7 @@ class EvalsAgg(object):
 			measure, algname, netname = inst.name.split(_SEPNAMEPART)
 			#print('Final aggregate over net: {}, pathid: {}'.format(netname, pathid))
 			# Remove instance id if exists (initial name does not contain params and pathid)
-			netname, insid, apars, shid, pathid = parseName(netname, True)
+			netname, apars, insid, shid, pathid = parseName(netname, True)
 			assert not shid, 'Shuffles should already be aggregated'
 			# Take average over instances and shuffles for each set of alg params
 			# and the max for alg params among the obtained results

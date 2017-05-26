@@ -305,7 +305,7 @@ def parseParams(args):
 			if val == 'f':
 				flat = True
 				val = arg[3]
-			asym = None  # Asym: None - not specified (symmetric is assumed), False - symmetric, True - asymmetric
+			asym = asymnet(_EXTNETFILE)  # Asym: None - not specified (symmetric is assumed), False - symmetric, True - asymmetric
 			if val == 'a':
 				asym = True
 			elif val == 'e':
@@ -347,16 +347,17 @@ def parseParams(args):
 def prepareInput(datas, netext=_EXTNETFILE):
 	"""Generating directories structure, linking there the original network, and shuffles
 	for the input datasets according to the specidied parameters. The former dir is backuped.
+	The wildcards are resolved.
 
 	datas  - pathes with flags to be processed in the format: [PathOpts, ...]
 	netext  - extension of the network files with the leading point
 
 	return
-		datadirs  - target dirs of networks to be processed: [PathOpts, ...]
-		datafiles  - target networks to be processed: [PathOpts, ...]
+		datadirs  - unique target dirs of networks to be processed (without wildcards)
+		datafiles  - unique target files to be processed (without wildcards)
 	"""
-	datadirs = []
-	datafiles = []
+	datadirs = set()
+	datafiles = set()
 
 	if not datas:
 		return datadirs, datafiles
@@ -397,18 +398,18 @@ def prepareInput(datas, netext=_EXTNETFILE):
 						dirname = os.path.splitext(net)[0]
 						prepareDir(dirname, net, bcksuffix)
 						# Update target dirs
-						datadirs.append(PathOpts(dirname + '/', popt.flat, popt.asym))
+						datadirs.add(dirname + '/')
 				else:
-					datadirs.append(PathOpts(path, popt.flat, popt.asym))
+					datadirs.add(path)
 			else:
 				# Generate dirs if required
 				if not popt.flat:
 					dirname = os.path.splitext(path)[0]
 					prepareDir(dirname, path, bcksuffix)
-					datafiles.append(PathOpts('/'.join((dirname, os.path.split(path)[1])), popt.flat, popt.asym))
+					datafiles.add('/'.join((dirname, os.path.split(path)[1])))
 				else:
-					datafiles.append(PathOpts(path, popt.flat, popt.asym))
-	return datadirs, datafiles
+					datafiles.add(path)
+	return [p for p in datadirs], [p for p in datafiles]
 
 
 # Networks processing ----------------------------------------------------------
@@ -548,8 +549,8 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 def shuffleNets(datadirs, datafiles, shufnum, netext=_EXTNETFILE, overwrite=False, shuftimeout=30*60):  # 30 min
 	"""Shuffle specified networks
 
-	datadirs  - directories with target networks to be processed
-	datafiles  - target networks to be processed
+	datadirs  - unique directories of the converting networks (without wildcards)
+	datafiles  - unique files of the converting networks (without wildcards)
 	shufnum  - number of shufflings for of each instance on the generated network, > 0
 	netext  - network file extension (should have the leading '.')
 	overwrite  - whether to renew existent shuffles (delete former and generate new).
@@ -614,9 +615,10 @@ for i in range(1, {shufnum} + 1):
 		return shufnum
 
 	count = 0
-	for asym, ddir in datadirs:
-		for dfile in glob.iglob('*'.join((ddir, netext))):  # Allow wildcards
-			count += shuffleNet(dfile)
+	for netdir in datadirs:
+		for nets in (glob.iglob('*'.join((netdir, netext))), datafiles):
+			for net in nets:  # Allow wildcards
+				count += shuffleNet(net)
 	for asym, dfile in datafiles:
 		count += shuffleNet(dfile)
 
@@ -629,7 +631,7 @@ for i in range(1, {shufnum} + 1):
 def convertNet(inpnet, overwrite=False, resdub=False, timeout=3*60):  # 3 min
 	"""Convert input networks to another formats
 
-	datadir  - directory of the networks to be converted
+	inpnet  - the network file to be converted
 	overwrite  - whether to overwrite existing networks or use them
 	resdub  - resolve duplicated links
 	timeout  - network conversion timeout
@@ -655,35 +657,33 @@ def convertNet(inpnet, overwrite=False, resdub=False, timeout=3*60):  # 3 min
 	#	print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
 
 
-def convertNets(path, dirpath=False, netext=_EXTNETFILE, overwrite=False, resdub=False, convtimeout=30*60):  # 30 min
+def convertNets(datadirs, datafiles, netext=_EXTNETFILE, overwrite=False, resdub=False, convtimeout=30*60):  # 30 min
 	"""Convert input networks to another formats
 
-	path  - directory of the networks to be converted
-	dirpath  - the path is a directory
+	datadirs  - unique directories of the converting networks (without wildcards)
+	datafiles  - unique files of the converting networks (without wildcards)
 	netext  - network file extension (should have the leading '.')
 	overwrite  - whether to overwrite existing networks or use them
 	resdub  - resolve duplicated links
 	"""
 	assert netext and netext[0] == '.', 'A file extension should have the leading "."'
-	print('Converting networks from {} into the required formats (.hig, .lig, etc.)...'
-		.format(path))
-
+	print('Converting networks into the required formats (.hig, .lig, etc.)...')
 	global _execpool
 
 	if not _execpool:
 		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN))
 
-	convTimeMax = 3 * 60  # 3 min
+	convTimeMax = 5 * 60  # 5 min
 	netsnum = 0  # Number of converted networks
-	# Convert network files to .hig format and .lig (Louvain Input Format)
-	for net in glob.iglob(path if not dirpath else '*'.join((path, netext))):  # Allow wildcards
-		# Skip shuffles
-		if os.path.splitext(net)[0].find(_SEPSHF) == -1:
-			convertNet(net, overwrite, resdub, convTimeMax)
-			netsnum += 1
+	# Convert network files to required formats: .rcg, .lig (Louvain Input Format), etc.
+	for netdir in datadirs:
+		for nets in (glob.iglob('*'.join((netdir, netext))), datafiles):
+			for net in nets:  # Note: the shuffles are also included
+				convertNet(net, overwrite, resdub, convTimeMax)
+				netsnum += 1
 
 	if _execpool:
-		_execpool.join(max(convtimeout, netsnum * convTimeMax))  # 2 hours
+		_execpool.join(max(convtimeout, netsnum * convTimeMax))
 		_execpool = None
 	print('Networks conversion is completed, converted {} networks'.format(netsnum))
 
@@ -974,11 +974,6 @@ def benchmark(*args):
 		## Symlink is used to work even when target file is on another file system
 		#os.symlink(os.path.relpath(opts.syntdir + bmname, opts.syntdir), benchpath)
 
-	# Extract dirs and files from opts.datas, generate dirs structure and shuffles if required
-	datadirs, datafiles = prepareInput(opts.datas, opts.netext)
-	opts.datas = None
-	#print('Datadirs: ', datadirs)
-
 	if opts.gensynt and opts.netins >= 1:
 		# opts.gensynt:  0 - do not generate, 1 - only if not exists, 2 - forced generation
 		generateNets(benchpath, opts.syntdir, _NETSDIR, opts.netext, opts.gensynt == 2, opts.netins, opts.seedfile)
@@ -986,20 +981,22 @@ def benchmark(*args):
 	# Update opts.datasets with sythetic generated
 	# Note: should be done only after the genertion, because new directories can be created
 	asym = asymnet(opts.netext)  # Whether the network is asymetric (directed)
-	if opts.gensynt or (not datadirs and not datafiles):
-		datadirs.append(PathOpts(_NETSDIR.join((opts.syntdir, '*/')), False, asym))  # path, flat, asym
+	if opts.gensynt or not opts.datas:
+		opts.datas.append(PathOpts(_NETSDIR.join((opts.syntdir, '*/')), False, asym))  # path, flat, asym
+
+	# Extract dirs and files from opts.datas, generate dirs structure if required and resolve the wildcards
+	datadirs, datafiles = prepareInput(opts.datas, opts.netext)
+	opts.datas = None
+	#print('Datadirs: ', datadirs)
 
 	# Note: the conversion should be performed after the shuffling if required to convert also the shuffles
 	if opts.shufnum:
-		shuffleNets(datadirs, datafiles, opts.shufnum, opts.gensynt == 2)
+		shuffleNets(datadirs, datafiles, opts.shufnum, opts.netext, opts.gensynt == 2)
 
 	# Note: conversion should not be used typically
 	# opts.convnets: 0 - do not convert, 0b01 - only if not exists, 0b11 - forced conversion, 0b100 - resolve duplicated links
 	if opts.convnets:
-		for ddir in datadirs:
-			convertNets(ddir.path, True, opts.netext, opts.convnets&0b11 == 0b11, opts.convnets&0b100)
-		for dfile in datafiles:
-			convertNet(dfile.path, False, opts.netext, opts.convnets&0b11 == 0b11, opts.convnets&0b100)
+		convertNets(datadirs, datafiles, opts.netext, opts.convnets&0b11 == 0b11, opts.convnets&0b100)
 
 	# Run the opts.algorithms and measure their resource consumption
 	if opts.runalgs:

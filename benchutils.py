@@ -33,6 +33,16 @@ _SEPPATHID = '#'  # Network path id separator (to distinguish files with the sam
 _PATHID_FILE = 'f'  # File marker of the pathid (input file specified directly without the embracing dir), must be a char
 
 
+def timeSeed():
+	"""Generate time seed as uint64_t
+
+	>>> timeSeed() > 20170526191034 and len(str(timeSeed())) == len('20170526191034')
+	True
+	"""
+	t = time.gmtime()
+	return t.tm_sec + 100*(t.tm_min + 100*(t.tm_hour + 100*(t.tm_mday + 100*(t.tm_mon + 100*t.tm_year))))   # 2017'05'26'21'10'34
+
+
 def delPathSuffix(path, nameonly=False):
 	"""Extracts base of the path skipping instance, shuffling and pathid suffixes
 

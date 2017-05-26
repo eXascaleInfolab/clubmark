@@ -70,8 +70,9 @@ from benchevals import _EXTEXECTIME
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 _SYNTDIR = 'syntnets/'  # Default base directory for the synthetic datasets (both networks, params and seeds)
-_NETSDIR = 'networks/'  # Networks directory of the synthetic networks (inside _SYNTDIR)
-_SEEDFILE = 'seed.txt'
+_NETSDIR = 'networks/'  # Networks sub-directory of the synthetic networks (inside _SYNTDIR)
+assert _RESDIR.endswith('/'), 'A directory should have valid terminator'
+_SEEDFILE = _RESDIR + 'seed.txt'
 _SYNTINUM = 3  # Default number of instances of each synthetic network, >= 1
 _TIMEOUT = 36 * 60*60  # Default execution timeout for each algorithm for a single network instance
 _EXTNETFILE = '.nse'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated edges (.nsa - arcs)
@@ -80,6 +81,17 @@ _EXTNETFILE = '.nse'  # Extension of the network files to be executed by the alg
 _PREFEXEC = 'exec'  # Execution prefix for the apps functions in benchapps
 
 _execpool = None  # Pool of executors to process jobs
+
+
+def asymnet(netext):
+	"""Whether the network is asymmetric (directed, specified by arcs rather than edges)
+
+	netext  - network extension (starts with '.'): .nse or .nsa
+
+	return  - the networks is asymmetric (specified by arcs)
+	"""
+	assert netext in ('.nse', '.nsa'), 'Unknown network extension'
+	return netext == '.nsa'
 
 
 # Data structures --------------------------------------------------------------
@@ -138,7 +150,7 @@ class Params(object):
 		timeout  - execution timeout in sec per each algorithm
 		algorithms  - algorithms to be executed (just names as in the code)
 		aggrespaths = paths for the evaluated resutls aggregation (to be done for already existent evaluations)
-		seed  - seed value for the synthetic networks generation and stochastic algorithms, integer
+		seedfile  - seed file name
 		"""
 		self.gensynt = 0
 		self.netins = _SYNTINUM  # Number of network instances to generate, >= 1
@@ -154,7 +166,7 @@ class Params(object):
 		self.timeout = _TIMEOUT
 		self.algorithms = []
 		self.aggrespaths = []  # Paths for the evaluated resutls aggregation (to be done for already existent evaluations)
-		self.seed = None  # Seed value for the synthetic networks generation and stochastic algorithms, integer
+		self.seedfile = _SEEDFILE  # Seed value for the synthetic networks generation and stochastic algorithms, integer
 
 
 # Input зarameters processing --------------------------------------------------
@@ -323,7 +335,7 @@ def parseParams(args):
 		elif arg[1] == 's':
 			if len(arg) <= 3 or arg[2] != '=':
 				raise ValueError('Unexpected argument: ' + arg)
-			opts.seed = int(arg[3:])  # Integer is expected like 20170525132915
+			opts.seedfile = arg[3:]
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
 
@@ -398,7 +410,7 @@ def prepareInput(datas, netext=_EXTNETFILE):
 
 
 # Networks processing ----------------------------------------------------------
-def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME, overwrite=False, count=_SYNTINUM, seed=None, gentimeout=2*60*60):  # 2 hours
+def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME, overwrite=False, count=_SYNTINUM, seedfile=_SEEDFILE, gentimeout=2*60*60):  # 2 hours
 	"""Generate synthetic networks with ground-truth communities and save generation params.
 	Previously existed paths with the same name are backuped.
 
@@ -409,7 +421,7 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	netext  - network file extension (should have the leading '.')
 	overwrite  - whether to overwrite existing networks or use them
 	count  - number of insances of each network to be generated, >= 1
-	seed  - seed value, integer
+	seedfile  - seed file name
 	gentimeout  - timeout for all networks generation in parallel mode
 	"""
 	paramsdir = 'params/'  # Contains networks generation parameters per each network type
@@ -421,7 +433,6 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	assert ((basedir == '' or basedir[-1] == '/') and paramsdir[-1] == '/' and seedsdir[-1] == '/' and netsdir[-1] == '/'
 		), 'Directory name must have valid terminator'
 	assert netext and netext[0] == '.', 'A file extension should have the leading "."'
-	assert seed is None or isinstance(seed, int), 'Integer seed is expected'
 
 	paramsdirfull = basedir + paramsdir
 	seedsdirfull = basedir + seedsdir
@@ -434,11 +445,9 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 				backupPath(dirname, False, bcksuffix)
 
 	# Create dirs if required
-	if not os.path.exists(basedir):
-		os.mkdir(basedir)  # Note: mkdir does not create intermediate (non-leaf) dirs
 	for dirname in (basedir, paramsdirfull, seedsdirfull, netsdirfull):
 		if not os.path.exists(dirname):
-			os.mkdir(dirname)
+			os.mkdir(dirname)  # Note: mkdir does not create intermediate (non-leaf) dirs
 
 	# Initial options for the networks generation
 	N0 = 1000  # Satrting number of nodes
@@ -468,13 +477,15 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	bmname =  os.path.split(genbin)[1]  # Benchmark name
 	genbin = os.path.relpath(genbin, basedir)  # Update path to the executable relative to the job workdir
 	#bmbin = './' + bmname  # Benchmark binary
-	randseed = basedir + 'seed.txt'  # Random seed file name
+	randseed = basedir + 'lastseed.txt'  # Random seed file name
 
-	# Check whether time seed exists and create it if required
-	if seed is None:
-		seed = timeSeed()  # time.gmtime()
-	with open(randseed) as frs:
-		frs.write('{}\n'.format(seed));
+	# Copy benchmark seed to the syntnets seed
+	if not os.path.isfile(seedfile):
+		with open(seedfile, 'w') as fseed:
+			fseed.write(str(timeSeed()))
+	shutil.copy2(seedfile, randseed)
+
+	asym = '-a' if asymnet(netext) else ''  # Whether to generate directed (specified by arcs) or undirected (specified by edges) network
 	for nm in varNmul:
 		N = nm * N0
 		for k in vark:
@@ -505,7 +516,7 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 					netfile = netpath + name
 					if count and overwrite or not os.path.exists(netfile.join((basedir, netext))):
 						args = ('../exectime', '-n=' + name, ''.join(('-o=', bmname, netext))  # Output .rcp in the current dir, basedir
-							, genbin, '-f', netparams, '-name', netfile)
+							, genbin, '-f', netparams, '-name', netfile, '-seed', randseed, asym)
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 						_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
 							, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
@@ -516,7 +527,7 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 						netfile = netpath + namext
 						if overwrite or not os.path.exists(netfile.join((basedir, netext))):
 							args = ('../exectime', '-n=' + namext, ''.join(('-o=', bmname, netext))
-								, genbin, '-f', netparams, '-name', netfile)
+								, genbin, '-f', netparams, '-name', netfile, '-seed', randseed, asym)
 							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 							_execpool.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
 								, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
@@ -551,7 +562,7 @@ def shuffleNets(datadirs, datafiles, shufnum, netext=_EXTNETFILE, overwrite=Fals
 	if not _execpool:
 		_execpool = ExecPool(max(cpu_count() - 1, 1))
 
-	timeout = 3 * 60  # 3 min per each shuffling
+	timeout = 5 * 60  # 5 min per each shuffling
 
 	def shuffle(job):
 		"""Shufle network specified by the job"""
@@ -969,12 +980,15 @@ def benchmark(*args):
 
 	if opts.gensynt and opts.netins >= 1:
 		# opts.gensynt:  0 - do not generate, 1 - only if not exists, 2 - forced generation
-		generateNets(benchpath, opts.syntdir, _NETSDIR, opts.netext, opts.gensynt == 2, opts.netins, opts.seed)
+		generateNets(benchpath, opts.syntdir, _NETSDIR, opts.netext, opts.gensynt == 2, opts.netins, opts.seedfile)
 
 	# Update opts.datasets with sythetic generated
 	# Note: should be done only after the genertion, because new directories can be created
+	assert _EXTNETFILE
+	asym = asymnet(opts.netext)  # Whether the network is asymetric (directed)
 	if opts.gensynt or (not datadirs and not datafiles):
-		datadirs.append((False, _NETSDIR.join((opts.syntdir, '*/'))))  # asym, ddir
+		PathOpts(_NETSDIR.join((opts.syntdir, '*/')), False, )  # path, flat, asym
+		datadirs.append((False, ))  # asym, ddir
 
 	# opts.convnets: 0 - do not convert, 0b01 - only if not exists, 0b11 - forced conversion, 0b100 - resolve duplicated links
 	if opts.convnets:
@@ -1097,7 +1111,7 @@ if __name__ == '__main__':
 			', contains uint64_t value. Default: {seedfile}'
 			)).format(sys.argv[0], syntdir=_SYNTDIR, synetsnum=_SYNTINUM, netsdir=_NETSDIR
 				, sepinst=_SEPINST, seppars=_SEPPARS, sepshf=_SEPSHF, extnetfile=_EXTNETFILE, resdir=_RESDIR
-				, th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60, seedfile=_RESDIR + _SEEDFILE))
+				, th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60, seedfile=_SEEDFILE))
 	else:
 		# Set handlers of external signals
 		signal.signal(signal.SIGTERM, terminationHandler)

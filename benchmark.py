@@ -38,6 +38,7 @@ import atexit  # At exit termination handleing
 import sys
 import time
 import subprocess
+from subprocess import PIPE
 from multiprocessing import cpu_count  # Returns the number of multi-core CPU units if exist, otherwise the number of cores
 import os
 import shutil
@@ -72,7 +73,7 @@ from benchevals import _EXTEXECTIME
 _UTILDIR = 'utils/'  # Utilities directory
 _SYNTDIR = 'syntnets/'  # Default base directory for the synthetic datasets (both networks, params and seeds)
 _NETSDIR = 'networks/'  # Networks sub-directory of the synthetic networks (inside _SYNTDIR)
-assert _RESDIR.endswith('/'), 'A directory should have valid terminator'
+assert _RESDIR.endswith('/'), 'A directory should have a valid terminator'
 _SEEDFILE = _RESDIR + 'seed.txt'
 _SYNTINUM = 3  # Default number of instances of each synthetic network, >= 1
 _TIMEOUT = 36 * 60*60  # Default execution timeout for each algorithm for a single network instance
@@ -467,8 +468,10 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	# Defaults: beta: 1.5, t1: 2, t2: 1
 
 	# Generate options for the networks generation using chosen variations of params
-	varNmul = (1, 5, 20, 50)  # *N0 - sizes of the generating networks;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
-	vark = (5, 25, 75)  # Average density of network links
+	#varNmul = (1, 5, 20, 50)  # *N0 - sizes of the generating networks;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
+	#vark = (5, 25, 75)  # Average density of network links
+	varNmul = (1, 5)  # *N0 - sizes of the generating networks;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
+	vark = (5, 25)  # Average density of network links
 	assert vark[-1] <= round(varNmul[0] / rmaxK), 'Avg vs max degree validation failed'
 	#varkr = (0.5, 1, 5)  #, 20)  # Average relative density of network links in percents of the number of nodes
 	global _execpool
@@ -485,7 +488,7 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	# Copy benchmark seed to the syntnets seed
 	if not os.path.isfile(seedfile):
 		with open(seedfile, 'w') as fseed:
-			fseed.write(str(timeSeed()))
+			fseed.write('{}\n'.format(timeSeed()))
 	shutil.copy2(seedfile, randseed)
 
 	asym = '-a' if asymnet(netext) else ''  # Whether to generate directed (specified by arcs) or undirected (specified by edges) network
@@ -582,15 +585,28 @@ for i in range(1, {shufnum} + 1):
 	# sort -R pgp_udir.net -o pgp_udir_rand3.net
 	netfile = ''.join(('{jobname}', {sepshf}, str(i), '{netext}'))
 	if {overwrite} or not os.path.exists(netfile):
-		subprocess.call(('sort', '-R', basenet, '-o', netfile))
-# Remove existent redundant shuffles if any
-#i = {shufnum} + 1
-#while i < 100:  # Max number of shuffles
-#	netfile = ''.join(('{jobname}', {sepshf}, str(i), '{netext}'))
-#	if not os.path.exists(netfile):
-#		break
-#	else:
-#		os.remove(netfile)
+		with open(basenet) as inpnet:
+			ln = inpnet.readline()
+			if ln.startswith('#'):
+				# Shuffle considering the header
+				# ('sort', '-R') or just ('shuf')
+				wproc = subprocess.Popen(('shuf'), bufsize=-1, stdin=PIPE, stdout=PIPE)  # bufsize=-1 - use system default IO buffer size
+				with open(netfile, 'w') as shfnet:
+					hdr = True  # The file header is processed
+					body = []  # File body
+					while ln:
+						# Write the header
+						if hdr and ln.startswith('#'):
+							shfnet.write(ln)
+							continue
+						hdr = False
+						body.append(ln)
+					body = wproc.communicate(ln)[0]  # Fetch stdout (PIPE)
+					shfnet.write(body)
+			else:
+				# The file does not have a header
+				#subprocess.call(('sort', '-R', basenet, '-o', netfile))
+				subprocess.call(('shuf', basenet, '-o', netfile))
 """.format(jobname=job.name, sepshf=_SEPSHF, netext=netext, shufnum=shufnum
 , overwrite=overwrite))
 		_execpool.execute(Job(name=job.name + '_shf', workdir=job.workdir
@@ -611,8 +627,10 @@ for i in range(1, {shufnum} + 1):
 			if int(shf[1:]) > shufnum:
 				os.remove(netfile)
 			return 0
+		# Note: the shuffling might be scheduled even when the shuffles exist in case
+		# the origin network is traversed before it's shuffles
 		shuffle(Job(name=name, workdir=path + '/'))
-		return shufnum
+		return shufnum  # The network is shuffled shufnum times
 
 	count = 0
 	for netdir in datadirs:
@@ -968,7 +986,8 @@ def benchmark(*args):
 			, ', '.join(opts.aggrespaths) if opts.aggrespaths else ''))
 	# Make opts.syntdir and link there lfr benchmark bin if required
 	bmname = 'lfrbench_udwov'  # Benchmark name for the synthetic networks generation
-	benchpath = opts.utilsdir + bmname  # Benchmark path
+	assert _UTILDIR.endswith('/'), 'A directory should have a valid terminator'
+	benchpath = _UTILDIR + bmname  # Benchmark path
 	if not os.path.exists(opts.syntdir):
 		os.makedirs(opts.syntdir)
 		## Symlink is used to work even when target file is on another file system

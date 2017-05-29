@@ -84,7 +84,7 @@ _WPROCSMIN = 1  # Minimal number of the worker processes, maximal number is cpu_
 
 _execpool = None  # Pool of executors to process jobs
 
-_TRACE = 2  # Tracing level: 0 - none, 1 - lightweight, 2 - debug, 3 - detailed
+_TRACE = 1  # Tracing level: 0 - none, 1 - lightweight, 2 - debug, 3 - detailed
 
 
 def asymnet(netext):
@@ -604,24 +604,26 @@ for i in range(1, {shufnum} + 1):
 	netfile = ''.join(('{jobname}', '{sepshf}', str(i), '{netext}'))
 	if {overwrite} or not os.path.exists(netfile):
 		with open(basenet) as inpnet:
+			pos = 0
 			ln = inpnet.readline()
 			if ln.startswith('#'):
+				print(''.join(('Shuffling ', basenet, ' to ', netfile)))
 				# Shuffle considering the header
 				# ('sort', '-R') or just ('shuf')
 				wproc = subprocess.Popen(('shuf'), bufsize=-1, stdin=subprocess.PIPE, stdout=subprocess.PIPE)  # bufsize=-1 - use system default IO buffer size
 				with open(netfile, 'w') as shfnet:
-					hdr = True  # The file header is processed
-					body = []  # File body
+					body = ''  # File body
 					while ln:
 						# Write the header
-						if hdr and ln.startswith('#'):
+						if ln.startswith('#'):
 							shfnet.write(ln)
+							pos = inpnet.tell()
 							ln = inpnet.readline()
 							continue
-						hdr = False
-						body.append(ln)
-						ln = inpnet.readline()
-					body = wproc.communicate(''.join(body))[0]  # Fetch stdout (PIPE)
+						inpnet.seek(pos)
+						body = inpnet.read()
+						break
+					body = wproc.communicate(body)[0]  # Fetch stdout (PIPE)
 					shfnet.write(body)
 			else:
 				# The file does not have a header

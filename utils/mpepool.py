@@ -33,6 +33,7 @@ from subprocess import PIPE
 from subprocess import STDOUT
 
 
+_AFFINITYBIN = 'taskset'  # System app to set CPU affinity if required
 DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
@@ -137,7 +138,7 @@ class Job(object):
 	"""
 	# NOTE: keyword-only arguments are specified after the *, supported only since Python 3
 	def __init__(self, name, workdir=None, args=(), timeout=0, ontimeout=False, task=None #,*
-	, startdelay=0, onstart=None, ondone=None, params=None, stdout=sys.stdout, stderr=sys.stderr):
+	, startdelay=0, onstart=None, ondone=None, params=None, stdout=sys.stdout, stderr=sys.stderr, omitafn=False):
 		"""Initialize job to be executed
 
 		name  - job name
@@ -164,6 +165,7 @@ class Job(object):
 		stdout  - None or file name or PIPE for the buffered output to be APPENDED
 		stderr  - None or file name or PIPE or STDOUT for the unbuffered error output to be APPENDED
 			ATTENTION: PIPE is a buffer in RAM, so do not use it if the output data is huge or unlimited
+		omitafn  - Omit affinity policy of the scheduler, which is actual when some process is computed on all treads, etc.
 
 		tstart  - start time is filled automatically on the execution start (before onstart). Default: None
 		tstop  - termination / completion time after ondone
@@ -197,6 +199,8 @@ class Job(object):
 		# Process-related file descriptors to be closed
 		self._fstdout = None
 		self._fstderr = None
+		# Omit scheduler affinity policy (actual when some process is computed on all treads, etc.)
+		self._omitafn = omitafn
 
 
 	def complete(self, graceful=True):
@@ -256,10 +260,11 @@ class ExecPool(object):
 	each subsequent job.
 	'''
 
-	def __init__(self, workers=cpu_count()):
+	def __init__(self, workers=cpu_count(), fixafn=False):
 		"""Execution Pool constructor
 
 		workers  - number of resident worker processes
+		fixafn  - fix affinity of the executing workers on the corresponding CPUs
 		"""
 		assert workers >= 1, 'At least one worker should be managed by the pool'
 
@@ -270,6 +275,28 @@ class ExecPool(object):
 		# Predefined privte attributes
 		self._latency = 1  # 1 sec of sleep on pooling
 		self._killCount = 3  # 3 cycles of self._latency, termination wait time
+		# Check whether _AFFINITYBIN exists in the system
+		try:
+			subprocess.call([_AFFINITYBIN, '-V'])
+		except OSError as err:
+			print('WARNING: {afnbin} does not exists in the system to set affinity: {err}'
+				.format(afnbin=_AFFINITYBIN, err=err))
+			fixafn = None
+		self._affinity = None if not fixafn else [None]*self._workersLim
+
+
+	def __clearAffinity(self, job):
+		"""Clear job affinity
+
+		job  - the job to be processed
+		"""
+		if self._affinity and job.proc is not None and not job._omitafn:
+			try:
+				self._affinity[self._affinity.index(job.proc.pid)] = None
+			except ValueError:
+				print('WARNING: affinity clearup is requested to the job "{}" without the activated affinity'
+					.format(job.name))
+				pass  # Note: do nothing if the affinity was not set for this process
 
 
 	def __del__(self):
@@ -288,6 +315,7 @@ class ExecPool(object):
 		print('WARNING: terminating the workers pool ...')
 		for job in self._jobs:
 			job.complete(False)
+			# Note: only executing jobs, i.e. workers might have activated affinity
 			print('  Scheduled "{}" is removed'.format(job.name))
 		self._jobs.clear()
 		while self._workers:
@@ -314,6 +342,7 @@ class ExecPool(object):
 			# Tidy jobs
 			for job in self._workers.values():
 				job.complete(False)
+				self.__clearAffinity(job)
 			self._workers.clear()
 
 
@@ -377,8 +406,14 @@ class ExecPool(object):
 				print('"{}" output channels:\n\tstdout: {}\n\tstderr: {}'.format(job.name
 					, str(job.stdout), str(job.stderr)))
 			if(job.args):
+				# Consider CPU affinity
+				icpu = -1 if not self._affinity or job._omitafn else self._affinity.index(None)  # Index of the CPU to be bound
+				if icpu >= 0:
+					job.args = [_AFFINITYBIN, '-c', str(icpu)].extend(job.args)
 				#print('Opening proc with:\n\tjob.args: {},\n\tcwd: {}'.format(' '.join(job.args), job.workdir), file=sys.stderr)
 				job.proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
+				if icpu >= 0:
+					self._affinity[icpu] = job.proc.pid
 				# Wait a little bit to start the process besides it's scheduling
 				if job.startdelay > 0:
 					time.sleep(job.startdelay)
@@ -387,12 +422,15 @@ class ExecPool(object):
 				job.name, err, traceback.format_exc()), file=sys.stderr)
 			# Note: process-associated file descriptors are closed in complete()
 			job.complete(False)
+			if job.proc is not None:  # Note: this is an extra rare, but possible case
+				self.__clearAffinity(job)  # Note: process can both exists here and does not exist, i.e. the process state is undefined
 		else:
 			if async:
 				self._workers[job.proc] = job
 			else:
 				job.proc.wait()
 				job.complete()
+				self.__clearAffinity(job)
 				return job.proc.returncode
 		return 0
 
@@ -428,11 +466,13 @@ class ExecPool(object):
 				self.__startJob(job)
 			else:
 				job.complete(False)
+				self.__clearAffinity(job)
 
 		# Process completed jobs: execute callbacks and remove the workers
 		for proc, job in completed:
 			del self._workers[proc]
 			job.complete()
+			self.__clearAffinity(job)
 
 		# Start subsequent job if it is required
 		while self._jobs and len(self._workers) <  self._workersLim:

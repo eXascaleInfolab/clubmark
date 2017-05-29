@@ -84,7 +84,8 @@ _WPROCSMIN = 1  # Minimal number of the worker processes, maximal number is cpu_
 
 _execpool = None  # Pool of executors to process jobs
 
-_TRACE = 1  # Tracing level: 0 - none, 1 - lightweight, 2 - debug, 3 - detailed
+#_TRACE = 1  # Tracing level: 0 - none, 1 - lightweight, 2 - debug, 3 - detailed
+DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
 def asymnet(netext):
@@ -478,21 +479,23 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	global _execpool
 
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN))
+		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN), True)
+
+	# Copy benchmark seed to the syntnets seed
+	if not os.path.exists(seedfile):
+		# Consider inexisting base path of the common seed file
+		sfbase = os.path.split(seedfile)[0]
+		if not os.path.exists(sfbase):
+			os.makedirs(sfbase)
+		with open(seedfile, 'w') as fseed:
+			fseed.write('{}\n'.format(timeSeed()))
+
 	netgenTimeout = 30 * 60  # 30 min per a network instance (50K nodes on K=75 takes ~15 min)
 	#shuftimeout = 1 * 60  # 1 min per each shuffling
 	bmname =  os.path.split(genbin)[1]  # Benchmark name
 	genbin = os.path.relpath(genbin, basedir)  # Update path to the executable relative to the job workdir
 	#bmbin = './' + bmname  # Benchmark binary
 	randseed = basedir + 'lastseed.txt'  # Random seed file name
-
-	# Copy benchmark seed to the syntnets seed
-	if not os.path.exists(seedfile):
-		sfbase = os.path.split(seedfile)[0]
-		if not os.path.exists(sfbase):
-			os.makedirs(sfbase)
-		with open(seedfile, 'w') as fseed:
-			fseed.write('{}\n'.format(timeSeed()))
 	shutil.copy2(seedfile, randseed)
 
 	asym = '-a' if asymnet(netext) else None  # Whether to generate directed (specified by arcs) or undirected (specified by edges) network
@@ -517,7 +520,7 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 			netseed = name.join((seedsdirfull, '.ngs'))
 			if os.path.isfile(netseed):
 				shutil.copy2(netseed, randseed)
-				if _TRACE >= 2:
+				if DEBUG_TRACE:
 					print('The seed {netseed} is retained'.format(netseed=netseed))
 
 			# Generate networks with ground truth corresponding to the parameters
@@ -533,7 +536,7 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 						os.mkdir(netpathfull)
 					startdelay = 0.1  # Required to start execution of the LFR benchmark before copying the time_seed for the following process
 					netfile = netpath + name
-					if _TRACE >= 2:
+					if DEBUG_TRACE:
 						print('Generating {netfile} as {name} by {netparams}'.format(netfile=netfile, name=name, netparams=netparams))
 					if count and overwrite or not os.path.exists(netfile.join((basedir, netext))):
 						args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, _EXTEXECTIME))  # Output .rcp in the current dir, basedir
@@ -587,7 +590,7 @@ def shuffleNets(shufnum, datafiles, datadirs, netext=_EXTNETFILE, overwrite=Fals
 	global _execpool
 
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN))
+		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN), True)
 
 	timeout = 5 * 60  # 5 min per each shuffling
 
@@ -714,7 +717,7 @@ def convertNets(datafiles, datadirs, netext=_EXTNETFILE, overwrite=False, resdub
 	global _execpool
 
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN))
+		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN), True)
 
 	convTimeMax = 5 * 60  # 5 min
 	netsnum = 0  # Number of converted networks
@@ -750,7 +753,7 @@ def runApps(appsmodule, algorithms, datafiles, datadirs, netext, exectime, timeo
 	assert not _execpool, '_execpool should be clear on algs execution'
 	starttime = time.time()  # Procedure start time
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN))
+		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN), True)
 
 	def unknownApp(name):
 		"""A stub for the unknown / not implemented apps (algorithms) to be benchmaked
@@ -882,7 +885,7 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 	assert not _execpool, '_execpool should be clear on algs evaluation'
 	starttime = time.time()  # Procedure start time
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN))
+		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN), True)  # ATTENTION: NMI ovp multi-scale should be ealuated in the dedicated mode requiring all CPU cores
 
 	# Measures is a dict with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
 	measures = {3: ['nmi', _EXTCLNODES, 'NMIs'], 4: ['mod', '.hig', 'Q']}

@@ -487,7 +487,10 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	randseed = basedir + 'lastseed.txt'  # Random seed file name
 
 	# Copy benchmark seed to the syntnets seed
-	if not os.path.isfile(seedfile):
+	if not os.path.exists(seedfile):
+		sfbase = os.path.split(seedfile)[0]
+		if not os.path.exists(sfbase):
+			os.makedirs(sfbase)
 		with open(seedfile, 'w') as fseed:
 			fseed.write('{}\n'.format(timeSeed()))
 	shutil.copy2(seedfile, randseed)
@@ -567,13 +570,13 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	print('Synthetic networks files generation is completed')
 
 
-def shuffleNets(datadirs, datafiles, shufnum, netext=_EXTNETFILE, overwrite=False, shuftimeout=30*60):  # 30 min
+def shuffleNets(shufnum, datafiles, datadirs, netext=_EXTNETFILE, overwrite=False, shuftimeout=30*60):  # 30 min
 	"""Shuffle specified networks
 
-	datadirs  - unique directories of the converting networks (without wildcards)
-	datafiles  - unique files of the converting networks (without wildcards)
 	shufnum  - number of shufflings for of each instance on the generated network, > 0
-	netext  - network file extension (should have the leading '.')
+	datafiles  - unique files of the converting networks (without wildcards)
+	datadirs  - unique directories of the converting networks (without wildcards)
+	netext  - network file extension (should have the leading '.'), required for datadirs only
 	overwrite  - whether to renew existent shuffles (delete former and generate new).
 		ATTENTION: Anyway redundant shuffles are deleted.
 	shuftimeout  - global shuffling timeout
@@ -665,7 +668,7 @@ for i in range(1, {shufnum} + 1):
 	if _execpool:
 		_execpool.join(max(shuftimeout, count * shufnum * timeout))  # 30 min
 		_execpool = None
-	print('Synthetic networks files generation is completed')
+	print('Networks shuffling is completed')
 
 
 def convertNet(inpnet, overwrite=False, resdub=False, timeout=3*60):  # 3 min
@@ -697,12 +700,12 @@ def convertNet(inpnet, overwrite=False, resdub=False, timeout=3*60):  # 3 min
 	#	print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
 
 
-def convertNets(datadirs, datafiles, netext=_EXTNETFILE, overwrite=False, resdub=False, convtimeout=30*60):  # 30 min
+def convertNets(datafiles, datadirs, netext=_EXTNETFILE, overwrite=False, resdub=False, convtimeout=30*60):  # 30 min
 	"""Convert input networks to another formats
 
-	datadirs  - unique directories of the converting networks (without wildcards)
 	datafiles  - unique files of the converting networks (without wildcards)
-	netext  - network file extension (should have the leading '.')
+	datadirs  - unique directories of the converting networks (without wildcards)
+	netext  - network file extension (should have the leading '.'), required for datadirs only
 	overwrite  - whether to overwrite existing networks or use them
 	resdub  - resolve duplicated links
 	"""
@@ -728,14 +731,14 @@ def convertNets(datadirs, datafiles, netext=_EXTNETFILE, overwrite=False, resdub
 	print('Networks conversion is completed, converted {} networks'.format(netsnum))
 
 
-def runApps(appsmodule, algorithms, datadirs, datafiles, netext, exectime, timeout):
+def runApps(appsmodule, algorithms, datafiles, datadirs, netext, exectime, timeout):
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
 	algorithms  - list of the algorithms to be executed
-	datadirs  - directories with target networks to be processed
 	datafiles  - target networks to be processed
-	netext  - network file extension (should have the leading '.')
+	datadirs  - directories with target networks to be processed
+	netext  - network file extension (should have the leading '.'), required for datadirs only
 	exectime  - elapsed time since the benchmarking started
 	timeout  - timeout per each algorithm execution
 	"""
@@ -1032,20 +1035,20 @@ def benchmark(*args):
 
 	# Note: the conversion should be performed after the shuffling if required to convert also the shuffles
 	if opts.shufnum:
-		shuffleNets(datadirs, datafiles, opts.shufnum, opts.netext, opts.gensynt == 2)
+		shuffleNets(opts.shufnum, datafiles, datadirs, opts.netext, opts.gensynt == 2)
 
 	# Note: conversion should not be used typically
 	# opts.convnets: 0 - do not convert, 0b01 - only if not exists, 0b11 - forced conversion, 0b100 - resolve duplicated links
 	if opts.convnets:
-		convertNets(datadirs, datafiles, opts.netext, opts.convnets&0b11 == 0b11, opts.convnets&0b100)
+		convertNets(datafiles, datadirs, opts.netext, opts.convnets&0b11 == 0b11, opts.convnets&0b100)
 
 	# Run the opts.algorithms and measure their resource consumption
 	if opts.runalgs:
-		runApps(benchapps, opts.algorithms, datadirs, datafiles, exectime, opts.timeout)
+		runApps(benchapps, opts.algorithms, datafiles, datadirs, opts.netext, exectime, opts.timeout)
 
 	# Evaluate results
 	if opts.evalres:
-		evalResults(opts.evalres, benchapps, opts.algorithms, datadirs, datafiles, exectime, opts.timeout)
+		evalResults(opts.evalres, benchapps, opts.algorithms, datafiles, datadirs, opts.netext, exectime, opts.timeout)
 
 	if opts.aggrespaths:
 		aggEvaluations(opts.aggrespaths)

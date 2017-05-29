@@ -38,7 +38,6 @@ import atexit  # At exit termination handleing
 import sys
 import time
 import subprocess
-from subprocess import PIPE
 from multiprocessing import cpu_count  # Returns the number of multi-core CPU units if exist, otherwise the number of cores
 import os
 import shutil
@@ -84,6 +83,8 @@ _PREFEXEC = 'exec'  # Execution prefix for the apps functions in benchapps
 _WPROCSMIN = 1  # Minimal number of the worker processes, maximal number is cpu_num-1 or core_num-1 for the single CPU with multiple cores
 
 _execpool = None  # Pool of executors to process jobs
+
+_TRACE = 2  # Tracing level: 0 - none, 1 - lightweight, 2 - debug, 3 - detailed
 
 
 def asymnet(netext):
@@ -468,11 +469,11 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	# Defaults: beta: 1.5, t1: 2, t2: 1
 
 	# Generate options for the networks generation using chosen variations of params
-	#varNmul = (1, 5, 20, 50)  # *N0 - sizes of the generating networks;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
-	#vark = (5, 25, 75)  # Average density of network links
-	varNmul = (1, 5)  # *N0 - sizes of the generating networks;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
-	vark = (5, 25)  # Average density of network links
-	assert vark[-1] <= round(varNmul[0] / rmaxK), 'Avg vs max degree validation failed'
+	#varNmul = (1, 5, 20, 50)  # *N0 - sizes of the generating networks in thousands of nodes;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
+	#vark = (5, 25, 75)  # Average node degree (density of the network links)
+	varNmul = (1, 5)  # *N0 - sizes of the generating networks in thousands of nodes;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
+	vark = (5, 25)  # Average node degree (density of the network links)
+	assert vark[-1] <= round(varNmul[0] * 1000 / rmaxK), 'Avg vs max degree validation failed'
 	#varkr = (0.5, 1, 5)  #, 20)  # Average relative density of network links in percents of the number of nodes
 	global _execpool
 
@@ -491,7 +492,7 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 			fseed.write('{}\n'.format(timeSeed()))
 	shutil.copy2(seedfile, randseed)
 
-	asym = '-a' if asymnet(netext) else ''  # Whether to generate directed (specified by arcs) or undirected (specified by edges) network
+	asym = '-a' if asymnet(netext) else None  # Whether to generate directed (specified by arcs) or undirected (specified by edges) network
 	for nm in varNmul:
 		N = nm * N0
 		for k in vark:
@@ -509,10 +510,19 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 						fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
 			else:
 				assert os.path.isfile(fnamex), '{} should be a file'.format(fnamex)
+			# Recover the seed file is exists
+			netseed = name.join((seedsdirfull, '.ngs'))
+			if os.path.isfile(netseed):
+				shutil.copy2(netseed, randseed)
+				if _TRACE >= 2:
+					print('The seed {netseed} is retained'.format(netseed=netseed))
+
 			# Generate networks with ground truth corresponding to the parameters
-			if os.path.isfile(fnamex):  # TODO: target
+			if os.path.isfile(fnamex):
 				netpath = name.join((netsdir, '/'))  # syntnets/networks/<netname>/  netname.*
 				netparams = name.join((paramsdir, ext))  # syntnets/params/<netname>.<ext>
+				xtimebin = os.path.relpath(_UTILDIR + 'exectime', basedir)
+				jobseed = os.path.relpath(netseed, basedir)
 				# Generate required number of network instances
 				if _execpool:
 					netpathfull = basedir + netpath
@@ -520,27 +530,35 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 						os.mkdir(netpathfull)
 					startdelay = 0.1  # Required to start execution of the LFR benchmark before copying the time_seed for the following process
 					netfile = netpath + name
+					if _TRACE >= 2:
+						print('Generating {netfile} as {name} by {netparams}'.format(netfile=netfile, name=name, netparams=netparams))
 					if count and overwrite or not os.path.exists(netfile.join((basedir, netext))):
-						args = ('../exectime', '-n=' + name, ''.join(('-o=', bmname, netext))  # Output .rcp in the current dir, basedir
-							, genbin, '-f', netparams, '-name', netfile, '-seed', randseed, asym)
+						args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, _EXTEXECTIME))  # Output .rcp in the current dir, basedir
+							, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
+						if asym:
+							args.append(args)
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 						_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
-							, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
+							#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
+							, onstart=lambda job: shutil.copy2(randseed, netseed)  # Network generation seed
 							#, ondone=shuffle if shufnum > 0 else None
 							, startdelay=startdelay))
 					for i in range(1, count):
 						namext = ''.join((name, _SEPINST, str(i)))
 						netfile = netpath + namext
 						if overwrite or not os.path.exists(netfile.join((basedir, netext))):
-							args = ('../exectime', '-n=' + namext, ''.join(('-o=', bmname, netext))
-								, genbin, '-f', netparams, '-name', netfile, '-seed', randseed, asym)
+							args = [xtimebin, '-n=' + namext, ''.join(('-o=', bmname, _EXTEXECTIME))
+								, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
+							if asym:
+								args.append(args)
 							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 							_execpool.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
-								, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
+								#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
+								, onstart=lambda job: shutil.copy2(randseed, netseed)  # Network generation seed
 								#, ondone=shuffle if shufnum > 0 else None
 								, startdelay=startdelay))
 			else:
-				print('ERROR: network parameters file "{}" is not exist'.format(fnamex), file=sys.stderr)
+				print('ERROR: network parameters file "{}" does not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')
 	if _execpool:
 		_execpool.join(max(gentimeout, count * (netgenTimeout  #+ (shufnum * shuftimeout)  # Note: consider only the time required for the largest instances generation
@@ -583,14 +601,14 @@ basenet = '{jobname}' + '{netext}'
 #print('basenet: ' + basenet, file=sys.stderr)
 for i in range(1, {shufnum} + 1):
 	# sort -R pgp_udir.net -o pgp_udir_rand3.net
-	netfile = ''.join(('{jobname}', {sepshf}, str(i), '{netext}'))
+	netfile = ''.join(('{jobname}', '{sepshf}', str(i), '{netext}'))
 	if {overwrite} or not os.path.exists(netfile):
 		with open(basenet) as inpnet:
 			ln = inpnet.readline()
 			if ln.startswith('#'):
 				# Shuffle considering the header
 				# ('sort', '-R') or just ('shuf')
-				wproc = subprocess.Popen(('shuf'), bufsize=-1, stdin=PIPE, stdout=PIPE)  # bufsize=-1 - use system default IO buffer size
+				wproc = subprocess.Popen(('shuf'), bufsize=-1, stdin=subprocess.PIPE, stdout=subprocess.PIPE)  # bufsize=-1 - use system default IO buffer size
 				with open(netfile, 'w') as shfnet:
 					hdr = True  # The file header is processed
 					body = []  # File body
@@ -598,10 +616,12 @@ for i in range(1, {shufnum} + 1):
 						# Write the header
 						if hdr and ln.startswith('#'):
 							shfnet.write(ln)
+							ln = inpnet.readline()
 							continue
 						hdr = False
 						body.append(ln)
-					body = wproc.communicate(ln)[0]  # Fetch stdout (PIPE)
+						ln = inpnet.readline()
+					body = wproc.communicate(''.join(body))[0]  # Fetch stdout (PIPE)
 					shfnet.write(body)
 			else:
 				# The file does not have a header
@@ -1029,11 +1049,11 @@ def benchmark(*args):
 		aggEvaluations(opts.aggrespaths)
 
 	exectime = time.time() - exectime
-	print('The benchmark is completed in{:.4f} sec ({} h {} m {:.4f} s)'
+	print('The benchmark is completed in {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(exectime, *secondsToHms(exectime)))
 
 
-def terminationHandler(signal, frame):
+def terminationHandler(signal=None, frame=None):
 	"""Signal termination handler"""
 	#if signal == signal.SIGABRT:
 	#	os.killpg(os.getpgrp(), signal)

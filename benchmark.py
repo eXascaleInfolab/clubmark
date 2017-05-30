@@ -482,7 +482,7 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	global _execpool
 
 	if not _execpool:
-		_execpool = ExecPool(_WPROCSMAX, _AFNSTEP)  # 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
+		_execpool = ExecPool(_WPROCSMAX, _AFNSTEP)
 
 	# Copy benchmark seed to the syntnets seed
 	if not os.path.exists(seedfile):
@@ -593,7 +593,7 @@ def shuffleNets(shufnum, datafiles, datadirs, netext=_EXTNETFILE, overwrite=Fals
 	global _execpool
 
 	if not _execpool:
-		_execpool = ExecPool(_WPROCSMAX, _AFNSTEP)
+		_execpool = ExecPool(_WPROCSMAX, 1)  # 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
 
 	timeout = 5 * 60  # 5 min per each shuffling
 
@@ -720,7 +720,7 @@ def convertNets(datafiles, datadirs, netext=_EXTNETFILE, overwrite=False, resdub
 	global _execpool
 
 	if not _execpool:
-		_execpool = ExecPool(_WPROCSMAX, _AFNSTEP)
+		_execpool = ExecPool(_WPROCSMAX, 1)  # 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
 
 	convTimeMax = 5 * 60  # 5 min
 	netsnum = 0  # Number of converted networks
@@ -756,7 +756,7 @@ def runApps(appsmodule, algorithms, datafiles, datadirs, netext, exectime, timeo
 	assert not _execpool, '_execpool should be clear on algs execution'
 	starttime = time.time()  # Procedure start time
 	if not _execpool:
-		_execpool = ExecPool(_WPROCSMAX, _AFNSTEP)  # min(_WPROCSMAX, ramfracs(32))
+		_execpool = ExecPool(_WPROCSMAX, _AFNSTEP)  # min(_WPROCSMAX, max(ramfracs(32), 1))
 
 	def unknownApp(name):
 		"""A stub for the unknown / not implemented apps (algorithms) to be benchmaked

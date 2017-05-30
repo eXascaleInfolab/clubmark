@@ -20,12 +20,12 @@
 from __future__ import print_function  # Required for stderr output, must be the first import;  division
 import sys
 import time
-import subprocess
 import collections
 import os
 import ctypes  # Required for the multiprocessing Value definition
 import types  # Required for instance methods definition
 import traceback  # Stacktrace
+import subprocess
 
 from multiprocessing import cpu_count
 from multiprocessing import Value
@@ -33,7 +33,7 @@ from subprocess import PIPE
 from subprocess import STDOUT
 
 
-_AFFINITYBIN = 'taskset'  # System app to set CPU affinity if required, should be preliminarry installed
+_AFFINITYBIN = 'taskset'  # System app to set CPU affinity if required, should be preliminarry installed (taskset is present by default on NIX systems)
 DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
@@ -289,9 +289,13 @@ class ExecPool(object):
 			where "node CPU" is CPU cores * HW treads per core.
 			To guarantee minimal number of RAM per a process, for example 2.5 GB:
 				workers = min(cpu_count(), ramfracs(2.5))
-		afnstep  - affinity step, integer if applied. Used to bound whole CPU cores
-			instead of the hardware treads to have more dedicated cache.
-			Typical values: None, 1, cpucorethreads().
+		afnstep  - affinity step, integer if applied. Used to bind worker to the
+			processing units to have warm cache for single thread workers.
+			Typical values:
+				None  - do not use affinity at all (recommended for multi-threaded workers),
+				1  - maximize parallelization (the number of worker processes = CPU units),
+				cpucorethreads()  - maximize the dedicated CPU cache (the number of
+					worker processes = CPU cores = CPU units / hardware treads per CPU core).
 			NOTE: specification of the afnstep might cause reduction of the workers.
 		"""
 		assert workers >= 1, 'At least one worker should be managed by the pool'
@@ -350,7 +354,8 @@ class ExecPool(object):
 		if not self._jobs and not self._workers:
 			return
 
-		print('WARNING: terminating the workers pool ...')
+		print('WARNING: terminating the execution pool with {} non-scheduled jobs and {} workers...'
+			.format(len(self._jobs), len(self._workers)))
 		for job in self._jobs:
 			job.complete(False)
 			# Note: only executing jobs, i.e. workers might have activated affinity
@@ -447,7 +452,7 @@ class ExecPool(object):
 				# Consider CPU affinity
 				iafn = -1 if not self._affinity or job._omitafn else self._affinity.index(None)  # Index in the affinity table to bind process to the CPU/core
 				if iafn >= 0:
-					job.args = [_AFFINITYBIN, '-c', str(iafn * self._afnstep)].extend(job.args)
+					job.args = [_AFFINITYBIN, '-c', str(iafn * self._afnstep)] + list(job.args)
 				#print('Opening proc with:\n\tjob.args: {},\n\tcwd: {}'.format(' '.join(job.args), job.workdir), file=sys.stderr)
 				job.proc = subprocess.Popen(job.args, bufsize=-1, cwd=job.workdir, stdout=fstdout, stderr=fstderr)  # bufsize=-1 - use system default IO buffer size
 				if iafn >= 0:

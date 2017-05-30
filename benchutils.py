@@ -393,7 +393,7 @@ def dirempty(dirpath):
 	if not dirpath.endswith('/'):
 		dirpath += '/'
 	try:
-		glob.iglob(dirpath + '*').next()
+		next(glob.iglob(dirpath + '*'))
 	except StopIteration:
 		# Diretory is empty
 		return True

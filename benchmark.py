@@ -37,8 +37,6 @@ from __future__ import print_function, division  # Required for stderr output, m
 import atexit  # At exit termination handleing
 import sys
 import time
-import subprocess
-from multiprocessing import cpu_count  # Returns the number of multi-core CPU units if exist, otherwise the number of cores
 import os
 import shutil
 import signal  # Intercept kill signals
@@ -46,6 +44,8 @@ from math import sqrt
 import glob
 from datetime import datetime
 import traceback  # Stacktrace
+import subprocess
+from multiprocessing import cpu_count  # Returns the number of multi-core CPU units if exist, otherwise the number of cores
 
 import benchapps  # Benchmarking apps (clustering algs)
 
@@ -632,8 +632,8 @@ for i in range(1, {shufnum} + 1):
 						inpnet.seek(pos)
 						body = inpnet.read()
 						break
-					body = wproc.communicate(body)[0]  # Fetch stdout (PIPE)
-					shfnet.write(body)
+					body = wproc.communicate(body.encode())[0]  # Fetch stdout (PIPE)
+					shfnet.write(body.decode())
 			else:
 				# The file does not have a header
 				#subprocess.call(('sort', '-R', basenet, '-o', netfile))
@@ -1009,12 +1009,12 @@ def benchmark(*args):
 
 	opts = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tsyntdir: {}\n\tconvnets: 0b{:b}'
-		'\n\trunalgs: {}\n\tevalres: 0b{:b}\n\tdatas: {}\n\ttimeout (h, min, sec): {}\n\talgorithms: {},\n\taggrespaths: {}'
+		'\n\trunalgs: {}\n\tevalres: 0b{:b}\n\tdatas: {}\n\talgorithms: {}\n\taggrespaths: {}\n\ttimeout: {} h {} m {:.4f} sec'
 		.format(opts.gensynt, opts.syntdir, opts.convnets, opts.runalgs, opts.evalres
 			, ', '.join(['{}{}{}'.format('' if not asym else 'asym: ', path, ' (gendir)' if gen else '')
 				for asym, path, gen in opts.datas])
-			, secondsToHms(opts.timeout), ', '.join(opts.algorithms) if opts.algorithms else ''
-			, ', '.join(opts.aggrespaths) if opts.aggrespaths else ''))
+			, ', '.join(opts.algorithms) if opts.algorithms else ''
+			, ', '.join(opts.aggrespaths) if opts.aggrespaths else '', *secondsToHms(opts.timeout)))
 	# Make opts.syntdir and link there lfr benchmark bin if required
 	bmname = 'lfrbench_udwov'  # Benchmark name for the synthetic networks generation
 	assert _UTILDIR.endswith('/'), 'A directory should have a valid terminator'
@@ -1074,7 +1074,10 @@ def terminationHandler(signal=None, frame=None):
 
 	if _execpool:
 		del _execpool  # Destructors are caled later
-	sys.exit(0)
+		# Define _execpool to avoid unnessary trash in the error log, which might
+		# be caused by the attempt of subsequent deletion on destruction
+		_execpool = None  # Note: otherwise _execpool becomes undefined
+	sys.exit()  # exit(0), 0 is the default exit code.
 
 
 if __name__ == '__main__':
@@ -1171,6 +1174,7 @@ if __name__ == '__main__':
 		atexit.register(terminationHandler)
 
 		benchmark(*sys.argv[1:])
+		print('bm completed', file=sys.stderr)
 
 
 # Extrenal API (exporting functions)

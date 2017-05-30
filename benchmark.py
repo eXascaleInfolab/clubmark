@@ -80,7 +80,10 @@ _EXTNETFILE = '.nse'  # Extension of the network files to be executed by the alg
 #_algseeds = 9  # TODO: Implement
 #_EVALDFL = 'd'  # Default evaluation measures: d - default extrinsic eval measures (NMI_max, F1h, F1p)
 _PREFEXEC = 'exec'  # Execution prefix for the apps functions in benchapps
-_WPROCSMIN = 1  # Minimal number of the worker processes, maximal number is cpu_num-1 or core_num-1 for the single CPU with multiple cores
+#_WPROCSMIN = 1  # Minimal number of the worker processes, maximal number is cpu_num-1 or core_num-1 for the single CPU with multiple cores
+_WPROCSMAX = max(cpu_count() - 1, 1)  # Maximal number of the worker processes, should be >= 1
+assert _WPROCSMAX >= 1, 'Natural number is expected not exceeding the number of system cores'
+_AFNSTEP = cpucorethreads()  # Affinity step to maximize the dedicated CPU cache
 
 _execpool = None  # Pool of executors to process jobs
 
@@ -479,7 +482,7 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 	global _execpool
 
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN), True)
+		_execpool = ExecPool(_WPROCSMAX, _AFNSTEP)  # 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
 
 	# Copy benchmark seed to the syntnets seed
 	if not os.path.exists(seedfile):
@@ -521,7 +524,7 @@ def generateNets(genbin, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
 			if os.path.isfile(netseed):
 				shutil.copy2(netseed, randseed)
 				if DEBUG_TRACE:
-					print('The seed {netseed} is retained'.format(netseed=netseed))
+					print('The seed {netseed} is retained (but inapplicable for the shuffles)'.format(netseed=netseed))
 
 			# Generate networks with ground truth corresponding to the parameters
 			if os.path.isfile(fnamex):
@@ -590,7 +593,7 @@ def shuffleNets(shufnum, datafiles, datadirs, netext=_EXTNETFILE, overwrite=Fals
 	global _execpool
 
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN), True)
+		_execpool = ExecPool(_WPROCSMAX, _AFNSTEP)
 
 	timeout = 5 * 60  # 5 min per each shuffling
 
@@ -717,7 +720,7 @@ def convertNets(datafiles, datadirs, netext=_EXTNETFILE, overwrite=False, resdub
 	global _execpool
 
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN), True)
+		_execpool = ExecPool(_WPROCSMAX, _AFNSTEP)
 
 	convTimeMax = 5 * 60  # 5 min
 	netsnum = 0  # Number of converted networks
@@ -753,7 +756,7 @@ def runApps(appsmodule, algorithms, datafiles, datadirs, netext, exectime, timeo
 	assert not _execpool, '_execpool should be clear on algs execution'
 	starttime = time.time()  # Procedure start time
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN), True)
+		_execpool = ExecPool(_WPROCSMAX, _AFNSTEP)  # min(_WPROCSMAX, ramfracs(32))
 
 	def unknownApp(name):
 		"""A stub for the unknown / not implemented apps (algorithms) to be benchmaked
@@ -885,7 +888,7 @@ def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, 
 	assert not _execpool, '_execpool should be clear on algs evaluation'
 	starttime = time.time()  # Procedure start time
 	if not _execpool:
-		_execpool = ExecPool(max(cpu_count() - 1, _WPROCSMIN), True)  # ATTENTION: NMI ovp multi-scale should be ealuated in the dedicated mode requiring all CPU cores
+		_execpool = ExecPool(_WPROCSMAX, _AFNSTEP)  # ATTENTION: NMI ovp multi-scale should be ealuated in the dedicated mode requiring all CPU cores
 
 	# Measures is a dict with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
 	measures = {3: ['nmi', _EXTCLNODES, 'NMIs'], 4: ['mod', '.hig', 'Q']}

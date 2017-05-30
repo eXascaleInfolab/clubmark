@@ -33,9 +33,6 @@ rsync -aLhv ../oslom/OSLOM2/convert\
 # Note: oslom_undir can be used for the symmetric networks specified with the arcs
 #	../oslom/OSLOM2/oslom_dir
 rsync -aLhv\
-	/home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/GANXiS_v3.0.2/GANXiS_v3.0.2/commons-collections-3.2.1.jar\
-	/home/lav/exascale/Papers/DataAnalysis/Clustering/Communities/Evaluation/Benchmarks/AlorithmsImpl/GANXiS_v3.0.2/GANXiS_v3.0.2/GANXiSw.jar\
-	\
 	../cggc_rg/bin/Release/rgmc\
 	../oslom/OSLOM2/oslom_undir\
 	../pscan/bin/Release/pscan\

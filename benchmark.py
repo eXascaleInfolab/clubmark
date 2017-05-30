@@ -45,7 +45,7 @@ import glob
 from datetime import datetime
 import traceback  # Stacktrace
 import subprocess
-from multiprocessing import cpu_count  # Returns the number of multi-core CPU units if exist, otherwise the number of cores
+from multiprocessing import cpu_count  # Returns the number of multi-core CPU units if defined
 
 import benchapps  # Benchmarking apps (clustering algs)
 
@@ -770,8 +770,9 @@ def runApps(appsmodule, algorithms, datafiles, datadirs, netext, exectime, timeo
 
 	# Run all algs if not specified the concrete algorithms to be run
 	if not algorithms:
+		# Algorithms callers
 		execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
-		# Save algorithms to perform resutls aggregation after the execution
+		# Save algorithms names to perform resutls aggregation after the execution
 		preflen = len(_PREFEXEC)
 		algorithms = [func[preflen:] for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
 	else:
@@ -779,11 +780,10 @@ def runApps(appsmodule, algorithms, datafiles, datadirs, netext, exectime, timeo
 		#algorithms = [alg.lower() for alg in algorithms]
 	execalgs = tuple(execalgs)
 
-	def execute(net, asym, pathid=''):
+	def execute(net, pathid=''):
 		"""Execute algorithms on the specified network counting number of ran jobs
 
 		net  - network to be processed
-		asym  - network links weights are asymmetric (in/outbound weights can be different)
 		pathid  - path id of the net to distinguish nets with the same name located in different dirs
 
 		return
@@ -791,7 +791,7 @@ def runApps(appsmodule, algorithms, datafiles, datadirs, netext, exectime, timeo
 		"""
 		for ealg in execalgs:
 			try:
-				jobsnum = ealg(_execpool, net, asym, timeout, pathid)
+				jobsnum = ealg(_execpool, net, asymnet(net), timeout, pathid)
 			except StandardError as err:
 				jobsnum = 0
 				errexectime = time.time() - exectime
@@ -800,26 +800,26 @@ def runApps(appsmodule, algorithms, datafiles, datadirs, netext, exectime, timeo
 		return jobsnum
 
 	# Desribe paths mapping if required
-	fpid = None
+	fpathids = None  # File of pathes ids
 	if len(datadirs) + len(datafiles) > 1:
 		if not os.path.exists(_RESDIR):
 			os.mkdir(_RESDIR)
-		pathidsMap = _RESDIR + 'path_ids.map'  # Path ids map file
+		pathidsMap = _RESDIR + 'path_ids.map'  # Path ids map file for the results iterpratation
 		try:
-			fpid = open(pathidsMap, 'a')
+			fpathids = open(pathidsMap, 'a')
 		except IOError as err:
 			print('WARNING, creation of the path ids map file is failed: {}. The mapping is outputted to stdout.'
 				.format(err), file=sys.stderr)
-			fpid = sys.stdout
+			fpathids = sys.stdout
 		# Write header if required
 		if not os.path.getsize(pathidsMap):
-			fpid.write('# ID(#)\tPath\n')  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
-		fpid.write('# --- {} ---\n'.format(datetime.utcnow()))  # Write timestamp
+			fpathids.write('# ID(#)\tPath\n')  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
+		fpathids.write('# --- {} ---\n'.format(datetime.utcnow()))  # Write timestamp
 	jobsnum = 0  # Number of the processed network jobs (can be a few per each algorithm per each network)
 	netcount = 0  # Number of networks to be processed
 	# Track processed file names to resolve cases when files with the same name present in different input dirs
 	filenames = set()
-	for pathid, (asym, ddir) in enumerate(datadirs):
+	for pathid, ddir in enumerate(datadirs):
 		pathid = _SEPPATHID + str(pathid)
 		tracePath = False
 		for net in glob.iglob('*'.join((ddir, netext))):  # Allow wildcards
@@ -830,12 +830,12 @@ def runApps(appsmodule, algorithms, datafiles, datadirs, netext, exectime, timeo
 			else:
 				ambiguous = True
 				tracePath = True
-			tnum = execute(net, asym, pathid if ambiguous else '')
+			tnum = execute(net, pathid if ambiguous else '')
 			jobsnum += tnum
 			netcount += tnum != 0
 		if tracePath:
-			fpid.write('{}\t{}\n'.format(pathid[1:], ddir))  # Skip the separator symbol
-	for pathid, (asym, net) in enumerate(datafiles):
+			fpathids.write('{}\t{}\n'.format(pathid[1:], ddir))  # Skip the separator symbol
+	for pathid, net in enumerate(datafiles):
 		pathid = ''.join((_SEPPATHID, _PATHID_FILE, str(pathid)))
 		netname = os.path.split(net)[1]
 		ambiguous = False  # Net name is unambigues even without the dir
@@ -843,20 +843,20 @@ def runApps(appsmodule, algorithms, datafiles, datadirs, netext, exectime, timeo
 			filenames.add(netname)
 		else:
 			ambiguous = True
-			fpid.write('{}\t{}\n'.format(pathid[1:], net))  # Skip the separator symbol
-		tnum = execute(net, asym, pathid if ambiguous else '')
+			fpathids.write('{}\t{}\n'.format(pathid[1:], net))  # Skip the separator symbol
+		tnum = execute(net, pathid if ambiguous else '')
 		jobsnum += tnum
 		netcount += tnum != 0
 	# Flush resulting buffer
-	if fpid:
-		if fpid is not sys.stdout:
-			fpid.close()
+	if fpathids:
+		if fpathids is not sys.stdout:
+			fpathids.close()
 		else:
-			fpid.flush()
+			fpathids.flush()
 	filenames = None  # Free memory from filenames
 
 	if _execpool:
-		timelim = min(timeout * jobsnum, 5 * 24*60*60)  # Global timeout, up to N days
+		timelim = min(timeout * jobsnum, 10 * 24*60*60)  # Global timeout, up to N days
 		print('Waiting for the apps execution on {} jobs from {} networks'
 			' with {} sec ({} h {} m {:.4f} s) timeout ...'.format(jobsnum, netcount, timelim, *secondsToHms(timelim)))
 		_execpool.join(timelim)

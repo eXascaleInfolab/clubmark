@@ -55,7 +55,7 @@ def delPathSuffix(path, nameonly=False):
 	'1K10'
 	>>> delPathSuffix('1K10!k7^1*1#1', True)
 	'1K10'
-	>>> delPathSuffix("1K10^1*2#1") == '1K10'
+	>>> delPathSuffix("1K10^1*2#f1") == '1K10'
 	True
 	>>> delPathSuffix('2K5^1', False) == '2K5'
 	True
@@ -142,7 +142,7 @@ def parseName(path, nameonly=False):
 	True
 	>>> parseName('scp/mod/2K5*1', True) == ('scp/mod/2K5', '', '', '*1', '')
 	True
-	>>> parseName('1K10!k5#1') == ('1K10', '!k5', '', '', '#1')
+	>>> parseName('1K10!k5#f1') == ('1K10', '!k5', '', '', '#f1')
 	True
 	>>> parseName('1K10!k3') == ('1K10', '!k3', '', '', '')
 	True

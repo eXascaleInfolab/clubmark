@@ -415,7 +415,8 @@ def prepareInput(datas, netext=_EXTNETFILE):
 
 
 # Networks processing ----------------------------------------------------------
-def generateNets(genbin, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME, overwrite=False, count=_SYNTINUM, seedfile=_SEEDFILE, gentimeout=2*60*60):  # 2 hours
+def generateNets(genbin, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
+, overwrite=False, count=_SYNTINUM, seedfile=_SEEDFILE, gentimeout=3*60*60):  # 2-4 hours
 	"""Generate synthetic networks with ground-truth communities and save generation params.
 	Previously existed paths with the same name are backuped.
 
@@ -490,7 +491,7 @@ def generateNets(genbin, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=
 		with open(seedfile, 'w') as fseed:
 			fseed.write('{}\n'.format(timeSeed()))
 
-	netgenTimeout = 30 * 60  # 30 min per a network instance (50K nodes on K=75 takes ~15 min)
+	#netgenTimeout = 30 * 60  # 30 min per a network instance (50K nodes on K=75 takes ~15 min)
 	#shuftimeout = 1 * 60  # 1 min per each shuffling
 	bmname =  os.path.split(genbin)[1]  # Benchmark name
 	genbin = os.path.relpath(genbin, basedir)  # Update path to the executable relative to the job workdir
@@ -498,10 +499,11 @@ def generateNets(genbin, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=
 	randseed = basedir + 'lastseed.txt'  # Random seed file name
 	shutil.copy2(seedfile, randseed)
 
-	asymarg = '-a' if asym else None  # Whether to generate directed (specified by arcs) or undirected (specified by edges) network
+	asymarg = ['-a', '1'] if asym else None  # Whether to generate directed (specified by arcs) or undirected (specified by edges) network
 	for nm in varNmul:
 		N = nm * N0
 		for k in vark:
+			netgenTimeout = max(nm * k / 1.5, 30)  # ~ up to 30 min (>= 30 sec) per a network instance (50K nodes on K=75 takes ~15-35 min)
 			name = 'K'.join((str(nm), str(k)))
 			ext = '.ngp'  # Network generation parameters
 			# Generate network parameters files if not exist
@@ -542,7 +544,7 @@ def generateNets(genbin, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=
 						args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, _EXTEXECTIME))  # Output .rcp in the current dir, basedir
 							, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
 						if asymarg:
-							args.append(asymarg)
+							args.extend(asymarg)
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 						_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
 							#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
@@ -556,7 +558,7 @@ def generateNets(genbin, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=
 							args = [xtimebin, '-n=' + namext, ''.join(('-o=', bmname, _EXTEXECTIME))
 								, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
 							if asymarg:
-								args.append(asymarg)
+								args.extend(asymarg)
 							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 							_execpool.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
 								#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
@@ -567,8 +569,7 @@ def generateNets(genbin, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=
 				print('ERROR: network parameters file "{}" does not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')
 	if _execpool:
-		_execpool.join(max(gentimeout, count * (netgenTimeout  #+ (shufnum * shuftimeout)  # Note: consider only the time required for the largest instances generation
-			)))  # 2 hours vs inst_count * inst_timeout
+		_execpool.join(max(gentimeout, count*netgenTimeout))  # Note: count*netgenTimeout is max time required for the largest instances generation
 		_execpool = None
 	print('Synthetic networks files generation is completed')
 

@@ -38,20 +38,12 @@ from utils.mpepool import *
 from benchutils import *
 
 from sys import executable as PYEXEC  # Full path to the current Python interpreter
-from benchutils import _SEPSHF
 from benchutils import _SEPPARS
-from benchevals import _SEPNAMEPART
-from benchevals import _ALGSDIR
-from benchevals import _RESDIR
-from benchevals import _CLSDIR
-from benchevals import _EXTERR
-from benchevals import _EXTEXECTIME
-from benchevals import _EXTAGGRES
-from benchevals import _EXTAGGRESEXT
+from benchevals import _SEPNAMEPART, _ALGSDIR, _RESDIR, _CLSDIR, _EXTERR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
 
 _EXTLOG = '.log'
 _EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
-_APREFIX = 'exec'  # Prefix of the executing application / algorithm
+_PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
 
 
 def aggexec(algs):
@@ -194,8 +186,8 @@ def	preparePath(taskpath):
 
 def funcToAppName(funcname):
 	"""Fetch name of the execution application by the function name"""
-	assert funcname.startswith(_APREFIX), 'Executing appliation is expected instead of "{}"'.format(functname)
-	return funcname[len(_APREFIX):].lower()
+	assert funcname.startswith(_PREFEXEC), 'Executing appliation is expected instead of "{}"'.format(functname)
+	return funcname[len(_PREFEXEC):]  # .lower()
 
 
 # Louvain
@@ -228,12 +220,13 @@ def funcToAppName(funcname):
 #	return
 
 
-def execLouvain_igraph(execpool, netfile, asym, timeout, pathid='', selfexec=False):
-	"""Execute Louvain
-	Results are not stable => multiple execution is desirable.
+def execLouvainIg(execpool, netfile, asym, timeout, pathid='', selfexec=False):
+	"""Execute Louvain using the igraph library
+	Note: Louvain produces not stable results => multiple executions are desirable.
 
 	returns number of executions or None
 	"""
+	# Note: .. + 0 >= 0 to be sure that type is arithmetic, otherwise it's always true for the str
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))

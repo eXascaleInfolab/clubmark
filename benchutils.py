@@ -19,8 +19,7 @@ import tarfile
 import re
 
 from multiprocessing import Lock
-from math import sqrt
-from math import copysign
+from math import sqrt, copysign
 
 
 _BCKDIR = 'backup/'  # Backup directory

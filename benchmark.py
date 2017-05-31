@@ -52,20 +52,9 @@ import benchapps  # Benchmarking apps (clustering algs)
 from utils.mpepool import *
 from benchutils import *
 
-from benchutils import _SEPPARS
-from benchutils import _SEPSHF
-from benchutils import _SEPINST
-from benchutils import _SEPPATHID
-
-from benchapps import PYEXEC
-from benchapps import aggexec
-from benchapps import _EXTCLNODES
-
-from benchevals import evalAlgorithm
-from benchevals import aggEvaluations
-from benchevals import EvalsAgg
-from benchevals import _RESDIR
-from benchevals import _EXTEXECTIME
+from benchutils import _SEPPARS, _SEPSHF, _SEPINST, _SEPPATHID
+from benchapps import PYEXEC, aggexec, funcToAppName, _EXTCLNODES, _PREFEXEC
+from benchevals import evalAlgorithm, aggEvaluations, EvalsAgg, _RESDIR, _EXTEXECTIME
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
@@ -79,7 +68,6 @@ _TIMEOUT = 36 * 60*60  # Default execution timeout for each algorithm for a sing
 _EXTNETFILE = '.nse'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated edges (.nsa - arcs)
 #_algseeds = 9  # TODO: Implement
 #_EVALDFL = 'd'  # Default evaluation measures: d - default extrinsic eval measures (NMI_max, F1h, F1p)
-_PREFEXEC = 'exec'  # Execution prefix for the apps functions in benchapps
 #_WPROCSMIN = 1  # Minimal number of the worker processes, maximal number is cpu_num-1 or core_num-1 for the single CPU with multiple cores
 _WPROCSMAX = max(cpu_count() - 1, 1)  # Maximal number of the worker processes, should be >= 1
 assert _WPROCSMAX >= 1, 'Natural number is expected not exceeding the number of system cores'
@@ -774,7 +762,7 @@ def runApps(appsmodule, algorithms, datafiles, datadirs, netext, exectime, timeo
 		execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
 		# Save algorithms names to perform resutls aggregation after the execution
 		preflen = len(_PREFEXEC)
-		algorithms = [func[preflen:] for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
+		algorithms = [funcToAppName(func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
 	else:
 		execalgs = [getattr(appsmodule, _PREFEXEC + alg.capitalize(), unknownApp(_PREFEXEC + alg.capitalize())) for alg in algorithms]
 		#algorithms = [alg.lower() for alg in algorithms]
@@ -1028,7 +1016,7 @@ def benchmark(*args):
 		# opts.gensynt:  0 - do not generate, 1 - only if not exists, 2 - forced generation
 		generateNets(benchpath, opts.syntdir, _NETSDIR, opts.netext, opts.gensynt == 2, opts.netins, opts.seedfile)
 
-	# Update opts.datasets with sythetic generated
+	# Update opts.datasets with sythetic generated: all subdirs of the synthetic networks dir
 	# Note: should be done only after the genertion, because new directories can be created
 	asym = asymnet(opts.netext)  # Whether the network is asymetric (directed)
 	if opts.gensynt or not opts.datas:

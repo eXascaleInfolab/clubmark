@@ -23,12 +23,7 @@ from datetime import datetime
 
 from utils.mpepool import *
 from benchutils import *
-
-from benchutils import _SEPINST
-from benchutils import _SEPSHF
-from benchutils import _SEPPATHID
-from benchutils import _PATHID_FILE
-from benchutils import _SEPPARS
+from benchutils import _SEPINST, _SEPSHF, _SEPPATHID, _PATHID_FILE, _SEPPARS
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file

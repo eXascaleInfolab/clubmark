@@ -25,9 +25,9 @@ from math import sqrt, copysign
 _BCKDIR = 'backup/'  # Backup directory
 _REFLOAT = re.compile('[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')  # Regular expression to parse float
 _REINT = re.compile('[-+]?\d+(?=\W)')  # Regular expression to parse int
-_SEPINST = '^'  # Network instances separator, must be a char
 _SEPPARS = '!'  # Network parameters separator, must be a char
-_SEPSHF = '*'  # Network shuffles separator, must be a char
+_SEPINST = '^'  # Network instances separator, must be a char
+_SEPSHF = '%'  # Network shuffles separator, must be a char; ~
 _SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
 _PATHID_FILE = 'f'  # File marker of the pathid (input file specified directly without the embracing dir), must be a char
 
@@ -50,15 +50,15 @@ def delPathSuffix(path, nameonly=False):
 
 	return  base of the path without suffixes
 
-	>>> delPathSuffix('1K10!k7^1*1#1')
+	>>> delPathSuffix('1K10!k7^1%1#1')
 	'1K10'
-	>>> delPathSuffix('1K10!k7^1*1#1', True)
+	>>> delPathSuffix('1K10!k7^1%1#1', True)
 	'1K10'
-	>>> delPathSuffix("1K10^1*2#f1") == '1K10'
+	>>> delPathSuffix("1K10^1%2#f1") == '1K10'
 	True
 	>>> delPathSuffix('2K5^1', False) == '2K5'
 	True
-	>>> delPathSuffix('scp/mod/2K5*1', True) == 'scp/mod/2K5'
+	>>> delPathSuffix('scp/mod/2K5%1', True) == 'scp/mod/2K5'
 	True
 	>>> delPathSuffix('1K10!k5#1') == '1K10'
 	True
@@ -69,7 +69,7 @@ def delPathSuffix(path, nameonly=False):
 	>>> delPathSuffix('2K5.dhrh^1') == "2K5.dhrh"
 	True
 
-	#>>> delPathSuffix('2K5.dhrh^1*1.cnl', True) == '2K5.dhrh'
+	#>>> delPathSuffix('2K5.dhrh^1%1.cnl', True) == '2K5.dhrh'
 	#True
 	#>>> delPathSuffix('scp/mod/1K10^1!k5#1.mod') == 'scp/mod/1K10'
 	#True
@@ -133,13 +133,13 @@ def parseName(path, nameonly=False):
 		shid  - shuffle id with separator or empty string
 		pathid  - path id with separator or empty string
 
-	>>> parseName('1K10!k7^1*1#1')
-	('1K10', '!k7', '^1', '*1', '#1')
-	>>> parseName("1K10^1*2#1") == ('1K10', '', '^1', '*2', '#1')
+	>>> parseName('1K10!k7^1%1#1')
+	('1K10', '!k7', '^1', '%1', '#1')
+	>>> parseName("1K10^1%2#1") == ('1K10', '', '^1', '%2', '#1')
 	True
 	>>> parseName('2K5^1', False) == ('2K5', '', '^1', '', '')
 	True
-	>>> parseName('scp/mod/2K5*1', True) == ('scp/mod/2K5', '', '', '*1', '')
+	>>> parseName('scp/mod/2K5%1', True) == ('scp/mod/2K5', '', '', '%1', '')
 	True
 	>>> parseName('1K10!k5#f1') == ('1K10', '!k5', '', '', '#f1')
 	True

@@ -1,0 +1,47 @@
+# (c) Network Speci format (NSL)
+#
+# \description The input Network (graph) is Specified by Links (Edges/Arcs).
+# Each line of the file defines edge of arc with optional weight.
+#
+# \Author: Artem Lutov <luart@ya.ru>
+# \Organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
+# \Date: 2016-11
+# \Version: 1.1
+
+
+# NSL[A,E] format specification:
+# Comments are marked with '#' symbol
+# Optional Header as a special comment:
+# [Nodes: <nodes_num>[,]	<Links>: <links_num>[,] [Weighted: {0, 1}]]
+# Note: the comma is either always present as a delimiter or always absent
+# Body, links_num lines (not considering comments that might be present)
+<src_id> <dst_id> [<weight>]
+...
+# where:
+#  nodes_num  - the number of nodes (vertices) in the network (graph)
+#  Links  - are either Edges (for the undirected network) or Arcs (for the direted network)
+#  links_num  - the number of <links> (edges or arcs) in the network
+#  weighted = {0, 1}  - wether the network is weighted or not, default: 1
+#
+#  src_id  - source node id >=0
+#  dst_id  - destination node id >=0
+#  weight  - weight in case the network is weighted, non-negative floating point number
+
+
+# Example --------------------------------------------------------------
+# = Example Network .nse (edges - nondirected) =
+# Nodes: 3	Edges: 3   Weighted: 0 
+# Note that the number of links corresponds to the number of payload lines in the file
+0 1
+# Empty lines and comments are allowed
+0 2
+2 1
+
+# = Example Network .nsa (arcs - directed) =
+# Nodes:3,  Arcs: 6,Weighted: 1
+0 1 1 
+1 0 1
+1 2 1
+2 1 1
+0 2 1
+2 0 1

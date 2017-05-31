@@ -3,7 +3,13 @@
 # This is internal script to sync benchmarking components to the latest version
 
 # Make target dirs if have not been existed yet
-mkdir -pv utils/louvain/ algorithms/daoc/ algorithms/ganxis/
+mkdir -pv utils/louvain/ algorithms/daoc/ algorithms/ganxis/ formats/
+
+# File Formats Specificaitons --------------------------------------------------
+rsync -aLhv ../daoc/common/format.cnl\
+	 ../daoc/common/format.nsl\
+	 \
+	 formats/
 
 # Utilities --------------------------------------------------------------------
 rsync -aLhv ../../system/ExecTime/bin/Release/exectime\

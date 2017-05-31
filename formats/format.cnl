@@ -1,0 +1,50 @@
+# (c) Clusters Nodes List format (CNL)
+#
+# \description The clustering is specified by the single file, where
+# each line corresponds to the cluster. The cluster consist of member
+# nodes with possible overlaps (a node might belong to multiple
+# clusters). Nodes a listed with space/tab separator and possible share
+# in case the membership is not equal (fuzzy overlap).
+#
+# \Author: Artem Lutov <luart@ya.ru>
+# \Organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
+# \Date: 2016-11
+# \Version: 1.1
+
+# CNL format specification:
+# Comments are marked with '#' symbol
+# Optional Header as a special comment:
+# [Clusters: <clusters_num>[,]  Nodes: <nodes_num>[,] [Fuzzy: {0, 1}]][,] [Numbered: {0, 1}]]
+# Note: the comma is either always present as a delimiter or always absent
+# The body consists of clusters_num lines (not considering comments that might be present)
+# in the following format using a space delimiter:
+# [cl1_id>] <nd1_id>[:<share1>] <nd2_id>[:<share1>] ...
+# ...
+# where:
+#  clusters_num  - the number of clusters
+#  nodes_num  - the number of DISTINCT nodes in all clusters
+#  Fuzzy = {0, 1}  - whether the membership can be fuzzy (inequal) or not, default: 1
+#  Numbered = {0, 1}  - whether the clusters are numbered, default: 0
+#
+#  cl_id  - cluster id, integer >=0, should form the solid range 0 .. clusters_num-1
+#    if specified at all
+#  nd_id  - node id, integer >=0
+#  share  - membership share, non-negative floating point number E (0, 1]
+# ATTENTION: all nodes in each cluster are unique (otherwise the file would consume more space
+# 	and NMI evaluation would not work on standard tools), but the same node may occure in
+# 	(be shared by) multiple clusters
+
+# Examples -------------------------------------------------------------
+# Overlapping fuzzy clustering consisting with the header
+# Clusters: 4	 Nodes:5,Fuzzy: 1, Numbered: 1
+# Note that the number of clusters corresponds to the number of payload lines in the file
+0> 1 2:0.2
+# Empty lines and comments are allowed
+1> 2:0.3 3
+2> 5 2:0.5 3
+3> 3 4
+
+# Example of the non-overlapping clustering consisting of 2 clusters and 5 nodes
+# without the header and cluster identifiers
+0 1
+3 2 4

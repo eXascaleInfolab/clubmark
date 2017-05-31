@@ -56,6 +56,7 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 	With Overlaps   | + | + | | + | + | + | * |
 	Parameter-Free  | + | | + | * | * |  | *
 	Consensus/Ensemble | + | | | + | | | +
+ 
 > *With Overlaps* marked with `*` means non-overlapping clusters as a result, but the algorithm can be modified to output overlapping clusters.  
 *Parameter-Free* marked with `*` means availability of default values for all parameters.
 

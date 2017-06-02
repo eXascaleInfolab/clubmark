@@ -66,6 +66,7 @@ _SEEDFILE = _RESDIR + 'seed.txt'
 _SYNTINUM = 3  # Default number of instances of each synthetic network, >= 1
 _TIMEOUT = 36 * 60*60  # Default execution timeout for each algorithm for a single network instance
 _EXTNETFILE = '.nse'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated edges (.nsa - arcs)
+_GENSEPSHF = '%'  # Shuffle number separator in the synthetic networks generation parameters
 #_algseeds = 9  # TODO: Implement
 #_EVALDFL = 'd'  # Default evaluation measures: d - default extrinsic eval measures (NMI_max, F1h, F1p)
 #_WPROCSMIN = 1  # Minimal number of the worker processes, maximal number is cpu_num-1 or core_num-1 for the single CPU with multiple cores
@@ -151,7 +152,7 @@ class Params(object):
 		"""
 		self.gensynt = 0
 		self.genasym = False
-		self.netins = _SYNTINUM  # Number of network instances to generate, >= 1
+		self.netins = None  # Number of network instances to generate, >= 1
 		assert self.netins >= 1, 'The number of network instances to generate should be positive'
 		self.shufnum = 0  # Number of shuffles for each network instance to be produced, >=0
 		self.syntdir = _SYNTDIR  # Base directory for synthetic datasets
@@ -201,7 +202,7 @@ def parseParams(args):
 				val = arg[pos+1:].split('=', 1)
 				if val[0]:
 					# Parse number of instances
-					nums = val[0].split('.', 1)
+					nums = val[0].split(_GENSEPSHF, 1)
 					# Now [instances][shuffles][outpdir]
 					if nums[0]:
 						opts.netins = int(nums[0])
@@ -221,10 +222,22 @@ def parseParams(args):
 					opts.syntdir = opts.syntdir.strip('"\'')
 					if not opts.syntdir.endswith('/'):
 						opts.syntdir += '/'
-		elif arg[1] == 'a':
-			if not (arg[:3] == '-a=' and len(arg) >= 4):
+		elif arg[1] == 'i':  # arg[1] == 'd' or arg[1] == 'f'
+			pos = arg.find('=', 2)
+			if pos == -1 or arg[2] not in 'fa=' or len(arg) == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
-			opts.algorithms = arg[3:].strip('"\'').split()  # Note: argparse automatically performs this escaping
+			# Extend weighted / unweighted opts.dataset, default is unweighted
+			val = arg[2]
+			flat = False  # Use flat derivatives or generate the dedicated dir for the derivatives of this network(s)
+			if val == 'f':
+				flat = True
+				val = arg[3]
+			asym = False  # asymnet(_EXTNETFILE)  # Asym: None - not specified (symmetric is assumed), False - symmetric, True - asymmetric
+			if val == 'a':
+				asym = True
+			#elif val == 'e':
+			#	asym = False
+			opts.datas.append(PathOpts(arg[pos+1:].strip('"\''), flat, asym))  # Remove quotes if exist
 		elif arg[1] == 'c':
 			opts.convnets = 1
 			for i in range(2,4):
@@ -235,10 +248,12 @@ def parseParams(args):
 				opts.convnets |= 0b10
 			if 'r' in arg:
 				opts.convnets |= 0b100
-		elif arg[1] == 'r':
-			if arg != '-r':
-				raise ValueError('Unexpected argument: ' + arg)
+		elif arg[1] == 'a':
 			opts.runalgs = True
+			if len(arg) >= 3:
+				if not (arg[:3] == '-a=' and len(arg) >= 4):
+					raise ValueError('Unexpected argument: ' + arg)
+				opts.algorithms = arg[3:].strip('"\'').split()  # Note: argparse automatically performs this escaping
 		elif arg[1] == 'e':
 			#0b00000001  - NMI_max
 			#0b00000011  - all NMIs (max, min, avg, sqrt)
@@ -295,23 +310,7 @@ def parseParams(args):
 				opts.evalres |= evalres
 			else:
 				raise ValueError('Unexpected argument: ' + arg)
-		elif arg[1] == 'i':  # arg[1] == 'd' or arg[1] == 'f'
-			pos = arg.find('=', 2)
-			if pos == -1 or arg[2] not in 'fa=' or len(arg) == pos + 1:
-				raise ValueError('Unexpected argument: ' + arg)
-			# Extend weighted / unweighted opts.dataset, default is unweighted
-			val = arg[2]
-			flat = False  # Use flat derivatives or generate the dedicated dir for the derivatives of this network(s)
-			if val == 'f':
-				flat = True
-				val = arg[3]
-			asym = False  # asymnet(_EXTNETFILE)  # Asym: None - not specified (symmetric is assumed), False - symmetric, True - asymmetric
-			if val == 'a':
-				asym = True
-			#elif val == 'e':
-			#	asym = False
-			opts.datas.append(PathOpts(arg[pos+1:].strip('"\''), flat, asym))  # Remove quotes if exist
-		elif arg[1] == 'a':
+		elif arg[1] == 's':
 			if len(arg) <= 3 or arg[2] != '=':
 				raise ValueError('Unexpected argument: ' + arg)
 			opts.aggrespaths.append(arg[3:].strip('"\''))  # Remove quotes if exist
@@ -325,7 +324,7 @@ def parseParams(args):
 			elif arg[2] == 'h':
 				timemul = 3600  # Hours
 			opts.timeout = float(arg[pos:]) * timemul
-		elif arg[1] == 's':
+		elif arg[1] == 'd':
 			if len(arg) <= 3 or arg[2] != '=':
 				raise ValueError('Unexpected argument: ' + arg)
 			opts.seedfile = arg[3:]
@@ -417,19 +416,19 @@ def prepareInput(datas, netext=_EXTNETFILE):
 
 
 # Networks processing ----------------------------------------------------------
-def generateNets(genbin, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
-, overwrite=False, count=_SYNTINUM, seedfile=_SEEDFILE, gentimeout=3*60*60):  # 2-4 hours
+def generateNets(genbin, count, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
+, overwrite=False, seedfile=_SEEDFILE, gentimeout=3*60*60):  # 2-4 hours
 	"""Generate synthetic networks with ground-truth communities and save generation params.
 	Previously existed paths with the same name are backuped.
 
 	genbin  - the binary used to generate the data (full path or relative to the base benchmark dir)
+	count  - the number of insances of each network to be generated, >= 1
 	asym  - generate asymmetric (specified by arcs, directed) instead of undifected networks
 	basedir  - base directory where data will be generated
 	netsdir  - relative directory for the synthetic networks, contains subdirs,
 		each contains all instances of each network and all shuffles of each instance
 	netext  - network file extension (should have the leading '.')
 	overwrite  - whether to overwrite existing networks or use them
-	count  - number of insances of each network to be generated, >= 1
 	seedfile  - seed file name
 	gentimeout  - timeout for all networks generation in parallel mode
 	"""
@@ -1035,7 +1034,7 @@ def benchmark(*args):
 
 	genovr = opts.gensynt == 2  # opts.gensynt:  0 - do not generate, 1 - only if not exists, 2 - forced generation
 	if opts.gensynt and opts.netins >= 1:
-		generateNets(benchpath, opts.genasym, opts.syntdir, _NETSDIR, opts.netext, genovr, opts.netins, opts.seedfile)
+		generateNets(benchpath, opts.netins, opts.genasym, opts.syntdir, _NETSDIR, opts.netext, genovr, opts.seedfile)
 	# Shuffle synthetic networks if required
 	if opts.shufnum:
 		# Note: backup is made on overriding generation of the synthetic networks, do not repeat it
@@ -1097,9 +1096,10 @@ def terminationHandler(signal=None, frame=None):
 if __name__ == '__main__':
 	if len(sys.argv) <= 1 or (len(sys.argv) == 2 and sys.argv[1] == '-h'):
 		print('\n'.join(('Usage:',
-			'  {0} [-g[f][a][=[<number>][.<shuffles_number>][=<outpdir>]] [-c[f][r]] [-a="app1 app2 ..."]'
-			' [-r] [-e[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]] [-i[f][a]=<datasets_{{dir,file}}_wildcard>'
-			' [-a=<eval_path>] [-t[{{s,m,h}}]=<timeout>] [-s=<seed_file>] | -h',
+			'  {0} [-g[f][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
+			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
+			' [-c[f][r]] [-a="app1 app2 ..."] [-r] [-q[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]]'
+			' [-s=<reseval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] | -h',
 			'',
 			'Example:',
 			'  {0} -g=3.5 -r -e -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
@@ -1107,12 +1107,14 @@ if __name__ == '__main__':
 			'  - The benchmark should be executed exclusively from the current directory (./)',
 			'  - The expected format of input datasets (networks) is .ns<l> - network specified by'
 			' <links> (arcs / edges), a generalization of the .snap, .ncol and Edge/Arcs Graph formats.',
+			'  - paths can contain wildcards: *, ?, +',
+			'  - multiple paths can be specified via multiple -i, -s options (one per the item)',
 			'',
 			'Parameters:',
 			'  -h  - show this usage description',
-			'  -g[f][a][=[<number>][.<shuffles_number>][=<outpdir>]]  - generate <number> (default: {synetsnum}) >= 0'
-			' synthetic datasets of the specified extension (default: {extnetfile}) in the <outpdir> (default: {syntdir})'
-			', shuffling each <shuffles_number> >= 0 times (default: 0). If <number> is omitted or set to 0 then'
+			'  -g[f][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets'
+			' of the specified extension (default: {extnetfile}) in the <outpdir> (default: {syntdir})'
+			', shuffling each <shuffles_number> times (default: 0). If <number> is omitted or set to 0 then'
 			' ONLY shuffling of the specified datasets should be performed including the <outpdir>/{netsdir}/*.'
 			' The generated networks are automatically added to the input datasets on the first place.',
 			'    f  - force the generation even when the data already exists (existent datasets are moved to backup)',
@@ -1121,18 +1123,36 @@ if __name__ == '__main__':
 			'    - shuffled datasets have the following naming format:\n'
 			'\t<base_name>[(seppars)<param1>...][{sepinst}<instance_index>][{sepshf}<shuffle_index>].<net_extension>',
 			'    - use "-g0" to execute existing synthetic datasets not changing them',
+			'  -i[X][{gensepshuf}<shuffles_number>]=<datasets_dir>  - input dataset(s)'
+			', directory with datasets of the specified extension (default: {extnetfile})'
+			' or a single dataset file (wildcards allowed), which should be shuffled <shuffles_number> times.'
+			' Default: -ie={syntdir}{netsdir}*/, which are subdirs of the synthetic networks dir without shuffling.',  # Note: corresponds to the _EXTNETFILE=.'.nse'
+			'  NOTE: use wildcards for the specific sets of files.',
+			'    f  - make flat derivatives on shuffling instead of generating the dedicted directory (havng the file base name)'
+			' for each input network, might cause flooding of the base directory. Existed shuffles are backuped',
+			'    a  - the dataset is specified by arcs (asymmetric, directed links, i.e. in/outbound weights of the link might differ) instead of edges'
+			', which overrides the UNSUPPORTED common custom extension format',
+			'    NOTE:',
+			'    - the following symbols in the path name have specific semantic and processed respectively: {rsvpathsmb}',
+			'    - paths can contain wildcards: *, ?, +',
+			'    - multiple directories and files can be specified via multiple -d/f options (one per the item)',
+			'    - datasets should have the following format: <node_src> <node_dest> [<weight>]',
+			'    - {{a,s}} is considered only if the network file has no corresponding metadata (formats like SNAP, ncol, nsa, ...)',
+			'    - ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
+			' is up to the clustering algorithm',
 			'  -c[X]  - convert existing networks into the required formats (.rcg[.hig], .lig, etc.)',
 			'    f  - force the conversion even when the data is already exist',
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
 			'  NOTE: files with the specified extension (default: {extnetfile}) are looked for in the specified dirs'
 			' to be converted into the processing app specific format.',
-			'  -a="app1 app2 ..."  - apps (clustering algorithms) to run/benchmark among the implemented.'
-			' Available: scp louvain_igraph randcommuns hirecs oslom2 ganxis.'
+			'  -a[="app1 app2 ..."]  - apps (clustering algorithms) to be run or evaluated, default: all.'
+			' Available apps: scp louvain_igraph randcommuns hirecs oslom2 ganxis.'
 			' Impacts {{r, e}} options. Optional, all registered apps (see benchapps.py) are executed by default.',
 			'  NOTE: output results are stored in the "{resdir}<algname>/" directory',
-			'  -r  - run the benchmarking apps on the specified networks',
 			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
-			'  -e[X]  - evaluate quality of the results, default: all',
+			'  -r  - run specified apps on the specidied datasets, default: all',
+			'  -q[X]  - evaluate quality of the results for the specified algorithms on the specified datasets'
+			' and form the summarized results. Default: all apps on all datasets',
 			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
 			'    e[Y]  - extrinsic measures for overlapping communities, default: all',
 			'      n[Z]  - NMI measure(s) for overlapping and multi-level communities: max, avg, min, sqrt',
@@ -1151,33 +1171,16 @@ if __name__ == '__main__':
 			'    i[Y]  - intrinsic measures for overlapping communities',
 			'      m  - modularity Q',
 			'      c  - conductance f',
-			'  -i[X]=<datasets_dir>  - input dataset(s), directory with datasets of the specified extension (default: {synetsnum})'
-			' or a single dataset file, wildcards allowed. Default: -ie={syntdir}{netsdir}*/, i.e. subdirs of the synthetic networks dir',  # Note: corresponds to the _EXTNETFILE=.'.nse'
-			'  NOTE: for the ',
-			'    f  - use flat derivatives on shuffling instead of generating the dedicted directory (havng the file base name)'
-			' for each input network, might cause flooding of the base directory. Existed shuffles are backuped',
-			'    a  - the dataset is specified by arcs (asymmetric, directed links, i.e. in/outbound weights of the link might differ) instead of edges'
-			', which overrides the UNSUPPORTED common custom extension format',
-			'    NOTE:',
-			'    - the following symbols in the path name have specific semantic and processed respectively: {rsvpathsmb}',
-			'    - paths can contain wildcards: *, ?, +',
-			'    - multiple directories and files can be specified via multiple -d/f options (one per the item)',
-			'    - datasets should have the following format: <node_src> <node_dest> [<weight>]',
-			'    - {{a,s}} is considered only if the network file has no corresponding metadata (formats like SNAP, ncol, nsa, ...)',
-			'    - ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
-			' is up to the clustering algorithm',
-			'  -a=<eval_path>  - perform aggregation of the specified evaluation results without the evaluation itself',
-			'    NOTE:',
-			'    - paths can contain wildcards: *, ?, +'
-			'    - multiple paths can be specified via multiple -s options (one per the item)',
+			'  -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
+			', which can be useful to include external manual evaluations into final summarized results',
 			'  -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network'
-			' in sec, min or hours; 0 sec - no timeout, Default: {th} h {tm} min {ts} sec',
-			'    s  - time in seconds. Default option',
+			' in sec, min or hours; 0 sec - no timeout, default: {th} h {tm} min {ts} sec',
+			'    s  - time in seconds, default option',
 			'    m  - time in minutes',
 			'    h  - time in hours',
-			'  -s=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms'
+			'  -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms'
 			', contains uint64_t value. Default: {seedfile}'
-			)).format(sys.argv[0], resdir=_RESDIR, synetsnum=_SYNTINUM, extnetfile=_EXTNETFILE, syntdir=_SYNTDIR, netsdir=_NETSDIR
+			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=_RESDIR, extnetfile=_EXTNETFILE, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=_SEPINST, seppars=_SEPPARS, sepshf=_SEPSHF, rsvpathsmb=(_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID)
 				, th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60, seedfile=_SEEDFILE))
 	else:

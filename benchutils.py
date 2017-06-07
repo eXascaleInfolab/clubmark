@@ -472,7 +472,7 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 
 	path  - the path to be named with version.
 		ATTENTION: the basepathis escaped, i.e. wildcards are not supported
-	expand  - whether to expand (take derivatives from this template) the path or use as it is
+	expand  - whether to expand (take derivatives from this template) the path
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
 	suffix  - suffix to be added to the backup name
@@ -515,7 +515,7 @@ def backupPath(basepath, expand=False, synctime=None, compress=True, suffix=''):
 
 	basepath  - path, last component of which (file or dir) is a template to backup
 		all paths starting from it in the same location.
-		ATTENTION: the basepathis escaped, i.e. wildcards are not supported
+		ATTENTION: the basepathis escaped, i.e. wildcards are NOT supported
 	expand  - expand prefix, backup all paths staring from basepath, or basepath only
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected

@@ -63,9 +63,7 @@ _SYNTDIR = 'syntnets/'  # Default base directory for the synthetic datasets (bot
 _NETSDIR = 'networks/'  # Networks sub-directory of the synthetic networks (inside _SYNTDIR)
 assert _RESDIR.endswith('/'), 'A directory should have a valid terminator'
 _SEEDFILE = _RESDIR + 'seed.txt'
-_SYNTINUM = 3  # Default number of instances of each synthetic network, >= 1
 _TIMEOUT = 36 * 60*60  # Default execution timeout for each algorithm for a single network instance
-_EXTNETFILE = '.nse'  # Extension of the network files to be executed by the algorithms; Network specified by tab/space separated edges (.nsa - arcs)
 _GENSEPSHF = '%'  # Shuffle number separator in the synthetic networks generation parameters
 #_algseeds = 9  # TODO: Implement
 #_EVALDFL = 'd'  # Default evaluation measures: d - default extrinsic eval measures (NMI_max, F1h, F1p)
@@ -91,20 +89,60 @@ def asymnet(netext):
 	return netext == '.nsa'
 
 
+def dflnetext(asym):
+	"""Get default networks extension for the network
+
+	asym  - whether the network is asymmetric (directed) or symmetric (undirected)
+
+	return  - respective extension of the network file having leading '.'
+	"""
+	return '.ns' + ('a' if asym else 'e')
+
+
 # Data structures --------------------------------------------------------------
 class PathOpts(object):
-	"""Input parameters"""
-	def __init__(self, path, flat=False, asym=False):
+	"""Paths parameters"""
+	def __init__(self, path, flat=False, asym=False, shufs=0):
 		"""Sets default values for the input parameters
 
 		path  - path (directory or file), a wildcard is allowed
 		flat  - use flat derivatives or create the dedicated directory on shuffling
 			to avoid flooding of the base directory
 		asym  - the network is asymmetric (specified by arcs rather than edges)
+		shufnum  - the number of shuffles of each network instance to be produced, >= 0
 		"""
 		self.path = path
 		self.flat = flat
 		self.asym = asym
+		self.shufs = shufs  # Number of shuffles for each network instance to be produced, >= 0
+
+	def __str__(self):
+		return ', '.join(('path: ' + self.path, 'flat: ' + str(self.flat), 'asym: ' + str(self.asym)
+			, 'shufs: ' + str(self.shufs)))
+
+
+class SyntPathOpts(PathOpts):
+	"""Paths parameters for the synthetic networks"""
+	def __init__(self, path, netins=3, overwrite=False, flat=False, asym=False, shufs=0):
+		"""Sets default values for the input parameters
+
+		path  - path (directory or file), a wildcard is allowed
+		netins  - the number of network instances to generate, >= 0
+		overwrite  - overwrite or skip generation if the synthetic networks instances
+			already exist
+			NOTE: the shuffling is performed always anyway if it was specified
+		flat  - use flat derivatives or create the dedicated directory on shuffling
+			to avoid flooding of the base directory
+		asym  - the network is asymmetric (specified by arcs rather than edges)
+		shufnum  - the number of shuffles of each network instance to be produced, >= 0
+		"""
+		super(SyntPathOpts, self).__init__(path, flat, asym, shufs)
+		self.netins = netins
+		self.overwrite = overwrite
+
+	def __str__(self):
+		return ', '.join((str(super(SyntPathOpts, self)), 'netins: ' + self.netins
+			, 'overwrite: ' + self.overwrite))
 
 
 class Params(object):
@@ -112,14 +150,7 @@ class Params(object):
 	def __init__(self):
 		"""Sets default values for the input parameters
 
-		gensynt  - generate synthetic networks:
-			0 - do not generate
-			1 - generate only if the network does not exist (the shuffling is performed always anyway)
-			2 - force geration (overwrite all)
-		genasym  - generate asymmetric (specified by arcs, directed) networks instead of undirected ones
-		netins  - number of network instances for each network type to be generated, >= 1
-		shufnum  - number of shuffles of each network instance to be produced, >= 0
-		syntdir  - base directory for synthetic datasets
+		syntpo  - synthetic networks path options, SyntPathOpts
 		convnets  - convert existing networks into the .hig format
 			0 - do not convert
 			0b001  - convert:
@@ -150,22 +181,29 @@ class Params(object):
 		aggrespaths = paths for the evaluated resutls aggregation (to be done for already existent evaluations)
 		seedfile  - seed file name
 		"""
-		self.gensynt = 0
-		self.genasym = False
-		self.netins = None  # Number of network instances to generate, >= 1
-		assert self.netins >= 1, 'The number of network instances to generate should be positive'
-		self.shufnum = 0  # Number of shuffles for each network instance to be produced, >=0
-		self.syntdir = _SYNTDIR  # Base directory for synthetic datasets
-		self.convnets = 0
+		self.syntpo = None  # SyntPathOpts()
+		#self.gensynt = 0
+		#self.genasym = False
+		#self.netins = 0  # Number of network instances to generate, >= 0
+		#assert self.netins >= 1, 'The number of network instances to generate should be positive'
+		#self.shufnum = 0  # Number of shuffles for each network instance to be produced, >= 0
+		#self.syntdir = _SYNTDIR  # Base directory for synthetic datasets
+			#gensynt  - generate synthetic networks:
+			#	0 - do not generate
+			#	1 - generate only if the network does not exist (the shuffling is performed always anyway)
+			#	2 - force geration (overwrite all)
+			#genasym  - generate asymmetric (specified by arcs, directed) networks instead of undirected ones
+			#netins  - the number of network instances for each network type to be generated, >= 1
+			#shufnum  - the number of shuffles of each network instance to be produced, >= 0
+			#syntdir  - base directory for synthetic datasets
 		self.runalgs = False
-		self.evalres = 0  # 1 - NMI, 2 - NMI_s, 4 - Q, 7 - all measures
-		self.datas = []  # Input datasets, list of triples: [PathOpts, ...], where path is either dir or file
-		self.netext = _EXTNETFILE  # Network file extension (.nse)
-		assert self.netext and self.netext[0] == '.', 'A file extension should have the leading "."'
+		self.evalres = 0
+		self.datas = []  # Input datasets, list of PathOpts, where path is either dir or file wildcard
 		self.timeout = _TIMEOUT
 		self.algorithms = []
-		self.aggrespaths = []  # Paths for the evaluated resutls aggregation (to be done for already existent evaluations)
 		self.seedfile = _SEEDFILE  # Seed value for the synthetic networks generation and stochastic algorithms, integer
+		self.convnets = 0
+		self.aggrespaths = []  # Paths for the evaluated resutls aggregation (to be done for already existent evaluations)
 
 
 # Input зarameters processing --------------------------------------------------
@@ -184,17 +222,18 @@ def parseParams(args):
 			raise ValueError('Unexpected argument: ' + arg)
 
 		if arg[1] == 'g':
-			opts.gensynt = 1  # Generate if not exists
+			# [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]
+			opts.syntpo = PathOpts(_SYNTDIR)
 			alen = len(arg)
 			if alen == 2:
 				continue
 			pos = arg.find('=', 2)
 			ieflags = pos if pos != -1 else len(arg)  # End index of the prefix flags
 			for i in range(2, ieflags):
-				if arg[i] == 'f':
-					opts.gensynt = 2  # Forced generation (overwrite)
+				if arg[i] == 'o':
+					opts.syntpo.overwrite = True  # Forced generation (overwrite)
 				elif arg[i] == 'a':
-					opts.genasym = True  # Generate asymmetric (directed) networks
+					opts.syntpo.asym = True  # Generate asymmetric (directed) networks
 				else:
 					raise ValueError('Unexpected argument: ' + arg)
 			if pos != -1:
@@ -205,39 +244,44 @@ def parseParams(args):
 					nums = val[0].split(_GENSEPSHF, 1)
 					# Now [instances][shuffles][outpdir]
 					if nums[0]:
-						opts.netins = int(nums[0])
+						opts.syntpo.netins = int(nums[0])
 					else:
-						opts.netins = 0  # Zero if omitted in case of shuffles are specified
+						opts.syntpo.netins = 0  # Zero if omitted in case of shuffles are specified
 					# Parse shuffles
 					if len(nums) > 1:
-						opts.shufnum = int(nums[1])
-					if opts.netins < 0 or opts.shufnum < 0:
-						raise ValueError('Value is out of range:  opts.netins: {netins} >= 1, opts.shufnum: {shufnum} >= 0'
-							.format(netins=opts.netins, shufnum=opts.shufnum))
+						opts.syntpo.shufs = int(nums[1])
+					if opts.syntpo.netins < 0 or opts.syntpo.shufs < 0:
+						raise ValueError('Value is out of range:  netins: {netins} >= 1, shufs: {shufnum} >= 0'
+							.format(netins=opts.syntpo.netins, shufnum=opts.syntpo.shufs))
 				# Parse outpdir
 				if len(val) > 1:
 					if not val[1]:  # arg ended with '=' symbol
 						raise ValueError('Unexpected argument: ' + arg)
-					opts.syntdir = val[1]
-					opts.syntdir = opts.syntdir.strip('"\'')
-					if not opts.syntdir.endswith('/'):
-						opts.syntdir += '/'
-		elif arg[1] == 'i':  # arg[1] == 'd' or arg[1] == 'f'
+					opts.syntpo.path = val[1]
+					opts.syntpo.path = opts.syntpo.path.strip('"\'')
+					if not opts.syntpo.path.endswith('/'):
+						opts.syntpo.path += '/'
+		elif arg[1] == 'i':
+			# [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>
 			pos = arg.find('=', 2)
-			if pos == -1 or arg[2] not in 'fa=' or len(arg) == pos + 1:
+			if pos == -1 or arg[2] not in 'fa=' + _GENSEPSHF or len(arg) == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
-			# Extend weighted / unweighted opts.dataset, default is unweighted
-			val = arg[2]
-			flat = False  # Use flat derivatives or generate the dedicated dir for the derivatives of this network(s)
-			if val == 'f':
-				flat = True
+			# flat  - Use flat derivatives or generate the dedicated dir for the derivatives of this network(s)
+			# aysm  - asymmetric (directed): None - not specified (symmetric is assumed), False - symmetric, True - asymmetric
+			# shufs  - the number of shuffles
+			popt = PathOpts(arg[pos+1:].strip('"\''), flat=False, asym=False, shufs=0)  # Remove quotes if exist
+			for i in range(2, pos):
+				if arg[i] == 'f':
+					popt.flat = True
+				elif arg[i] == 'a':
+					popt.asym = True
+				elif arg[i] == _GENSEPSHF:
+					popt.shufs = int(arg[i+1:pos])
+					break
+				else:
+					raise ValueError('Unexpected argument: ' + arg)
 				val = arg[3]
-			asym = False  # asymnet(_EXTNETFILE)  # Asym: None - not specified (symmetric is assumed), False - symmetric, True - asymmetric
-			if val == 'a':
-				asym = True
-			#elif val == 'e':
-			#	asym = False
-			opts.datas.append(PathOpts(arg[pos+1:].strip('"\''), flat, asym))  # Remove quotes if exist
+			opts.datas.append(popt)
 		elif arg[1] == 'c':
 			opts.convnets = 1
 			for i in range(2,4):
@@ -249,12 +293,15 @@ def parseParams(args):
 			if 'r' in arg:
 				opts.convnets |= 0b100
 		elif arg[1] == 'a':
+			if not (arg[:3] == '-a=' and len(arg) >= 4):
+				raise ValueError('Unexpected argument: ' + arg)
+			opts.algorithms = arg[3:].strip('"\'').split()  # Note: argparse automatically performs this escaping
+		elif arg[1] == 'r':
+			if len(arg) > 2:
+				raise ValueError('Unexpected argument: ' + arg)
 			opts.runalgs = True
-			if len(arg) >= 3:
-				if not (arg[:3] == '-a=' and len(arg) >= 4):
-					raise ValueError('Unexpected argument: ' + arg)
-				opts.algorithms = arg[3:].strip('"\'').split()  # Note: argparse automatically performs this escaping
-		elif arg[1] == 'e':
+		elif arg[1] == 'q':
+			# [-q[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]]
 			#0b00000001  - NMI_max
 			#0b00000011  - all NMIs (max, min, avg, sqrt)
 			#0b00000100  - ONMI_max
@@ -334,100 +381,18 @@ def parseParams(args):
 	return opts
 
 
-def prepareInput(datas, netext=_EXTNETFILE):
-	"""Generating directories structure, linking there the original network, and shuffles
-	for the input datasets according to the specidied parameters. The former dir is backuped.
-	The wildcards are resolved.
-
-	datas  - pathes with flags to be processed in the format: [PathOpts, ...]
-	netext  - extension of the network files with the leading point
-
-	return
-		datadirs  - unique target dirs of networks to be processed (without wildcards)
-		datafiles  - unique target files to be processed (without wildcards)
-	"""
-	# Pathes are dictionaries of {path: index} to have unique pathes and traverse
-	# them in the order specified by the user
-	datadirs = {}
-	datafiles = {}
-
-	if not datas:
-		return datadirs, datafiles
-	assert isinstance(datas[0], PathOpts), 'datas must be a container of PathOpts'
-	assert netext and netext[0] == '.', 'file extension should have the leading point'
-
-	def prepareDir(dirname, netfile, bcksuffix=None):
-		"""Move specified dir to the backup if not empty. Make the dir if not exists.
-		Link the origal network inside the dir.
-
-		dirname  - dir to be moved
-		netfile  - network file to be linked into the <dirname> dir
-		bcksuffix  - backup suffix for the group of directories, formed automatically
-			from the SyncValue()
-		"""
-		# Note: there is no need to backup each input dir, syntnets have a dedicated backup on regeneration or shuffling
-		#if os.path.exists(dirname) and not dirempty(dirname):
-		#	backupPath(dirname, False, bcksuffix)
-		if not os.path.exists(dirname):
-			os.mkdir(dirname)
-			# Make hard link to the network.
-			# Hard link is used to have initial former copy of the archive even when the origin is changed
-			os.link(netfile, '/'.join((dirname, os.path.split(netfile)[1])))
-
-	for i, popt in enumerate(datas):
-		# Resolve wildcards
-		for path in glob.iglob(popt.path):  # Allow wildcards
-			#if not popt.flat:
-			#	bcksuffix = SyncValue()  # Use unified suffix for the backup of various network instances
-			if os.path.isdir(path):
-				# Use the same path separator on all OSs
-				if not path.endswith('/'):
-					path += '/'
-				# Generate dirs if required
-				if not popt.flat:
-					# Traverse over the networks instances and create corresponding dirs
-					for net in glob.iglob('*'.join((path, netext))):  # Allow wildcards
-						# Backup existent dir
-						dirname = os.path.splitext(net)[0]
-						prepareDir(dirname, net, bcksuffix)
-						# Update target dirs
-						datadirs.setdefault(dirname + '/', i)  # Retain the index of the first occurance
-				else:
-					datadirs.setdefault(path, i)  # Retain the index of the first occurance
-			else:
-				# Generate dirs if required
-				if not popt.flat:
-					dirname = os.path.splitext(path)[0]
-					prepareDir(dirname, path, bcksuffix)
-					datafiles.setdefault('/'.join((dirname, os.path.split(path)[1])), i)
-				else:
-					datafiles.adsetdefaultd(path, i)
-
-	# Retain the original order
-	sortByIndex = lambda x: x[1]
-
-	datadirs = datadirs.items()
-	datadirs.sort(key=sortByIndex)
-
-	datafiles = datafiles.items()
-	datafiles.sort(key=sortByIndex)
-
-	return [p[0] for p in datadirs], [p[0] for p in datafiles]
-
-
 # Networks processing ----------------------------------------------------------
-def generateNets(genbin, count, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, netext=_EXTEXECTIME
+def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 , overwrite=False, seedfile=_SEEDFILE, gentimeout=3*60*60):  # 2-4 hours
 	"""Generate synthetic networks with ground-truth communities and save generation params.
-	Previously existed paths with the same name are backuped.
+	Previously existed paths with the same name are backuped before being updated.
 
 	genbin  - the binary used to generate the data (full path or relative to the base benchmark dir)
-	count  - the number of insances of each network to be generated, >= 1
+	insnum  - the number of insances of each network to be generated, >= 1
 	asym  - generate asymmetric (specified by arcs, directed) instead of undifected networks
 	basedir  - base directory where data will be generated
 	netsdir  - relative directory for the synthetic networks, contains subdirs,
 		each contains all instances of each network and all shuffles of each instance
-	netext  - network file extension (should have the leading '.')
 	overwrite  - whether to overwrite existing networks or use them
 	seedfile  - seed file name
 	gentimeout  - timeout for all networks generation in parallel mode
@@ -437,25 +402,30 @@ def generateNets(genbin, count, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, 
 	# Note: shuffles unlike ordinary networks have double extension: shuffling nimber and standard extension
 
 	# Store all instances of each network with generation parameters in the dedicated directory
-	assert count >= 1, 'Number of the network instances to be generated must be positive'
+	assert insnum >= 1, 'Number of the network instances to be generated must be positive'
 	assert ((basedir == '' or basedir[-1] == '/') and paramsdir[-1] == '/' and seedsdir[-1] == '/' and netsdir[-1] == '/'
 		), 'Directory name must have valid terminator'
-	assert netext and netext[0] == '.', 'A file extension should have the leading "."'
+	assert os.path.exists(seedfile), 'The seed file should exist'
 
 	paramsdirfull = basedir + paramsdir
 	seedsdirfull = basedir + seedsdir
 	netsdirfull = basedir + netsdir
-	# Backup params dirs on rewriting
+	# Initialize backup path suffix if required
 	if overwrite:
-		bcksuffix = SyncValue()
-		for dirname in (paramsdirfull, seedsdirfull, netsdirfull):
-			if os.path.exists(dirname) and not dirempty(dirname):
-				backupPath(dirname, False, bcksuffix)
+		bcksuffix = SyncValue()  # Use the same backup suffix for multiple paths
 
 	# Create dirs if required
 	for dirname in (basedir, paramsdirfull, seedsdirfull, netsdirfull):
 		if not os.path.exists(dirname):
 			os.mkdir(dirname)  # Note: mkdir does not create intermediate (non-leaf) dirs
+		# Backup target dirs on rewriting, removing backuped content
+		elif overwrite and not dirempty(dirname):
+			backupPath(dirname, False, bcksuffix)
+			if os.path.islink(dirname):
+				os.remove(dirname)
+			else:
+				shutil.rmtree(dirname)
+			os.mkdir(dirname)
 
 	# Initial options for the networks generation
 	N0 = 1000  # Satrting number of nodes
@@ -483,23 +453,13 @@ def generateNets(genbin, count, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, 
 	if not _execpool:
 		_execpool = ExecPool(_WPROCSMAX, _AFNSTEP)
 
-	# Copy benchmark seed to the syntnets seed
-	if not os.path.exists(seedfile):
-		# Consider inexisting base path of the common seed file
-		sfbase = os.path.split(seedfile)[0]
-		if not os.path.exists(sfbase):
-			os.makedirs(sfbase)
-		with open(seedfile, 'w') as fseed:
-			fseed.write('{}\n'.format(timeSeed()))
-
-	#netgenTimeout = 30 * 60  # 30 min per a network instance (50K nodes on K=75 takes ~15 min)
-	#shuftimeout = 1 * 60  # 1 min per each shuffling
 	bmname =  os.path.split(genbin)[1]  # Benchmark name
 	genbin = os.path.relpath(genbin, basedir)  # Update path to the executable relative to the job workdir
-	#bmbin = './' + bmname  # Benchmark binary
+	# Copy benchmark seed to the syntnets seed
 	randseed = basedir + 'lastseed.txt'  # Random seed file name
 	shutil.copy2(seedfile, randseed)
 
+	netext = dflnetext(asym)  # Network file extension (should have the leading '.')
 	asymarg = ['-a', '1'] if asym else None  # Whether to generate directed (specified by arcs) or undirected (specified by edges) network
 	for nm in varNmul:
 		N = nm * N0
@@ -541,7 +501,7 @@ def generateNets(genbin, count, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, 
 					netfile = netpath + name
 					if DEBUG_TRACE:
 						print('Generating {netfile} as {name} by {netparams}'.format(netfile=netfile, name=name, netparams=netparams))
-					if count and overwrite or not os.path.exists(netfile.join((basedir, netext))):
+					if insnum and overwrite or not os.path.exists(netfile.join((basedir, netext))):
 						args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, _EXTEXECTIME))  # Output .rcp in the current dir, basedir
 							, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
 						if asymarg:
@@ -552,7 +512,7 @@ def generateNets(genbin, count, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, 
 							, onstart=lambda job: shutil.copy2(randseed, netseed)  # Network generation seed
 							#, ondone=shuffle if shufnum > 0 else None
 							, startdelay=startdelay))
-					for i in range(1, count):
+					for i in range(1, insnum):
 						namext = ''.join((name, _SEPINST, str(i)))
 						netfile = netpath + namext
 						if overwrite or not os.path.exists(netfile.join((basedir, netext))):
@@ -570,36 +530,33 @@ def generateNets(genbin, count, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR, 
 				print('ERROR: network parameters file "{}" does not exist'.format(fnamex), file=sys.stderr)
 	print('Parameter files generation is completed')
 	if _execpool:
-		_execpool.join(max(gentimeout, count*netgenTimeout))  # Note: count*netgenTimeout is max time required for the largest instances generation
+		_execpool.join(max(gentimeout, insnum*netgenTimeout))  # Note: insnum*netgenTimeout is max time required for the largest instances generation
 		_execpool = None
 	print('Synthetic networks files generation is completed')
 
 
-def shuffleNets(shufnum, datafiles, datadirs, netext=_EXTNETFILE, overwrite=False, backup=False, shuftimeout=30*60):  # 30 min
-	"""Shuffle specified networks
+def shuffleNets(datas, shuftimeout=30*60):  # 30 min
+	"""Shuffle specified networks backing up and updateing exsinting shuffles.
+	Existing shuffles with the target name are skipped, redundant are deleted,
+	lacked are formed.
 
-	shufnum  - number of shufflings for of each instance on the generated network, > 0
-	datafiles  - unique files of the converting networks (without wildcards)
-	datadirs  - unique directories of the converting networks (without wildcards)
-	netext  - network file extension (should have the leading '.'), required for datadirs only
-	overwrite  - whether to renew existent shuffles (delete former and generate new).
-		ATTENTION: Anyway redundant shuffles are deleted.
-	shuftimeout  - global shuffling timeout
-	backup  - backup existent networks before the shuffling
+	datas  - input datasets, wildcards of files or directories containing files
+		of the default extensions .ns{{e,a}}
+	shuftimeout  - total shuffling timeout
 	"""
-	# Note: backup is performe on paths extraction, see prepareInput()
-	assert shufnum >= 1, 'Number of the network shuffles to be generated must be positive'
-	assert netext and netext[0] == '.', 'A file extension should have the leading "."'
+	if not datas:
+		return
+	assert isinstance(datas[0], PathOpts), 'datas must be a container of PathOpts'
 	global _execpool
 
 	if not _execpool:
 		_execpool = ExecPool(_WPROCSMAX, 1)  # 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
-
-	timeout = 5 * 60  # 5 min per each shuffling
+	timeout1 = 7 * 60  # 7 min per each shuffling
 
 	def shuffle(job):
-		"""Shufle network specified by the job"""
-		if shufnum < 1:
+		"""Shufle network instance specified by the job"""
+		#assert job.params, 'Job params should be defined'
+		if job.params.shfnum < 1:
 			return
 		args = (PYEXEC, '-c',
 # Shuffling procedure
@@ -608,7 +565,7 @@ import subprocess
 
 basenet = '{jobname}' + '{netext}'
 #print('basenet: ' + basenet, file=sys.stderr)
-for i in range(1, {shufnum} + 1):
+for i in range(1, {shfnum} + 1):
 	# sort -R pgp_udir.net -o pgp_udir_rand3.net
 	netfile = ''.join(('{jobname}', '{sepshf}', str(i), '{netext}'))
 	if {overwrite} or not os.path.exists(netfile):
@@ -638,49 +595,103 @@ for i in range(1, {shufnum} + 1):
 				# The file does not have a header
 				#subprocess.call(('sort', '-R', basenet, '-o', netfile))
 				subprocess.call(('shuf', basenet, '-o', netfile))
-""".format(jobname=job.name, sepshf=_SEPSHF, netext=netext, shufnum=shufnum
-, overwrite=overwrite))
+""".format(jobname=job.name, sepshf=_SEPSHF, netext=job.params.netext, shfnum=job.params.shfnum
+, overwrite=False))  # Skip the shuffling if the respective file already exists
 		_execpool.execute(Job(name=job.name + '_shf', workdir=job.workdir
-			, args=args, timeout=timeout * shufnum))
+			, args=args, timeout=min(shuftimeout, timeout1 * job.params.shufs)))
 
-	def shuffleNet(netfile):
+	def shuffleNet(netfile, shfnum):
 		"""Shuffle specified network
 
+		netfile  - the network instance to be shuffled
+		shfnum  - the number of shuffles to be done
+
 		return
-			shufnum - number of shufflings to be done
+			shfnum - number of shufflings to be done or zero if the instance is a shuffle by itself
 		"""
-		# Remove existent shuffles if required
+		# Remove existing shuffles if required
 		path, name = os.path.split(netfile)
-		name = os.path.splitext(name)[0]
+		name, netext = os.path.splitext(name)
 		if name.find(_SEPSHF) != -1:
 			shf = name.rsplit(_SEPSHF, 1)[1]
 			# Omit shuffling of the shuffles, remove redundant shuffles
-			if int(shf[1:]) > shufnum:
+			if int(shf[1:]) > shfnum:
 				os.remove(netfile)
 			return 0
 		# Note: the shuffling might be scheduled even when the shuffles exist in case
 		# the origin network is traversed before it's shuffles
-		shuffle(Job(name=name, workdir=path + '/'))
-		return shufnum  # The network is shuffled shufnum times
+		shuffle(Job(name=name, workdir=path + '/', params={netext: netext, shfnum: shfnum} ))
+		return shfnum  # The network is shuffled shfnum times
 
-	count = 0
-	if backup:
-		bcksuffix = SyncValue()
-	for netdir in datadirs:
-		# Backup existent data if required
-		if backup and os.path.exists(netdir) and not dirempty(netdir):
-			backupPath(netdir, False, bcksuffix)
-		for nets in (glob.iglob('*'.join((netdir, netext))), datafiles):
-			for net in nets:  # Allow wildcards
-				count += shuffleNet(net)
-	for asym, dfile in datafiles:
-		# Backup existent data if required
-		if backup and os.path.exists(dfile):
-			backupPath(dfile, False, bcksuffix)
-		count += shuffleNet(dfile)
+	def prepareDir(dirname, netfile, bcksuffix=None):
+		"""Make the dir if not exists, otherwise move to the backup if the dir is not empty.
+		Link the origal network inside the dir.
+
+		dirname  - dir to be moved
+		netfile  - network file to be linked into the <dirname> dir
+		bcksuffix  - backup suffix for the group of directories, formed automatically
+			from the SyncValue()
+
+		return  - shuffle0, the origin network filename for the shuffles
+		"""
+		if not os.path.exists(dirname):
+			os.mkdir(dirname)
+		elif not dirempty(dirname):
+			backupPath(dirname, False, bcksuffix)
+		shuf0 = '/'.join((dirname, os.path.split(netfile)[1]))
+		# Make hard link to the network if not exists
+		if not os.path.exists(shuf0):
+			# Hard link is used to have initial former copy of the archive even when the origin is deleted
+			os.link(netfile, shuf0)
+		return shuf0
+
+	bcksuffix = SyncValue()  # Use unified suffix for the backup of various network instances
+	shfnum = 0  # Total number of shuffles
+	for popt in datas:  # (path, flat=False, asym=False, shufs=0)
+		#assert isinstance(popt, PathOpts), 'datas must be a container of PathOpts'
+		# Skip paths that do not require any shuffling
+		if not popt.shufs:
+			continue
+		dflext = dflnetext(popt.asym)
+		# Resolve wildcards
+		for path in glob.iglob(popt.path):  # Allow wildcards
+			# Shuffle synthetic networks if required
+			if os.path.isdir(path):
+				# Use the same path separator on all OSs
+				if not path.endswith('/'):
+					path += '/'
+				# Generate dirs if required
+				if not popt.flat:
+					# Traverse over the networks instances and create corresponding dirs
+					for net in glob.iglob('*'.join((path, dflext))):  # Allow wildcards
+						# Skip the shuffles if any
+						netname = os.path.split(net)[1]
+						if netname.find(_SEPSHF) != -1:
+							continue
+						# Backup existed dir
+						dirname = os.path.splitext(net)[0]
+						shuf0 = prepareDir(dirname, net, bcksuffix)
+						shfnum += shuffleNet(shuf0)
+				else:
+					# Backup the whole dir of network instances with possible shuffles,
+					# which are going ot be shuffled
+					backupPath(path, False, bcksuffix)
+					# Note: the folder containing the network instance origining the shuffling should not be deleted
+					for net in glob.iglob('*'.join((path, dflext))):
+						shfnum += shuffleNet(net)
+			else:
+				# Generate dirs if required
+				if not popt.flat:
+					dirname = os.path.splitext(path)[0]
+					shuf0 = prepareDir(dirname, path, bcksuffix)
+					shfnum += shuffleNet(shuf0)
+				else:
+					# Backup existing flat shuffles if any, which will be updated the subsequent shuffling
+					backupPath(path, True, bcksuffix)
+					shfnum += shuffleNet(path)
 
 	if _execpool:
-		_execpool.join(max(shuftimeout, count * shufnum * timeout))  # 30 min
+		_execpool.join(min(shuftimeout, shfnum * timeout1))  # 30 min
 		_execpool = None
 	print('Networks shuffling is completed')
 
@@ -714,12 +725,11 @@ def convertNet(inpnet, overwrite=False, resdub=False, timeout=3*60):  # 3 min
 	#	print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
 
 
-def convertNets(datafiles, datadirs, netext=_EXTNETFILE, overwrite=False, resdub=False, convtimeout=30*60):  # 30 min
+def convertNets(datas, overwrite=False, resdub=False, convtimeout=30*60):  # 30 min
 	"""Convert input networks to another formats
 
-	datafiles  - unique files of the converting networks (without wildcards)
-	datadirs  - unique directories of the converting networks (without wildcards)
-	netext  - network file extension (should have the leading '.'), required for datadirs only
+	datas  - input datasets, wildcards of files or directories containing files
+		of the default extensions .ns{{e,a}}
 	overwrite  - whether to overwrite existing networks or use them
 	resdub  - resolve duplicated links
 	"""
@@ -745,14 +755,13 @@ def convertNets(datafiles, datadirs, netext=_EXTNETFILE, overwrite=False, resdub
 	print('Networks conversion is completed, converted {} networks'.format(netsnum))
 
 
-def runApps(appsmodule, algorithms, datafiles, datadirs, netext, exectime, timeout):
+def runApps(appsmodule, algorithms, datas, exectime, timeout):
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
 	algorithms  - list of the algorithms to be executed
-	datafiles  - target networks to be processed
-	datadirs  - directories with target networks to be processed
-	netext  - network file extension (should have the leading '.'), required for datadirs only
+	datas  - input datasets, wildcards of files or directories containing files
+		of the default extensions .ns{{e,a}}
 	exectime  - elapsed time since the benchmarking started
 	timeout  - timeout per each algorithm execution
 	"""
@@ -877,14 +886,14 @@ def runApps(appsmodule, algorithms, datafiles, datadirs, netext, exectime, timeo
 	print('Execution statistics aggregated')
 
 
-def evalResults(evalres, appsmodule, algorithms, datadirs, datafiles, exectime, timeout):
+def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout):
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
 	evalres  - evaluation flags: 0 - Skip evaluations, 1 - NMI, 2 - NMI_s, 4 - Q (modularity), 7 - all measures
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
 	algorithms  - list of the algorithms to be executed
-	datadirs  - directories with target networks to be processed
-	datafiles  - target networks to be processed
+	datas  - input datasets, wildcards of files or directories containing files
+		of the default extensions .ns{{e,a}}
 	exectime  - elapsed time since the benchmarking started
 	timeout  - timeout per each evaluation run
 	"""
@@ -1016,58 +1025,58 @@ def benchmark(*args):
 	exectime = time.time()  # Benchmarking start time
 
 	opts = parseParams(args)
-	print('The benchmark is started, parsed params:\n\tgensynt: {}\n\tgenasym: {}\n\tsyntdir: {}\n\tconvnets: 0b{:b}'
+	#__init__(self, path, flat=False, asym=False, shufs=0)
+	print('The benchmark is started, parsed params:\n\syntpo: "{}"\n\tgenasym: {}\n\tsyntdir: {}\n\tconvnets: 0b{:b}'
 		'\n\trunalgs: {}\n\tevalres: 0b{:b}\n\tdatas: {}\n\talgorithms: {}\n\taggrespaths: {}\n\ttimeout: {} h {} m {:.4f} sec'
-		.format(opts.gensynt, opts.genasym, opts.syntdir, opts.convnets, opts.runalgs, opts.evalres
-			, ', '.join(['{}{}{}'.format('' if not asym else 'asym: ', path, ' (gendir)' if gen else '')
-				for asym, path, gen in opts.datas])
+		.format(opts.syntpo, opts.convnets, opts.runalgs, opts.evalres
+			, ', '.join([str(pathopts) for pathopts in opts.datas])
 			, ', '.join(opts.algorithms) if opts.algorithms else ''
 			, ', '.join(opts.aggrespaths) if opts.aggrespaths else '', *secondsToHms(opts.timeout)))
 	# Make opts.syntdir and link there lfr benchmark bin if required
 	bmname = 'lfrbench_udwov'  # Benchmark name for the synthetic networks generation
 	assert _UTILDIR.endswith('/'), 'A directory should have a valid terminator'
 	benchpath = _UTILDIR + bmname  # Benchmark path
-	if not os.path.exists(opts.syntdir):
-		os.makedirs(opts.syntdir)
-		## Symlink is used to work even when target file is on another file system
-		#os.symlink(os.path.relpath(opts.syntdir + bmname, opts.syntdir), benchpath)
 
-	genovr = opts.gensynt == 2  # opts.gensynt:  0 - do not generate, 1 - only if not exists, 2 - forced generation
-	if opts.gensynt and opts.netins >= 1:
-		generateNets(benchpath, opts.netins, opts.genasym, opts.syntdir, _NETSDIR, opts.netext, genovr, opts.seedfile)
-	# Shuffle synthetic networks if required
-	if opts.shufnum:
-		# Note: backup is made on overriding generation of the synthetic networks, do not repeat it
-		shuffleNets(opts.shufnum, datafiles, datadirs, opts.netext, genovr, not (opts.gensynt and opts.netins >= 1 and genovr))
+	# Create the global seed file if not exists
+	if not os.path.exists(opts.seedfile):
+		# Consider inexisting base path of the common seed file
+		sfbase = os.path.split(seedfile)[0]
+		if not os.path.exists(sfbase):
+			os.makedirs(sfbase)
+		with open(seedfile, 'w') as fseed:
+			fseed.write('{}\n'.format(timeSeed()))
 
-	# Update opts.datasets with sythetic generated: all subdirs of the synthetic networks dir
+	# Generate parameters for the synthetic networs and the networks instances if required
+	if opts.syntpo and opts.syntpo.netins >= 1:
+		# Note: on overwirte old instances are rewritten and shulles are deleted making the backup
+		generateNets(genbin=benchpath, insnum=opts.syntpo.netins, asym=opts.syntpo.asym, basedir=opts.syntpo.path
+			, netsdir=_NETSDIR, overwrite=opts.syntpo.overwrite, seedfile=opts.seedfile, gentimeout=3*60*60)  # 3 hours
+
+	# Update opts.datasets with sythetic generated data: all subdirs of the synthetic networks dir
 	# Note: should be done only after the genertion, because new directories can be created
-	if opts.gensynt or not opts.datas:
+	if opts.syntpo or not opts.datas:
+		#popts = copy.copy(super(SyntPathOpts, opts.syntpo))
+		#popts.path = _NETSDIR.join((popts.path, '*/'))  # Change meaning of the path from base dir to the target dirs
+		opts.syntpo.path = _NETSDIR.join((opts.syntpo.path, '*/'))  # Change meaning of the path from base dir to the target dirs
 		# Generated synthetic networks are processed before the manually specified other paths
-		opts.datas.insert(0, PathOpts(_NETSDIR.join((opts.syntdir, '*/')), False, opts.genasym))  # path, flat, asym
+		opts.datas.insert(0, opts.syntpo)
+		opts.syntpo = None  # Delete syntpo to not occasionally use .path with changed meaning
 
-	# Extract dirs and files from opts.datas, generate dirs structure if required and resolve the wildcards
-	datadirs, datafiles = prepareInput(opts.datas, opts.netext)
-	opts.datas = None
-	#print('Datadirs: ', datadirs)
-
-	# Shuffle synthetic networks if required
-	# Note: the conversion should be performed after the shuffling if required to convert also the shuffles
-	if opts.shufnum:
-		shuffleNets(opts.shufnum, datafiles, datadirs, opts.netext, opts.gensynt == 2)
+	# Shuffle datasets backing up and overwriting existing shuffles if the shuffling is required at all
+	shuffleNets(opts.datas, shuftimeout=30*60)
 
 	# Note: conversion should not be used typically
 	# opts.convnets: 0 - do not convert, 0b01 - only if not exists, 0b11 - forced conversion, 0b100 - resolve duplicated links
 	if opts.convnets:
-		convertNets(datafiles, datadirs, opts.netext, opts.convnets&0b11 == 0b11, opts.convnets&0b100)
+		convertNets(opts.datas, opts.convnets&0b11 == 0b11, opts.convnets&0b100)
 
 	# Run the opts.algorithms and measure their resource consumption
 	if opts.runalgs:
-		runApps(benchapps, opts.algorithms, datafiles, datadirs, opts.netext, exectime, opts.timeout)
+		runApps(benchapps, opts.algorithms, opts.datas, exectime, opts.timeout)
 
 	# Evaluate results
 	if opts.evalres:
-		evalResults(opts.evalres, benchapps, opts.algorithms, datafiles, datadirs, opts.netext, exectime, opts.timeout)
+		evalResults(opts.evalres, benchapps, opts.algorithms, opts.datas, exectime, opts.timeout)
 
 	if opts.aggrespaths:
 		aggEvaluations(opts.aggrespaths)
@@ -1096,13 +1105,13 @@ def terminationHandler(signal=None, frame=None):
 if __name__ == '__main__':
 	if len(sys.argv) <= 1 or (len(sys.argv) == 2 and sys.argv[1] == '-h'):
 		print('\n'.join(('Usage:',
-			'  {0} [-g[f][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
+			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
 			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
 			' [-c[f][r]] [-a="app1 app2 ..."] [-r] [-q[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]]'
 			' [-s=<reseval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] | -h',
 			'',
 			'Example:',
-			'  {0} -g=3.5 -r -e -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
+			'  {0} -g=3.5 -r -q -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
 			'NOTE:',
 			'  - The benchmark should be executed exclusively from the current directory (./)',
 			'  - The expected format of input datasets (networks) is .ns<l> - network specified by'
@@ -1112,39 +1121,30 @@ if __name__ == '__main__':
 			'',
 			'Parameters:',
 			'  -h  - show this usage description',
-			'  -g[f][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets'
-			' of the specified extension (default: {extnetfile}) in the <outpdir> (default: {syntdir})'
-			', shuffling each <shuffles_number> times (default: 0). If <number> is omitted or set to 0 then'
-			' ONLY shuffling of the specified datasets should be performed including the <outpdir>/{netsdir}/*.'
-			' The generated networks are automatically added to the input datasets on the first place.',
-			'    f  - force the generation even when the data already exists (existent datasets are moved to backup)',
+			'  -g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets'
+			' of the required format in the <outpdir> (default: {syntdir}), shuffling each'
+			' <shuffles_number> times (default: 0). If <number> is omitted or set to 0 then'
+			' ONLY shuffling of <outpdir>/{netsdir}/* is performed.'
+			' The generated networks are automatically added to the begin of the input datasets.',
+			'    o  - overwrite existing network instances (old data is backuped) instead of skipping generation',
 			'    a  - generate networks specifined by arcs (directed) instead of edges (undirected)',
-			'  NOTE:',
-			'    - shuffled datasets have the following naming format:\n'
+			'  NOTE: shuffled datasets have the following naming format:',
 			'\t<base_name>[(seppars)<param1>...][{sepinst}<instance_index>][{sepshf}<shuffle_index>].<net_extension>',
-			'    - use "-g0" to execute existing synthetic datasets not changing them',
-			'  -i[X][{gensepshuf}<shuffles_number>]=<datasets_dir>  - input dataset(s)'
-			', directory with datasets of the specified extension (default: {extnetfile})'
-			' or a single dataset file (wildcards allowed), which should be shuffled <shuffles_number> times.'
-			' Default: -ie={syntdir}{netsdir}*/, which are subdirs of the synthetic networks dir without shuffling.',  # Note: corresponds to the _EXTNETFILE=.'.nse'
-			'  NOTE: use wildcards for the specific sets of files.',
+			'  -i[X][{gensepshuf}<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories'
+			', which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension (.ns{{e,a}}).'
+			' Default: -ie={syntdir}{netsdir}*/, which are subdirs of the synthetic networks dir without shuffling.',
 			'    f  - make flat derivatives on shuffling instead of generating the dedicted directory (havng the file base name)'
 			' for each input network, might cause flooding of the base directory. Existed shuffles are backuped',
-			'    a  - the dataset is specified by arcs (asymmetric, directed links, i.e. in/outbound weights of the link might differ) instead of edges'
-			', which overrides the UNSUPPORTED common custom extension format',
-			'    NOTE:',
-			'    - the following symbols in the path name have specific semantic and processed respectively: {rsvpathsmb}',
-			'    - paths can contain wildcards: *, ?, +',
-			'    - multiple directories and files can be specified via multiple -d/f options (one per the item)',
-			'    - datasets should have the following format: <node_src> <node_dest> [<weight>]',
-			'    - {{a,s}} is considered only if the network file has no corresponding metadata (formats like SNAP, ncol, nsa, ...)',
-			'    - ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
+			'    a  - the dataset is specified by arcs (asymmetric, directed links) instead of edges (undirected links)'
+			', considered only for not .ns{{a,e}} extensions.',
+			'  NOTE:',
+			'  - The following symbols in the path name have specific semantic and processed respectively: {rsvpathsmb}',
+			'  - Paths may contain wildcards: *, ?, +',
+			'  - Multiple directories and files wildcards can be specified via multiple -i options',
+			'  - Shuffles backup and OVERWRITE previously excisting shuffles',
+			'  - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]',
+			'  - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
 			' is up to the clustering algorithm',
-			'  -c[X]  - convert existing networks into the required formats (.rcg[.hig], .lig, etc.)',
-			'    f  - force the conversion even when the data is already exist',
-			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
-			'  NOTE: files with the specified extension (default: {extnetfile}) are looked for in the specified dirs'
-			' to be converted into the processing app specific format.',
 			'  -a[="app1 app2 ..."]  - apps (clustering algorithms) to be run or evaluated, default: all.'
 			' Available apps: scp louvain_igraph randcommuns hirecs oslom2 ganxis.'
 			' Impacts {{r, e}} options. Optional, all registered apps (see benchapps.py) are executed by default.',
@@ -1171,16 +1171,22 @@ if __name__ == '__main__':
 			'    i[Y]  - intrinsic measures for overlapping communities',
 			'      m  - modularity Q',
 			'      c  - conductance f',
-			'  -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
-			', which can be useful to include external manual evaluations into final summarized results',
 			'  -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network'
 			' in sec, min or hours; 0 sec - no timeout, default: {th} h {tm} min {ts} sec',
 			'    s  - time in seconds, default option',
 			'    m  - time in minutes',
 			'    h  - time in hours',
 			'  -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms'
-			', contains uint64_t value. Default: {seedfile}'
-			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=_RESDIR, extnetfile=_EXTNETFILE, syntdir=_SYNTDIR, netsdir=_NETSDIR
+			', contains uint64_t value. Default: {seedfile}',
+			'',
+			'Advanced parameters:',
+			'  -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.)',
+			'    f  - force the conversion even when the data is already exist',
+			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
+			'  -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
+			', which is useful to include external manual evaluations into the final summarized results.',
+			'  ATTENTION: <resval_path>  should include the algorithm name and target measure'
+			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=_RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=_SEPINST, seppars=_SEPPARS, sepshf=_SEPSHF, rsvpathsmb=(_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID)
 				, th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60, seedfile=_SEEDFILE))
 	else:

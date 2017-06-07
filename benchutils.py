@@ -18,7 +18,7 @@ import time
 import tarfile
 import re
 
-from multiprocessing import Lock
+from multiprocessing import RLock
 from math import sqrt, copysign
 
 
@@ -415,6 +415,11 @@ class SyncValue(object):
 	"""Interprocess synchronized value.
 	Provides the single attribute: 'value', which should be used inside "with" statement
 	if non-atomic operation is applied like +=.
+
+	>>> sv = SyncValue(None); print(sv.value)
+	None
+	>>> with sv: sv.value = 1; print(sv.value)
+	1
 	"""
 	def __init__(self, val=None):
 		"""Sync value constructor
@@ -424,44 +429,31 @@ class SyncValue(object):
 		# Note: recursive lock occurs if normal attrib names are used because of __setattr__ definition
 		object.__setattr__(self, 'value', val)
 		# Private attributes
-		object.__setattr__(self, '_lock', Lock())
-		object.__setattr__(self, '_synced', 0)
+		object.__setattr__(self, '_lock', RLock())  # Use reentrant lock (can be acquired multiple times by the same thread)
 
 
 	def __setattr__(self, name, val):
 		if name != 'value':
 			raise AttributeError('Attribute "{}" is not accessable'.format(name))
-		if name != 'value' or object.__getattribute__(self, '_synced') > 0:
+		with object.__getattribute__(self, '_lock'):
 			object.__setattr__(self, name, val)
-		else:
-			with object.__getattribute__(self, '_lock'):
-				object.__setattr__(self, name, val)
 
 
 	def __getattribute__(self, name):
 		if name != 'value':
 			raise AttributeError('Attribute "{}" is not accessable'.format(name))
-		if name != 'value' or object.__getattribute__(self, '_synced') > 0:
-			return object.__getattribute__(self, name)
 		with object.__getattribute__(self, '_lock'):
 			return object.__getattribute__(self, name)
 
 
 	def __enter__(self):
-		# Do not lock when already synced
-		if (not object.__getattribute__(self, '_synced')
-		and not object.__getattribute__(self, '_lock').acquire()):
+		if not object.__getattribute__(self, '_lock').acquire():
 			raise ValueError('Lock timeout is exceeded')
-		object.__setattr__(self, '_synced', object.__getattribute__(self, '_synced') + 1)
 		return self
 
 
 	def __exit__(self, exception_type, exception_val, trace):
-		object.__setattr__(self, '_synced', object.__getattribute__(self, '_synced') - 1)
-		# Unlock only when not synced
-		if not object.__getattribute__(self, '_synced'):
-			object.__getattribute__(self, '_lock').release()
-		assert object.__getattribute__(self, '_synced') >= 0, 'Synchronization is broken'
+		object.__getattribute__(self, '_lock').release()
 
 
 	#def get_lock(self):
@@ -512,8 +504,9 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 			mtime = synctime.value
 	else:
 		mtime = time.gmtime(os.path.getmtime(path))
-	mtime = time.strftime('_%y%m%d_%H%M%S', mtime)  # Modification time
-	return ''.join((name, suffix, mtime))
+	assert isinstance(mtime, time.struct_time), 'Unexected type of mtime'
+	mtstr = time.strftime('_%y%m%d_%H%M%S', mtime)  # Modification time
+	return ''.join((name, suffix, mtstr))
 
 
 def backupPath(basepath, expand=False, synctime=None, compress=True, suffix=''):  # basedir, name

@@ -23,7 +23,7 @@ from datetime import datetime
 
 from utils.mpepool import *
 from benchutils import *
-from benchutils import _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _PATHID_FILE
+from benchutils import _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
@@ -391,9 +391,9 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 		elif not pathid:
 			icnpid = clsname.rfind(_SEPPATHID)  # Index of pathid in clsname
 			if icnpid != -1 and icnpid + 1 < clsnameLen:
-				# Check whether this is a valid pathid considering possible pathid file mark
-				if clsname[icnpid + 1] == _PATHID_FILE:
-					icnpid += 1
+				## Check whether this is a valid pathid considering possible pathid file mark
+				#if clsname[icnpid + 1] == _PATHID_FILE:
+				#	icnpid += 1
 				# Validate pathid
 				try:
 					int(clsname[icnpid + 1:])

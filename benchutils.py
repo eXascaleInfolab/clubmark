@@ -29,7 +29,7 @@ _SEPPARS = '!'  # Network parameters separator, must be a char
 _SEPINST = '^'  # Network instances separator, must be a char
 _SEPSHF = '%'  # Network shuffles separator, must be a char; ~
 _SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
-_PATHID_FILE = 'f'  # File marker of the pathid (input file specified directly without the embracing dir), must be a char
+#_PATHID_FILE = 'f'  # File marker of the pathid (input file specified directly without the embracing dir), must be a char
 
 
 def timeSeed():
@@ -103,9 +103,9 @@ def delPathSuffix(path, nameonly=False):
 			# Valudate the suffix in case it is an instance or shuffle suffix
 			j = 0
 			if pname[pos] in (_SEPINST, _SEPPATHID, _SEPSHF):
-				# Consider file pname id
-				if pname[pos] == _SEPPATHID and len(pname) > pos + 1 and pname[pos + 1] == _PATHID_FILE:
-					j = 1
+				## Consider file pname id
+				#if pname[pos] == _SEPPATHID and len(pname) > pos + 1 and pname[pos + 1] == _PATHID_FILE:
+				#	j = 1
 				try:
 					int(pname[pos + j + 1:pose])
 				except ValueError as err:
@@ -141,14 +141,15 @@ def parseName(path, nameonly=False):
 	True
 	>>> parseName('scp/mod/2K5%1', True) == ('scp/mod/2K5', '', '', '%1', '')
 	True
-	>>> parseName('1K10!k5#f1') == ('1K10', '!k5', '', '', '#f1')
-	True
 	>>> parseName('1K10!k3') == ('1K10', '!k3', '', '', '')
 	True
 	>>> parseName('2K5') == ("2K5", '', '', '', '')
 	True
 	>>> parseName('2K5.dhrh^1') == ("2K5.dhrh", '', '^1', '', '')
 	True
+
+	#>>> parseName('1K10!k5#f1') == ('1K10', '!k5', '', '', '#f1')
+	#True
 	"""
 	# Separate path into base dir and name
 	if not nameonly:
@@ -176,9 +177,9 @@ def parseName(path, nameonly=False):
 			# Valudate the suffix in case it is an instance or shuffle suffix
 			j = 0
 			if pname[pos] in (_SEPINST, _SEPSHF, _SEPPATHID):
-				# Consider file pname id
-				if pname[pos] == _SEPPATHID and len(pname) > pos + 1 and pname[pos + 1] == _PATHID_FILE:
-					j = 1
+				## Consider file pname id
+				#if pname[pos] == _SEPPATHID and len(pname) > pos + 1 and pname[pos + 1] == _PATHID_FILE:
+				#	j = 1
 				try:
 					int(pname[pos + j + 1:pose])
 				except ValueError as err:

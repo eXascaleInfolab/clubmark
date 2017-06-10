@@ -6,7 +6,7 @@
 
 	Execution function for each algorithm must be named "exec<Algname>" and have the following signature:
 
-	def execAlgorithm(execpool, netfile, asym, timeout, pathid='', selfexec=False):
+	def execAlgorithm(execpool, netfile, asym, netshf, timeout, pathid='', selfexec=False):
 		Execute the algorithm (stub)
 
 		execpool  - execution pool to perform execution of current task
@@ -142,27 +142,28 @@ def aggexec(algs):
 				.format(measure, err, traceback.format_exc()), file=sys.stderr)
 
 
-def	preparePath(taskpath):
+def	preparePath(taskpath, netshf=False):
 	"""Create the path if required, otherwise move existent data to backup.
 	All itnstances and shuffles of each network are handled all together and only once,
 	even on calling this function for each shuffle.
 	NOTE: To process files starting with taskpath, it should not contain '/' in the end
 
 	taskpath  - the path to be prepared
+	netshf  - whether the task is a shuffle processing in the non-flat dir structure
 	"""
 	# Backup existent files & dirs with such base only if this path exists and is not empty
 	# ATTENTION: do not use only basePathExists(taskpath) here to avoid movement to the backup
 	# processing paths when xxx.mod.net is processed before the xxx.net (have the same base)
 	if os.path.exists(taskpath) and not dirempty(taskpath):
 		mainpath = delPathSuffix(taskpath)
-		backupPath(mainpath, True)
+		tobackup(mainpath, True)  # Move to the backup (old results can't be reused in the forming results)
 	# Create target path if not exists
 	if not os.path.exists(taskpath):
 		os.makedirs(taskpath)
 
 
 # ATTENTION: this function should not be defined to not beight automatically executed
-#def execAlgorithm(execpool, netfile, asym, timeout, pathid='', selfexec=False, **kwargs):
+#def execAlgorithm(execpool, netfile, asym, netshf, timeout, pathid='', selfexec=False, **kwargs):
 #	"""Execute the algorithm (stub)
 #
 #	execpool  - execution pool to perform execution of current task
@@ -192,7 +193,7 @@ def funcToAppName(funcname):
 
 # Louvain
 ## Original Louvain
-#def execLouvain(execpool, netfile, asym, timeout, pathid='', tasknum=0):
+#def execLouvain(execpool, netfile, asym, netshf, timeout, pathid='', tasknum=0):
 #	"""Execute Louvain
 #	Results are not stable => multiple execution is desirable.
 #
@@ -220,7 +221,7 @@ def funcToAppName(funcname):
 #	return
 
 
-def execLouvainIg(execpool, netfile, asym, timeout, pathid='', selfexec=False):
+def execLouvainIg(execpool, netfile, asym, netshf, timeout, pathid='', selfexec=False):
 	"""Execute Louvain using the igraph library
 	Note: Louvain produces not stable results => multiple executions are desirable.
 
@@ -231,8 +232,7 @@ def execLouvainIg(execpool, netfile, asym, timeout, pathid='', selfexec=False):
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
 	# Fetch the task name and chose correct network filename
-	netfile, netext = os.path.splitext(netfile)  # Remove the extension
-	task = os.path.split(netfile)[1]  # Base name of the network
+	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Base name of the network
 	assert task, 'The network name should exists'
 	#if tasknum:
 	#	task = '_'.join((task, str(tasknum)))
@@ -240,7 +240,10 @@ def execLouvainIg(execpool, netfile, asym, timeout, pathid='', selfexec=False):
 	# ATTENTION: for the correct execution algname must be always the same as func lower case name without the prefix "exec"
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
 	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -ol=louvain_igoutp/1K5/1K5.cnl
-	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
+	taskdirs = task
+	if netshf:
+		taskdirs = ''.join((delPathSuffix(task, True), '/', task))
+	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, taskdirs, pathid))
 
 	preparePath(taskpath)
 
@@ -265,7 +268,7 @@ def execLouvainIg(execpool, netfile, asym, timeout, pathid='', selfexec=False):
 
 	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
-		, 'python', ''.join(('./', algname, '.py')), ''.join(('-i=../', netfile, netext))
+		, 'python', ''.join(('./', algname, '.py')), '-i=../' + netfile
 		, ''.join(('-ol=../', taskpath, _EXTCLNODES)))
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout
 		#, ondone=postexec
@@ -279,13 +282,13 @@ def execLouvainIg(execpool, netfile, asym, timeout, pathid='', selfexec=False):
 	#	netdir = os.path.split(netfile)[0] + '/'
 	#	#print('Netdir: ', netdir)
 	#	for netfile in glob.iglob(''.join((escapePathWildcards(netdir), escapePathWildcards(task), '/*', netext))):
-	#		execLouvain_ig(execpool, netfile, asym, timeout, selfexec)
+	#		execLouvain_ig(execpool, netfile, asym, netshf, timeout, selfexec)
 	#		execnum += 1
 	return execnum
 
 
 # SCP (Sequential algorithm for fast clique percolation)
-def execScp(execpool, netfile, asym, timeout, pathid=''):
+def execScp(execpool, netfile, asym, netshf, timeout, pathid=''):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -331,7 +334,7 @@ def execScp(execpool, netfile, asym, timeout, pathid=''):
 	return kmax + 1 - kmin
 
 
-def execRandcommuns(execpool, netfile, asym, timeout, pathid='', instances=5):  # _netshuffles + 1
+def execRandcommuns(execpool, netfile, asym, netshf, timeout, pathid='', instances=5):  # _netshuffles + 1
 	"""Execute Randcommuns, Random Disjoint Clustering
 	Results are not stable => multiple execution is desirable.
 
@@ -362,7 +365,7 @@ def execRandcommuns(execpool, netfile, asym, timeout, pathid='', instances=5):  
 
 
 # HiReCS
-def execHirecs(execpool, netfile, asym, timeout, pathid=''):
+def execHirecs(execpool, netfile, asym, netshf, timeout, pathid=''):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -384,7 +387,7 @@ def execHirecs(execpool, netfile, asym, timeout, pathid=''):
 	return 1
 
 
-def execHirecsOtl(execpool, netfile, asym, timeout, pathid=''):
+def execHirecsOtl(execpool, netfile, asym, netshf, timeout, pathid=''):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -408,7 +411,7 @@ def execHirecsOtl(execpool, netfile, asym, timeout, pathid=''):
 	return 1
 
 
-def execHirecsAhOtl(execpool, netfile, asym, timeout, pathid=''):
+def execHirecsAhOtl(execpool, netfile, asym, netshf, timeout, pathid=''):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -432,7 +435,7 @@ def execHirecsAhOtl(execpool, netfile, asym, timeout, pathid=''):
 	return 1
 
 
-def execHirecsNounwrap(execpool, netfile, asym, timeout, pathid=''):
+def execHirecsNounwrap(execpool, netfile, asym, netshf, timeout, pathid=''):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -457,7 +460,7 @@ def execHirecsNounwrap(execpool, netfile, asym, timeout, pathid=''):
 
 
 # Oslom2
-def execOslom2(execpool, netfile, asym, timeout, pathid=''):
+def execOslom2(execpool, netfile, asym, netshf, timeout, pathid=''):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -503,7 +506,7 @@ def execOslom2(execpool, netfile, asym, timeout, pathid=''):
 
 
 # Ganxis (SLPA)
-def execGanxis(execpool, netfile, asym, timeout, pathid=''):
+def execGanxis(execpool, netfile, asym, netshf, timeout, pathid=''):
 	#print('> exec params:\n\texecpool: {}\n\tnetfile: {}\n\tasym: {}\n\ttimeout: {}'
 	#	.format(execpool, netfile, asym, timeout))
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (

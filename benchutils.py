@@ -29,7 +29,6 @@ _SEPPARS = '!'  # Network parameters separator, must be a char
 _SEPINST = '^'  # Network instances separator, must be a char
 _SEPSHF = '%'  # Network shuffles separator, must be a char; ~
 _SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
-#_PATHID_FILE = 'f'  # File marker of the pathid (input file specified directly without the embracing dir), must be a char
 
 
 def timeSeed():
@@ -101,13 +100,9 @@ def delPathSuffix(path, nameonly=False):
 			pose = poses[0] if poses else len(pname)  # Intex of the next separator or end of the name
 			# Note: parameters can be any, but another suffixes are strictly specified
 			# Valudate the suffix in case it is an instance or shuffle suffix
-			j = 0
 			if pname[pos] in (_SEPINST, _SEPPATHID, _SEPSHF):
-				## Consider file pname id
-				#if pname[pos] == _SEPPATHID and len(pname) > pos + 1 and pname[pos + 1] == _PATHID_FILE:
-				#	j = 1
 				try:
-					int(pname[pos + j + 1:pose])
+					int(pname[pos + 1:pose])
 				except ValueError as err:
 					print('WARNING, invalid suffix or separator "{}" represents part of the path name "{}"'
 						', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
@@ -124,7 +119,7 @@ def parseName(path, nameonly=False):
 	"""Fetch basename, instance id, algorithm params, shuffle id and path id
 
 	path  - path to be processed WITHOUT the file extension
-	nameonly  - process path as name only comonent (do not split the basedir)
+	nameonly  - process path as name only component (do not split the basedir)
 
 	return
 		basepath  - base path without suffixes, same as delPathSuffix(path, nameonly)
@@ -147,9 +142,6 @@ def parseName(path, nameonly=False):
 	True
 	>>> parseName('2K5.dhrh^1') == ("2K5.dhrh", '', '^1', '', '')
 	True
-
-	#>>> parseName('1K10!k5#f1') == ('1K10', '!k5', '', '', '#f1')
-	#True
 	"""
 	# Separate path into base dir and name
 	if not nameonly:
@@ -175,13 +167,9 @@ def parseName(path, nameonly=False):
 			pose = poses[0] if poses else len(pname)  # Intex of the next separator or end of the name
 			# Note: parameters can be any, but another suffixes are strictly specified
 			# Valudate the suffix in case it is an instance or shuffle suffix
-			j = 0
 			if pname[pos] in (_SEPINST, _SEPSHF, _SEPPATHID):
-				## Consider file pname id
-				#if pname[pos] == _SEPPATHID and len(pname) > pos + 1 and pname[pos + 1] == _PATHID_FILE:
-				#	j = 1
 				try:
-					int(pname[pos + j + 1:pose])
+					int(pname[pos + 1:pose])
 				except ValueError as err:
 					print('WARNING, invalid suffix or separator "{}" represents part of the path name "{}"'
 						', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
@@ -510,9 +498,9 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 	return ''.join((name, suffix, mtstr))
 
 
-def backupPath(basepath, expand=False, synctime=None, compress=True, suffix=''):  # basedir, name
-	"""Backup all files and dirs starting from the specified basepath into backup/
-	located in the parent dir of the basepath
+def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', move=True):  # basedir, name
+	"""MOVE or copy all files and dirs starting from the specified basepath into backup/
+	located in the parent dir of the basepath with optional compression.
 
 	basepath  - path, last component of which (file or dir) is a template to backup
 		all paths starting from it in the same location.
@@ -521,7 +509,8 @@ def backupPath(basepath, expand=False, synctime=None, compress=True, suffix=''):
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
 	compress  - compress or just copy spesified paths
-	suffix  - suffix to be added to the backup name
+	xsuffix  - extra suffix to be added to the backup name
+	move  - whether to move or copy data to the backup
 
 	ATTENTION: All paths are MOVED to the dedicated timestamped dir / archive
 	"""
@@ -538,7 +527,7 @@ def backupPath(basepath, expand=False, synctime=None, compress=True, suffix=''):
 		os.mkdir(basedir)
 	# Backup files
 	rennmarg = 10  # Max number of renaming attempts
-	basename = basedir + nameVersion(basepath, expand, synctime, suffix)  # Base name of the backup
+	basename = basedir + nameVersion(basepath, expand, synctime, xsuffix)  # Base name of the backup
 	if compress:
 		archname = basename + '.tar.gz'
 		# Rename already existent archive if required
@@ -553,18 +542,19 @@ def backupPath(basepath, expand=False, synctime=None, compress=True, suffix=''):
 			try:
 				os.rename(archname, bckname)
 			except StandardError as err:
-				print('WARNING: removing backup file "{}", as its renaming failed: {}'
+				print('WARNING: removing old backup file "{}", as its renaming failed: {}'
 					.format(archname, err), file=sys.stderr)
 				os.remove(archname)
 		# Move data to the archive
-		with tarfile.open(archname, 'w:gz', bufsize=64*1024, compresslevel=6) as tar:
+		with tarfile.open(archname, 'w:gz', bufsize=128*1024, compresslevel=6) as tar:
 			for path in glob.iglob(basepath + ('*' if expand else '')):
 				tar.add(path, arcname=os.path.split(path)[1])
-				# Delete the archived paths
-				if os.path.isdir(path):
-					shutil.rmtree(path)
-				else:
-					os.remove(path)
+				# Delete the archived paths if required
+				if move:
+					if os.path.isdir(path):
+						shutil.rmtree(path)
+					else:
+						os.remove(path)
 	else:
 		# Rename already existent backup if required
 		if os.path.exists(basename):
@@ -579,14 +569,15 @@ def backupPath(basepath, expand=False, synctime=None, compress=True, suffix=''):
 			try:
 				os.rename(basename, bckname)
 			except StandardError as err:
-				print('WARNING: removing backup dir "{}", as its renaming failed: {}'
+				print('WARNING: removing old backup dir "{}", as its renaming failed: {}'
 					.format(basename, err), file=sys.stderr)
 				shutil.rmtree(basename)
 		# Move data to the backup
 		if not os.path.exists(basename):
 			os.mkdir(basename)
 		for path in glob.iglob(basepath + ('*' if expand else '')):
-			shutil.move(path, '/'.join((basename, os.path.split(path)[1])))
+			bckop = shutil.move if move else shutil.copy2
+			bckop(path, '/'.join((basename, os.path.split(path)[1])))
 
 
 if __name__ == '__main__':

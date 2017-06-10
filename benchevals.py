@@ -391,9 +391,6 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 		elif not pathid:
 			icnpid = clsname.rfind(_SEPPATHID)  # Index of pathid in clsname
 			if icnpid != -1 and icnpid + 1 < clsnameLen:
-				## Check whether this is a valid pathid considering possible pathid file mark
-				#if clsname[icnpid + 1] == _PATHID_FILE:
-				#	icnpid += 1
 				# Validate pathid
 				try:
 					int(clsname[icnpid + 1:])

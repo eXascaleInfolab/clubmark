@@ -53,14 +53,13 @@ import benchapps  # Benchmarking apps (clustering algs)
 from utils.mpepool import *
 from benchutils import *
 
-from benchutils import _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID
+from benchutils import _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR
 # PYEXEC - current Python interpreter
 from benchapps import PYEXEC, aggexec, funcToAppName, _EXTCLNODES, _PREFEXEC
 from benchevals import evalAlgorithm, aggEvaluations, EvalsAgg, _RESDIR, _EXTEXECTIME
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
-_UTILDIR = 'utils/'  # Utilities directory
 _SYNTDIR = 'syntnets/'  # Default base directory for the synthetic datasets (both networks, params and seeds)
 _NETSDIR = 'networks/'  # Networks sub-directory of the synthetic networks (inside _SYNTDIR)
 assert _RESDIR.endswith('/'), 'A directory should have a valid terminator'
@@ -145,8 +144,8 @@ class SyntPathOpts(PathOpts):
 		self.overwrite = overwrite
 
 	def __str__(self):
-		return ', '.join((str(super(SyntPathOpts, self)), 'netins: ' + self.netins
-			, 'overwrite: ' + self.overwrite))
+		return ', '.join((str(super(SyntPathOpts, self)), 'netins: ' + str(self.netins)
+			, 'overwrite: ' + str(self.overwrite)))
 
 
 class Params(object):
@@ -213,7 +212,7 @@ def parseParams(args):
 
 		if arg[1] == 'g':
 			# [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]
-			opts.syntpo = PathOpts(_SYNTDIR)
+			opts.syntpo = SyntPathOpts(_SYNTDIR)
 			alen = len(arg)
 			if alen == 2:
 				continue
@@ -411,7 +410,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 			os.mkdir(dirname)  # Note: mkdir does not create intermediate (non-leaf) dirs
 		# Backup target dirs on rewriting, removing backuped content
 		elif overwrite and not dirempty(dirname):
-			tobackup(dirname, False, bcksuffix)  # Move to the backup
+			tobackup(dirname, False, bcksuffix, move=True)  # Move to the backup
 			os.mkdir(dirname)
 
 	# Initial options for the networks generation
@@ -548,7 +547,7 @@ def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
 	def shuffle(job):
 		"""Shufle network instance specified by the job"""
 		#assert job.params, 'Job params should be defined'
-		if job.params.shfnum < 1:
+		if job.params['shfnum'] < 1:
 			return
 		job.args = (PYEXEC, '-c',
 # Shuffling procedure
@@ -587,13 +586,13 @@ for i in range(1, {shfnum} + 1):
 				# The file does not have a header
 				#subprocess.call(('sort', '-R', basenet, '-o', netfile))
 				subprocess.call(('shuf', basenet, '-o', netfile))
-""".format(jobname=job.name, sepshf=_SEPSHF, netext=job.params.netext, shfnum=job.params.shfnum
+""".format(jobname=job.name, sepshf=_SEPSHF, netext=job.params['netext'], shfnum=job.params['shfnum']
 , overwrite=False))  # Skip the shuffling if the respective file already exists
 		job.name += '_shf'  # Update jobname to cleary associate it with the shuffling process
 		_execpool.execute(job)
 
 	def shuffleNet(netfile, shfnum):
-		"""Shuffle specified network
+		"""Shuffle specified network produsing cpecified number of shuffles in the same directory
 
 		netfile  - the network instance to be shuffled
 		shfnum  - the number of shuffles to be done
@@ -612,7 +611,7 @@ for i in range(1, {shfnum} + 1):
 			return 0
 		# Note: the shuffling might be scheduled even when the shuffles exist in case
 		# the origin network is traversed before it's shuffles
-		shuffle(Job(name=name, workdir=path + '/', params={netext: netext, shfnum: shfnum}
+		shuffle(Job(name=name, workdir=path + '/', params={'netext': netext, 'shfnum': shfnum}
 			, timeout=timeout1*shfnum))
 		return shfnum  # The network is shuffled shfnum times
 
@@ -636,7 +635,7 @@ for i in range(1, {shfnum} + 1):
 		elif not dirempty(dirname):
 			tobackup(dirname, False, bcksuffix, move=False)  # Copy to the backup to not regenerate existing networks
 		#if os.path.exists(dirname) and not dirempty(dirname):
-		#	tobackup(dirname, False, bcksuffix)  # Move to the backup
+		#	tobackup(dirname, False, bcksuffix, move=True)  # Move to the backup
 		#if not os.path.exists(dirname):
 		#	os.mkdir(dirname)
 		## Make hard link of the origin network to the target dir if this file does not exist
@@ -672,14 +671,14 @@ for i in range(1, {shfnum} + 1):
 						# Backup existed dir (path, not just a name)
 						dirname = os.path.splitext(net)[0]
 						shuf0 = prepareDir(dirname, net, bcksuffix)
-						shfnum += shuffleNet(shuf0)
+						shfnum += shuffleNet(shuf0, popt.shfnum)
 				else:
 					# Backup the whole dir of network instances with possible shuffles,
 					# which are going ot be shuffled
 					tobackup(path, False, bcksuffix, move=False)  # Copy to the backup
 					# Note: the folder containing the network instance origining the shuffling should not be deleted
 					for net in glob.iglob('*'.join((path, dflext))):
-						shfnum += shuffleNet(net)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
+						shfnum += shuffleNet(net, popt.shfnum)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
 			else:
 				# Skip shuffles and their direct backup
 				# Note: previous shuffles are backuped from their origin instance
@@ -690,11 +689,11 @@ for i in range(1, {shfnum} + 1):
 				if not popt.flat:
 					dirname = os.path.splitext(path)[0]
 					shuf0 = prepareDir(dirname, path, bcksuffix)
-					shfnum += shuffleNet(shuf0)
+					shfnum += shuffleNet(shuf0, popt.shfnum)
 				else:
 					# Backup existing flat shuffles if any (expanding the base path), which will be updated the subsequent shuffling
 					tobackup(path, True, bcksuffix, move=False)  # Copy to the backup
-					shfnum += shuffleNet(path)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
+					shfnum += shuffleNet(path, popt.shfnum)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
 
 	if _execpool:
 		if shftimeout <= 0:
@@ -823,7 +822,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 		convertNet(net, xargs.overwrite, xargs.resdub, xargs.timeout1)
 		xargs.netsnum += 1
 
-	xargs = {overwrite: overwrite, resdub: resdub, timeout1: timeout1, netsnum: 0}  # Number of converted networks
+	xargs = {'overwrite': overwrite, 'resdub': resdub, 'timeout1': timeout1, 'netsnum': 0}  # Number of converted networks
 	for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
 		# Resolve wildcards
 		pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
@@ -845,7 +844,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
 	algorithms  - list of the algorithms to be executed
 	datas  - input datasets, wildcards of files or directories containing files
-		of the default extensions .ns{{e,a}}
+		of the default extensions .ns{{e,a}}, PathOpts
 	seed  - benchmark seed, natural number
 	exectime  - elapsed time since the benchmarking started
 	timeout  - timeout per each algorithm execution
@@ -853,8 +852,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	"""
 	if not datas:
 		return
-	assert netext and netext[0] == '.', 'A file extension should have the leading "."'
-	assert appsmodule and (datadirs or datafiles) and exectime + 0 >= 0 and timeout + 0 >= 0, 'Invalid input arguments'
+	assert appsmodule and isinstance(datas[0], PathOpts) and exectime + 0 >= 0 and timeout + 0 >= 0, 'Invalid input arguments'
 	assert isinstance(seed, int) and seed >=0, 'Seed value is invalid'
 
 	global _execpool
@@ -882,7 +880,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		algorithms = [funcToAppName(func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
 	else:
 		# Execute only specified algorithms
-		execalgs = [getattr(appsmodule, _PREFEXEC + alg.capitalize(), unknownApp(_PREFEXEC + alg.capitalize())) for alg in algorithms]
+		execalgs = [getattr(appsmodule, _PREFEXEC + alg # .capitalize()
+			, unknownApp(_PREFEXEC + alg)) for alg in algorithms]  # .capitalize()
 		#algorithms = [alg.lower() for alg in algorithms]
 
 	def runapp(net, asym, netshf, pathid=''):
@@ -929,19 +928,19 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		netshf  - whether this network is a shuffle in the non-flat dir structure
 		xargs  - extra custom parameters
 		"""
-		tnum = runapp(net, xargs.asym, netshf, xargs.pathidstr)
-		xargs.jobsnum += tnum
-		xargs.netcount += tnum != 0
+		tnum = runapp(net, xargs['asym'], netshf, xargs['pathidstr'])
+		xargs['jobsnum'] += tnum
+		xargs['netcount'] += tnum != 0
 
-	xargs = {asym: False  # Asymmetric network
-			 pathidstr: '',  # Id of the dublicated path shortcut to have the unique shortcut
-			 jobsnum: 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
-			 netcount: 0}  # Number of converted network instances (includes multiple shuffles)
+	xargs = {'asym': False,  # Asymmetric network
+			 'pathidstr': '',  # Id of the dublicated path shortcut to have the unique shortcut
+			 'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
+			 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
 	# Track processed file names to resolve cases when files with the same name present in different input dirs
 	# Note: pathids are required at least to set concise job names to see what is executed in runtime
 	paths = set()
 	for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
-		xargs.asym = popt.asym
+		xargs['asym'] = popt.asym
 		# Resolve wildcards
 		pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
 		for pathid, path in enumerate(glob.iglob(popt.path)):  # Allow wildcards
@@ -949,8 +948,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			if path not in paths:
 				paths.add(path)
 			else:
-				xargs.pathidstr = _SEPPATHID + str(pathid)
-				fpathids.write('{}\t{}\n'.format(xargs.pathidstr[len(_SEPPATHID):], path))
+				xargs['pathidstr'] = _SEPPATHID + str(pathid)
+				fpathids.write('{}\t{}\n'.format(xargs['pathidstr'][len(_SEPPATHID):], path))
 			pcuropt.path = path
 			processPath(pcuropt, runner, xargs)
 
@@ -964,11 +963,11 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 
 	if _execpool:
 		if runtimeout <= 0:
-			runtimeout = timeout * xargs.jobsnum
-		timelim = min(timeout * xargs.jobsnum, runtimeout)
+			runtimeout = timeout * xargs['jobsnum']
+		timelim = min(timeout * xargs['jobsnum'], runtimeout)
 		print('Waiting for the apps execution on {} jobs from {} networks'
 			' with {} sec ({} h {} m {:.4f} s) timeout ...'
-			.format(xargs.jobsnum, xargs.netcount, timelim, *secondsToHms(timelim)))
+			.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
 		try:
 			_execpool.join(timelim)
 		except StandardError as err:
@@ -1029,10 +1028,9 @@ def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout, evalt
 
 		if not algorithms:
 			# Fetch available algorithms
-			ianame = len(_PREFEXEC)  # Index of the algorithm name start
-			evalalgs = [funcname[ianame:].lower() for funcname in dir(appsmodule) if func.startswith(_PREFEXEC)]
+			evalalgs = [funcToAppName(funcname) for funcname in dir(appsmodule) if func.startswith(_PREFEXEC)]
 		else:
-			evalalgs = [alg.lower() for alg in algorithms]
+			evalalgs = [alg for alg in algorithms]  # .lower()
 		evalalgs = tuple(evalalgs)
 
 		def evaluate(measure, basefile, asym, jobsnum, pathid=''):

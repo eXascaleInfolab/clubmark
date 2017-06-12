@@ -32,20 +32,20 @@ def loadNsl(network, netfmt):
 			if ln[0] == '#':
 				ln = ln[1:].split(None, 6)
 				if len(ln) >= 2 and ln[0].lower() == 'nodes:':
-					ndsnum = int(ln[1])
+					ndsnum = int(ln[1].rstrip(','))
 				# Parse arcs/edges number optionally
 				i = 2
 				if len(ln) >= i+2 and ln[i].lower() == ('arcs:' if directed else 'edges:'):
-					#lnsnum = int(ln[3])
+					#lnsnum = int(ln[3].rstrip(','))
 					i += 2
 				if len(ln) >= i+2 and ln[i].lower() == 'weighted:':
-					weighted = bool(int(ln[5]))  # Note: int() is required because bool('0') is True
+					weighted = bool(int(ln[5].rstrip(',')))  # Note: int() is required because bool('0') is True
 			break
 
 		links = []
 		weights = []
 		nodes = set()
-		nodename = None
+		lastnode = None
 		for ln in finp:
 			# Skip empty lines and comments
 			#ln = ln.lstrip()
@@ -54,14 +54,18 @@ def loadNsl(network, netfmt):
 			parts = ln.split(None, 2)
 			if weighted is not None:
 				if len(parts) != 2 + weighted:
-					raise ValueError('Weights are inconsistent; weighted: {}, line: {}'.format(weighted, ' '.join(parts)))
+					raise ValueError('Weights are inconsistent; weighted: {}, line: {}'
+						.format(weighted, ' '.join(parts)))
 			else:
 				weighted = len(parts) == 3
 
-			if nodename != parts[0]:
-				nodename = parts[0]
-				nodes.add(nodename)
+			if lastnode != parts[0]:
+				lastnode = parts[0]
+				nodes.add(lastnode)
 			links.append((parts[0], parts[1]))
+			# Extend nodes with dest node for the undirected network
+			if not directed:
+				nodes.add(parts[1])
 			if len(parts) > 2:
 				weights.append(float(parts[2]))
 
@@ -180,7 +184,7 @@ def parseArgs(params=None):
 
 	return args  - parsed arguments
 	"""
-	inpfmts = ('nse', 'pjk', 'ncol')  # Note: louvain_igraph supports only undirected input graph
+	inpfmts = ('nse', 'nsa', 'pjk', 'ncol')  # Note: louvain_igraph supports only undirected input graph
 	parser = argparse.ArgumentParser(description='Louvain Clustering of the undirected graph.')
 
 	ipars = parser.add_argument_group('Input Network (Graph)')
@@ -188,7 +192,8 @@ def parseArgs(params=None):
 		' The following formats are supported: {{{inpfmts}}}.'
 		' If the file has another extension then the format should be specified'
 		' explicitly.'.format(inpfmts=' '.join(inpfmts)))
-	ipars.add_argument('-i', '--inpfmt', dest='inpfmt', choices=inpfmts, help='input network (graph) format')
+	ipars.add_argument('-i', '--inpfmt', dest='inpfmt', choices=inpfmts
+		, help='input network (graph) format, required only for the non-standard extension')
 
 	outpext = '.cnl'  # Default extension of the output file
 	opars = parser.add_argument_group('Output Network (Graph)')

@@ -6,7 +6,7 @@
 
 	Execution function for each algorithm must be named "exec<Algname>" and have the following signature:
 
-	def execAlgorithm(execpool, netfile, asym, netshf, timeout, pathid='', selfexec=False):
+	def execAlgorithm(execpool, netfile, asym, taskdir, timeout, pathid='', selfexec=False):
 		Execute the algorithm (stub)
 
 		execpool  - execution pool to perform execution of current task
@@ -38,7 +38,7 @@ from utils.mpepool import *
 from benchutils import *
 
 from sys import executable as PYEXEC  # Full path to the current Python interpreter
-from benchutils import _SEPPARS
+from benchutils import _SEPPARS, _UTILDIR
 from benchevals import _SEPNAMEPART, _ALGSDIR, _RESDIR, _CLSDIR, _EXTERR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
 
 _EXTLOG = '.log'
@@ -142,28 +142,30 @@ def aggexec(algs):
 				.format(measure, err, traceback.format_exc()), file=sys.stderr)
 
 
-def	preparePath(taskpath, netshf=False):
+def	preparePath(taskpath):  # , netshf=False
 	"""Create the path if required, otherwise move existent data to backup.
 	All itnstances and shuffles of each network are handled all together and only once,
 	even on calling this function for each shuffle.
 	NOTE: To process files starting with taskpath, it should not contain '/' in the end
 
 	taskpath  - the path to be prepared
-	netshf  - whether the task is a shuffle processing in the non-flat dir structure
 	"""
+	# netshf  - whether the task is a shuffle processing in the non-flat dir structure
+	#
 	# Backup existent files & dirs with such base only if this path exists and is not empty
 	# ATTENTION: do not use only basePathExists(taskpath) here to avoid movement to the backup
 	# processing paths when xxx.mod.net is processed before the xxx.net (have the same base)
-	if os.path.exists(taskpath) and not dirempty(taskpath):
-		mainpath = delPathSuffix(taskpath)
-		tobackup(mainpath, True)  # Move to the backup (old results can't be reused in the forming results)
 	# Create target path if not exists
 	if not os.path.exists(taskpath):
 		os.makedirs(taskpath)
+	elif not dirempty(taskpath):
+		mainpath = delPathSuffix(taskpath)
+		tobackup(mainpath, True, move=True)  # Move to the backup (old results can't be reused in the forming results)
+		os.makedir(taskpath)
 
 
 # ATTENTION: this function should not be defined to not beight automatically executed
-#def execAlgorithm(execpool, netfile, asym, netshf, timeout, pathid='', selfexec=False, **kwargs):
+#def execAlgorithm(execpool, netfile, asym, taskdir, timeout, pathid='', selfexec=False, **kwargs):
 #	"""Execute the algorithm (stub)
 #
 #	execpool  - execution pool to perform execution of current task
@@ -193,7 +195,7 @@ def funcToAppName(funcname):
 
 # Louvain
 ## Original Louvain
-#def execLouvain(execpool, netfile, asym, netshf, timeout, pathid='', tasknum=0):
+#def execLouvain(execpool, netfile, asym, taskdir, timeout, pathid='', tasknum=0):
 #	"""Execute Louvain
 #	Results are not stable => multiple execution is desirable.
 #
@@ -221,11 +223,21 @@ def funcToAppName(funcname):
 #	return
 
 
-def execLouvainIg(execpool, netfile, asym, netshf, timeout, pathid='', selfexec=False):
+def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, selfexec=False):
 	"""Execute Louvain using the igraph library
 	Note: Louvain produces not stable results => multiple executions are desirable.
 
-	returns number of executions or None
+	execpool  - execution pool of worker processes
+	netfile  - the input network to be clustered
+	asym  - whether the input network is asymmetric (directed, specified by arcs)
+	odir  - whether to output results to the dedicated dir named by the instance name,
+		which actual the the shuffles with non-flat structure
+	timeout  - processing (clustering) timeout of the input file
+	pathid  - pather id of the input networks file
+	workdir  - relative working directory of the app, actual when the app contains libs
+	selfexec  - whether to call self recursively
+
+	returns  - the number of executions or None
 	"""
 	# Note: .. + 0 >= 0 to be sure that type is arithmetic, otherwise it's always true for the str
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -239,13 +251,16 @@ def execLouvainIg(execpool, netfile, asym, netshf, timeout, pathid='', selfexec=
 
 	# ATTENTION: for the correct execution algname must be always the same as func lower case name without the prefix "exec"
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
-	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -ol=louvain_igoutp/1K5/1K5.cnl
-	taskdirs = task
-	if netshf:
-		taskdirs = ''.join((delPathSuffix(task, True), '/', task))
-	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, taskdirs, pathid))
+
+	# Preapare resulting directory
+	taskdir = task  # Relative task directory withouth the ending '/'
+	if odir:
+		nameparts = parseName(task, True)
+		taskdir = ''.join((nameparts[0], nameparts[2], '/', task))  # Use base name and instance id
+	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, taskdir, pathid))
 
 	preparePath(taskpath)
+	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
 
 	## Louvain accumulated statistics over shuffled modification of the network or total statistics for all networks
 	#extres = '.acs'
@@ -261,18 +276,40 @@ def execLouvainIg(execpool, netfile, asym, netshf, timeout, pathid='', selfexec=
 	#	"""Copy final modularity output to the separate file"""
 	#	# File name of the accumulated result
 	#	# Note: here full path is required
-	#	accname = ''.join((_ALGSDIR, _RESDIR, algname, extres))
+	#	accname = ''.join((workdir, _RESDIR, algname, extres))
 	#	with open(accname, 'a') as accres:  # Append to the end
 	#		# TODO: Evaluate the average
 	#		subprocess.call(('tail', '-n 1', taskpath + _EXTLOG), stdout=accres)
 
-	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
+	pybin = PYEXEC if not os.path.split(PYEXEC)[1].startswith('pypy') else 'python'
+	# Note: Louvain_igraph creates the output dir if it has not been existed, but not the exectime app
+
+	def relpath(path, basedir=workdir):
+		"""Relative path to the specidied basedir"""
+		return os.path.relpath(path, basedir)
+
+	errfile = ''.join((taskpath, _EXTLOG))
+	# Evaluate relative paths
+	xtimebin = relpath(_UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	netfile = relpath(netfile)
+	taskpath = relpath(taskpath)
+
+	#os.path.relpath(
+	# Prepare resdir
+	resdir = _RESDIR
+	if odir:
+		resdir += algname + '/'
+		if not os.path.exists(resdir):
+			os.mkdir(resdir)
+	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
-		, 'python', ''.join(('./', algname, '.py')), '-i=../' + netfile
-		, ''.join(('-ol=../', taskpath, _EXTCLNODES)))
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout
+		, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
+		, ''.join(('-lo', taskpath, '/', task, _EXTCLNODES)), netfile)
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec
-		, stdout=os.devnull, stderr=''.join((taskpath, _EXTLOG))))
+		, stdout=os.devnull, stderr=errfile))
 
 	execnum = 1
 	# Note: execution on shuffled network instances is now generalized for all algorithms
@@ -282,13 +319,13 @@ def execLouvainIg(execpool, netfile, asym, netshf, timeout, pathid='', selfexec=
 	#	netdir = os.path.split(netfile)[0] + '/'
 	#	#print('Netdir: ', netdir)
 	#	for netfile in glob.iglob(''.join((escapePathWildcards(netdir), escapePathWildcards(task), '/*', netext))):
-	#		execLouvain_ig(execpool, netfile, asym, netshf, timeout, selfexec)
+	#		execLouvain_ig(execpool, netfile, asym, taskdir, timeout, selfexec)
 	#		execnum += 1
 	return execnum
 
 
 # SCP (Sequential algorithm for fast clique percolation)
-def execScp(execpool, netfile, asym, netshf, timeout, pathid=''):
+def execScp(execpool, netfile, asym, taskdir, timeout, pathid=''):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -334,7 +371,7 @@ def execScp(execpool, netfile, asym, netshf, timeout, pathid=''):
 	return kmax + 1 - kmin
 
 
-def execRandcommuns(execpool, netfile, asym, netshf, timeout, pathid='', instances=5):  # _netshuffles + 1
+def execRandcommuns(execpool, netfile, asym, taskdir, timeout, pathid='', instances=5):  # _netshuffles + 1
 	"""Execute Randcommuns, Random Disjoint Clustering
 	Results are not stable => multiple execution is desirable.
 
@@ -365,7 +402,7 @@ def execRandcommuns(execpool, netfile, asym, netshf, timeout, pathid='', instanc
 
 
 # HiReCS
-def execHirecs(execpool, netfile, asym, netshf, timeout, pathid=''):
+def execHirecs(execpool, netfile, asym, taskdir, timeout, pathid=''):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -387,7 +424,7 @@ def execHirecs(execpool, netfile, asym, netshf, timeout, pathid=''):
 	return 1
 
 
-def execHirecsOtl(execpool, netfile, asym, netshf, timeout, pathid=''):
+def execHirecsOtl(execpool, netfile, asym, taskdir, timeout, pathid=''):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -411,7 +448,7 @@ def execHirecsOtl(execpool, netfile, asym, netshf, timeout, pathid=''):
 	return 1
 
 
-def execHirecsAhOtl(execpool, netfile, asym, netshf, timeout, pathid=''):
+def execHirecsAhOtl(execpool, netfile, asym, taskdir, timeout, pathid=''):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -435,7 +472,7 @@ def execHirecsAhOtl(execpool, netfile, asym, netshf, timeout, pathid=''):
 	return 1
 
 
-def execHirecsNounwrap(execpool, netfile, asym, netshf, timeout, pathid=''):
+def execHirecsNounwrap(execpool, netfile, asym, taskdir, timeout, pathid=''):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -460,7 +497,7 @@ def execHirecsNounwrap(execpool, netfile, asym, netshf, timeout, pathid=''):
 
 
 # Oslom2
-def execOslom2(execpool, netfile, asym, netshf, timeout, pathid=''):
+def execOslom2(execpool, netfile, asym, taskdir, timeout, pathid=''):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -506,7 +543,7 @@ def execOslom2(execpool, netfile, asym, netshf, timeout, pathid=''):
 
 
 # Ganxis (SLPA)
-def execGanxis(execpool, netfile, asym, netshf, timeout, pathid=''):
+def execGanxis(execpool, netfile, asym, taskdir, timeout, pathid=''):
 	#print('> exec params:\n\texecpool: {}\n\tnetfile: {}\n\tasym: {}\n\ttimeout: {}'
 	#	.format(execpool, netfile, asym, timeout))
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (

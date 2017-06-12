@@ -29,6 +29,7 @@ _SEPPARS = '!'  # Network parameters separator, must be a char
 _SEPINST = '^'  # Network instances separator, must be a char
 _SEPSHF = '%'  # Network shuffles separator, must be a char; ~
 _SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
+_UTILDIR = 'utils/'  # Utilities (external applicaions) directory
 
 
 def timeSeed():

@@ -742,9 +742,9 @@ def processPath(popt, handler, xargs=None):
 				#if popt.shfnum:  # ATTENTNION: shfnum is not available for non-synthetic networks
 				# Process dedicated dir of shufles for the specified network,
 				# the origin network itself is linked to the shufles dir (inside it)
-				dirname = os.path.splitext(net)[0]
+				dirname, ext = os.path.splitext(net)
 				if os.path.isdir(dirname):
-					for desnet in glob.iglob('/*'.join((dirname, dflext))):
+					for desnet in glob.iglob('/*'.join((dirname, ext))):
 						handler(desnet, True, xargs)  # True - shuffle is processed in the non-flat dir structure
 				else:
 					handler(net, False, xargs)
@@ -763,9 +763,9 @@ def processPath(popt, handler, xargs=None):
 			#if popt.shfnum:  # ATTENTNION: shfnum is not available for non-synthetic networks
 			# Process dedicated dir of shufles for the specified network,
 			# the origin network itself is linked to the shufles dir (inside it)
-			dirname = os.path.splitext(path)[0]
+			dirname, ext = os.path.splitext(path)
 			if os.path.isdir(dirname):
-				for desnet in glob.iglob('/*'.join((dirname, dflext))):
+				for desnet in glob.iglob('/*'.join((dirname, ext))):
 					handler(desnet, True, xargs)  # True - shuffle is processed in the non-flat dir structure
 			else:
 				handler(path, False, xargs)
@@ -961,6 +961,9 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 				xargs['pathidstr'] = _SEPPATHID + str(pathid)
 				fpathids.write('{}\t{}\n'.format(xargs['pathidstr'][len(_SEPPATHID):], path))
 			pcuropt.path = path
+			if DEBUG_TRACE:
+				print('  Scheduling apps execution for (flat: {flat}, asym: {asym}, shfnum: {shfnum}) path: {path}'
+					.format(flat=pcuropt.flat, asym=pcuropt.asym, shfnum=pcuropt.shfnum, path=path))
 			processPath(pcuropt, runner, xargs)
 
 	# Extend lagorithms execution tracing files (.rcp) with time tracing, once per an executing algorithm

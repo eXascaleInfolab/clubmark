@@ -556,7 +556,8 @@ import subprocess
 
 basenet = '{jobname}' + '{netext}'
 #print('basenet: ' + basenet, file=sys.stderr)
-for i in range(1, {shfnum} + 1):
+i = 1
+while i <= {shfnum}:
 	# sort -R pgp_udir.net -o pgp_udir_rand3.net
 	netfile = ''.join(('{jobname}', '{sepshf}', str(i), '{netext}'))
 	if {overwrite} or not os.path.exists(netfile):
@@ -586,6 +587,14 @@ for i in range(1, {shfnum} + 1):
 				# The file does not have a header
 				#subprocess.call(('sort', '-R', basenet, '-o', netfile))
 				subprocess.call(('shuf', basenet, '-o', netfile))
+	i += 1
+while True:
+	netfile = ''.join(('{jobname}', '{sepshf}', str(i), '{netext}'))
+	if os.path.exists(netfile):
+		os.remove(netfile)
+		i += 1
+	else:
+		break
 """.format(jobname=job.name, sepshf=_SEPSHF, netext=job.params['netext'], shfnum=job.params['shfnum']
 , overwrite=False))  # Skip the shuffling if the respective file already exists
 		job.name += '_shf'  # Update jobname to cleary associate it with the shuffling process
@@ -880,8 +889,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		algorithms = [funcToAppName(func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
 	else:
 		# Execute only specified algorithms
-		execalgs = [getattr(appsmodule, _PREFEXEC + alg # .capitalize()
-			, unknownApp(_PREFEXEC + alg)) for alg in algorithms]  # .capitalize()
+		execalgs = [getattr(appsmodule, _PREFEXEC + alg
+			, unknownApp(_PREFEXEC + alg)) for alg in algorithms]
 		#algorithms = [alg.lower() for alg in algorithms]
 
 	def runapp(net, asym, netshf, pathid=''):
@@ -901,8 +910,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			except StandardError as err:
 				jobsnum = 0
 				errexectime = time.time() - exectime
-				print('WARNING, the "{}" is interrupted by the exception: {}. {} on {:.4f} sec ({} h {} m {:.4f} s)'
-					.format(ealg.__name__, err, errexectime, traceback.format_exc(), *secondsToHms(errexectime)), file=sys.stderr)
+				print('WARNING, the "{}" is interrupted by the exception: {} with the callstack: {} on {:.4f} sec ({} h {} m {:.4f} s)'
+					.format(ealg.__name__, err, traceback.format_exc(), errexectime, *secondsToHms(errexectime)), file=sys.stderr)
 		return jobsnum
 
 	# Prepare resulting paths mapping file

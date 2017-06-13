@@ -161,7 +161,7 @@ def	preparePath(taskpath):  # , netshf=False
 	elif not dirempty(taskpath):
 		mainpath = delPathSuffix(taskpath)
 		tobackup(mainpath, True, move=True)  # Move to the backup (old results can't be reused in the forming results)
-		os.makedir(taskpath)
+		os.mkdir(taskpath)
 
 
 # ATTENTION: this function should not be defined to not beight automatically executed

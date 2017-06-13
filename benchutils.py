@@ -529,16 +529,13 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	# Backup files
 	rennmarg = 10  # Max number of renaming attempts
 	basename = basedir + nameVersion(basepath, expand, synctime, xsuffix)  # Base name of the backup
+	bckname = '-'.join((basename, str(timeSeed())))
 	if compress:
 		archname = basename + '.tar.gz'
 		# Rename already existent archive if required
 		if os.path.exists(archname):
-			nametmpl = ''.join((basename, '-{}', '.tar.gz'))
-			for i in range(rennmarg):
-				bckname = nametmpl.format(i)
-				if not os.path.exists(bckname):
-					break
-			else:
+			bckname += '.tar.gz'
+			if os.path.exists(bckname):
 				print('WARNING: backup file "{}" is being rewritten'.format(bckname), file=sys.stderr)
 			try:
 				os.rename(archname, bckname)
@@ -559,12 +556,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	else:
 		# Rename already existent backup if required
 		if os.path.exists(basename):
-			nametmpl = basename + '-{}'
-			for i in range(rennmarg):
-				bckname = nametmpl.format(i)
-				if not os.path.exists(bckname):
-					break
-			else:
+			if os.path.exists(bckname):
 				print('WARNING: backup dir "{}" is being rewritten'.format(bckname), file=sys.stderr)
 				shutil.rmtree(bckname)
 			try:

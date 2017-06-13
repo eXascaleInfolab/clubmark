@@ -963,7 +963,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			pcuropt.path = path
 			processPath(pcuropt, runner, xargs)
 
-	# Open alg execution tracing file (.rcp) and trace timing there
+	# Extend lagorithms execution tracing files (.rcp) with time tracing, once per an executing algorithm
+	# to distinguish different executions (benchmark runs)
 	for alg in algorithms:
 		aexecres = ''.join((_RESDIR, alg, '/', alg, _EXTEXECTIME))
 		with open(aexecres, 'a') as faexres:

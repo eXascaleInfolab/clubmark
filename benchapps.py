@@ -68,7 +68,7 @@ def aggexec(algs):
 	malgs = []  # Measured algs
 	ialg = 0  # Algorithm index
 	for alg in algs:
-		algesfile = ''.join((_RESDIR, alg, _EXTEXECTIME))
+		algesfile = ''.join((_RESDIR, alg, '/', alg, _EXTEXECTIME))
 		try:
 			with open(algesfile, 'r') as aest:
 				malgs.append(alg)

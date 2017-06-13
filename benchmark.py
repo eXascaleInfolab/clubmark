@@ -926,9 +926,10 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			.format(err), file=sys.stderr)
 		fpathids = sys.stdout
 	# Write header if required
+	timestamp = datetime.utcnow()
 	if not os.path.getsize(pathidsMap):
 		fpathids.write('# ID(#)\tPath\n')  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
-	fpathids.write('# --- {time} (seed: {seed}) ---\n'.format(time=datetime.utcnow(), seed=seed))  # Write timestamp
+	fpathids.write('# --- {time} (seed: {seed}) ---\n'.format(time=timestamp, seed=seed))  # Write timestamp
 
 	def runner(net, netshf, xargs):
 		"""Network runner helper
@@ -961,6 +962,12 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 				fpathids.write('{}\t{}\n'.format(xargs['pathidstr'][len(_SEPPATHID):], path))
 			pcuropt.path = path
 			processPath(pcuropt, runner, xargs)
+
+	# Open alg execution tracing file (.rcp) and trace timing there
+	for alg in algorithms:
+		aexecres = ''.join((_RESDIR, alg, '/', alg, _EXTEXECTIME))
+		with open(aexecres, 'a') as faexres:
+			faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=timestamp, seed=seed))  # Write timestamp
 
 	# Flush the formed fpathids
 	if fpathids:

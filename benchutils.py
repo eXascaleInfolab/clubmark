@@ -32,6 +32,30 @@ _SEPPATHID = '#'  # Network path id separator (to distinguish files with the sam
 _UTILDIR = 'utils/'  # Utilities (external applicaions) directory
 
 
+def hasMethod(obj, method):
+	"""Whether the object has the specified method
+	Note: no exceptions are raised
+
+	obj  - the object to be checked for the method
+	method  - name of the target method
+
+	return  whether obj.method is callable
+	"""
+	try:
+		ometh = getattr(obj, method, None)
+		return callable(ometh)
+	except Exception:
+		pass
+	return False
+
+
+# Define viewitems function to efficiently traverse items of dictionaries in both Python 2 and 3
+try:
+	from future.utils import viewitems
+except ImportError:
+	viewitems = lambda dct: dct.items() if not hasMethod(dct, viewitems) else dct.viewitems()
+
+
 def timeSeed():
 	"""Generate time seed as uint64_t
 
@@ -394,7 +418,7 @@ def basePathExists(path):
 		ATTENTION: the basepathis escaped, i.e. wildcards are not supported
 	"""
 	try:
-		glob.iglob(escapePathWildcards(path) + '*').next()
+		next(glob.iglob(escapePathWildcards(path) + '*'))
 	except StopIteration:
 		# No such files / dirs
 		return False
@@ -479,7 +503,7 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 		exists = False
 		if expand:
 			try:
-				path = glob.iglob(path + '*').next()
+				path = next(glob.iglob(path + '*'))
 				exists = True
 			except StopIteration:
 				pass
@@ -527,7 +551,6 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	if not os.path.exists(basedir):
 		os.mkdir(basedir)
 	# Backup files
-	rennmarg = 10  # Max number of renaming attempts
 	basename = basedir + nameVersion(basepath, expand, synctime, xsuffix)  # Base name of the backup
 	bckname = '-'.join((basename, str(timeSeed())))
 	if compress:
@@ -539,7 +562,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 				print('WARNING: backup file "{}" is being rewritten'.format(bckname), file=sys.stderr)
 			try:
 				os.rename(archname, bckname)
-			except StandardError as err:
+			except Exception as err:
 				print('WARNING: removing old backup file "{}", as its renaming failed: {}'
 					.format(archname, err), file=sys.stderr)
 				os.remove(archname)
@@ -561,7 +584,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 				shutil.rmtree(bckname)
 			try:
 				os.rename(basename, bckname)
-			except StandardError as err:
+			except Exception as err:
 				print('WARNING: removing old backup dir "{}", as its renaming failed: {}'
 					.format(basename, err), file=sys.stderr)
 				shutil.rmtree(basename)

@@ -477,7 +477,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 		for job in jobs:
 			try:
 				execpool.execute(job)
-			except StandardError as err:
+			except Exception as err:
 				print('WARNING, "{}" job is interrupted by the exception: {}. {}'
 					.format(job.name, err, traceback.format_exc()), file=sys.stderr)
 	else:

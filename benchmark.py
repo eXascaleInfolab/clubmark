@@ -51,10 +51,9 @@ import copy
 import benchapps  # Benchmarking apps (clustering algs)
 
 from utils.mpepool import *
-from benchutils import *
 
-from benchutils import _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR
 # PYEXEC - current Python interpreter
+from benchutils import viewitems, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR
 from benchapps import PYEXEC, aggexec, funcToAppName, _EXTCLNODES, _PREFEXEC
 from benchevals import evalAlgorithm, aggEvaluations, EvalsAgg, _RESDIR, _EXTEXECTIME
 
@@ -331,7 +330,7 @@ def parseParams(args):
 						evalres |= 0b0010000  # F1h
 					elif arg[pos] == 'p':
 						evalres |= 0b0100000  # F1p
-				elif arg[pos] == 'd':  # Default extrinsic measures
+				elif arg[pos] == 'r':  # Recommended extrinsic measures
 					evalres |= 0b0110001  # NMI_max, F1h, F1p
 			elif arg[pos] == 'i':
 				pos += 1
@@ -461,7 +460,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 					genopts.update({'N': N, 'k': k})
 					genopts.update({'maxk': evalmaxk(genopts), 'muw': evalmuw(genopts), 'minc': evalminc(genopts)
 						, 'maxc': evalmaxc(genopts), 'on': evalon(genopts), 'name': name})
-					for opt in genopts.items():
+					for opt in viewitems(genopts):  # .items()  Note: the number of genopts is small
 						fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
 			else:
 				assert os.path.isfile(fnamex), '{} should be a file'.format(fnamex)
@@ -786,7 +785,7 @@ def convertNet(inpnet, overwrite=False, resdub=False, timeout=7*60):  # 7 min
 		if resdub:
 			args.append('-d')
 		_execpool.execute(Job(name=os.path.splitext(os.path.split(inpnet)[1])[0], args=args, timeout=timeout))
-	except StandardError as err:
+	except Exception as err:
 		print('ERROR on "{}" conversion into .hig, the network is skipped: {}. {}'
 			.format(inpnet, err, traceback.format_exc()), file=sys.stderr)
 	#netnoext = os.path.splitext(net)[0]  # Remove the extension
@@ -798,7 +797,7 @@ def convertNet(inpnet, overwrite=False, resdub=False, timeout=7*60):  # 7 min
 	#	# ATTENTION: original Louvain implementation processes incorrectly weighted networks with uniform weights (=1) if supplied as unweighted
 	#	subprocess.call((_ALGSDIR + 'convert', '-i', net, '-o', netnoext + '.lig'
 	#		, '-w', netnoext + '.liw'))
-	#except StandardError as err:
+	#except Exception as err:
 	#	print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
 
 
@@ -907,7 +906,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		for ealg in execalgs:
 			try:
 				jobsnum = ealg(_execpool, net, asymnet(net, asym), netshf, timeout, pathid)
-			except StandardError as err:
+			except Exception as err:
 				jobsnum = 0
 				errexectime = time.time() - exectime
 				print('WARNING, the "{}" is interrupted by the exception: {} with the callstack: {} on {:.4f} sec ({} h {} m {:.4f} s)'
@@ -990,7 +989,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
 		try:
 			_execpool.join(timelim)
-		except StandardError as err:
+		except Exception as err:
 			print('Algorithms execution pool is interrupted by: {}. {}'
 				.format(err, traceback.format_exc()), file=sys.stderr)
 			raise
@@ -1029,7 +1028,7 @@ def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout, evalt
 	# Measures is a dict with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
 	measures = {3: ['nmi', _EXTCLNODES, 'NMIs'], 4: ['mod', '.hig', 'Q']}
 	evaggs = []  # Evaluation results aggregators
-	for im, msr in measures.items():
+	for im, msr in viewitems(measures):  # .items()  Note: the number of measures is small
 		# Evaluate only required measures
 		if evalres & im == 0:
 			continue
@@ -1075,7 +1074,7 @@ def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout, evalt
 					if evalres & im == 3:
 					#if measure == 'nmi':
 						evalAlgorithm(_execpool, algname, basefile, 'nmi_s', timeout, evagg_s, pathid)
-				except StandardError as err:
+				except Exception as err:
 					print('WARNING, "{}" evaluation of "{}" is interrupted by the exception: {}. {}'
 						.format(measure, algname, err, traceback.format_exc()), file=sys.stderr)
 				else:
@@ -1123,7 +1122,7 @@ def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout, evalt
 			.format(jobsnum, timelim, *secondsToHms(timelim)))
 		try:
 			_execpool.join(timelim)  # max(timelim, exectime * 2) - Twice the time of the algorithms execution
-		except StandardError as err:
+		except Exception as err:
 			print('Results evaluation execution pool is interrupted by: {}. {}'
 				.format(err, traceback.format_exc()), file=sys.stderr)
 			raise
@@ -1217,8 +1216,13 @@ def benchmark(*args):
 		.format(exectime, *secondsToHms(exectime)))
 
 
-def terminationHandler(signal=None, frame=None):
-	"""Signal termination handler"""
+def terminationHandler(signal=None, frame=None, terminate=True):
+	"""Signal termination handler
+
+	signal  - raised signal
+	frame  - origin stack frame
+	terminate  - whether to terminate the application
+	"""
 	#if signal == signal.SIGABRT:
 	#	os.killpg(os.getpgrp(), signal)
 	#	os.kill(os.getpid(), signal)
@@ -1230,7 +1234,8 @@ def terminationHandler(signal=None, frame=None):
 		# Define _execpool to avoid unnessary trash in the error log, which might
 		# be caused by the attempt of subsequent deletion on destruction
 		_execpool = None  # Note: otherwise _execpool becomes undefined
-	sys.exit()  # exit(0), 0 is the default exit code.
+	if terminate:
+		sys.exit()  # exit(0), 0 is the default exit code.
 
 
 if __name__ == '__main__':
@@ -1284,7 +1289,7 @@ if __name__ == '__main__':
 			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
 			'  -r  - run specified apps on the specidied datasets, default: all',
 			'  -q[X]  - evaluate quality of the results for the specified algorithms on the specified datasets'
-			' and form the summarized results. Default: all apps on all datasets',
+			' and form the summarized results. Default: all measures on all datasets',
 			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
 			'    e[Y]  - extrinsic measures for overlapping communities, default: all',
 			'      n[Z]  - NMI measure(s) for overlapping and multi-level communities: max, avg, min, sqrt',
@@ -1299,8 +1304,8 @@ if __name__ == '__main__':
 			#'        a  - avg F1-Score',
 			'        h  - harmonic mean of F1-Score',
 			'        p  - F1p measure (harmonic mean of the weighted average of partial probabilities)',
-			'      d  - default extrinsic measures (NMI_max, F1_h, F1_p) for overlapping communities',
-			'    i[Y]  - intrinsic measures for overlapping communities',
+			'      r  - recommended extrinsic measures (NMI_max, F1_h, F1_p) for overlapping multi-level communities',
+			'    i[Y]  - intrinsic measures for overlapping communities, default: all',
 			'      m  - modularity Q',
 			'      c  - conductance f',
 			'  -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network'
@@ -1330,7 +1335,7 @@ if __name__ == '__main__':
 		signal.signal(signal.SIGABRT, terminationHandler)
 
 		# Set termination handler for the internal termination
-		atexit.register(terminationHandler)
+		atexit.register(terminationHandler, terminate=False)
 
 		benchmark(*sys.argv[1:])
 		print('bm completed', file=sys.stderr)

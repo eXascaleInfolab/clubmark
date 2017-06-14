@@ -6,7 +6,7 @@
 
 	Execution function for each algorithm must be named "exec<Algname>" and have the following signature:
 
-	def execAlgorithm(execpool, netfile, asym, taskdir, timeout, pathid='', selfexec=False):
+	def execAlgorithm(execpool, netfile, asym, odir, timeout, pathid='', selfexec=False):
 		Execute the algorithm (stub)
 
 		execpool  - execution pool to perform execution of current task
@@ -31,19 +31,23 @@ import glob
 import sys
 import inspect  # To automatically fetch algorithm name
 import traceback  # Stacktrace
+import subprocess
+import re
 
 from datetime import datetime
 
 from utils.mpepool import *
-from benchutils import *
 
 from sys import executable as PYEXEC  # Full path to the current Python interpreter
-from benchutils import _SEPPARS, _UTILDIR
+from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, tobackup, _SEPPARS, _UTILDIR
 from benchevals import _SEPNAMEPART, _ALGSDIR, _RESDIR, _CLSDIR, _EXTERR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
 
 _EXTLOG = '.log'
 _EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
 _PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
+
+
+reFirstDigits = re.compile('\d+')  # First digit regex
 
 
 def aggexec(algs):
@@ -124,7 +128,7 @@ def aggexec(algs):
 					outres.write('\t{}'.format(alg))
 				outres.write('\n')
 				# Output results for each network
-				for netname, netstats in measures[imsr].iteritems():
+				for netname, netstats in viewitems(measures[imsr]):  # Note: .items() are not efficient on Python2
 					outres.write(netname)
 					outresx.write(netname)
 					for ialg, stat in enumerate(netstats):
@@ -165,7 +169,7 @@ def	preparePath(taskpath):  # , netshf=False
 
 
 # ATTENTION: this function should not be defined to not beight automatically executed
-#def execAlgorithm(execpool, netfile, asym, taskdir, timeout, pathid='', selfexec=False, **kwargs):
+#def execAlgorithm(execpool, netfile, asym, odir, timeout, pathid='', selfexec=False, **kwargs):
 #	"""Execute the algorithm (stub)
 #
 #	execpool  - execution pool to perform execution of current task
@@ -193,9 +197,31 @@ def funcToAppName(funcname):
 	return funcname[len(_PREFEXEC):]  # .lower()
 
 
+def prepareResDir(appname, task, odir, pathid):
+	"""Prepare output directory for the app results and backup the previous results
+
+	appname  - application (algorithm) name
+	task  - task name
+	odir  - whether to output results to the dedicated dir named by the instance name,
+		which actual the the shuffles with non-flat structure
+	pathid  - pather id of the input networks file
+
+	return resulting directory without the ending '/' terminator
+	"""
+	# Preapare resulting directory
+	taskdir = task  # Relative task directory withouth the ending '/'
+	if odir:
+		nameparts = parseName(task, True)
+		taskdir = ''.join((nameparts[0], nameparts[2], '/', task))  # Use base name and instance id
+	taskpath = ''.join((_RESDIR, appname, '/', _CLSDIR, taskdir, pathid))
+
+	preparePath(taskpath)
+	return taskpath
+
+
 # Louvain
 ## Original Louvain
-#def execLouvain(execpool, netfile, asym, taskdir, timeout, pathid='', tasknum=0):
+#def execLouvain(execpool, netfile, asym, odir, timeout, pathid='', tasknum=0):
 #	"""Execute Louvain
 #	Results are not stable => multiple execution is desirable.
 #
@@ -251,15 +277,9 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 
 	# ATTENTION: for the correct execution algname must be always the same as func lower case name without the prefix "exec"
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
+	# Backup prepated the resulting dir and backup the previous results if exist
+	taskpath = prepareResDir(algname, task, odir, pathid)
 
-	# Preapare resulting directory
-	taskdir = task  # Relative task directory withouth the ending '/'
-	if odir:
-		nameparts = parseName(task, True)
-		taskdir = ''.join((nameparts[0], nameparts[2], '/', task))  # Use base name and instance id
-	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, taskdir, pathid))
-
-	preparePath(taskpath)
 	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
 
 	## Louvain accumulated statistics over shuffled modification of the network or total statistics for all networks
@@ -284,19 +304,18 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 	pybin = PYEXEC if not os.path.split(PYEXEC)[1].startswith('pypy') else 'python'
 	# Note: Louvain_igraph creates the output dir if it has not been existed, but not the exectime app
-
-	def relpath(path, basedir=workdir):
-		"""Relative path to the specidied basedir"""
-		return os.path.relpath(path, basedir)
-
 	errfile = ''.join((taskpath, _EXTLOG))
+
+	# def relpath(path, basedir=workdir):
+	# 	"""Relative path to the specidied basedir"""
+	# 	return os.path.relpath(path, basedir)
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
 	# Evaluate relative paths
 	xtimebin = relpath(_UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 
-	#os.path.relpath(
 	# Prepare resdir
 	resdir = _RESDIR
 	if odir:
@@ -306,10 +325,10 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 		, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
-		, ''.join(('-lo', taskpath, '/', task, _EXTCLNODES)), netfile)
+		, '-lo', ''.join((taskpath, '/', task, _EXTCLNODES)), netfile)
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
-		#, ondone=postexec
-		, stdout=os.devnull, stderr=errfile))
+		#, ondone=postexec, stdout=os.devnull
+		, stderr=errfile))
 
 	execnum = 1
 	# Note: execution on shuffled network instances is now generalized for all algorithms
@@ -319,22 +338,53 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	#	netdir = os.path.split(netfile)[0] + '/'
 	#	#print('Netdir: ', netdir)
 	#	for netfile in glob.iglob(''.join((escapePathWildcards(netdir), escapePathWildcards(task), '/*', netext))):
-	#		execLouvain_ig(execpool, netfile, asym, taskdir, timeout, selfexec)
+	#		execLouvain_ig(execpool, netfile, asym, odir, timeout, selfexec)
 	#		execnum += 1
 	return execnum
 
 
 # SCP (Sequential algorithm for fast clique percolation)
-def execScp(execpool, netfile, asym, taskdir, timeout, pathid=''):
+def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
 	# Fetch the task name
-	task, netext = os.path.splitext(netfile)
-	task = os.path.split(task)[1]  # Base name of the network
+	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Base name of the network
 	assert task, 'The network name should exists'
-
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'scp'
+
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	# Evaluate relative paths
+	xtimebin = relpath(_UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	netfile = relpath(netfile)
+
+	# Set the best possible interpreter
+	# ATTENTION: Scp doesn't work correctly under Python 3
+	pybin = PYEXEC if not os.path.split(PYEXEC)[1].find('3') == -1 else 'python'
+	# Note: More accurate solution is not check "python -V" output, but it fails on Python2 for the
+	# 'python -V' (but works for the 'python -h')
+	# pyverstr = subprocess.check_output([PYEXEC, '-V']).decode()  # Note: Xcoding is required for Python3
+	##pyverstr = subprocess.Popen((PYEXEC, '-V'), stdout=subprocess.PIPE).communicate()[0].decode()
+	# pyver = int(reFirstDigits.search(pyverstr).group())  # Take the first digits, i.e. the magor version
+	# pybin = 'python' if pyver >= 3 else PYEXEC
+	#
+	# Note: run SCP under pypy if possible
+	try:
+		with open(os.devnull, 'wb') as fdevnull:
+			# NOTE: 'pypy -V' is outputted into the stdout even when another file is specified for pypy/Python2,
+			# it works fine only on Python3
+			if pybin.find('pypy') == -1 and not subprocess.call(('pypy', '-h'), stdout=fdevnull):
+				pybin = 'pypy'
+	except OSError:
+		pass
+
+	# def tidy(job):
+	# 	# The network might lack large cliques, so for some parameters the resulting
+	# 	# directories might be empty and should be cleared
+	# 	if os.path.isdir(job.params) and dirempty(job.params):
+	# 		os.rmdir(job.params)
+
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 8  # Max clique size (~ min node degree to be considered)
 	# Run for range of clique sizes
@@ -345,33 +395,27 @@ def execScp(execpool, netfile, asym, taskdir, timeout, pathid=''):
 		taskbasex = delPathSuffix(task, True)
 		tasksuf = task[len(taskbasex):]
 		ktask = ''.join((taskbasex, _SEPPARS, kstrex, tasksuf))
-		# Backup previous results if exist
-		taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, ktask, pathid))
-
-		preparePath(taskpath)
+		# Backup prepated the resulting dir and backup the previous results if exist
+		taskpath = prepareResDir(algname, ktask, odir, pathid)
+		errfile = ''.join((taskpath, _EXTLOG))
+		# Evaluate relative paths dependent of the alg params
+		reltaskpath = relpath(taskpath)
 
 		# ATTENTION: a single argument is k-clique size, specified later
-		steps = '10'  # Use 10 levels in the hierarchy Ganxis
-		resbase = ''.join(('../', taskpath, '/', ktask))  # Base name of the result
+		steps = '10'  # Use 10 scale levels as in Ganxis
 		# scp.py netname k [start_linksnum end__linksnum numberofevaluations] [weight]
-		args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', ktask, pathid)), '-s=/etime_' + algname
-			, PYEXEC, ''.join(('./', algname, '.py')), '../' + netfile, kstr, steps, resbase + _EXTCLNODES)
-
-		def tidy(job):
-			"""Remove empty resulting folders"""
-			# Note: GANXiS leaves empty ./output dir in the _ALGSDIR, which should be deleted
-			path = os.path.split(job.args[-1])[0][3:]  # Skip '../' prefix
-			if os.path.exists(path) and dirempty(path):
-				os.rmdir(path)
+		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ktask, pathid)), '-s=/etime_' + algname
+			, pybin, './scp.py', netfile, kstr, steps, ''.join((reltaskpath, '/', ktask, _EXTCLNODES)))
 
 		#print('> Starting job {} with args: {}'.format('_'.join((ktask, algname, kstrex)), args + [kstr]))
-		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ktask)), workdir=_ALGSDIR, args=args, timeout=timeout
-			, ondone=tidy, stderr=taskpath + _EXTLOG))
+		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ktask)), workdir=workdir, args=args, timeout=timeout
+			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
+			, stderr=errfile))
 
 	return kmax + 1 - kmin
 
 
-def execRandcommuns(execpool, netfile, asym, taskdir, timeout, pathid='', instances=5):  # _netshuffles + 1
+def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', instances=5):  # _netshuffles + 1
 	"""Execute Randcommuns, Random Disjoint Clustering
 	Results are not stable => multiple execution is desirable.
 
@@ -402,7 +446,7 @@ def execRandcommuns(execpool, netfile, asym, taskdir, timeout, pathid='', instan
 
 
 # HiReCS
-def execHirecs(execpool, netfile, asym, taskdir, timeout, pathid=''):
+def execHirecs(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -424,7 +468,7 @@ def execHirecs(execpool, netfile, asym, taskdir, timeout, pathid=''):
 	return 1
 
 
-def execHirecsOtl(execpool, netfile, asym, taskdir, timeout, pathid=''):
+def execHirecsOtl(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -448,7 +492,7 @@ def execHirecsOtl(execpool, netfile, asym, taskdir, timeout, pathid=''):
 	return 1
 
 
-def execHirecsAhOtl(execpool, netfile, asym, taskdir, timeout, pathid=''):
+def execHirecsAhOtl(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -472,7 +516,7 @@ def execHirecsAhOtl(execpool, netfile, asym, taskdir, timeout, pathid=''):
 	return 1
 
 
-def execHirecsNounwrap(execpool, netfile, asym, taskdir, timeout, pathid=''):
+def execHirecsNounwrap(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
 	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
 	just outputs the folded hierarchy"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -497,7 +541,7 @@ def execHirecsNounwrap(execpool, netfile, asym, taskdir, timeout, pathid=''):
 
 
 # Oslom2
-def execOslom2(execpool, netfile, asym, taskdir, timeout, pathid=''):
+def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -543,7 +587,7 @@ def execOslom2(execpool, netfile, asym, taskdir, timeout, pathid=''):
 
 
 # Ganxis (SLPA)
-def execGanxis(execpool, netfile, asym, taskdir, timeout, pathid=''):
+def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
 	#print('> exec params:\n\texecpool: {}\n\tnetfile: {}\n\tasym: {}\n\ttimeout: {}'
 	#	.format(execpool, netfile, asym, timeout))
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (

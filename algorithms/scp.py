@@ -21,10 +21,13 @@ Changelog by Artem Lutov (luart@ya.ru):
 	stop = linksnum, start = log(stop)
 - Community structure levels (dendrogram) output to the files
 """
-import sys,array,math
+from __future__ import print_function, division  # Required for stderr output, must be the first import
+from functools import reduce
 from operator import mul
+import sys, math
 
 #---- A networking framework -----
+# ATTENTION: works somehow only in Python2, cliques are not merged into clusters on Python3
 
 class Net(object):
 	"""A sparse matrix"""
@@ -49,7 +52,7 @@ class Net(object):
 				self._nodes[src]={dst: val}
 			else:
 				self._nodes[src][dst]=val
-	
+
 	def _setedge(self, src, dst, val):
 		assert self._legaledge(src, dst)
 		self._intsetedge(src, dst, val)
@@ -58,7 +61,7 @@ class Net(object):
 	def __getitem__(self, args):
 		if isinstance(args, tuple):
 			if len(args) != 2:
-				raise KeyError, "Don't be silly. One or two indices"
+				raise KeyError("One or two indices are expected")
 			assert self._legaledge(args[0],args[1])
 			try:
 				retval=self._nodes[args[0]][args[1]]
@@ -67,12 +70,12 @@ class Net(object):
 			return retval
 		else:
 			return Node(self, args)
-		
+
 	def __setitem__(self, key, val):
 		if isinstance(key, tuple):
 			if len(key) != 2:
-				raise KeyError, "Don't be silly. One or two args"
-			self._setedge(key[0], key[1], val) 
+				raise KeyError("One or two args are expected")
+			self._setedge(key[0], key[1], val)
 			return val
 		else:
 			if isinstance(val, Node):
@@ -81,18 +84,17 @@ class Net(object):
 				else:
 					val={}
 			if not isinstance(val, dict):
-				raise NotImplemented, \
-						"Setting nodes only implemented from maps"
+				raise NotImplemented("Setting nodes only implemented from maps")
 			del self[key] # calls __delitem__
 			# We perform a deep copy
 			for edge in val.iteritems():
 				self._setedge(key, edge[0], edge[1])
 			return Node(self, key)
-	
+
 	def __delitem__(self, args):
 		if isinstance(args, tuple):
 			if len(args) != 2:
-				raise KeyError, "Don't be silly. One or two indices"
+				raise KeyError("One or two indices are expected")
 			self._setedge(args[0], args[1], 0)
 		else:
 			for dest in self[args]:
@@ -107,6 +109,7 @@ class Net(object):
 
 	def __len__(self):
 		return len(self._nodes)
+
 class Node(object):
 	def __init__(self, net, index):
 		self.net=net;
@@ -143,7 +146,7 @@ class SymmNet(Net):
 		Net._intsetedge(self, src, dst, val)
 		Net._intsetedge(self, dst, src, val)
 		return val
-				
+
 	def isSymmetric(self):
 		return True
 
@@ -156,19 +159,19 @@ class Net_edges:
 	def __init__(self,net):
 		self.net=net
 	def __iter__(self):
-		 for node1Index in self.net:
+		for node1Index in self.net:
 			node1=self.net[node1Index]
 			for node2Index in node1:
 				if (not self.net.isSymmetric()) or node1Index.__hash__()<node2Index.__hash__():
-					yield [node1Index,node2Index,self.net[node1Index,node2Index]]		
+					yield [node1Index,node2Index,self.net[node1Index,node2Index]]
 	def __len__(self):
-		lenght=0
+		length=0
 		for nodeIndex in self.net:
-			lenght+=len(self.net[nodeIndex].edges)
+			length+=len(self.net[nodeIndex])  # net:  {iscr: {idst: weight}}
 		if self.net.isSymmetric():
-			return lenght/2
+			return length//2
 		else:
-			return lenght
+			return length
 	def __str__(self):
 		return str(list(self))
 Net.edges=property(Net_edges)
@@ -196,7 +199,7 @@ def getSubnet(net,nodes):
 	return newNet
 
 
-def loadNet_edg(input, mutualEdges = False, splitterChar = None,symmetricNet=True):
+def loadNet_edg(input, mutualEdges = False, splitterChar = None, symmetricNet=True):
 	"""
 	Reads a network data from input in edg format.
 
@@ -216,7 +219,7 @@ def loadNet_edg(input, mutualEdges = False, splitterChar = None,symmetricNet=Tru
 		return True
 
 	numerical=isNumerical(input)
-		
+
 	if symmetricNet:
 		newNet=SymmNet()
 	else:
@@ -226,24 +229,32 @@ def loadNet_edg(input, mutualEdges = False, splitterChar = None,symmetricNet=Tru
 	nodeMap = {} # Used only if mutualEdges = True.
 	linksnum = 0
 
-	for line in input:
-		fields=line.split(splitterChar)
-		if len(fields)>=2:
-			if numerical:
-				fields[0]=int(fields[0])
-				fields[1]=int(fields[1])
-			if fields[0]!=fields[1]:
-				linksnum += 1
-				if len(fields) == 2:
-					fields.append(1)
-				if mutualEdges:
-					if nodeMap.has_key( (fields[1], fields[0]) ):
-						value = 0.5*( nodeMap[(fields[1], fields[0])] + float(fields[2]) )
-						newNet[fields[0]][fields[1]] = value
+	try:
+		for line in input:
+			# Skip comments and empty lines
+			if not line or line[0] == '#':
+				continue
+			fields=line.split(splitterChar)
+			if len(fields)>=2:
+				if numerical:
+					fields[0]=int(fields[0])
+					fields[1]=int(fields[1])
+				if fields[0]!=fields[1]:
+					linksnum += 1
+					if len(fields) == 2:
+						fields.append(1)
+					if mutualEdges:
+						if nodeMap.has_key( (fields[1], fields[0]) ):
+							value = 0.5*( nodeMap[(fields[1], fields[0])] + float(fields[2]) )
+							newNet[fields[0]][fields[1]] = value
+							newNet[fields[1]][fields[0]] = value
+						else:
+							nodeMap[(fields[0], fields[1])] = float(fields[2])
 					else:
-						nodeMap[(fields[0], fields[1])] = float(fields[2])
-				else:
-					newNet[fields[0]][fields[1]]=float(fields[2])
+						newNet[fields[0]][fields[1]]=float(fields[2])
+	except Exception:
+		print('Input data parcing failed on the line: ' + line)
+		raise
 
 	return newNet, linksnum
 
@@ -279,7 +290,7 @@ class Enumerator:
 			return self.number[item]
 		except KeyError:
 			return self._addItem(item)
- 
+
 	def getReverse(self,number):
 		return self.item[number]
 
@@ -295,7 +306,7 @@ class NodeFamily:
 	"""
 	Defines a community structure of a network.
 	"""
-	
+
 	def __init__(self,cmap={},inputFile=None):
 		self.comm=[]
 		for community in cmap:
@@ -319,8 +330,8 @@ class NodeFamily:
 		return string
 
 	def _sortBySize(self):
-		self.comm.sort(lambda x,y:cmp(len(x),len(y)),reverse=True)	 
-		
+		self.comm.sort(key=lambda x: len(x), reverse=True)
+
 	def _addCommunity(self,newCommunity):
 		self.comm.append(set(newCommunity))
 
@@ -470,10 +481,10 @@ class KtreeInteger:
 			for index in range(0,size+1):
 				self.ktree.append(index);
 
-		
+
 	def __getRealParent(self,node):
 		"""
-		Private method. Reads elements directly from the tree.		
+		Private method. Reads elements directly from the tree.
 		"""
 		try:
 			return self.ktree[node]
@@ -496,7 +507,7 @@ class KtreeInteger:
 		if node!=parent:
 			self.__setRealParent(node,self.getParent(parent))
 		return self.__getRealParent(node)
-			
+
 	def setParent(self,node,newParent):
 		self.__setRealParent(self.getParent(node),self.getParent(newParent))
 
@@ -509,7 +520,7 @@ class KtreeInteger:
 			nodes=self.ktree
 		else:
 			nodes=range(0,len(self.ktree))
-		
+
 		for node in nodes:
 			communityKey=self.getParent(node)
 			if separateElements or communityKey!=node:
@@ -530,7 +541,7 @@ class KtreeInteger:
 
 	def addEdge(self,edge):
 		self.setParent(edge[0],edge[1])
-		
+
 	def setSize(self,newSize):
 		for index in range( len(self.ktree),newSize+1):
 			self.ktree.append(index);
@@ -596,12 +607,12 @@ class EvaluationList:
 		if not self.strengthEvaluations and not self.lastEvaluation:
 			index=0
 			evalIter=self.evaluationPoints.__iter__()
-			nextEvaluationPoint=evalIter.next()
+			nextEvaluationPoint=next(evalIter)
 			for element in self.thelist:
 				yield element
 				if index==nextEvaluationPoint:
 					yield EvaluationEvent(self.weightFunction(element),index+1)
-					nextEvaluationPoint=evalIter.next()
+					nextEvaluationPoint=next(evalIter)
 				index+=1
 		elif not self.lastEvaluation:
 			last=None
@@ -632,7 +643,7 @@ def getKCliqueComponents(net,k):
 		yield EvaluationEvent()
 	edgesAndEvaluations=evaluateAtEnd(net.edges)
 
-	kcliques=kcliquesByEdges(edgesAndEvaluations,k) #unweighted clique percolation		
+	kcliques=kcliquesByEdges(edgesAndEvaluations,k) #unweighted clique percolation
 	for community in communitiesByKCliques(kcliques):
 		return community
 
@@ -707,7 +718,7 @@ def kcliquesAtSubnet(nodes,net,k):
 def kcliquesByEdges(edges,k):
 	"""
 	Phase I in the SCP-algorithm.
-	
+
 	Generator function that generates a list of cliques of size k in the order they
 	are formed when edges are added in the order defined by the 'edges' argument.
 	If many cliques is formed by adding one edge, the order of the cliques is
@@ -735,7 +746,7 @@ def kcliquesByEdges(edges,k):
 
 def kcliquesWeight(net,k,weightFunction):
 	kcliques=list(kcliquesByEdges(net.edges,k))
-	kcliques.sort(lambda x,y: cmp(weightFunction(x,net),weightFunction(y,net)))
+	kcliques.sort(key=lambda x: weightFunction(x,net))
 	for kclique in kcliques:
 		yield kclique
 
@@ -755,7 +766,7 @@ def communitiesByKCliques(kcliques):
 			#for fewer operations at ktree, names of new cliques should be saved
 			#and given to ktree when merging the sets
 			krcliques=list(kclique.getSubcliques()) #list all k-1 cliques that are subcliques
-			krTree.mergeSetsWithElements(krcliques) #merge the sets of k-1 cliques at the list 
+			krTree.mergeSetsWithElements(krcliques) #merge the sets of k-1 cliques at the list
 
 def kcliquePercolator(net,k,start,stop,evaluations,reverse=False,weightFunction=None):
 	"""
@@ -765,13 +776,13 @@ def kcliquePercolator(net,k,start,stop,evaluations,reverse=False,weightFunction=
 	assert evaluations >= 1, "At least one evaluation should be performed"
 	if weightFunction==None: #unweighted clique percolation with thresholding
 		edges=list(net.edges)
-		edges.sort(lambda x, y: cmp(x[2],y[2]),reverse=reverse)
+		edges.sort(key=lambda x: x[2], reverse=reverse)
 		edgesAndEvaluations=EvaluationList(edges)
 		edgesAndEvaluations.setLinearEvaluations(start,stop,evaluations)
-		kcliques=kcliquesByEdges(edgesAndEvaluations,k) 
+		kcliques=kcliquesByEdges(edgesAndEvaluations,k)
 	else: #weighted clique percolation
 		kcliques=EvaluationList(kcliquesWeight(net,k,weightFunction),weightFunction=lambda x:getIntensity(x,net))
-		kcliques.setLinearEvaluations(start,stop,evaluations) 
+		kcliques.setLinearEvaluations(start,stop,evaluations)
 
 	for community in communitiesByKCliques(kcliques):
 		yield community
@@ -799,7 +810,7 @@ if len(sys.argv)>2:
 	filename=sys.argv[1]
 	k=int(sys.argv[2])
 	f=open(filename,'r')
-	net,stop=loadNet_edg(f)
+	net,stop=loadNet_edg(f)  # Note: symmetric network of edges by default is used, can be defined both only by edges and by all arcs
 	assert stop >= 3, "Network must have at least 3 links"
 	outbase = None
 if len(sys.argv)>3:
@@ -818,7 +829,7 @@ if len(sys.argv)==7:
 
 if len(sys.argv)==3:
 	cs=getKCliqueComponents(net,k)
-	print cs
+	print(cs)
 elif len(sys.argv)>=4 and len(sys.argv)<=7:
 	lev = 0  # Level in the dendrogram
 	for i, cs in enumerate(kcliquePercolator(net,k,start,stop,evaluations,weightFunction=weightFunction)):
@@ -826,9 +837,9 @@ elif len(sys.argv)>=4 and len(sys.argv)<=7:
 			continue  # Skip empty levels
 		if not outbase:
 			toplinks = int(round(start if evaluations <= 1 else start + (stop - start) * i / (evaluations - 1)))
-			print "# {}. Communities for the top heaviest {}-cliques at the threshold {}:".format(
-				lev, toplinks, k, cs.threshold)
-			print cs
+			print("# {}. Communities for the top heaviest {}-cliques at the threshold {}:".format(
+				lev, toplinks, k, cs.threshold))
+			print(cs)
 		else:
 			outfile = outbase.rsplit('.', 1)  # Fetch extension
 			outfile = ''.join((outfile[0], '_', str(lev), '' if len(outfile) <= 1 else '.' + outfile[1]))
@@ -836,4 +847,4 @@ elif len(sys.argv)>=4 and len(sys.argv)<=7:
 				fout.write(str(cs))
 		lev += 1
 else:
-	print helpstring.format(sys.argv[0])
+	print(helpstring.format(sys.argv[0]))

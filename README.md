@@ -22,7 +22,7 @@ Author (c)  Artem Lutov <artem@exascale.info>
 - optionally *generates or preprocesses datasets* using specified executable(s) (by default uses LFR framework for overlapping weighted networks)
 - optionally *executes specified apps* (clustering algorithms; can be a binary, any script or java executable) with the specified params on the specified datasets (networks)
 - optionally *evaluates results* of the execution using specified executable(s) (by default performs NMIs and Q evaluation) and *performs unified aggregation* of results from multiple apps on multiple datasets into the single file by the specified measure
-- *per-task and global timeouts* (for an app execution on a single dataset) and specified number of CPU cores (workers) are set for the *batch apps execution / evaluation* using the multi-process task execution pool ([mpepool](//github.com/XI-lab/PyExPool))
+- *per-task and global timeouts* (for an app execution on a single dataset) and specified number of CPU cores (workers) are set for the *batch apps execution / evaluation* using the multi-process task execution pool ([mpepool](https://github.com/eXascaleInfolab/PyExPool))
 - per-task and accumulative *execution tracing and results logging* is performed even in case of internal / external interruptions and crashes:
 	* all stdout/err output is logged
 	* resources consumption, i. e. time: execution (wall-clock) and CPU consumption (user, kernel, total), memory (RAM RSS) are traced
@@ -56,7 +56,7 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 	With Overlaps   | + | + | | + | + | + | * |
 	Parameter-Free  | + | | + | * | * |  | *
 	Consensus/Ensemble | + | | | + | | | +
- 
+
 > *With Overlaps* marked with `*` means non-overlapping clusters as a result, but the algorithm can be modified to output overlapping clusters.  
 *Parameter-Free* marked with `*` means availability of default values for all parameters.
 
@@ -148,7 +148,7 @@ $ sudo apt-get install libstdc++6
 
   > Note: gecmi dependencies are uploaded to `./algorithms/gecmi_deps/`.
 
-- [PyExPool](//github.com/XI-lab/PyExPool) for asynchronous jobs execution and results aggregation via tasks of jobs
+- [PyExPool](//github.com/eXascaleInfolab/PyExPool) for asynchronous jobs execution and results aggregation via tasks of jobs
 
   > Note: it is uploaded to `./contrib/`.
 
@@ -337,7 +337,7 @@ All the evaluations will be performed automatically, the algorithm should just f
 
 
 ## Related Projects
-* DAOC (former [HiReCS](https://github.com/XI-lab/hirecs) - High Resolution Hierarchical Clustering with Stable State: https://github.com/XI-lab/hirecs)
+* DAOC (former [HiReCS](https://github.com/eXascaleInfolab/hirecs) - High Resolution Hierarchical Clustering with Stable State: https://github.com/eXascaleInfolab/hirecs)
 
 If you are interested in this benchmark, please visit <a href="http://exascale.info/">eXascale Infolab</a> where you can find another projects and research papers related to Big Data!  
 Please, [star this project](https://github.com/eXascaleInfolab/PyCABeM) if you use it.

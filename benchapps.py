@@ -32,7 +32,7 @@ import sys
 import inspect  # To automatically fetch algorithm name
 import traceback  # Stacktrace
 import subprocess
-import re
+# import re
 
 from datetime import datetime
 
@@ -47,7 +47,8 @@ _EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
 _PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
 
 
-reFirstDigits = re.compile('\d+')  # First digit regex
+# reFirstDigits = re.compile('\d+')  # First digit regex
+DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
 def aggexec(algs):
@@ -249,7 +250,44 @@ def prepareResDir(appname, task, odir, pathid):
 #	return
 
 
-def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, selfexec=False):
+# class PyBin(object):
+# 	def bestof(pypy, v3):
+
+def bestPython(pypy, v3):
+	"""Select the best suitable Python interpreter
+
+	pypy  - whether to consider PyPy versions, give priority to pypy over the CPython (standard interpreter)
+	v3  - whether to consider interpretors of v3.x, give priority to the largest version
+	"""
+	pybin = PYEXEC
+	pyname = os.path.split(pybin)[1]
+	try:
+		with open(os.devnull, 'wb') as fdevnull:
+			# Check for the pypy interpreter/JIT in the system if required
+			if pypy:
+				if v3 and pyname.find('pypy3') == -1 and not subprocess.call(('pypy3', '-h'), stdout=fdevnull):
+					pybin = 'pypy3'
+				elif pyname.find('pypy') == -1 and not subprocess.call(('pypy', '-h'), stdout=fdevnull) or (
+				not v3 and pyname.find('pypy3') != -1):
+					pybin = 'pypy'
+			else:
+				if v3 and pyname.find('python3') == -1 and not subprocess.call(('python3', '-h'), stdout=fdevnull):
+					pybin = 'python3'
+				elif pyname.find('python') == -1 or (not v3 and pybin.find('python3') != -1):  # Chenge interpreter from 'pypy' to 'python' if required
+					pybin = 'python'
+	except OSError:
+		# Note: the required interpreter existance in the system can't be checked here,
+		# only 'python' is assumed to be present by default.
+		#
+		# Change the interpretor from pypy to python if requried
+		if not pypy and pyname.find('pypy') != -1:
+			pybin = 'python'
+		if DEBUG_TRACE:
+			print('WARNING, system dev null could not be opened to analyze the Python interpretor', file=sys.stderr)
+	return pybin
+
+
+def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None, selfexec=False):
 	"""Execute Louvain using the igraph library
 	Note: Louvain produces not stable results => multiple executions are desirable.
 
@@ -261,13 +299,15 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	timeout  - processing (clustering) timeout of the input file
 	pathid  - pather id of the input networks file
 	workdir  - relative working directory of the app, actual when the app contains libs
+	seed  - random seed, uint64_t
 	selfexec  - whether to call self recursively
 
 	returns  - the number of executions or None
 	"""
 	# Note: .. + 0 >= 0 to be sure that type is arithmetic, otherwise it's always true for the str
-	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)
+		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)
+		), ('Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
 	# Fetch the task name and chose correct network filename
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Base name of the network
@@ -275,7 +315,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	#if tasknum:
 	#	task = '_'.join((task, str(tasknum)))
 
-	# ATTENTION: for the correct execution algname must be always the same as func lower case name without the prefix "exec"
+	# ATTENTION: for the correct execution algname must be always the same as func name without the prefix "exec"
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
 	# Backup prepated the resulting dir and backup the previous results if exist
 	taskpath = prepareResDir(algname, task, odir, pathid)
@@ -302,7 +342,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	#		subprocess.call(('tail', '-n 1', taskpath + _EXTLOG), stdout=accres)
 
 	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
-	pybin = PYEXEC if not os.path.split(PYEXEC)[1].startswith('pypy') else 'python'
+	pybin = bestPython(pypy=False, v3=True)
 	# Note: Louvain_igraph creates the output dir if it has not been existed, but not the exectime app
 	errfile = ''.join((taskpath, _EXTLOG))
 
@@ -344,7 +384,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 
 
 # SCP (Sequential algorithm for fast clique percolation)
-def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
+def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -361,7 +401,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR)
 
 	# Set the best possible interpreter
 	# ATTENTION: Scp doesn't work correctly under Python 3
-	pybin = PYEXEC if not os.path.split(PYEXEC)[1].find('3') == -1 else 'python'
+	pybin = bestPython(pypy=True, v3=False)
 	# Note: More accurate solution is not check "python -V" output, but it fails on Python2 for the
 	# 'python -V' (but works for the 'python -h')
 	# pyverstr = subprocess.check_output([PYEXEC, '-V']).decode()  # Note: Xcoding is required for Python3
@@ -415,24 +455,26 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR)
 	return kmax + 1 - kmin
 
 
-def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', instances=5):  # _netshuffles + 1
+def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None, instances=5):  # _netshuffles + 1
 	"""Execute Randcommuns, Random Disjoint Clustering
 	Results are not stable => multiple execution is desirable.
 
-	instances  - number of networks instances to be generated
+	instances  - the number of clustering instances to be produced
 	"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
+
 	# Fetch the task name and chose correct network filename
 	netfile, netext = os.path.splitext(netfile)  # Remove the extension
 	task = os.path.split(netfile)[1]  # Base name of the network
 	assert task, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
-	# Backup previous results if exist
-	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
+	# Backup prepated the resulting dir and backup the previous results if exist
+	taskpath = prepareResDir(algname, task, odir, pathid)
 
-	preparePath(taskpath)
+	# Set the best possible interpreter
+	pybin = bestPython(pypy=True, v3=True)
 
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
 	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname

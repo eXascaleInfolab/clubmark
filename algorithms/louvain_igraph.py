@@ -12,78 +12,7 @@ import sys
 import os  # Pathes processing
 import argparse
 from igraph import Graph
-
-
-def loadNsl(network, netfmt):
-	"""Load the graph from NSL(nse, nsa) file"""
-	assert netfmt in ('nsa', 'nse')
-
-	graph = None
-	with open(network) as finp:
-		# Prase the header if exists
-		ndsnum = 0  # The number of nodes
-		#lnsnum = 0  # The number of links (edges or arcs)
-		weighted = None  # The network is weighted
-		directed = netfmt == 'nsa'
-		for ln in finp:
-			#ln = ln.lstrip()
-			if not ln:
-				continue
-			if ln[0] == '#':
-				ln = ln[1:].split(None, 6)
-				if len(ln) >= 2 and ln[0].lower() == 'nodes:':
-					ndsnum = int(ln[1].rstrip(','))
-				# Parse arcs/edges number optionally
-				i = 2
-				if len(ln) >= i+2 and ln[i].lower() == ('arcs:' if directed else 'edges:'):
-					#lnsnum = int(ln[3].rstrip(','))
-					i += 2
-				if len(ln) >= i+2 and ln[i].lower() == 'weighted:':
-					weighted = bool(int(ln[5].rstrip(',')))  # Note: int() is required because bool('0') is True
-			break
-
-		links = []
-		weights = []
-		nodes = set()
-		lastnode = None
-		for ln in finp:
-			# Skip empty lines and comments
-			#ln = ln.lstrip()
-			if not ln or ln[0] == '#':
-				continue
-			parts = ln.split(None, 2)
-			if weighted is not None:
-				if len(parts) != 2 + weighted:
-					raise ValueError('Weights are inconsistent; weighted: {}, line: {}'
-						.format(weighted, ' '.join(parts)))
-			else:
-				weighted = len(parts) == 3
-
-			if lastnode != parts[0]:
-				lastnode = parts[0]
-				nodes.add(lastnode)
-			links.append((parts[0], parts[1]))
-			# Extend nodes with dest node for the undirected network
-			if not directed:
-				nodes.add(parts[1])
-			if len(parts) > 2:
-				weights.append(float(parts[2]))
-
-		assert not ndsnum or len(nodes) == ndsnum, 'Validation of the number of nodes failed'
-		if not ndsnum:
-			ndsnum = len(nodes)
-		#nodes = list(nodes)
-		#nodes.sort()
-		nodes = tuple(nodes)
-
-		graph = Graph(n=ndsnum, directed=directed)
-		graph.vs["name"] = nodes
-		# Make a map from the input ids to the internal ids of the vertices
-		ndsmap = {name: i for i, name in enumerate(nodes)}
-		graph.add_edges([(ndsmap[ln[0]], ndsmap[ln[1]]) for ln in links])
-		if weights:
-			graph.es["weight"] = weights
-	return graph
+from utils.parser_nsl import asymnet, loadNsl
 
 
 def louvain(args):
@@ -106,8 +35,8 @@ def louvain(args):
 		graph = Graph.Read_Ncol(args.network, directed=False)  # Weight are considered if present; .ncol format is always undirected
 	elif args.inpfmt == 'pjk':
 		graph = Graph.Read_Pajek(args.network)
-	elif args.inpfmt == 'nse':
-		graph = loadNsl(args.network, args.inpfmt)
+	elif args.inpfmt in ('nse', 'nsa'):
+		graph = loadNsl(args.network, asymnet(os.path.splitext(args.network)[1], args.inpfmt == 'nsa'))
 	else:
 		raise ValueError('Unknown network format: ' + args.inpfmt)
 

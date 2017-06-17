@@ -12,35 +12,49 @@
 \organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
 \date: 2015-07
 """
+
+from __future__ import print_function, division  # Required for stderr output, must be the first import
 import sys
 import os  # Pathes processing
-import igraph as ig
+#import igraph as ig
 import random as rand
-
+from utils.parser_nsl import asymnet, loadNsl
 
 # Default number of the resulting clusterings (partitions, i.e files that contain disjoint clusters)
-resnum = 1
+_RESNUM = 1
 
-def parseParams(args):
-	"""Parse user-specified parameters
 
-	return
+class Params(object):
+	"""Input parameters (arguments)"""
+	def __init__(self):
+		"""Parameters:
 		groundtruth  - flile name of the ground truth clustering
 		network  - flile name of the input network
 		dirnet  - whether the input network is directed
 		outnum  - number of the resulting clusterings
+		randseed  - seed for the clustering generation (automatically generated if not specified)
+		outpseed  - whether to output the seed (automatically set to True on if the seed is generated automatically)
 		outdir  - output directory
 		outname  - base name of the output file based on the network name
 		outext  - extenstion of the output files based on the groundtruth extension
+		"""
+		self.groundtruth = None
+		self.network = None
+		self.dirnet = False
+		self.outnum = _RESNUM
+		self.randseed = None
+		self.outpseed = False
+		self.outdir = None
+		self.outext = ''
+
+
+def parseParams(args):
+	"""Parse user-specified parameters
+
+	returns  - parsed input arguments, Params()
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
-	groundtruth = None
-	network = None
-	dirnet = False
-	outnum = 1
-	randseed = None
-	outdir = None
-	outext = ''
+	prm = Params()
 
 	for arg in args:
 		# Validate input format
@@ -49,66 +63,67 @@ def parseParams(args):
 			raise ValueError('Unexpected argument: ' + arg)
 
 		if arg[1] == 'g':
-			groundtruth = arg[preflen:]
-			outext = os.path.splitext(groundtruth)[1]
+			prm.groundtruth = arg[preflen:]
+			prm.outext = os.path.splitext(prm.groundtruth)[1]
 		elif arg[1] == 'i':
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'ud=' or len(arg) == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
 			pos += 1
-			dirnet = arg[2] == 'd'
-			network = arg[pos:]
-			outname = os.path.splitext(os.path.split(network)[1])[0]
-			if not outname:
-				raise ValueError('Invalid network name (is a directory): ' + network)
+			prm.network = arg[pos:]
+			prm.outname, netext = os.path.splitext(os.path.split(prm.network)[1])
+			prm.dirnet = asymnet(netext, arg[2] == 'd')
+			if not prm.outname:
+				raise ValueError('Invalid network name (is a directory): ' + prm.network)
 		elif arg[1] == 'n':
-			outnum = int(arg[preflen:])
-			assert outnum >= 1, 'outnum must be a natural number'
+			prm.outnum = int(arg[preflen:])
+			assert prm.outnum >= 1, 'outnum must be a natural number'
 		elif arg[1] == 'r':
-			randseed = arg[preflen:]
+			prm.randseed = arg[preflen:]
 		elif arg[1] == 'o':
-			outdir = arg[preflen:]
+			prm.outdir = arg[preflen:]
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
 
-	if not (groundtruth and network):
+	if not (prm.groundtruth and prm.network):
 		raise ValueError('Input network and groundtruth file names must be specified')
-	if not outdir:
-		outdir = outname
-	if not randseed:
+	if not prm.outdir:
+		prm.outdir = os.path.split(prm.network)[0]
+	if not prm.randseed:
 		try:
-			randseed = ''.join([str(ord(c)) for c in os.urandom(8)])
+			prm.randseed = ''.join([str(ord(c)) for c in os.urandom(8)])
 		except NotImplementedError:
-			randseed = str(rand.random())
+			prm.randseed = str(rand.random())
+		prm.outpseed = True
 
-	return groundtruth, network, dirnet, outnum, randseed, outdir, outname, outext
+	return prm
 
 
 def randcommuns(*args):
 	"""Generate random clusterings for the specified network"""
-	groundtruth, network, dirnet, outnum, randseed, outdir, outname, outext = parseParams(args)
+	prm = parseParams(args)
 	print('Starting randcommuns clustering:'
 		'\n\tgroundtruth: {}'
 		'\n\t{} network: {}'
 		'\n\t{} {} in {} with randseed: {}'
-		.format(groundtruth, 'directed' if dirnet else 'undirected', network
-			, outnum, outname + outext, outdir, randseed))
+		.format(prm.groundtruth, 'directed' if prm.dirnet else 'undirected', prm.network
+			, prm.outnum, prm.outname + prm.outext, prm.outdir, prm.randseed))
 	# Load Data from simple real-world networks
-	graph = ig.Graph.Read_Ncol(network, directed=dirnet)  # , weights=False
+	graph = loadNsl(prm.network, prm.dirnet)  # ig.Graph.Read_Ncol(network, directed=dirnet)  # , weights=False
 
 	# Load statistics from the ground thruth
 	groundstat = []
-	with open(groundtruth, 'r') as fground:
+	with open(prm.groundtruth, 'r') as fground:
 		for line in fground:
 			groundstat.append(len(line.split()))
 
 	# Create outpdir if required
-	if outdir and not os.path.exists(outdir):
-		os.makedirs(outdir)
+	if prm.outdir and not os.path.exists(prm.outdir):
+		os.makedirs(prm.outdir)
 	# Geneate rand clsuterings
-	rand.seed(randseed)
-	while outnum > 0:
-		outnum -= 1
+	rand.seed(prm.randseed)
+	while prm.outnum > 0:
+		prm.outnum -= 1
 		actnodes = set(graph.vs.indices)  # Active (remained) nodes indices of the input network
 		clusters = []  # Forming clusters
 		# Reference size of the ground truth clusters (they migh have overlaps unlike the current partitioning)
@@ -140,19 +155,16 @@ def randcommuns(*args):
 			# Use original labels of the nodes
 			clusters.append([graph.vs[ind]['name'] for ind in nodes])
 		# Output resulting clusters
-		with open('/'.join((outdir, ''.join((outname, '_', str(outnum), outext)))), 'w') as fout:
+		with open('/'.join((prm.outdir, ''.join((prm.outname, '_', str(prm.outnum), prm.outext)))), 'w') as fout:
 			for cl in clusters:
 				fout.write(' '.join(cl))
 				fout.write('\n')
 
 	# Output randseed used for the generated clusterings
 	# Output to the dir above if possible to not mix cluster levels with rand seed
-	if outdir:
-		basedir = os.path.split(outdir)[0]
-		if basedir:
-			outdir = basedir
-	with open('/'.join((outdir, (outname + '.rseed'))), 'w') as fout:
-		fout.write(randseed)
+	if prm.outpseed:
+		with open('/'.join((prm.outdir, (os.path.splitext(prm.outname)[0] + '.seed'))), 'w') as fout:
+			fout.write(prm.randseed)
 	print('Random clusterings are successfully generated')
 
 
@@ -160,13 +172,16 @@ if __name__ == '__main__':
 	if len(sys.argv) > 2:
 		randcommuns(*sys.argv[1:])
 	else:
-		print('\n'.join(('Produces random disjoint partitioning (clusters are formed with rand nodes and their neighbors)\n',
-			'Usage: {} -g=<ground_truth> -i[{{u, d}}]=<input_network> [-n=<res_num>] [-r=<rand_seed>] [-o=<outp_dir>]',
+		print('\n'.join(('Produces random disjoint partitioning (clusters are formed with rand nodes and their neighbors)'
+			' for the input network specified in the NSL format (generalizaiton of NCOL, SNAP, etc.)\n',
+			'Usage: {app} -g=<ground_truth> -i[{{u, d}}]=<input_network> [-n=<res_num>] [-r=<rand_seed>] [-o=<outp_dir>]',
+			'',
 			'  -g=<ground_truth>  - ground truth clustering as a template for sizes of the resulting communities',
 			'  -i[X]=<input_network>  - file of the input network in the format: <src_id> <dst_id> [<weight>]',
 			'    Xu  - undirected input network (<src_id> <dst_id> implies also <dst_id> <src_id>). Default',
 			'    Xd  - directed input network (both <src_id> <dst_id> and <dst_id> <src_id> are specified)',
-			'  -n=<res_num>  - number of the resulting clusterings to generate. Default: {}',
+			'    NOTE: (un)directed flag is considered only for the networks with non-NSL file extension',
+			'  -n=<res_num>  - number of the resulting clusterings to generate. Default: {resnum}',
 			'  -r=<rand_seed>  - random seed, string. Default: value from the system rand source (otherwise current time)',
 			'  -o=<output_communities>  - . Default: ./<input_network>/'
-		)).format(sys.argv[0], resnum))
+		)).format(app=sys.argv[0], resnum=_RESNUM))

@@ -18,12 +18,11 @@ import shutil
 import glob
 import sys
 import traceback  # Stacktrace
-
 from datetime import datetime
+from subprocess import PIPE
 
-from utils.mpepool import *
-from benchutils import *
-from benchutils import _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID
+from benchutils import ItemsStatistic, parseFloat, parseName, escapePathWildcards,envVarDefined, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID
+from utils.mpepool import Task, Job
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
@@ -35,6 +34,8 @@ _EXTEXECTIME = '.rcp'  # Resource Consumption Profile
 _EXTAGGRES = '.res'  # Aggregated results
 _EXTAGGRESEXT = '.resx'  # Extended aggregated results
 _SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not apear in a file name, which can be part of job name)
+
+DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
 class ShufflesAgg(object):

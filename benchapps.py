@@ -35,12 +35,11 @@ import subprocess
 # import re
 
 from datetime import datetime
-
-from utils.mpepool import *
-
 from sys import executable as PYEXEC  # Full path to the current Python interpreter
-from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, tobackup, _SEPPARS, _UTILDIR
+from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, tobackup, escapePathWildcards, _SEPPARS, _UTILDIR
 from benchevals import _SEPNAMEPART, _ALGSDIR, _RESDIR, _CLSDIR, _EXTERR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
+from utils.mpepool import Job
+
 
 _EXTLOG = '.log'
 _EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
@@ -193,8 +192,13 @@ def	preparePath(taskpath):  # , netshf=False
 
 
 def funcToAppName(funcname):
-	"""Fetch name of the execution application by the function name"""
-	assert funcname.startswith(_PREFEXEC), 'Executing appliation is expected instead of "{}"'.format(functname)
+	"""Fetch name of the execution application by the function name
+
+	funcname  - name of the executing function
+
+	returns  - name of the algorithm
+	"""
+	assert funcname.startswith(_PREFEXEC), 'Executing appliation is expected instead of "{}"'.format(funcname)
 	return funcname[len(_PREFEXEC):]  # .lower()
 
 
@@ -250,41 +254,53 @@ def prepareResDir(appname, task, odir, pathid):
 #	return
 
 
-# class PyBin(object):
-# 	def bestof(pypy, v3):
+class PyBin(object):
+	#_pybin = PYEXEC
+	_pypy3 = None
+	_pypy = None
+	_python3 = None
 
-def bestPython(pypy, v3):
-	"""Select the best suitable Python interpreter
-
-	pypy  - whether to consider PyPy versions, give priority to pypy over the CPython (standard interpreter)
-	v3  - whether to consider interpretors of v3.x, give priority to the largest version
-	"""
-	pybin = PYEXEC
-	pyname = os.path.split(pybin)[1]
+	# Initialized existing Python interpreters once
 	try:
 		with open(os.devnull, 'wb') as fdevnull:
 			# Check for the pypy interpreter/JIT in the system if required
-			if pypy:
-				if v3 and pyname.find('pypy3') == -1 and not subprocess.call(('pypy3', '-h'), stdout=fdevnull):
-					pybin = 'pypy3'
-				elif pyname.find('pypy') == -1 and not subprocess.call(('pypy', '-h'), stdout=fdevnull) or (
-				not v3 and pyname.find('pypy3') != -1):
-					pybin = 'pypy'
-			else:
-				if v3 and pyname.find('python3') == -1 and not subprocess.call(('python3', '-h'), stdout=fdevnull):
-					pybin = 'python3'
-				elif pyname.find('python') == -1 or (not v3 and pybin.find('python3') != -1):  # Chenge interpreter from 'pypy' to 'python' if required
-					pybin = 'python'
+			# ATTENTION: due to some bug 'python -V' does not output results
+			# to the specified pipe and .check_output() also fails to deliver results,
+			# always outputting to the stdout (which is not desirable in our case);
+			# 'python -V' works fine only for the Python3 that is why it is not used here.
+			if not subprocess.call(('pypy3', '-h'), stdout=fdevnull):
+				_pypy3 = 'pypy3'
+			if not subprocess.call(('pypy', '-h'), stdout=fdevnull):
+				_pypy = 'pypy'
+			if not subprocess.call(('python3', '-h'), stdout=fdevnull):
+				_python3 = 'python3'
 	except OSError:
 		# Note: the required interpreter existance in the system can't be checked here,
 		# only 'python' is assumed to be present by default.
-		#
-		# Change the interpretor from pypy to python if requried
-		if not pypy and pyname.find('pypy') != -1:
+		pass
+
+	@staticmethod
+	def bestof(pypy, v3):
+		"""Select the best suitable Python interpreter
+
+		pypy  - whether to consider PyPy versions, give priority to pypy over the CPython (standard interpreter)
+		v3  - whether to consider interpretors of v3.x, give priority to the largest version
+		"""
+		pybin = PYEXEC
+		pyname = os.path.split(pybin)[1]
+		if pypy and v3 and PyBin._pypy3:
+			if pyname.find('pypy3') == -1:  # Otherwise retain PYEXEC
+				pybin = PyBin._pypy3
+		elif pypy and PyBin._pypy:
+			if pyname.find('pypy') in (-1, pyname.find('pypy3')):  # Otherwise retain PYEXEC
+				pybin = PyBin._pypy
+		elif v3 and PyBin._python3:
+			if pyname.find('python3') == -1:  # Otherwise retain PYEXEC
+				pybin = PyBin._python3
+		elif pyname.find('python') in (-1, pyname.find('python3')):  # Otherwise retain PYEXEC
 			pybin = 'python'
-		if DEBUG_TRACE:
-			print('WARNING, system dev null could not be opened to analyze the Python interpretor', file=sys.stderr)
-	return pybin
+
+		return pybin
 
 
 def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None, selfexec=False):
@@ -342,7 +358,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	#		subprocess.call(('tail', '-n 1', taskpath + _EXTLOG), stdout=accres)
 
 	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
-	pybin = bestPython(pypy=False, v3=True)
+	pybin = PyBin.bestof(pypy=False, v3=True)
 	# Note: Louvain_igraph creates the output dir if it has not been existed, but not the exectime app
 	errfile = ''.join((taskpath, _EXTLOG))
 
@@ -401,7 +417,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 
 	# Set the best possible interpreter
 	# ATTENTION: Scp doesn't work correctly under Python 3
-	pybin = bestPython(pypy=True, v3=False)
+	pybin = PyBin.bestof(pypy=True, v3=False)
 	# Note: More accurate solution is not check "python -V" output, but it fails on Python2 for the
 	# 'python -V' (but works for the 'python -h')
 	# pyverstr = subprocess.check_output([PYEXEC, '-V']).decode()  # Note: Xcoding is required for Python3
@@ -474,7 +490,7 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	taskpath = prepareResDir(algname, task, odir, pathid)
 
 	# Set the best possible interpreter
-	pybin = bestPython(pypy=True, v3=True)
+	pybin = PyBin.bestof(pypy=True, v3=True)
 
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
 	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname

@@ -40,22 +40,20 @@ import time
 import os
 import shutil
 import signal  # Intercept kill signals
-from math import sqrt
 import glob
-from datetime import datetime
 import traceback  # Stacktrace
-import subprocess
-from multiprocessing import cpu_count  # Returns the number of multi-core CPU units if defined
 import copy
-
-import benchapps  # Benchmarking apps (clustering algs)
-
-from utils.mpepool import *
+from math import sqrt
+from datetime import datetime
+from multiprocessing import cpu_count  # Returns the number of multi-core CPU units if defined
 
 # PYEXEC - current Python interpreter
-from benchutils import viewitems, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR
+import benchapps  # Required for the functions name mapping to/from the app names
+from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR
 from benchapps import PYEXEC, aggexec, funcToAppName, _EXTCLNODES, _PREFEXEC
 from benchevals import evalAlgorithm, aggEvaluations, EvalsAgg, _RESDIR, _EXTEXECTIME
+from utils.mpepool import cpucorethreads, ExecPool, Job, secondsToHms
+from algorithms.utils.parser_nsl import asymnet, dflnetext
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
@@ -73,27 +71,6 @@ _execpool = None  # Pool of executors to process jobs
 
 #_TRACE = 1  # Tracing level: 0 - none, 1 - lightweight, 2 - debug, 3 - detailed
 DEBUG_TRACE = False  # Trace start / stop and other events to stderr
-
-
-def asymnet(netext, asym):
-	"""Whether the network is asymmetric (directed, specified by arcs rather than edges)
-
-	netext  - network extension (starts with '.'): .nse or .nsa
-	asym  - whether the network is asymmetric (directed), considered only for the non-standard network file extensions
-
-	return  - the networks is asymmetric (specified by arcs)
-	"""
-	return asym if netext not in ('.nse', '.nsa') else netext == '.nsa'
-
-
-def dflnetext(asym):
-	"""Get default networks extension for the network
-
-	asym  - whether the network is asymmetric (directed) or symmetric (undirected)
-
-	return  - respective extension of the network file having leading '.'
-	"""
-	return '.ns' + ('a' if asym else 'e')
 
 
 # Data structures --------------------------------------------------------------
@@ -198,7 +175,7 @@ class Params(object):
 def parseParams(args):
 	"""Parse user-specified parameters
 
-	return params
+	return params: Params
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
 	opts = Params()
@@ -812,7 +789,6 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 	convtimeout  - timeout for all networks conversion in parallel mode, >= 0,
 		0 means unlimited time
 	"""
-	assert netext and netext[0] == '.', 'A file extension should have the leading "."'
 	assert timeout1 + 0 >= 0, 'Non-negative network conversion timeout is expected'
 	print('Converting networks into the required formats (.hig, .lig, etc.)...')
 	global _execpool
@@ -827,8 +803,8 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 		netshf  - whether this network is a shuffle in the non-flat dir structure
 		xargs  - extra custom parameters
 		"""
+		xargs['netsnum'] += 1
 		convertNet(net, xargs.overwrite, xargs.resdub, xargs.timeout1)
-		xargs.netsnum += 1
 
 	xargs = {'overwrite': overwrite, 'resdub': resdub, 'timeout1': timeout1, 'netsnum': 0}  # Number of converted networks
 	for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
@@ -839,8 +815,9 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 			processPath(pcuropt, converter, xargs)  # Calls converter(net, netshf, xargs)
 
 	if _execpool:
+		netsnum = xargs['netsnum']
 		if convtimeout <= 0:
-			convtimeout = netsnum * timeout1
+			convtimeout =  netsnum * timeout1
 		_execpool.join(min(convtimeout, netsnum * timeout1))
 		_execpool = None
 	print('Networks conversion is completed, converted {} networks'.format(netsnum))
@@ -1015,7 +992,7 @@ def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout, evalt
 		of a single algorithm on a single network (all instances and shuffles), >= 0
 	evaltimeout  - timeout for all evaluations, >= 0, 0 means unlimited time
 	"""
-	assert (evalres and appsmodule and (datadirs or datafiles) and exectime + 0 >= 0
+	assert (evalres and appsmodule and datas and exectime + 0 >= 0
 		and timeout + 0 >= 0), 'Invalid input arguments'
 
 	global _execpool
@@ -1047,7 +1024,7 @@ def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout, evalt
 
 		if not algorithms:
 			# Fetch available algorithms
-			evalalgs = [funcToAppName(funcname) for funcname in dir(appsmodule) if func.startswith(_PREFEXEC)]
+			evalalgs = [funcToAppName(funcname) for funcname in dir(appsmodule) if funcname.startswith(_PREFEXEC)]
 		else:
 			evalalgs = [alg for alg in algorithms]  # .lower()
 		evalalgs = tuple(evalalgs)
@@ -1148,7 +1125,7 @@ def benchmark(*args):
 	exectime = time.time()  # Benchmarking start time
 
 	opts = parseParams(args)
-	print('The benchmark is started, parsed params:\n\syntpo: "{}"\n\tconvnets: 0b{:b}'
+	print('The benchmark is started, parsed params:\n\tsyntpo: "{}"\n\tconvnets: 0b{:b}'
 		'\n\trunalgs: {}\n\tevalres: 0b{:b}\n\tdatas: {}\n\talgorithms: {}'
 		'\n\taggrespaths: {}\n\ttimeout: {} h {} m {:.4f} sec'
 		.format(opts.syntpo, opts.convnets, opts.runalgs, opts.evalres
@@ -1163,11 +1140,11 @@ def benchmark(*args):
 	# Create the global seed file if not exists
 	if not os.path.exists(opts.seedfile):
 		# Consider inexisting base path of the common seed file
-		sfbase = os.path.split(seedfile)[0]
+		sfbase = os.path.split(opts.seedfile)[0]
 		if not os.path.exists(sfbase):
 			os.makedirs(sfbase)
 		seed = timeSeed()
-		with open(seedfile, 'w') as fseed:
+		with open(opts.seedfile, 'w') as fseed:
 			fseed.write('{}\n'.format(seed))
 	else:
 		with open(opts.seedfile) as fseed:

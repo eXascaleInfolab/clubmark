@@ -21,7 +21,6 @@ import re
 from multiprocessing import RLock
 from math import sqrt, copysign
 
-
 _BCKDIR = 'backup/'  # Backup directory
 _REFLOAT = re.compile('[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')  # Regular expression to parse float
 _REINT = re.compile('[-+]?\d+(?=\W)')  # Regular expression to parse int
@@ -50,6 +49,7 @@ def hasMethod(obj, method):
 
 
 # Define viewitems function to efficiently traverse items of dictionaries in both Python 2 and 3
+# Note: depends on hasMethod()
 try:
 	from future.utils import viewitems
 except ImportError:

@@ -3,7 +3,7 @@
 # This is internal script to sync benchmarking components to the latest version
 
 # Make target dirs if have not been existed yet
-mkdir -pv utils/louvain/ algorithms/daoc/ algorithms/ganxis/ formats/
+mkdir -pv algorithms/utils/louvain/ algorithms/daoc/ algorithms/ganxis/ formats/
 
 # File Formats Specificaitons --------------------------------------------------
 rsync -aLhv ../daoc/common/format.cnl\
@@ -29,11 +29,14 @@ rsync -aLhv ../../system/ExecTime/bin/Release/exectime\
 	\
 	utils/
 
+# Algorithms accessory utils
+rsync -aLhv ../daoc/common/parser_nsl.py algorithms/utils/
+
 # Louvain accessory utils
 rsync -aLhv ../oslom/OSLOM2/convert\
 	 ../oslom/OSLOM2/hierarchy\
 	 \
-	 utils/louvain/
+	 algorithms/utils/louvain/
 
 # Custering algorithms ---------------------------------------------------------
 # Note: oslom_undir can be used for the symmetric networks specified with the arcs

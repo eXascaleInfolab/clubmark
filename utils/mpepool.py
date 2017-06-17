@@ -18,6 +18,17 @@
 """
 
 from __future__ import print_function, division  # Required for stderr output, must be the first import
+import sys
+import time
+import collections
+import os
+import ctypes  # Required for the multiprocessing Value definition
+import types  # Required for instance methods definition
+import traceback  # Stacktrace
+import subprocess
+
+from multiprocessing import cpu_count
+from multiprocessing import Value
 
 try:
 	from future.utils import viewitems  # Required to efficiently traverse items of dictionaries in both Python 2 and 3
@@ -40,17 +51,6 @@ except ImportError:
 
 	viewitems = lambda dct: dct.items() if not hasMethod(dct, viewitems) else dct.viewitems()
 
-import sys
-import time
-import collections
-import os
-import ctypes  # Required for the multiprocessing Value definition
-import types  # Required for instance methods definition
-import traceback  # Stacktrace
-import subprocess
-
-from multiprocessing import cpu_count
-from multiprocessing import Value
 
 _ADJUST_WORKERS_BY_RAM = False  # Adjust the number of worker processing depending on the remained free RAM, which is actual when computations should avoid swap usage
 _ADJUST_RAM_MIN = 0.02  # Relative minimal amount of the remained free RAM to readjust workers count or terminate the benchmark, typically 5 .. 1 %

@@ -35,7 +35,7 @@ _EXTAGGRES = '.res'  # Aggregated results
 _EXTAGGRESEXT = '.resx'  # Extended aggregated results
 _SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not apear in a file name, which can be part of job name)
 
-DEBUG_TRACE = False  # Trace start / stop and other events to stderr
+_DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
 class ShufflesAgg(object):
@@ -133,7 +133,7 @@ class ShufflesAgg(object):
 		if self.bestlev is None or self.bestlev[1].avg is None:
 			print('WARNING, "{}" has no defined results'.format(self.name))
 		# Trace best lev value for debugging purposes
-		elif DEBUG_TRACE:
+		elif _DEBUG_TRACE:
 		#else:
 			print('Best lev of {}:\t{} = {:.6f}'.format(
 				self.name[self.name.rfind('/') + 1:], self.bestlev[0], self.bestlev[1].avg))
@@ -500,7 +500,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 		Note: pathid includes pathid separator
 	"""
 	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
-	if DEBUG_TRACE:
+	if _DEBUG_TRACE:
 		print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
 
 	def evaljobMod(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logsbase):

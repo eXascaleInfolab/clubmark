@@ -30,6 +30,8 @@ _SEPSHF = '%'  # Network shuffles separator, must be a char; ~
 _SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
 _UTILDIR = 'utils/'  # Utilities (external applicaions) directory
 
+_DEBUG_TRACE = False  # Trace start / stop and other events to stderr
+
 
 def hasMethod(obj, method):
 	"""Whether the object has the specified method
@@ -572,6 +574,8 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 				tar.add(path, arcname=os.path.split(path)[1])
 				# Delete the archived paths if required
 				if move:
+					#if _DEBUG_TRACE:
+					#	print('>> moving path: ' + path, file=sys.stderr)
 					if os.path.isdir(path):
 						shutil.rmtree(path)
 					else:

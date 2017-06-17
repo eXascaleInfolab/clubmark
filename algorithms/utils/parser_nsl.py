@@ -37,7 +37,7 @@ def dflnetext(asym):
 def loadNsl(network, directed=None):
 	"""Load the graph from NSL(nse, nsa) file"""
 	if directed is None:
-		directed = asymnet(os.path.splitext(network)[1])
+		directed = asymnet(os.path.splitext(network)[1].lower())
 		assert directed is not None, ('Nsl file with either standart extension or'
 			' explicit network type specification is expected')
 

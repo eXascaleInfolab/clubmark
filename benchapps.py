@@ -47,7 +47,7 @@ _PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
 
 
 # reFirstDigits = re.compile('\d+')  # First digit regex
-DEBUG_TRACE = False  # Trace start / stop and other events to stderr
+_DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
 def aggexec(algs):

@@ -70,7 +70,7 @@ _AFNSTEP = cpucorethreads()  # Affinity step to maximize the dedicated CPU cache
 _execpool = None  # Pool of executors to process jobs
 
 #_TRACE = 1  # Tracing level: 0 - none, 1 - lightweight, 2 - debug, 3 - detailed
-DEBUG_TRACE = False  # Trace start / stop and other events to stderr
+_DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
 # Data structures --------------------------------------------------------------
@@ -445,7 +445,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 			netseed = name.join((seedsdirfull, '.ngs'))
 			if os.path.isfile(netseed):
 				shutil.copy2(netseed, randseed)
-				if DEBUG_TRACE:
+				if _DEBUG_TRACE:
 					print('The seed {netseed} is retained (but inapplicable for the shuffles)'.format(netseed=netseed))
 
 			# Generate networks with ground truth corresponding to the parameters
@@ -461,7 +461,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 						os.mkdir(netpathfull)
 					startdelay = 0.1  # Required to start execution of the LFR benchmark before copying the time_seed for the following process
 					netfile = netpath + name
-					if DEBUG_TRACE:
+					if _DEBUG_TRACE:
 						print('Generating {netfile} as {name} by {netparams}'.format(netfile=netfile, name=name, netparams=netparams))
 					if insnum and overwrite or not os.path.exists(netfile.join((basedir, netext))):
 						args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, _EXTEXECTIME))  # Output .rcp in the current dir, basedir
@@ -937,7 +937,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 				xargs['pathidstr'] = _SEPPATHID + str(pathid)
 				fpathids.write('{}\t{}\n'.format(xargs['pathidstr'][len(_SEPPATHID):], path))
 			pcuropt.path = path
-			if DEBUG_TRACE:
+			if _DEBUG_TRACE:
 				print('  Scheduling apps execution for (flat: {flat}, asym: {asym}, shfnum: {shfnum}) path: {path}'
 					.format(flat=pcuropt.flat, asym=pcuropt.asym, shfnum=pcuropt.shfnum, path=path))
 			processPath(pcuropt, runner, xargs)

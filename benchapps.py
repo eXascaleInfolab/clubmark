@@ -514,103 +514,80 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	return 1
 
 
-# HiReCS
-def execHirecs(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
+# DAOC (using standard modularity as an optimizatio function, non-generelized)
+def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
+
 	# Fetch the task name and chose correct network filename
-	netfile = os.path.splitext(netfile)[0]  # Remove the extension
-	task = os.path.split(netfile)[1]  # Base name of the network
+	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
 	assert task, 'The network name should exists'
-	netfile += '.hig'  # Use network in the required format
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'hirecs'
-	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
+	# Backup prepated the resulting dir and backup the previous results if exist
+	taskpath = prepareResDir(algname, task, odir, pathid)
+	errfile = taskpath + _EXTLOG  # Contains also lib tracing including modularity value and clustering summary
+	logfile = taskpath + '.cli' + _EXTLOG    # Client log  from stdout, contains timings
 
-	preparePath(taskpath)
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	# Evaluate relative paths
+	xtimebin = relpath(_UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	netfile = relpath(netfile)
+	taskpath = relpath(taskpath)
 
-	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
-		, './hirecs', '-oc', ''.join(('-cls=../', taskpath, '/', task, '_', algname, _EXTCLNODES))
-		, '../' + netfile)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args
-		, timeout=timeout, stdout=os.devnull, stderr=taskpath + _EXTLOG))
+	# ./daoc -w -g=1 -te -cxl[:/0.8]s=../../results/Daoc/karate.cnl ../../realnets/karate.nse.txt
+	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+		, './daoc', '-w'  # Trace timing
+		, '-g=1'  # Resolution parameter = 1 (standard modularity)
+		, '-t' + ('a' if asym else 'e')
+		# Output only max shares, per-level clusters output with step 0.8 in the simple format (with the header but without the share value)
+		, ''.join(('-cxl[:/0.8]s=', taskpath, _EXTCLNODES))
+		, netfile)
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args
+		#, ondone=postexec, stdout=os.devnull
+		, stdout=logfile, timeout=timeout, stderr=errfile))
 	return 1
 
 
-def execHirecsOtl(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
-	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
-	just outputs the folded hierarchy"""
+# DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
+def execDaocAR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
+
 	# Fetch the task name and chose correct network filename
-	netfile = os.path.splitext(netfile)[0]  # Remove the extension
-	task = os.path.split(netfile)[1]  # Base name of the network
+	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
 	assert task, 'The network name should exists'
-	netfile += '.hig'  # Use network in the required format
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'hirecsotl'
-	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
+	# Backup prepated the resulting dir and backup the previous results if exist
+	taskpath = prepareResDir(algname, task, odir, pathid)
+	errfile = taskpath + _EXTLOG  # Contains also lib tracing including modularity value and clustering summary
+	logfile = taskpath + '.cli' + _EXTLOG    # Client log  from stdout, contains timings
 
-	preparePath(taskpath)
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	# Evaluate relative paths
+	xtimebin = relpath(_UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	netfile = relpath(netfile)
+	taskpath = relpath(taskpath)
 
-	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
-		, './hirecs', '-oc', ''.join(('-cols=../', taskpath, '/', task, '_', algname, _EXTCLNODES))
-		, '../' + netfile)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args
-		, timeout=timeout, stdout=os.devnull, stderr=taskpath + _EXTLOG))
-	return 1
-
-
-def execHirecsAhOtl(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
-	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
-	just outputs the folded hierarchy"""
-	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
-		.format(execpool, netfile, asym, timeout))
-	# Fetch the task name and chose correct network filename
-	netfile = os.path.splitext(netfile)[0]  # Remove the extension
-	task = os.path.split(netfile)[1]  # Base name of the network
-	assert task, 'The network name should exists'
-	netfile += '.hig'  # Use network in the required format
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'hirecsahotl'
-	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
-
-	preparePath(taskpath)
-
-	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
-		, './hirecs', '-oc', ''.join(('-coas=../', taskpath, '/', task, '_', algname, _EXTCLNODES))
-		, '../' + netfile)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args
-		, timeout=timeout, stdout=os.devnull, stderr=taskpath + _EXTLOG))
-	return 1
-
-
-def execHirecsNounwrap(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
-	"""Hirecs which performs the clustering, but does not unwrappes the hierarchy into levels,
-	just outputs the folded hierarchy"""
-	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
-		.format(execpool, netfile, asym, timeout))
-	# Fetch the task name and chose correct network filename
-	netfile = os.path.splitext(netfile)[0]  # Remove the extension
-	task = os.path.split(netfile)[1]  # Base name of the network
-	assert task, 'The network name should exists'
-	netfile += '.hig'  # Use network in the required format
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # Or 'hirecshfold'
-	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
-
-	preparePath(taskpath)
-
-	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
-		, './hirecs', '-oc', '../' + netfile)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args
-		, timeout=timeout, stdout=''.join((taskpath, '.hoc'))
-		, stderr=taskpath + _EXTLOG))
+	# ./daoc -w -g=1 -te -cxl[:/0.8]s=../../results/Daoc/karate.cnl ../../realnets/karate.nse.txt
+	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+		, './daoc', '-w'  # Trace timing
+		, '-g=-1'  # Resolution parameter = -1 (dynaminc automatic definition, generalized modularity)
+		, '-t' + ('a' if asym else 'e')
+		# Output only max shares, per-level clusters output with step 0.8 in the simple format (with the header but without the share value)
+		, ''.join(('-cxl[:/0.8]s=', taskpath, _EXTCLNODES))
+		, netfile)
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args
+		#, ondone=postexec, stdout=os.devnull
+		, stdout=logfile, timeout=timeout, stderr=errfile))
 	return 1
 
 
 # Oslom2
-def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
+def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -656,7 +633,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 
 # Ganxis (SLPA)
-def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR):
+def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
 	#print('> exec params:\n\texecpool: {}\n\tnetfile: {}\n\tasym: {}\n\ttimeout: {}'
 	#	.format(execpool, netfile, asym, timeout))
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (

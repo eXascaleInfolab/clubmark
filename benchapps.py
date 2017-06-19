@@ -41,7 +41,8 @@ from benchevals import _SEPNAMEPART, _ALGSDIR, _RESDIR, _CLSDIR, _EXTERR, _EXTEX
 from utils.mpepool import Job
 
 
-_EXTLOG = '.log'
+_EXTLOG = '.log'  # Extension for the logs
+_EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
 _EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
 _PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
 
@@ -321,8 +322,8 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	"""
 	# Note: .. + 0 >= 0 to be sure that type is arithmetic, otherwise it's always true for the str
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)
-		), ('Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
+		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
+		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
 	# Fetch the task name and chose correct network filename
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Base name of the network
@@ -359,7 +360,8 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 	pybin = PyBin.bestof(pypy=False, v3=True)
 	# Note: Louvain_igraph creates the output dir if it has not been existed, but not the exectime app
-	errfile = taskpath + _EXTLOG
+	errfile = taskpath + _EXTELOG
+	logfile = taskpath + _EXTLOG
 
 	# def relpath(path, basedir=workdir):
 	# 	"""Relative path to the specidied basedir"""
@@ -376,8 +378,8 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 		, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
 		, '-lo', ''.join((taskpath, '/', task, _EXTCLNODES)), netfile)
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
-		#, ondone=postexec
-		, stdout=os.devnull, stderr=errfile))
+		#, ondone=postexec, stdout=os.devnull
+		, stdout=logfile, stderr=errfile))
 
 	execnum = 1
 	# Note: execution on shuffled network instances is now generalized for all algorithms
@@ -446,7 +448,8 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		ktask = ''.join((taskbasex, _SEPPARS, kstrex, tasksuf))
 		# Backup prepated the resulting dir and backup the previous results if exist
 		taskpath = prepareResDir(algname, ktask, odir, pathid)
-		errfile = taskpath + _EXTLOG
+		errfile = taskpath + _EXTELOG
+		logfile = taskpath + _EXTLOG
 		# Evaluate relative paths dependent of the alg params
 		reltaskpath = relpath(taskpath)
 
@@ -459,7 +462,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		#print('> Starting job {} with args: {}'.format('_'.join((ktask, algname, kstrex)), args + [kstr]))
 		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ktask)), workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
-			, stderr=errfile))
+			, stdout=logfile, stderr=errfile))
 
 	return kmax + 1 - kmin
 
@@ -472,9 +475,10 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 
 	instances  - the number of clustering instances to be produced
 	"""
-	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
-		.format(execpool, netfile, asym, timeout))
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)
+		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
+		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}\n\tseed: {}'
+		.format(execpool, netfile, asym, timeout, seed))
 
 	# Fetch the task name and chose correct network filename
 	netfile, netext = os.path.splitext(netfile)  # Remove the extension
@@ -483,7 +487,8 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
 	# Backup prepated the resulting dir and backup the previous results if exist
 	taskpath = prepareResDir(algname, task, odir, pathid)
-	errfile = taskpath + _EXTLOG
+	errfile = taskpath + _EXTELOG
+	logfile = taskpath + _EXTLOG
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
 	# Evaluate relative paths
@@ -509,16 +514,22 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 		args.append('-r=' + str(seed))
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, stdout=os.devnull, stderr=errfile))
+		, stdout=logfile, stderr=errfile))
 
 	return 1
 
 
 # DAOC (using standard modularity as an optimizatio function, non-generelized)
-def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None):
-	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
-		.format(execpool, netfile, asym, timeout))
+def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None, rlevout=0.8):
+	"""Execute DAOC, Deterministic (including input order independent) Agglomerative Overlapping Clustering
+	using standard modularity as optimization function
+
+	rlevout  - ratio (at least) of output levels shrinking starting from the widest (bottom) level, (0, 1]
+	"""
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)
+		) and timeout + 0 >= 0 and 0 < rlevout <= 1, (
+		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}\n\trlevout: {}'
+		.format(execpool, netfile, asym, timeout, rlevout))
 
 	# Fetch the task name and chose correct network filename
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
@@ -526,8 +537,8 @@ def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
 	# Backup prepated the resulting dir and backup the previous results if exist
 	taskpath = prepareResDir(algname, task, odir, pathid)
-	errfile = taskpath + _EXTLOG  # Contains also lib tracing including modularity value and clustering summary
-	logfile = taskpath + '.cli' + _EXTLOG    # Client log  from stdout, contains timings
+	errfile = taskpath + _EXTELOG  # Errors log + lib tracing including modularity value and clustering summary
+	logfile = taskpath + _EXTLOG   # Tracing to stdout, contains timings
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
 	# Evaluate relative paths
@@ -542,19 +553,20 @@ def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR
 		, '-g=1'  # Resolution parameter = 1 (standard modularity)
 		, '-t' + ('a' if asym else 'e')
 		# Output only max shares, per-level clusters output with step 0.8 in the simple format (with the header but without the share value)
-		, ''.join(('-cxl[:/0.8]s=', taskpath, _EXTCLNODES))
+		, ''.join(('-cxl[:/', str(rlevout),  ']s=', taskpath, _EXTCLNODES))
 		, netfile)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, stdout=logfile, timeout=timeout, stderr=errfile))
+		, stdout=logfile, stderr=errfile))
 	return 1
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
-def execDaocAR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None):
-	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
-		.format(execpool, netfile, asym, timeout))
+def execDaocAR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None, rlevout=0.8):
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)
+		) and timeout + 0 >= 0 and 0 < rlevout <= 1, (
+		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}\n\trlevout: {}'
+		.format(execpool, netfile, asym, timeout, rlevout))
 
 	# Fetch the task name and chose correct network filename
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
@@ -562,8 +574,8 @@ def execDaocAR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
 	# Backup prepated the resulting dir and backup the previous results if exist
 	taskpath = prepareResDir(algname, task, odir, pathid)
-	errfile = taskpath + _EXTLOG  # Contains also lib tracing including modularity value and clustering summary
-	logfile = taskpath + '.cli' + _EXTLOG    # Client log  from stdout, contains timings
+	errfile = taskpath + _EXTELOG  # Errors log + lib tracing including modularity value and clustering summary
+	logfile = taskpath + _EXTLOG   # Tracing to stdout, contains timings
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
 	# Evaluate relative paths
@@ -578,11 +590,56 @@ def execDaocAR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 		, '-g=-1'  # Resolution parameter = -1 (dynaminc automatic definition, generalized modularity)
 		, '-t' + ('a' if asym else 'e')
 		# Output only max shares, per-level clusters output with step 0.8 in the simple format (with the header but without the share value)
-		, ''.join(('-cxl[:/0.8]s=', taskpath, _EXTCLNODES))
+		, ''.join(('-cxl[:/', str(rlevout),  ']s=', taskpath, _EXTCLNODES))
 		, netfile)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, stdout=logfile, timeout=timeout, stderr=errfile))
+		, stdout=logfile, stderr=errfile))
+	return 1
+
+
+# Ganxis (SLPA)
+def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'ganxis/', seed=None):
+	#print('> exec params:\n\texecpool: {}\n\tnetfile: {}\n\tasym: {}\n\ttimeout: {}'
+	#	.format(execpool, netfile, asym, timeout))
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)
+		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
+		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}\n\tseed: {}'
+		.format(execpool, netfile, asym, timeout, seed))
+
+	# Fetch the task name and chose correct network filename
+	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
+	assert task, 'The network name should exists'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
+	# Backup prepated the resulting dir and backup the previous results if exist
+	taskpath = prepareResDir(algname, task, odir, pathid)
+	errfile = taskpath + _EXTELOG
+	logfile = taskpath + _EXTLOG
+
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	# Evaluate relative paths
+	xtimebin = relpath(_UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	netfile = relpath(netfile)
+	taskpath = relpath(taskpath)
+
+	def tidy(job):
+		# Note: GANXiS leaves empty ./output dir in the _ALGSDIR, which should be deleted
+		tmp = workdir + 'output/'
+		if os.path.exists(tmp):
+			#os.rmdir(tmp)
+			shutil.rmtree(tmp)
+
+	# java -jar GANXiSw.jar -Sym 1 -seed 12345 -i ../../realnets/karate.txt -d ../../results/ganxis/karate
+	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+		, 'java', '-jar', './GANXiSw.jar', '-i', netfile, '-d', taskpath]
+	if not asym:
+		args.extend(['-Sym', '1'])
+	if seed is not None:
+		args.extend(['-seed', str(seed)])
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
+		#, ondone=postexec, stdout=os.devnull
+		, ondone=tidy, stdout=logfile, stderr=errfile))
 	return 1
 
 
@@ -628,38 +685,6 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 			os.remove(fname)
 
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout, ondone=postexec
-		, stdout=taskpath + _EXTLOG, stderr=taskpath + _EXTERR))
-	return 1
-
-
-# Ganxis (SLPA)
-def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
-	#print('> exec params:\n\texecpool: {}\n\tnetfile: {}\n\tasym: {}\n\ttimeout: {}'
-	#	.format(execpool, netfile, asym, timeout))
-	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
-		.format(execpool, netfile, asym, timeout))
-	# Fetch the task name
-	task = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network
-	assert task, 'The network name should exists'
-
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'ganxis'
-	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
-	args = ['../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
-		, 'java', '-jar', './GANXiSw.jar', '-i', '../' + netfile, '-d', '../' + taskpath]
-	if not asym:
-		args.append('-Sym 1')  # Check existance of the back links and generate them if requried
-
-	preparePath(taskpath)
-
-	def tidy(job):
-		# Note: GANXiS leaves empty ./output dir in the _ALGSDIR, which should be deleted
-		tmp = _ALGSDIR + 'output/'
-		if os.path.exists(tmp):
-			#os.rmdir(tmp)
-			shutil.rmtree(tmp)
-
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout, ondone=tidy
 		, stdout=taskpath + _EXTLOG, stderr=taskpath + _EXTERR))
 	return 1
 

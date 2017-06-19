@@ -62,7 +62,7 @@ if _ADJUST_WORKERS_BY_RAM:
 	#	_ADJUST_WORKERS_BY_RAM = False
 
 _AFFINITYBIN = 'taskset'  # System app to set CPU affinity if required, should be preliminarry installed (taskset is present by default on NIX systems)
-DEBUG_TRACE = False  # Trace start / stop and other events to stderr
+_DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
 def secondsToHms(seconds):
@@ -280,7 +280,7 @@ class Job(object):
 					os.rmdir(tpath)
 				except OSError:
 					pass  # The dir is not empty, just skip it
-			if DEBUG_TRACE:
+			if _DEBUG_TRACE:
 				print('"{}" #{} is completed'.format(self.name, self.proc.pid if self.proc else -1), file=sys.stderr)
 		# Check whether the job is associated with any task
 		if self.task:
@@ -497,7 +497,7 @@ class ExecPool(object):
 			raise AssertionError('Free workers must be available ({} busy workers of {})'
 				.format(len(self._workers), self._workersLim))
 
-		if DEBUG_TRACE:
+		if _DEBUG_TRACE:
 			print('Starting "{}"{}...'.format(job.name, '' if async else ' in sync mode'), file=sys.stderr)
 		job.tstart = time.time()
 		if job.onstart:
@@ -540,7 +540,7 @@ class ExecPool(object):
 					else:
 						raise ValueError('Ivalid output stream buffer: ' + str(joutp))
 
-			if DEBUG_TRACE and (fstdout or fstderr):
+			if _DEBUG_TRACE and (fstdout or fstderr):
 				print('"{}" output channels:\n\tstdout: {}\n\tstderr: {}'.format(job.name
 					, str(job.stdout), str(job.stderr)))
 			if(job.args):
@@ -669,7 +669,7 @@ class ExecPool(object):
 		assert len(self._workers) <= self._workersLim, 'Number of workers exceeds the limit'
 		assert job.name, 'Job parameters must be defined'  #  and job.workdir and job.args
 
-		if DEBUG_TRACE:
+		if _DEBUG_TRACE:
 			print('Scheduling the job "{}" with timeout {}'.format(job.name, job.timeout))
 		if async:
 			# Start the execution timer

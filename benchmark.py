@@ -882,7 +882,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		"""
 		for ealg in execalgs:
 			try:
-				jobsnum = ealg(_execpool, net, asymnet(net, asym), netshf, timeout, pathid)
+				jobsnum = ealg(_execpool, net, asym=asymnet(net, asym), odir=netshf, timeout=timeout, pathid=pathid, seed=seed)
 			except Exception as err:
 				jobsnum = 0
 				errexectime = time.time() - exectime

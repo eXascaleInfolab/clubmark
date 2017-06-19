@@ -303,7 +303,7 @@ class PyBin(object):
 		return pybin
 
 
-def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None, selfexec=False):
+def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):  # , selfexec=False  - whether to call self recursively
 	"""Execute Louvain using the igraph library
 	Note: Louvain produces not stable results => multiple executions are desirable.
 
@@ -316,7 +316,6 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	pathid  - pather id of the input networks file
 	workdir  - relative working directory of the app, actual when the app contains libs
 	seed  - random seed, uint64_t
-	selfexec  - whether to call self recursively
 
 	returns  - the number of executions or None
 	"""
@@ -360,7 +359,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 	pybin = PyBin.bestof(pypy=False, v3=True)
 	# Note: Louvain_igraph creates the output dir if it has not been existed, but not the exectime app
-	errfile = ''.join((taskpath, _EXTLOG))
+	errfile = taskpath + _EXTLOG
 
 	# def relpath(path, basedir=workdir):
 	# 	"""Relative path to the specidied basedir"""
@@ -372,19 +371,13 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 
-	# Prepare resdir
-	resdir = _RESDIR
-	if odir:
-		resdir += algname + '/'
-		if not os.path.exists(resdir):
-			os.mkdir(resdir)
 	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 		, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
 		, '-lo', ''.join((taskpath, '/', task, _EXTCLNODES)), netfile)
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
-		#, ondone=postexec, stdout=os.devnull
-		, stderr=errfile))
+		#, ondone=postexec
+		, stdout=os.devnull, stderr=errfile))
 
 	execnum = 1
 	# Note: execution on shuffled network instances is now generalized for all algorithms
@@ -453,7 +446,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		ktask = ''.join((taskbasex, _SEPPARS, kstrex, tasksuf))
 		# Backup prepated the resulting dir and backup the previous results if exist
 		taskpath = prepareResDir(algname, ktask, odir, pathid)
-		errfile = ''.join((taskpath, _EXTLOG))
+		errfile = taskpath + _EXTLOG
 		# Evaluate relative paths dependent of the alg params
 		reltaskpath = relpath(taskpath)
 
@@ -475,6 +468,8 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	"""Execute Randcommuns, Random Disjoint Clustering
 	Results are not stable => multiple execution is desirable.
 
+	Note: the ground-thruth should have the same file name as netfile and '.cnl' extension
+
 	instances  - the number of clustering instances to be produced
 	"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
@@ -488,18 +483,34 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
 	# Backup prepated the resulting dir and backup the previous results if exist
 	taskpath = prepareResDir(algname, task, odir, pathid)
+	errfile = taskpath + _EXTLOG
 
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	# Evaluate relative paths
+	xtimebin = relpath(_UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	netfile = relpath(netfile)
+	taskpath = relpath(taskpath)
 	# Set the best possible interpreter
 	pybin = PyBin.bestof(pypy=True, v3=True)
 
+	# Form name of the ground-truth file on base of the input network filename with the extension relpaced to '.cnl'
+	originpbase = netfile
+	if odir:
+		originpbase = os.path.split(netfile)[0]
+	gtfile = originpbase + _EXTCLNODES
+
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
-	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
-		, 'python', ''.join(('./', algname, '.py')), ''.join(('-g=../', netfile, _EXTCLNODES))
-		, ''.join(('-i=../', netfile, netext)), ''.join(('-o=../', taskpath))
-		, ''.join(('-n=', str(instances))))
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout
-		, stdout=os.devnull, stderr=taskpath + _EXTLOG))
+		, pybin, './randcommuns.py', '-g=' + gtfile, ''.join(('-i=', netfile, netext)), '-o=' + taskpath
+		, '-n=' + str(instances)]
+	if seed is not None:
+		args.append('-r=' + str(seed))
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
+		#, ondone=postexec, stdout=os.devnull
+		, stdout=os.devnull, stderr=errfile))
+
 	return 1
 
 

@@ -38,6 +38,8 @@ rsync -aLhv ../oslom/OSLOM2/convert\
 	 \
 	 algorithms/utils/louvain/
 
+rsync -aLhv ../oslom/OSLOM2/community algorithms/louvain
+
 # Custering algorithms ---------------------------------------------------------
 # Note: oslom_undir can be used for the symmetric networks specified with the arcs
 #	../oslom/OSLOM2/oslom_dir

@@ -438,8 +438,10 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 8  # Max clique size (~ min node degree to be considered)
+	steps = '10'  # Use 10 scale levels as in Ganxis
 	# Run for range of clique sizes
 	for k in range(kmin, kmax + 1):
+		# A single argument is k-clique size
 		kstr = str(k)
 		kstrex = 'k' + kstr
 		# Embed params into the task name
@@ -453,8 +455,6 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		# Evaluate relative paths dependent of the alg params
 		reltaskpath = relpath(taskpath)
 
-		# ATTENTION: a single argument is k-clique size, specified later
-		steps = '10'  # Use 10 scale levels as in Ganxis
 		# scp.py netname k [start_linksnum end__linksnum numberofevaluations] [weight]
 		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ktask, pathid)), '-s=/etime_' + algname
 			, pybin, './scp.py', netfile, kstr, steps, ''.join((reltaskpath, '/', ktask, _EXTCLNODES)))
@@ -692,6 +692,57 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 		#, ondone=postexec, stdout=os.devnull
 		, ondone=postexec, stdout=logfile, stderr=errfile))
 	return 1
+
+
+# pSCAN (Fast and Exact Structural Graph Clustering)
+def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
+		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
+		.format(execpool, netfile, asym, timeout))
+	# Fetch the task name
+	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Base name of the network
+	assert task, 'The network name should exists'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'scp'
+
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	# Evaluate relative paths
+	xtimebin = relpath(_UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	netfile = relpath(netfile)
+
+	eps = 0.05  # Min epsilon (similarity threshold)
+	epsMax = 0.95  # Max epsilon (similarity threshold)
+	steps = 10  # The number of steps (similarity thresholds). Use 10 scale levels as in Ganxis.
+	# Run for range of eps
+	deps = (epsMax - eps) / steps  # Epsilon delta for each step
+	while eps <= epsMax:
+		prm = str(eps)  # Alg params (eps) as string
+		prmex = 'e' + prm
+		# Embed params into the task name
+		taskbasex = delPathSuffix(task, True)
+		tasksuf = task[len(taskbasex):]
+		ctask = ''.join((taskbasex, _SEPPARS, prmex, tasksuf))  # Current task
+		# Backup prepated the resulting dir and backup the previous results if exist
+		taskpath = prepareResDir(algname, ctask, odir, pathid)
+		errfile = taskpath + _EXTELOG
+		#logfile = taskpath + _EXTLOG
+		# Evaluate relative paths dependent of the alg params
+		reltaskpath = relpath(taskpath)
+
+		# ATTENTION: a single argument is k-clique size, specified later
+		# ./pscan -e 0.7 -o graph-e7.cnl -f NSE graph.nse
+		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ctask, pathid)), '-s=/etime_' + algname
+			, './pscan', '-e', '{:.2f}'.format(eps), '-o', ''.join((reltaskpath, '/', ctask, _EXTCLNODES))
+			, '-f', 'NSA' if asym else 'NSE', netfile)
+
+		#print('> Starting job {} with args: {}'.format('_'.join((ctask, algname, prmex)), args + [prm]))
+		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ctask)), workdir=workdir, args=args, timeout=timeout
+			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
+			#, stdout=logfile  # Skip standard log, because there are too many files, which does not contain useful information
+			, stdout=os.devnull, stderr=errfile))
+		eps += deps
+
+	return steps
 
 
 #if __name__ == '__main__':

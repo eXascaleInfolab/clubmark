@@ -32,6 +32,7 @@ import sys
 import inspect  # To automatically fetch algorithm name
 import traceback  # Stacktrace
 import subprocess
+import numbers  # To verify that a variable is a number (int or float)
 # import re
 
 from datetime import datetime
@@ -477,7 +478,7 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
 		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}\n\tseed: {}'
+		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tseed: {}'
 		.format(execpool, netfile, asym, timeout, seed))
 
 	# Fetch the task name and chose correct network filename
@@ -519,22 +520,25 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	return 1
 
 
-# DAOC (using standard modularity as an optimizatio function, non-generelized)
-def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None, rlevout=0.8):
+# DAOC wit parameterized gamma
+def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None, rlevout=0.8, gamma=None):
 	"""Execute DAOC, Deterministic (including input order independent) Agglomerative Overlapping Clustering
 	using standard modularity as optimization function
 
+	algname  - name of the executing algorithm to be traced
+	...
 	rlevout  - ratio (at least) of output levels shrinking starting from the widest (bottom) level, (0, 1]
+	gamma  - resolution parameter gamma, <0 means automatic identification of the optimal dymamic value, number (float or int)
 	"""
-	assert execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and 0 < rlevout <= 1, (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}\n\trlevout: {}'
-		.format(execpool, netfile, asym, timeout, rlevout))
+	assert isinstance(algname, str) and algname and execpool and netfile and (asym is None or isinstance(asym, bool)
+		) and timeout + 0 >= 0 and 0 < rlevout <= 1 and isinstance(gamma, numbers.Number), (  # Verify that gamma is a numeric value (int or float)
+		'Invalid input parameters:\n\talgname: {},\n\texecpool: {},\n\tnet: {}'
+		',\n\tasym: {},\n\ttimeout: {},\n\trlevout: {},\n\tgamma: {}'
+		.format(execpool, netfile, asym, timeout, rlevout, gamma))
 
 	# Fetch the task name and chose correct network filename
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
 	assert task, 'The network name should exists'
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
 	# Backup prepated the resulting dir and backup the previous results if exist
 	taskpath = prepareResDir(algname, task, odir, pathid)
 	errfile = taskpath + _EXTELOG  # Errors log + lib tracing including modularity value and clustering summary
@@ -550,7 +554,7 @@ def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR
 	# ./daoc -w -g=1 -te -cxl[:/0.8]s=../../results/Daoc/karate.cnl ../../realnets/karate.nse.txt
 	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 		, './daoc', '-w'  # Trace timing
-		, '-g=1'  # Resolution parameter = 1 (standard modularity)
+		, '-g=' + str(gamma)  # Resolution parameter = 1 (standard modularity)
 		, '-t' + ('a' if asym else 'e')
 		# Output only max shares, per-level clusters output with step 0.8 in the simple format (with the header but without the share value)
 		, ''.join(('-cxl[:/', str(rlevout),  ']s=', taskpath, _EXTCLNODES))
@@ -559,50 +563,25 @@ def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR
 		#, ondone=postexec, stdout=os.devnull
 		, stdout=logfile, stderr=errfile))
 	return 1
+
+
+# DAOC (using standard modularity as an optimizatio function, non-generelized)
+def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None, rlevout=0.8):
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, rlevout, gamma=1)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
-def execDaocAR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None, rlevout=0.8):
-	assert execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and 0 < rlevout <= 1, (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}\n\trlevout: {}'
-		.format(execpool, netfile, asym, timeout, rlevout))
-
-	# Fetch the task name and chose correct network filename
-	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
-	assert task, 'The network name should exists'
+def execDaocA(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None, rlevout=0.8):
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
-	# Backup prepated the resulting dir and backup the previous results if exist
-	taskpath = prepareResDir(algname, task, odir, pathid)
-	errfile = taskpath + _EXTELOG  # Errors log + lib tracing including modularity value and clustering summary
-	logfile = taskpath + _EXTLOG   # Tracing to stdout, contains timings
-
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
-	# Evaluate relative paths
-	xtimebin = relpath(_UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
-	netfile = relpath(netfile)
-	taskpath = relpath(taskpath)
-
-	# ./daoc -w -g=1 -te -cxl[:/0.8]s=../../results/Daoc/karate.cnl ../../realnets/karate.nse.txt
-	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
-		, './daoc', '-w'  # Trace timing
-		, '-g=-1'  # Resolution parameter = -1 (dynaminc automatic definition, generalized modularity)
-		, '-t' + ('a' if asym else 'e')
-		# Output only max shares, per-level clusters output with step 0.8 in the simple format (with the header but without the share value)
-		, ''.join(('-cxl[:/', str(rlevout),  ']s=', taskpath, _EXTCLNODES))
-		, netfile)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
-		#, ondone=postexec, stdout=os.devnull
-		, stdout=logfile, stderr=errfile))
-	return 1
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, rlevout, gamma=-1)
 
 
 # Ganxis (SLPA)
 def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'ganxis/', seed=None):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
 		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}\n\tseed: {}'
+		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tseed: {}'
 		.format(execpool, netfile, asym, timeout, seed))
 
 	# Fetch the task name and chose correct network filename
@@ -645,7 +624,7 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
 		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}\n\tseed: {}'
+		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tseed: {}'
 		.format(execpool, netfile, asym, timeout, seed))
 
 	# Fetch the task name and chose correct network filename
@@ -711,7 +690,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 	netfile = relpath(netfile)
 
 	eps = 0.05  # Min epsilon (similarity threshold)
-	epsMax = 0.95  # Max epsilon (similarity threshold)
+	epsMax = 0.9  # Max epsilon (similarity threshold)
 	steps = 10  # The number of steps (similarity thresholds). Use 10 scale levels as in Ganxis.
 	# Run for range of eps
 	deps = (epsMax - eps) / steps  # Epsilon delta for each step
@@ -743,6 +722,57 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 		eps += deps
 
 	return steps
+
+
+# rgmc algorithms family: 1: RG, 2: CGGC_RG, 3: CGGCi_RG
+def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None, alg=None):
+	"""Rgmc algorithms family
+
+	algname  - name of the executing algorithm to be traced
+	...
+	alg  - the algorithm to be executed:  1: RG, 2: CGGC_RG, 3: CGGCi_RG
+	"""
+	algs = ('RG', 'CGGC_RG', 'CGGCi_RG')
+	assert isinstance(algname, str) and algname and execpool and netfile and (asym is None or isinstance(asym, bool)
+		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)) and alg in (1, 2, 3), (
+		'Invalid input parameters:\n\talgname: {},\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\talg: {}'
+		.format(algname, execpool, netfile, asym, timeout, algs[alg]))
+
+	# Fetch the task name and chose correct network filename
+	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
+	assert task, 'The network name should exists'
+	# Backup prepated the resulting dir and backup the previous results if exist
+	taskpath = prepareResDir(algname, task, odir, pathid)
+	errfile = taskpath + _EXTELOG
+	logfile = taskpath + _EXTLOG
+
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	# Evaluate relative paths
+	xtimebin = relpath(_UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	netfile = relpath(netfile)
+	taskpath = relpath(taskpath)
+
+	# ./rgmc -a 2 -c tests/rgmc_2/email.nse.cnl -i e networks/email.nse.txt
+	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+		, './rgmc', '-a', str(alg), '-c', ''.join((taskpath, '/', task, _EXTCLNODES))
+		, '-i', 'a' if asym else 'e', netfile)
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
+		#, ondone=postexec, stdout=os.devnull
+		, stdout=logfile, stderr=errfile))
+	return 1
+
+
+# CGGC_RG (rgmc -a 2)
+def execCggcRg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
+	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, alg=2)
+
+
+# CGGCi_RG (rgmc -a 3)
+def execCggciRg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
+	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, alg=3)
 
 
 #if __name__ == '__main__':

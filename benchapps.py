@@ -567,13 +567,13 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 
 # DAOC (using standard modularity as an optimizatio function, non-generelized)
 def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None, rlevout=0.8):
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, rlevout, gamma=1)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
 def execDaocA(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None, rlevout=0.8):
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, rlevout, gamma=-1)
 
 
@@ -587,7 +587,7 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 	# Fetch the task name and chose correct network filename
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
 	assert task, 'The network name should exists'
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Ganxis'
 	# Backup prepated the resulting dir and backup the previous results if exist
 	taskpath = prepareResDir(algname, task, odir, pathid)
 	errfile = taskpath + _EXTELOG
@@ -631,7 +631,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 	netbasepath, task = os.path.split(netfile)  # Extract base path and file name
 	task, netext = os.path.splitext(task)  # Separate file name and extension
 	assert task, 'The network name should exists'
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Oslom2'
 	# Backup prepated the resulting dir and backup the previous results if exist
 	taskpath = prepareResDir(algname, task, odir, pathid)
 	errfile = taskpath + _EXTELOG
@@ -681,7 +681,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 	# Fetch the task name
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Base name of the network
 	assert task, 'The network name should exists'
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'scp'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Pscan'
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
 	# Evaluate relative paths
@@ -765,14 +765,51 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 
 # CGGC_RG (rgmc -a 2)
 def execCggcRg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggcRg'
 	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, alg=2)
 
 
 # CGGCi_RG (rgmc -a 3)
 def execCggciRg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggciRg'
 	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, alg=3)
+
+
+# SCD
+def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
+	"""Scalable Community Detection (SCD)
+	Note: SCD os applicable only for the undirected unweighted networks, it skips the weight
+	in the weighted network.
+	"""
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)
+		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
+		'Invalid input parameters:\n\talgname: {},\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
+		.format(execpool, netfile, asym, timeout))
+
+	# Fetch the task name and chose correct network filename
+	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
+	assert task, 'The network name should exists'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'scd'
+	# Backup prepated the resulting dir and backup the previous results if exist
+	taskpath = prepareResDir(algname, task, odir, pathid)
+	errfile = taskpath + _EXTELOG
+	logfile = taskpath + _EXTLOG
+
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	# Evaluate relative paths
+	xtimebin = relpath(_UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	netfile = relpath(netfile)
+	taskpath = relpath(taskpath)
+
+	# ./scd -n 1 -o tests/scd/karate.nse.cnl -f networks/karate.nse.txt
+	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+		, './scd', '-n', '1' # Use a single threaded implementation
+		, '-o', ''.join((taskpath, '/', task, _EXTCLNODES)), '-f', netfile)
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
+		#, ondone=postexec, stdout=os.devnull
+		, stdout=logfile, stderr=errfile))
+	return 1
 
 
 #if __name__ == '__main__':

@@ -600,8 +600,6 @@ def execDaocAR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 # Ganxis (SLPA)
 def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'ganxis/', seed=None):
-	#print('> exec params:\n\texecpool: {}\n\tnetfile: {}\n\tasym: {}\n\ttimeout: {}'
-	#	.format(execpool, netfile, asym, timeout))
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
 		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}\n\tseed: {}'
@@ -645,47 +643,54 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 # Oslom2
 def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
-	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
-		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
-		.format(execpool, netfile, asym, timeout))
-	# Fetch the task name
-	task = os.path.split(netfile)[1]  # Base name of the network
-	task, netext = os.path.splitext(task)
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)
+		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
+		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}\n\tseed: {}'
+		.format(execpool, netfile, asym, timeout, seed))
+
+	# Fetch the task name and chose correct network filename
+	netbasepath, task = os.path.split(netfile)  # Extract base path and file name
+	task, netext = os.path.splitext(task)  # Separate file name and extension
 	assert task, 'The network name should exists'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
+	# Backup prepated the resulting dir and backup the previous results if exist
+	taskpath = prepareResDir(algname, task, odir, pathid)
+	errfile = taskpath + _EXTELOG
+	logfile = taskpath + _EXTLOG
 
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'oslom2'
-	taskpath = ''.join((_RESDIR, algname, '/', _CLSDIR, task, pathid))
-	# Note: wighted networks (-w) stands for the used null model, not for the input file format.
-	# Link weight is set to 1 if not specified in the file for weighted network.
-	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
-		, './oslom_undir' if not asym else './oslom_dir', '-f', '../' + netfile, '-w')
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	# Evaluate relative paths
+	xtimebin = relpath(_UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	netfile = relpath(netfile)
 
-	preparePath(taskpath)
-
-	netdir = os.path.split(netfile)[0] + '/'
-	# Copy results to the required dir on postprocessing
+	# Move final results to the required dir on postprocessing and clear up
 	def postexec(job):
-		# Copy communities output from original location to the target one
-		origResDir = ''.join((netdir, task, netext, '_oslo_files/'))
+		# Move communities output from the original location to the target one
+		origResDir = ''.join((netbasepath, '/', task, netext, '_oslo_files/'))
 		for fname in glob.iglob(escapePathWildcards(origResDir) +'tp*'):
-			shutil.copy2(fname, taskpath)
+			shutil.move(fname, taskpath)
 
-		# Move whole dir as extra task output to the logsdir
+		# Move the remained files as an extra task output
 		outpdire = taskpath + '/extra/'
-		if not os.path.exists(outpdire):
-			os.mkdir(outpdire)
-		else:
+		if os.path.exists(outpdire):
 			# If dest dir already exists, remove it to avoid exception on rename
 			shutil.rmtree(outpdire)
-		os.rename(origResDir, outpdire)
+		shutil.move(origResDir, outpdire)
 
-		# Note: oslom2 leaves ./tp file in the _ALGSDIR, which should be deleted
-		fname = _ALGSDIR + 'tp'
+		# Note: oslom2 leaves ./tp, which should be deleted
+		fname = workdir + 'tp'
 		if os.path.exists(fname):
 			os.remove(fname)
 
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args, timeout=timeout, ondone=postexec
-		, stdout=taskpath + _EXTLOG, stderr=taskpath + _EXTERR))
+	# ./oslom_[un]dir -f ../../realnets/karate.txt -w -seed 12345
+	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+		, './oslom_' +  ('dir' if asym else 'undir'), '-f', netfile, '-w']
+	if seed is not None:
+		args.extend(['-seed', str(seed)])
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
+		#, ondone=postexec, stdout=os.devnull
+		, ondone=postexec, stdout=logfile, stderr=errfile))
 	return 1
 
 

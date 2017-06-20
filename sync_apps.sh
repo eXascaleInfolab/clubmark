@@ -42,10 +42,10 @@ rsync -aLhv ../oslom/OSLOM2/community algorithms/louvain
 
 # Custering algorithms ---------------------------------------------------------
 # Note: oslom_undir can be used for the symmetric networks specified with the arcs
-#	../oslom/OSLOM2/oslom_dir
 rsync -aLhv\
 	../cggc_rg/bin/Release/rgmc\
 	../oslom/OSLOM2/oslom_undir\
+	../oslom/OSLOM2/oslom_dir\
 	../pscan/bin/Release/pscan\
 	../scd/build/scd\
 	\

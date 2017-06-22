@@ -843,7 +843,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	global _execpool
 
 	assert not _execpool, '_execpool should be clear on algs execution'
-	starttime = time.time()  # Procedure start time
+	starttime = time.time()  # Procedure start time; ATTENTION: .clock() should not be used, because it does not consider "sleep" time
 	if not _execpool:
 		_execpool = ExecPool(_WPROCSMAX, _AFNSTEP)  # min(_WPROCSMAX, max(ramfracs(32), 1))
 

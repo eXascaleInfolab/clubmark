@@ -33,29 +33,32 @@ _UTILDIR = 'utils/'  # Utilities (external applicaions) directory
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
-def hasMethod(obj, method):
-	"""Whether the object has the specified method
-	Note: no exceptions are raised
+def viewMethod(obj, method):
+	"""Fetch view method of the object
 
-	obj  - the object to be checked for the method
-	method  - name of the target method
+	obj  - the object to be processed
+	method  - name of the target method, str
 
-	return  whether obj.method is callable
+	return  target method or AttributeError
+
+	>>> callable(viewMethod(dict(), 'items'))
+	True
 	"""
-	try:
-		ometh = getattr(obj, method, None)
-		return callable(ometh)
-	except Exception:
-		pass
-	return False
+	viewmeth = 'view' + method
+	ometh = getattr(obj, viewmeth, None)
+	if not ometh:
+		ometh = getattr(obj, method)
+	return ometh
 
 
-# Define viewitems function to efficiently traverse items of dictionaries in both Python 2 and 3
-# Note: depends on hasMethod()
+# Define viewXXX functions to efficiently traverse items of dictionaries in both Python 2 and 3
+# Note: depends on viewMethod()
 try:
-	from future.utils import viewitems
+	from future.utils import viewitems, viewkeys, viewvalues
 except ImportError:
-	viewitems = lambda dct: dct.items() if not hasMethod(dct, viewitems) else dct.viewitems()
+	viewitems = lambda dct: viewMethod(dct, 'items')()
+	viewkeys = lambda dct: viewMethod(dct, 'keys')()
+	viewvalues = lambda dct: viewMethod(dct, 'values')()
 
 
 def timeSeed():

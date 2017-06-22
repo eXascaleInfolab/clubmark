@@ -21,7 +21,7 @@ import traceback  # Stacktrace
 from datetime import datetime
 from subprocess import PIPE
 
-from benchutils import ItemsStatistic, parseFloat, parseName, escapePathWildcards,envVarDefined, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID
+from benchutils import ItemsStatistic, parseFloat, parseName, escapePathWildcards, envVarDefined, viewvalues, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID
 from utils.mpepool import Task, Job
 
 
@@ -339,7 +339,7 @@ def aggEvaluations(respaths):
 					partagg.addraw(resfile, levname, float(val))
 				partagg.fix()
 	# Aggregate total statistics
-	for eagg in evalaggs.values():
+	for eagg in viewvalues(evalaggs):
 		eagg.aggregate()
 	print('Evaluation results aggregation is finished.')
 

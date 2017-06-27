@@ -527,7 +527,8 @@ def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
 			return
 		job.args = (PYEXEC, '-c',
 # Shuffling procedure
-"""import os
+"""from __future__ import print_function  #, division  # Required for stderr output, must be the first import
+import os
 import subprocess
 
 basenet = '{jobname}' + '{netext}'

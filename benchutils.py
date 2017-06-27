@@ -54,7 +54,7 @@ def viewMethod(obj, method):
 # Define viewXXX functions to efficiently traverse items of dictionaries in both Python 2 and 3
 # Note: depends on viewMethod()
 try:
-	from future.utils import viewitems, viewkeys, viewvalues
+	from future.utils import viewitems, viewkeys, viewvalues  # External package: pip install future
 except ImportError:
 	viewitems = lambda dct: viewMethod(dct, 'items')()
 	viewkeys = lambda dct: viewMethod(dct, 'keys')()
@@ -513,7 +513,7 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 			except StopIteration:
 				pass
 		if not exists:
-			print('WARNING: specified path is not exist', file=sys.stderr)
+			print('WARNING, specified path is not exist', file=sys.stderr)
 			return name + suffix
 	# Process existing path
 	if synctime is not None:
@@ -564,11 +564,11 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 		if os.path.exists(archname):
 			bckname += '.tar.gz'
 			if os.path.exists(bckname):
-				print('WARNING: backup file "{}" is being rewritten'.format(bckname), file=sys.stderr)
+				print('WARNING, backup file "{}" is being rewritten'.format(bckname), file=sys.stderr)
 			try:
 				os.rename(archname, bckname)
 			except Exception as err:
-				print('WARNING: removing old backup file "{}", as its renaming failed: {}'
+				print('WARNING, removing old backup file "{}", as its renaming failed: {}'
 					.format(archname, err), file=sys.stderr)
 				os.remove(archname)
 		# Move data to the archive
@@ -587,12 +587,12 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 		# Rename already existent backup if required
 		if os.path.exists(basename):
 			if os.path.exists(bckname):
-				print('WARNING: backup dir "{}" is being rewritten'.format(bckname), file=sys.stderr)
+				print('WARNING, backup dir "{}" is being rewritten'.format(bckname), file=sys.stderr)
 				shutil.rmtree(bckname)
 			try:
 				os.rename(basename, bckname)
 			except Exception as err:
-				print('WARNING: removing old backup dir "{}", as its renaming failed: {}'
+				print('WARNING, removing old backup dir "{}", as its renaming failed: {}'
 					.format(basename, err), file=sys.stderr)
 				shutil.rmtree(basename)
 		# Move data to the backup

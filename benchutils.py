@@ -406,7 +406,7 @@ def dirempty(dirpath):
 	"""Whether specified directory is empty"""
 	dirpath = escapePathWildcards(dirpath)
 	if not os.path.isdir(dirpath):
-		print('ERROR, Existent directory is expected instead of: ' + dirpath, file=sys.stderr)
+		print('ERROR, Existent directory is expected instead of: ', dirpath, file=sys.stderr)
 		raise ValueError('Existent directory is expected')
 	if not dirpath.endswith('/'):
 		dirpath += '/'
@@ -578,7 +578,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 				# Delete the archived paths if required
 				if move:
 					#if _DEBUG_TRACE:
-					#	print('>> moving path: ' + path, file=sys.stderr)
+					#	print('>> moving path: ', path, file=sys.stderr)
 					if os.path.isdir(path):
 						shutil.rmtree(path)
 					else:

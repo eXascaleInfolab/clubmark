@@ -327,7 +327,7 @@ def aggEvaluations(respaths):
 				evalaggs[measure] = eagg
 			with open(resfile, 'r') as finp:
 				partagg = ShufflesAgg(eagg, _SEPNAMEPART.join((measure, algname, netname)))
-				#print('Aggregating partial: ' + partagg.name)
+				#print('Aggregating partial: ', partagg.name)
 				for ln in finp:
 					# Skip header
 					ln = ln.lstrip()

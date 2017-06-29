@@ -532,7 +532,7 @@ import os
 import subprocess
 
 basenet = '{jobname}' + '{netext}'
-#print('basenet: ' + basenet, file=sys.stderr)
+#print('basenet: ', basenet, file=sys.stderr)
 i = 1
 while i <= {shfnum}:
 	# sort -R pgp_udir.net -o pgp_udir_rand3.net

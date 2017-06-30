@@ -7,6 +7,8 @@
 \organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
 \date: 2015-06
 """
+from __future__ import print_function, division  # Required for stderr output, must be the first import
+from future.utils import viewitems
 import sys
 import os
 import random
@@ -17,7 +19,7 @@ def outFile(filename, num=''):
 	"""Construct output file name from the input file name"""
 	name, ext = os.path.splitext(filename)  # Extract name and ext
 	return ''.join((name, '_rl', str(num), ext))
-	
+
 
 def parseArgs(args):
 	"""Parse user-specified parameters
@@ -37,7 +39,7 @@ def parseArgs(args):
 	inpnet = args[1]
 	outnet = outFile(inpnet, linksNum) if len(args) < 3 else args[2]
 	return linksNum, inpnet, outnet
-	
+
 
 def remlinks(*args):
 	linksNum, inpnet, outnet = parseArgs(args)
@@ -73,10 +75,10 @@ def remlinks(*args):
 		linksCount = len(network)
 		if isinstance(linksNum, float):
 			linksNum = int(linksCount * linksNum)
-		if linksNum >= linksCount / 2:
+		if linksNum * 2 >= linksCount:
 			raise ValueError('Too many links is assumed to be removed: {} of {}'
 			', less than 50% is expected.'.format(linksNum, linksCount))
-		
+
 		# Check whether the network directed or not
 		directed = True
 		sid, did = next(iter(network))
@@ -130,12 +132,12 @@ def remlinks(*args):
 		with open(outnet, 'w') as fout:
 			print(''.join(('Forming output network: ', outnet, '...')))
 			# Fetch keys (ids) via the lookup
-			for key, val in network.items():
+			for key, val in viewitems(network):
 				if weighted:
 					fout.write('{} {} {:.6f}\n'.format(key[0], key[1], val))
 				else:
 					fout.write('{} {}\n'.format(key[0], key[1]))
-			
+
 
 if __name__ == '__main__':
 	if len(sys.argv) > 2:

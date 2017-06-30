@@ -20,6 +20,8 @@ Changelog by Artem Lutov (luart@ya.ru):
 - Automatic evaluation of start and stop step for the given number of evaluations:
 	stop = linksnum, start = log(stop)
 - Community structure levels (dendrogram) output to the files
+
+ATTENTION: works somehow only on Python2, cliques are not merged into clusters on Python3
 """
 from __future__ import print_function, division  # Required for stderr output, must be the first import
 from functools import reduce
@@ -27,8 +29,6 @@ from operator import mul
 import sys, math
 
 #---- A networking framework -----
-# ATTENTION: works somehow only in Python2, cliques are not merged into clusters on Python3
-
 class Net(object):
 	"""A sparse matrix"""
 

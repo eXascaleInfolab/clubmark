@@ -105,7 +105,7 @@ To setup the `ulimit` permanently add the following lines to the `/etc/security/
 *               hard    nofile          524288
 *               soft    nofile          4096  
 ```
-And then execute `ulimit -n 65536` to set this value for the current process.
+And then execute `ulimit -n 65536` or `ulimit -u unlimited` to set this value for the current process.
 
 Typically the benchmarking is expected to be executed in the RAM, so reduce the system swappiness setting it to 1 .. 10:
 `sysctl -w vm.swappiness=10` or setting it permanently in `/etc/sysctl.conf`:
@@ -135,16 +135,13 @@ $ docker version
 ```
 See also the [brief tutorial on Docker installation and usage](https://www.howtoforge.com/tutorial/docker-installation-and-usage-on-ubuntu-16.04/) or the [official getting started tutorial](https://docs.docker.com/get-started/).
 
-To build the `PyCaBeM` Docker image from the source file:
+Optionally, the `PyCaBeM` Docker image can be built from the source file (otherwise it the prebuilt image will be pulled on `run`):
 ```
 $ docker build -t luaxi/pycabem:env-U16.04-v2.0 .
 ```
-Alternatively the prebuilt image can be downloaded:
-```
-$ docker pull luaxi/pycabem:env-U16.04-v2.0
-```
+otherwise it the prebuilt image will be pulled on the execution
 
-To run the benchmark:
+To run the benchmark you can execute
 ```
 $ docker run -it -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
 '''

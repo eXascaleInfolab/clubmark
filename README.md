@@ -154,8 +154,11 @@ $ docker run -it -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0 [
 '''
 Or to open "bash" shell in the benchmarking directory:
 '''
-$ docker run -it --entrypoint bash -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0 ls
+$ docker run -it --entrypoint bash -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0
 ```
+
+> $UID might not be defined in the non-bash shell (sh, etc), then use `id -u $USER` instead
+
 Where ``pwd`` projects to `<PYCABEM_REPOSITORY_PATH>`, which is the current directory and working directory of the benchmarking
 
 See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-with-examples).

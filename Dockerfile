@@ -76,7 +76,7 @@ CMD ["bash"]
 # - "$ docker exec -it ..." can be used to run other command on the running container
 # - use --entrypoint="" in the docker run to overwrite the default ENTRYPOINT
 ENTRYPOINT ["python3"]
-CMD ["benchmark.py"]
+CMD ["./benchmark.py"]
 
 # Note: Docker uses kernel, memory and swap of the host, so system-wide host
 # swappiness, file limits, etc. should be tuned on the host
@@ -89,9 +89,10 @@ CMD ["benchmark.py"]
 # Expected to be called as:
 # $ docker run -it -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
 # Or to open "bash" shell in the benchmarking directory:
-# $ docker run -it --entrypoint bash -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0 ls
+# $ docker run -it --entrypoint bash -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0
 #
 # Notes:
 # - "$UID" or "`id -u $USER`" is host user id, otherwise default user is "root",
-#  which results in read-only files owned by the root created on benchmarking execution
+#  which results in read-only files owned by the root created on benchmarking execution.
+#  $UID might not be defined in non-bash shells unlike $USER.
 # - "-w /opt/benchmark" should be used if the WORKDIR was omitted in the build file

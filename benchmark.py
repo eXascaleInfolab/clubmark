@@ -1222,7 +1222,7 @@ if __name__ == '__main__':
 			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
 			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
 			' [-c[f][r]] [-a="app1 app2 ..."] [-r] [-q[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]]'
-			' [-s=<reseval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] | -h',
+			' [-s=<eval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] | -h',
 			'',
 			'Example:',
 			'  {0} -g=3.5 -r -q -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',

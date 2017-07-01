@@ -7,14 +7,21 @@
 Author (c)  Artem Lutov <artem@exascale.info>
 
 ## Content
-[Functionality](#functionality)  
-[Dependencies](#dependencies)  
-  [Prerequisites](#prerequisites)  
-[Usage](#usage)  
-  [Usage Examples](#usage-examples)  
-[Benchmark Structure](#benchmark-structure)  
-[Extension](#extension)  
-[Related Projects](#related-projects)  
+- [Functionality](#functionality)
+  - [Generic Benchmarking Framework](#generic-benchmarking-framework)
+  - [Clustering Algorithms Benchmark](#clustering-algorithms-benchmark)
+- [Prerequisites](#prerequisites)
+- [Dependencies](#dependencies)
+  - [Overview](#overview)
+  - [Docker Container](#docker-container)
+  - [Direct Execution](#direct-execution)
+    - [Libraries](#libraries)
+    - [Accessory Utilities](#accessory-utilities)
+- [Usage](#usage)  
+  - [Usage Examples](#usage-examples)  
+- [Benchmark Structure](#benchmark-structure)  
+- [Benchmark Extension](#benchmark-extension)  
+- [Related Projects](#related-projects)  
 
 
 ## Functionality
@@ -33,7 +40,7 @@ It is possible to have multiple input directories with similarly named files ins
 In case of the measured application crash, the crash is logged and has no any impact on the execution of the remaining applications.
 
 
-### Benchmark of the Hierarchical Overlapping Clustering Algorithms
+### Clustering Algorithms Benchmark
 The benchmark is implemented as customization of the Generic Benchmarking Framework to evaluate *Hierarchical Overlapping  Clustering Algorithms*:
 - produces synthetic networks with specified number of instances for each set of parameters, generating them by the extended [LFR Framework](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) ("Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti and Santo Fortunato)
 - shuffles (reorders nodes) specified networks specified number of times, which is required to evaluate stability / determinism of the clustering algorithms
@@ -78,37 +85,13 @@ All results and traces are stored into the corresponding files even in case of i
 Basically the framework executes a set of applications on the specified datasets in interactive or daemon mode, logging the resources consumption, output and exceptions, providing workflow management (termination by timeout, resistance to exceptions, etc.) and results aggregation.
 
 
-## Dependencies
-### Overview
-There are some prerequisites related to the Operational System Environment, dependencies for the benchmarking itself and for each of the executing algorithms. Target OS is Ubuntu 16.04 x64, other OSes also can be used to run the benchmark itself, but there might be issues with the evaluation algorithms and evaluation utilities builds.
+## Prerequisites
+Operational System Environment
+Be sure that the operational system allows to work with lots of opened files and have adequate swapping policy.
 
+> Even when run under **Docker**, the Docker uses kernel, memory and swap of the host.
+So system-wide host swappiness, file limits, etc. should be tuned.
 
-Full list of dependencies for execution:
-- Required for the clustering algorithms:
-  - GANXiS:
-  $ sudo apt-get install openjdk-8-jre
-
-  - ...
-  pypy
-
-- Required for the evaluation applications:
-  - gecmi:
-  $ sudo sudo apt-get install libboost-program-options1.58.0 libtbb2
-
-Full list of dependencies for build and execution:
-  - Required for the clustering algorithms:
-    - GANXiS:
-    $ sudo apt-get install openjdk-8-jdk
-
-  - Required for the evaluation applications:
-    - gecmi:
-    $ sudo sudo apt-get install libboost-program-options1.58-dev libtbb-dev
-
-  - Required for the debugging:
-    $ sudo apt install gdb
-
-### Prerequisites
-Be sure that the operational system allows to work with lots of opened files:
 - Max number of the opened files in the system`$ sysctl fs.file-max` should be large enough, the recommended value is `1048576`.
 - Max number of the opened files per a process`$ ulimit -n` should be at least `4096`, may be higher depending on the evaluating datasets and algorithms. The recommended value is `65536`.
 
@@ -124,12 +107,88 @@ To setup the `ulimit` permanently add the following lines to the `/etc/security/
 ```
 And then execute `ulimit -n 65536` to set this value for the current process.
 
-### Fundamental
+Typically the benchmarking is expected to be executed in the RAM, so reduce the system swappiness setting it to 1 .. 10:
+`sysctl -w vm.swappiness=10` or setting it permanently in `/etc/sysctl.conf`:
+```
+vm.swappiness = 10
+``` 
+
+
+## Dependencies
+### Overview
+There are some prerequisites related to the Operational System Environment, dependencies for the benchmarking itself and for each of the executing algorithms. Target OS is Ubuntu 16.04 x64, other OSes also can be used to run the benchmark itself, but there might be issues with the evaluation algorithms and evaluation utilities builds.
+
+> Use Docker image where all dependencies are already satisfied
+
+
+### Docker Container
+On Linux Ubuntu 16.04 the Docker can be installed:
+```
+$ sudo apt-get update && apt-get upgrade
+$ sudo apt-get install -y docker.io
+```
+See the [official site for the installation](https://docs.docker.com/engine/installation/) details on another platforms.
+To start docker on Linux
+```
+$ sudo systemctl start docker
+$ docker version
+```
+See also the [brief tutorial on Docker installation and usage](https://www.howtoforge.com/tutorial/docker-installation-and-usage-on-ubuntu-16.04/) or the [official getting started tutorial](https://docs.docker.com/get-started/).
+
+To build the `PyCaBeM` Docker image from the source file:
+```
+$ docker build -t luaxi/pycabem:env-U16.04-v2.0 .
+```
+Alternatively the prebuilt image can be downloaded:
+```
+$ docker pull luaxi/pycabem:env-U16.04-v2.0
+```
+
+To run the benchmark:
+```
+$ docker run -it -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
+'''
+Or to open "bash" shell in the benchmarking directory:
+'''
+$ docker run -it --entrypoint bash -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0 ls
+```
+Where ``pwd`` projects to `<PYCABEM_REPOSITORY_PATH>`, which is the current directory and working directory of the benchmarking
+
+See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-with-examples).
+
+### Direct Execution
+
 - Python 2.7+ (optionally [PyPy](http://pypy.org/) JIT for the fast execution).
 
 > Note: It is recommended to run the benchmark itself under PyPy. The measured algorithms can be ran either using the same python or under the dedicated interpreter / script / executable.
 
-### Libraries
+
+#### Libraries
+Full list of dependencies for execution:
+- Required for the clustering algorithms:
+  - GANXiS:
+  `$ sudo apt-get install openjdk-8-jre`
+
+  - ...
+  pypy
+
+- Required for the evaluation applications:
+  - gecmi:
+  `$ sudo sudo apt-get install libboost-program-options1.58.0 libtbb2`
+
+Full list of dependencies for build and execution:
+  - Required for the clustering algorithms:
+    - GANXiS:
+    `$ sudo apt-get install openjdk-8-jdk`
+
+  - Required for the evaluation applications:
+    - gecmi:
+    `$ sudo sudo apt-get install libboost-program-options1.58-dev libtbb-dev`
+
+  - Required for the debugging:
+    `$ sudo apt install gdb`
+
+
 - daoc (former [hirecs](http://www.lumais.com/hirecs/)) for modularity evaluation of overlapping community structure with results compatible to the standard modularity value. It depends on:
   * `libstdc++.so.6`: version GLIBCXX_3.4.20 (precompiled version for modularity evaluation). To install it on Ubuntu use: `sudo apt-get install libstdc++6` or
 ```sh
@@ -152,10 +211,12 @@ $ sudo apt-get install libstdc++6
 
   > Note: it is uploaded to `./contrib/`.
 
-### External tools that are used as executables
+
+#### Accessory Utilities
 - [Extended LFR Benchmark](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) for the undirected weighted networks with overlaps (origins are here: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files)
 - [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption: https://bitbucket.org/lumais/exectime/
 - Clustering algorithms, used in the benchmarking: DAOC (former [HiReCS](http://www.lumais.com/hirecs)), [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm), [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/), pScan (binaries provided by the [author](http://www.cse.unsw.edu.au/~ljchang/)) and [CGGCi_RG](https://github.com/eXascaleInfolab/CGGC).
+
 
 ## Usage
 - `./install_depends.sh`  - install dependencies (using apt-get)
@@ -203,9 +264,8 @@ Parameters:
     Xh  - time in hours
 ```
 
-### Usage Examples
 
-#### Synthetic networks generation, clustering algorithms execution and evaluation
+### Synthetic networks generation, clustering algorithms execution and evaluation
 ```
 $ pypy ./benchmark.py -g=3.2=syntnets_i3_s4 -cr -a="scp oslom2" -r -emn -tm=90
 ```
@@ -215,7 +275,7 @@ Convert all networks into the .hig format resolving duзlicated links. This conv
 Run `scp` and `oslom2` clustering algorithms for each generated network and evaluate modularity and NMI measures for these algorithms.  
 Tшmeout is 90 min for each task of each network processing, where the tasks are: networks generation, clustering and evaluation by each specified measure. The network is each shuffle of each instance of each network type.  
 
-#### Shuffling existing network instances, clustering algorithm execution and evaluation
+### Shuffling existing network instances, clustering algorithm execution and evaluation
 ```
 $ ./benchmark.py -g=.4 -d=syntnets_i3_s4 -a=oslom2 -es -th=1
 ```
@@ -224,7 +284,7 @@ Produce 4 shuffles of the specified networks, previously existed shuffles are ba
 Run `oslom2` clusterшng algorithm for the specified networks with their shuffles and evaluate NMI_s measure.  
 Timeout is 1 hour for each task on each network.  
 
-#### Aggregation of the specified evaluation results
+### Aggregation of the specified evaluation results
 ```
 $ pypy benchmark.py -s=results/scp/mod/*.mod
 ```
@@ -314,7 +374,7 @@ Example of the `<net_instance>.mod` format:
 - `./install_depends.sh`  - the shell script to install dependencies
 
 
-## Extension
+## Benchmark Extension
 To add custom apps / algorithms to be benchmarked just add corresponding function for "myalgorithm" app to `benchapps.py`:
 
 ```python
@@ -337,7 +397,7 @@ All the evaluations will be performed automatically, the algorithm should just f
 
 
 ## Related Projects
-* DAOC (former [HiReCS](https://github.com/eXascaleInfolab/hirecs) - High Resolution Hierarchical Clustering with Stable State: https://github.com/eXascaleInfolab/hirecs)
+* DAOC - (former [HiReCS](https://github.com/eXascaleInfolab/hirecs) High Resolution Hierarchical Clustering with Stable State, which was totally redesigned: https://github.com/eXascaleInfolab/hirecs)
 
 If you are interested in this benchmark, please visit <a href="http://exascale.info/">eXascale Infolab</a> where you can find another projects and research papers related to Big Data!  
 Please, [star this project](https://github.com/eXascaleInfolab/PyCABeM) if you use it.

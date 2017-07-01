@@ -23,11 +23,12 @@ else
 fi
 
 ALG="scp"  # Algorithm to be evaluated
+TIMEOUT=3  # Hours
 for dir in "$@"
 do
 	# Skip dir path, leaving only the name
 	dirname=`echo $dir | sed 's/.*\/\([^/]*\)/\1/'`
 	#echo $dirname
-	nohup $PYTHON ./benchmark.py -ds="$dir" -a=$ALG -e -th=3 > "results/${ALG}/bench_${dirname}.log" \
+	nohup $PYTHON ./benchmark.py -i="$dir" -a=$ALG -e -th=$TIMEOUT > "results/${ALG}/bench_${dirname}.log" \
 		2> "results/${ALG}/bench_${dirname}.err" &
 done

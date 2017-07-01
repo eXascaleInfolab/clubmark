@@ -1,7 +1,10 @@
 #!/bin/sh
 #
 # \description  Prepares host environment for the benchmarking execution.
-# Note: the made setting are reseted on restart.
+# Notes:
+# - The made setting are reseted on restart
+# - Should be called only on the main host even if the benchmark is executed in
+#  the docker container. Should not be called in the container.
 #
 # \author Artem V L <luart@ya.ru>
 

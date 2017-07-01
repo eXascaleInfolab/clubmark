@@ -89,6 +89,13 @@ Basically the framework executes a set of applications on the specified datasets
 Operational System Environment
 Be sure that the operational system allows to work with lots of opened files and have adequate swapping policy.
 
+Should be called only on the main host even if the benchmark is executed in the docker container. Should not be called in the container.
+```
+$ ./prepare_hostenv.sh
+```
+
+Or manually:
+
 > Even when run under **Docker**, the Docker uses kernel, memory and swap of the host.
 So system-wide host swappiness, file limits, etc. should be tuned.
 

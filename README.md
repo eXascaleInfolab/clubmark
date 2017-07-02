@@ -152,9 +152,9 @@ To run the benchmark you can execute
 ```
 $ docker run -it -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
 '''
-Or to open "bash" shell in the benchmarking directory:
+Or to open a shell in the benchmarking directory:
 '''
-$ docker run -it --entrypoint bash -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0
+$ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0
 ```
 
 > $UID might not be defined in the non-bash shell (sh, etc), then use `id -u $USER` instead

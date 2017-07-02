@@ -4,6 +4,7 @@
 #
 # The benchmarking is started under the current user on the current host
 # directory, which is bound to the docker container directory.
+# The specified arguments are passed to the shell in the container.
 #
 # \author Artem V L <luart@ya.ru>
 
@@ -13,4 +14,4 @@
 # $UID might not be defined in the non-bash shell (sh, etc)
 
 echo "Starting docker from \"`pwd`\" under user \"$USER\""
-docker run -it -u `id -u $USER` -w /opt/benchmark -v `pwd`:/opt/benchmark --entrypoint bash luaxi/pycabem:env-U16.04-v2.0
+docker run -it -u `id -u $USER` -w /opt/benchmark -v `pwd`:/opt/benchmark --entrypoint "" luaxi/pycabem:env-U16.04-v2.0 $@

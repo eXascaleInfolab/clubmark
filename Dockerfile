@@ -88,8 +88,8 @@ CMD ["./benchmark.py"]
 
 # Expected to be called as:
 # $ docker run -it -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
-# Or to open "bash" shell in the benchmarking directory:
-# $ docker run -it --entrypoint bash -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0
+# Or to open a shell in the benchmarking directory:
+# $ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0
 #
 # Notes:
 # - "$UID" or "`id -u $USER`" is host user id, otherwise default user is "root",

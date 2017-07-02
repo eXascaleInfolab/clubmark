@@ -1,6 +1,10 @@
 #!/bin/sh
-# Install all external libraries
+#
+# \description  Install all external libraries for the PyCABeM
 # Note: this script is designed for Linux Ubuntu and might also work on Debian
+# or other Linuxes
+#
+# \author Artem V L <luart@ya.ru>
 
 sudo apt-get -y update
 

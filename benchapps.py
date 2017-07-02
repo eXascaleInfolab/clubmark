@@ -38,7 +38,7 @@ import numbers  # To verify that a variable is a number (int or float)
 from datetime import datetime
 from sys import executable as PYEXEC  # Full path to the current Python interpreter
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, tobackup, escapePathWildcards, _SEPPARS, _UTILDIR
-from benchevals import _SEPNAMEPART, _ALGSDIR, _RESDIR, _CLSDIR, _EXTERR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
+from benchevals import _SEPNAMEPART, _ALGSDIR, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
 from utils.mpepool import Job
 
 
@@ -234,6 +234,11 @@ def prepareResDir(appname, task, odir, pathid):
 #
 #	tasknum  - index of the execution on the same dataset
 #	"""
+#
+#	# Evaluate relative network size considering whether the network is directed (asymmetric)
+#	netsize = os.path.getsize(netfile)
+#	if not asym:
+#		netsize *= 2
 #	# Fetch the task name and chose correct network filename
 #	netfile = os.path.splitext(netfile)[0]  # Remove the extension
 #	task = os.path.split(netfile)[1]  # Base name of the network
@@ -248,7 +253,7 @@ def prepareResDir(appname, task, odir, pathid):
 #		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
 #	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args
 #		, timeout=timeout, stdout=''.join((_RESDIR, algname, '/', task, '.loc'))
-#		, stderr=''.join((_RESDIR, algname, '/', task, _EXTLOG))))
+#		, category=algname, size=netsize, stderr=''.join((_RESDIR, algname, '/', task, _EXTLOG))))
 #	return 1
 #
 #
@@ -326,6 +331,11 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
+
+	# Evaluate relative network size considering whether the network is directed (asymmetric)
+	netsize = os.path.getsize(netfile)
+	if not asym:
+		netsize *= 2
 	# Fetch the task name and chose correct network filename
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Base name of the network
 	assert task, 'The network name should exists'
@@ -380,7 +390,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 		, '-lo', ''.join((taskpath, '/', task, _EXTCLNODES)), netfile)
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, stdout=logfile, stderr=errfile))
+		, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 
 	execnum = 1
 	# Note: execution on shuffled network instances is now generalized for all algorithms
@@ -400,6 +410,11 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
+
+	# Evaluate relative network size considering whether the network is directed (asymmetric)
+	netsize = os.path.getsize(netfile)
+	if not asym:
+		netsize *= 2
 	# Fetch the task name
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Base name of the network
 	assert task, 'The network name should exists'
@@ -463,7 +478,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		#print('> Starting job {} with args: {}'.format('_'.join((ktask, algname, kstrex)), args + [kstr]))
 		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ktask)), workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
-			, stdout=logfile, stderr=errfile))
+			, category='_'.join((algname, kstrex)), size=netsize, stdout=logfile, stderr=errfile))
 
 	return kmax + 1 - kmin
 
@@ -481,6 +496,10 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tseed: {}'
 		.format(execpool, netfile, asym, timeout, seed))
 
+	# Evaluate relative network size considering whether the network is directed (asymmetric)
+	netsize = os.path.getsize(netfile)
+	if not asym:
+		netsize *= 2
 	# Fetch the task name and chose correct network filename
 	netfile, netext = os.path.splitext(netfile)  # Remove the extension
 	task = os.path.split(netfile)[1]  # Base name of the network
@@ -515,7 +534,7 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 		args.append('-r=' + str(seed))
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, stdout=logfile, stderr=errfile))
+		, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 
 	return 1
 
@@ -536,6 +555,10 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 		',\n\tasym: {},\n\ttimeout: {},\n\trlevout: {},\n\tgamma: {}'
 		.format(execpool, netfile, asym, timeout, rlevout, gamma))
 
+	# Evaluate relative network size considering whether the network is directed (asymmetric)
+	netsize = os.path.getsize(netfile)
+	if not asym:
+		netsize *= 2
 	# Fetch the task name and chose correct network filename
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
 	assert task, 'The network name should exists'
@@ -561,7 +584,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 		, netfile)
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, stdout=logfile, stderr=errfile))
+		, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 	return 1
 
 
@@ -584,6 +607,10 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tseed: {}'
 		.format(execpool, netfile, asym, timeout, seed))
 
+	# Evaluate relative network size considering whether the network is directed (asymmetric)
+	netsize = os.path.getsize(netfile)
+	if not asym:
+		netsize *= 2
 	# Fetch the task name and chose correct network filename
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
 	assert task, 'The network name should exists'
@@ -616,7 +643,7 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 		args.extend(['-seed', str(seed)])
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, ondone=tidy, stdout=logfile, stderr=errfile))
+		, category=algname, size=netsize, ondone=tidy, stdout=logfile, stderr=errfile))
 	return 1
 
 
@@ -627,6 +654,10 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tseed: {}'
 		.format(execpool, netfile, asym, timeout, seed))
 
+	# Evaluate relative network size considering whether the network is directed (asymmetric)
+	netsize = os.path.getsize(netfile)
+	if not asym:
+		netsize *= 2
 	# Fetch the task name and chose correct network filename
 	netbasepath, task = os.path.split(netfile)  # Extract base path and file name
 	task, netext = os.path.splitext(task)  # Separate file name and extension
@@ -669,7 +700,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 		args.extend(['-seed', str(seed)])
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, ondone=postexec, stdout=logfile, stderr=errfile))
+		, category=algname, size=netsize, ondone=postexec, stdout=logfile, stderr=errfile))
 	return 1
 
 
@@ -678,6 +709,11 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
+
+	# Evaluate relative network size considering whether the network is directed (asymmetric)
+	netsize = os.path.getsize(netfile)
+	if not asym:
+		netsize *= 2
 	# Fetch the task name
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Base name of the network
 	assert task, 'The network name should exists'
@@ -718,7 +754,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ctask)), workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
 			#, stdout=logfile  # Skip standard log, because there are too many files, which does not contain useful information
-			, stdout=os.devnull, stderr=errfile))
+			, category='_'.join((algname, prmex)), size=netsize, stdout=os.devnull, stderr=errfile))
 		eps += deps
 
 	return steps
@@ -738,6 +774,10 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 		'Invalid input parameters:\n\talgname: {},\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\talg: {}'
 		.format(algname, execpool, netfile, asym, timeout, algs[alg]))
 
+	# Evaluate relative network size considering whether the network is directed (asymmetric)
+	netsize = os.path.getsize(netfile)
+	if not asym:
+		netsize *= 2
 	# Fetch the task name and chose correct network filename
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
 	assert task, 'The network name should exists'
@@ -759,7 +799,7 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 		, '-i', 'a' if asym else 'e', netfile)
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, stdout=logfile, stderr=errfile))
+		, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 	return 1
 
 
@@ -786,6 +826,10 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		'Invalid input parameters:\n\talgname: {},\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
 
+	# Evaluate relative network size considering whether the network is directed (asymmetric)
+	netsize = os.path.getsize(netfile)
+	if not asym:
+		netsize *= 2
 	# Fetch the task name and chose correct network filename
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Remove the base path and separate extension
 	assert task, 'The network name should exists'
@@ -808,7 +852,7 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		, '-o', ''.join((taskpath, '/', task, _EXTCLNODES)), '-f', netfile)
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, stdout=logfile, stderr=errfile))
+		, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 	return 1
 
 

@@ -9,8 +9,19 @@ LABEL vendor="eXascale Infolab" \
       info.exascale.pycabem.version="2.0.0-env" \
       info.exascale.pycabem.release-date="2017-07-01"
 
+# Make the working directory an optional build parameter specified by --build-arg
+ARG WORK_DIR=/opt/benchmark
+# pyreqs.txt copied temporary to the container for the build
+ARG TMP_PYREQS=/tmp/pycabem_pyreqs.txt
+
+# Define environment variables
+# ATTENTION:
+# - ENV overwrites ARG
+# - ENV will persist when a container is run from the resulting image
+#ENV DEBUG true
+
 # Specify the working directory (created if did not exist)
-WORKDIR /opt/benchmark
+WORKDIR $WORK_DIR
 
 # Copy required files to the container (relative to the WORKDIR) usin ADD or COPY
 # Note ADD (vs COPY):
@@ -18,7 +29,9 @@ WORKDIR /opt/benchmark
 # - If the <src> parameter is an archive in a recognized compression format,
 #  it will be unpacked: ADD rootfs.tar.xz /
 #
-# COPY src dest
+# NOTE: during the image build only the copied files can be used, files from the
+# external volumes are not available
+COPY ./pyreqs.txt $TMP_PYREQS
 
 # Install Ubuntu dependencies
 # - Python scripts:  python
@@ -45,10 +58,7 @@ RUN pip3 install --upgrade pip
 
 # Install Python dependencies
 # louvain_igraph.py:  python-igraph
-RUN pip install -r ./pyreqs.txt
-
-# Define environment variable
-#ENV DEBUG true
+RUN pip3 install -r $TMP_PYREQS
 
 # Make port 80 available to the world outside this container
 #EXPOSE 80

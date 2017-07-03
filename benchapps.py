@@ -520,7 +520,8 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 	# Set the best possible interpreter
-	pybin = PyBin.bestof(pypy=True, v3=True)
+	# Note: randcommuns loads input network using external igraph-python lib, which interacts slower with PyPy than with CPython
+	pybin = PyBin.bestof(pypy=False, v3=True)
 
 	# Form name of the ground-truth file on base of the input network filename with the extension relpaced to '.cnl'
 	originpbase = netfile

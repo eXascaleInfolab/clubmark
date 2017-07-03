@@ -16,6 +16,7 @@
 echo "Starting docker from \"`pwd`\" under user \"$USER\" with the benchmark arguments: $@"
 WORK_DIR=/opt/benchmark  # Working directory of the benchmark
 # Note: quoted $@ is required to retain internal quotation inside the arguments
+# Note: python3 or python[2] can be used instead of pypy
 docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint pypy luaxi/pycabem:env-U16.04-v2.0 ./benchmark.py "$@"
 # Or to open "bash" shell in the benchmarking directory:
 # $ docker run -it -u `id -u $USER` -w /opt/benchmark -v `pwd`:/opt/benchmark --entrypoint bash luaxi/pycabem:env-U16.04-v2.0

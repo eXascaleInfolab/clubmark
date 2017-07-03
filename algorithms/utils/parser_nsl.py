@@ -10,7 +10,10 @@
 
 from __future__ import print_function, division  # Required for stderr output, must be the first import
 import os  # Pathes processing
-from igraph import Graph
+try:
+	from igraph import Graph
+except ImportError:
+	Graph = None  # Note: for some functions the Graph class is not required
 
 
 def asymnet(netext, asym=None):
@@ -36,6 +39,9 @@ def dflnetext(asym):
 
 def loadNsl(network, directed=None):
 	"""Load the graph from NSL(nse, nsa) file"""
+	if Graph is None:
+		raise ImportError('ERROR, the igraph.Graph is required to be imported')
+
 	if directed is None:
 		directed = asymnet(os.path.splitext(network)[1].lower())
 		assert directed is not None, ('Nsl file with either standart extension or'

@@ -588,6 +588,8 @@ while True:
 		"""
 		# Remove existing shuffles if required
 		path, name = os.path.split(netfile)
+		if not path:
+			path = '.'  # Note: '/' is added later
 		name, netext = os.path.splitext(name)
 		if name.find(_SEPSHF) != -1:
 			shf = name.rsplit(_SEPSHF, 1)[1]
@@ -1142,7 +1144,7 @@ def benchmark(*args):
 	if not os.path.exists(opts.seedfile):
 		# Consider inexisting base path of the common seed file
 		sfbase = os.path.split(opts.seedfile)[0]
-		if not os.path.exists(sfbase):
+		if sfbase and not os.path.exists(sfbase):
 			os.makedirs(sfbase)
 		seed = timeSeed()
 		with open(opts.seedfile, 'w') as fseed:

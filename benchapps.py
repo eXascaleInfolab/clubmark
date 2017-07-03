@@ -318,7 +318,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	netfile  - the input network to be clustered
 	asym  - whether the input network is asymmetric (directed, specified by arcs)
 	odir  - whether to output results to the dedicated dir named by the instance name,
-		which actual the the shuffles with non-flat structure
+		which is actual for the shuffles with non-flat structure
 	timeout  - processing (clustering) timeout of the input file
 	pathid  - pather id of the input networks file
 	workdir  - relative working directory of the app, actual when the app contains libs
@@ -397,7 +397,10 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	## Run again for all shuffled nets
 	#if not selfexec:
 	#	selfexec = True
-	#	netdir = os.path.split(netfile)[0] + '/'
+	#	netdir = os.path.split(netfile)[0]
+	#	if not netdir:
+	#		netdir = .
+	#	netdir += '/'
 	#	#print('Netdir: ', netdir)
 	#	for netfile in glob.iglob(''.join((escapePathWildcards(netdir), escapePathWildcards(task), '/*', netext))):
 	#		execLouvain_ig(execpool, netfile, asym, odir, timeout, selfexec)
@@ -527,6 +530,9 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	originpbase = netfile
 	if odir:
 		originpbase = os.path.split(netfile)[0]
+		if not originpbase:
+			assert 0, 'odir parameter validation failed, netfile should have a base directory'
+			originpbase = os.path.splitext(netfile)[0]
 	gtfile = originpbase + _EXTCLNODES
 
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
@@ -664,6 +670,8 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 		netsize *= 2
 	# Fetch the task name and chose correct network filename
 	netbasepath, task = os.path.split(netfile)  # Extract base path and file name
+	if not netbasepath:
+		netbasepath = '.'  # Note: '/' is added later
 	task, netext = os.path.splitext(task)  # Separate file name and extension
 	assert task, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Oslom2'

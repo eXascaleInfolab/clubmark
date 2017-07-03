@@ -552,7 +552,10 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	# Remove trailing path separator if exists
 	basepath = os.path.normpath(escapePathWildcards(basepath))
 	# Create backup/ if required
-	basedir = '/'.join((os.path.split(basepath)[0], _BCKDIR))
+	basedir = os.path.split(basepath)[0]
+	if not basedir:
+		basedir = '.'  # Note: '/' is added later
+	basedir = '/'.join((basedir, _BCKDIR))
 	if not os.path.exists(basedir):
 		os.mkdir(basedir)
 	# Backup files

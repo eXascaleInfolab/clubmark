@@ -85,7 +85,8 @@ CMD ["bash"]
 # - it overrides all elements specified using CMD
 # - "$ docker exec -it ..." can be used to run other command on the running container
 # - use --entrypoint="" in the docker run to overwrite the default ENTRYPOINT
-ENTRYPOINT ["python3"]
+# ENTRYPOINT ["python3"]
+ENTRYPOINT ["pypy"]
 CMD ["./benchmark.py"]
 
 # Note: Docker uses kernel, memory and swap of the host, so system-wide host

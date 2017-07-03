@@ -133,9 +133,9 @@ and then reload it by `# sysctl -p`.
 To setup the `ulimit` permanently add the following lines to the `/etc/security/limits.conf`:
 ```
 *               hard    nofile          524288
-*               soft    nofile          4096  
+*               soft    nofile          32768  
 ```
-And then execute `ulimit -n 65536` to set this value for the current shell.  
+And then execute `ulimit -n 32768` to set this value for the current shell.  
 Reduce the system swappiness setting to 1 .. 10 by `sysctl -w vm.swappiness=10` or set it permanently in `/etc/sysctl.conf`:
 ```
 vm.swappiness = 10

@@ -7,6 +7,7 @@
 Author (c)  Artem Lutov <artem@exascale.info>
 
 ## Content
+- [Motivation](#motivation)
 - [Functionality](#functionality)
   - [Generic Benchmarking Framework](#generic-benchmarking-framework)
   - [Clustering Algorithms Benchmark](#clustering-algorithms-benchmark)
@@ -24,33 +25,52 @@ Author (c)  Artem Lutov <artem@exascale.info>
 - [Related Projects](#related-projects)  
 
 
+## Motivation
+I did to find any open source cross-platform framework for the \[efficient\] execution and evaluation of custom applications, which have  significant variation of the time/memory complexity and custom constraints, so decided to write the own one.  
+Particularly, I had to evaluate various clustering (community detection) algorithms on large networks using specific measures. The main challenges there are the following:
+- the computing applications (clustering algorithms) being benchmarked have very different (orders of magnitude) time and memory complexity and represented by the applications implemented on various languages (mainly C++, Java, C and Python);
+- the target datasets are very different by structure and size (orders of magnitude, from Kb to Gb);
+- evaluating applications have very different (orders of magnitude) time and memory complexity, and represented by both single-threaded and multi-threaded applications.
+
+Ideally, the executing applications (algorithms) should be executed in parallel in a way to guarantee that they are :
+- not swapped (computed in RAM) to not affect the efficiency measurements;
+- executing on maximal number of available CPUs to speedup the bencmarking;
+- the CPU cache reuse is maximized (the processes are not jumped between the CPUs);
+- skipping computations on the more complex datasets if the executing application failed constraints on some dataset.
+
+There were available two open source frameworks for "Community Detection Algorithms" evaluation. The most comprehensive one is [Circulo](http://www.lab41.org/circulo-a-community-detection-evaluation-framework/) from [Lab41](https://github.com/Lab41/Circulo/tree/master/experiments), another one is called [CommunityEvaluation](https://github.com/rabbanyk/CommunityEvaluation).  
+Circulo is an excellent framework until you don't run evaluations on the large networks, don't need to specify per-algorithm time/memory constraints and in case the default pipeline is sufficient, which was not the case for me.
+
+
 ## Functionality
 ### Generic Benchmarking Framework
-- optionally *generates or preprocesses datasets* using specified executable(s) (by default uses LFR framework for overlapping weighted networks)
-- optionally *executes specified apps* (clustering algorithms; can be a binary, any script or java executable) with the specified params on the specified datasets (networks)
-- optionally *evaluates results* of the execution using specified executable(s) (by default performs NMIs and Q evaluation) and *performs unified aggregation* of results from multiple apps on multiple datasets into the single file by the specified measure
-- *per-task and global timeouts* (for an app execution on a single dataset) and specified number of CPU cores (workers) are set for the *batch apps execution / evaluation* using the multi-process task execution pool ([mpepool](https://github.com/eXascaleInfolab/PyExPool))
-- per-task and accumulative *execution tracing and results logging* is performed even in case of internal / external interruptions and crashes:
-	* all stdout/err output is logged
-	* resources consumption, i. e. time: execution (wall-clock) and CPU consumption (user, kernel, total), memory (RAM RSS) are traced
+The generic functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool), which provides \[external\] applications scheduling for the in-RAM execution on NUMA architecture with capabilities of the affinity control, CPU cache vs parallelization  maximization, limitation of the consumed memory and maximal execution time for the whole execution pool and per each executor process (called worker, which is an executing job).
+
+The benchmarking framework specifies structure and provides API for the:
+- optional *generation of datasets* using specified executable(s);
+- optional *execution of the specified computing applications* (clustering algorithms) on the specified datasets (using wildcards), where each application may produce multiple output files (levels of the hierarchy of clusters for each input network);
+- optional *execution of the evaluating applications* on the produced results (and ground-truth if applicable) and aggregation of the results grouped by the computing application;
+- optional specification of the *execution constraints* (timings, consumed RAM, parallelization, CPU cache and affinity) for each executable and for the whole benchmarking on base of the multi-process execution pool balancer, [PyExPool](https://github.com/eXascaleInfolab/PyExPool)
+- skipping computations on the more complex datasets if the executing application failed constraints on some dataset.
+- *efficiency measurements* (timings, consumed RAM) for each executable;
+- *logging of traces (stdout) and errors (stderr)* for each executable and for the benchmarking framework itself.
 - *automatic extension / backup* of the previously existent results to .gzip with the timestamp on the benchmarking reexecution
 
-It is possible to have multiple input directories with similarly named files inside, which represent different instances / snapshots of the datasets. In such case, the output results are provided per each snapshot, plus aggregated weighted average over all snapshots. This is useful to avoid occasional bias to the specific instance or to analyze evolving networks.
-
-In case of the measured application crash, the crash is logged and has no any impact on the execution of the remaining applications.
+It is possible to have multiple input directories with similarly named files inside, which represent different instances / snapshots of the datasets. In such case, the output results are provided per each snapshot, plus aggregated weighted average over all snapshots. This is useful to avoid occasional bias to the specific instance or to analyze evolving networks.  
+If any application is crashed, the crash is logged and does not affect execution of the remaining applications. The benchmark can be terminated by timeout or manually.
 
 
 ### Clustering Algorithms Benchmark
-The benchmark is implemented as customization of the Generic Benchmarking Framework to evaluate *Hierarchical Overlapping  Clustering Algorithms*:
+The benchmark is implemented as customization of the Generic Benchmarking Framework to evaluate various *Clustering Algorithms* (Community Detection Algorithms) including *Hierarchical Clustering Algorithms with Overlaps and Consensus*:
 - produces synthetic networks with specified number of instances for each set of parameters, generating them by the extended [LFR Framework](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) ("Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti and Santo Fortunato)
-- shuffles (reorders nodes) specified networks specified number of times, which is required to evaluate stability / determinism of the clustering algorithms
+- shuffles specified networks (reorders nodes) specified number of times, which is required to evaluate stability / determinism of the clustering algorithms
 - executes
-	* DAOC (former [HiReCS](http://www.lumais.com/hirecs), www.lumais.com/hirecs)
-	* [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) ([Sequential algorithm for fast clique percolation](http://www.lce.hut.fi/research/mm/complex/software/))
+	* DAOC (former and fully redesigned [HiReCS](http://www.lumais.com/hirecs), www.lumais.com/hirecs)
 	* [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations)
-	* [Oslom2](http://www.oslom.org/software.htm)
 	* [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*; *deterministic algorithm LabelRankT* is a modification of GANXiS, but LabelRankT is not publicly available)  
 	  > GANXiS requires preliminary created output directory if it is specified in the options, but GANXiS always creates also default "./output/" directory, which is empty if the custom one is used.
+	* [Oslom2](http://www.oslom.org/software.htm)
+	* [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) ([Sequential algorithm for fast clique percolation](http://www.lce.hut.fi/research/mm/complex/software/))
 	* [Randcommuns](/algorithms/randcommuns.py)  - generation of random communities (clusters) with structure of clusters similar to the ground-truth: the same number of random connected nodes in the number of clusters taken from the ground-truth
 
 	clustering algorithms on the generated synthetic networks (or on any specified directories and files). Outputs results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.

@@ -28,7 +28,7 @@ then
 	echo "ulimit files set to $UL_FILES"
 fi
 
-if [ `sysctl vm.swappiness` $MAX_SWPNS ]
+if [ `sysctl vm.swappiness` -lt $MAX_SWPNS ]
 then
 	sudo sysctl -w vm.swappiness=$MAX_SWPNS
 	echo "vm.swappiness set to $MAX_SWPNS"

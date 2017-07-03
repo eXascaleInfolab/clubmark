@@ -455,6 +455,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 8  # Max clique size (~ min node degree to be considered)
 	steps = '10'  # Use 10 scale levels as in Ganxis
+	golden = (1 + 5 ** 0.5) * 0.5  # Golden section const
 	# Run for range of clique sizes
 	for k in range(kmin, kmax + 1):
 		# A single argument is k-clique size
@@ -478,7 +479,9 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		#print('> Starting job {} with args: {}'.format('_'.join((ktask, algname, kstrex)), args + [kstr]))
 		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ktask)), workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
-			, category='_'.join((algname, kstrex)), size=netsize, stdout=logfile, stderr=errfile))
+			# Note: increasing clique size k takes ~ k ** golden time to be evaluated (up to k ^ 2), which is more
+			# more reasonable to use than different category of the algorithm for the much more efficient filteration
+			, category=algname, size=netsize * k ** golden, stdout=logfile, stderr=errfile))
 
 	return kmax + 1 - kmin
 

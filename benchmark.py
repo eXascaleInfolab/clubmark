@@ -1126,6 +1126,9 @@ def benchmark(*args):
 	exectime = time.time()  # Benchmarking start time
 
 	opts = parseParams(args)
+	# Note: even if syntpo was no specified, use it as default path
+	if opts.syntpo is None:
+		opts.syntpo = SyntPathOpts(_SYNTDIR)
 	print('The benchmark is started, parsed params:\n\tsyntpo: "{}"\n\tconvnets: 0b{:b}'
 		'\n\trunalgs: {}\n\tevalres: 0b{:b}\n\tdatas: {}\n\talgorithms: {}'
 		'\n\taggrespaths: {}\n\ttimeout: {} h {} m {:.4f} sec'
@@ -1161,8 +1164,6 @@ def benchmark(*args):
 	# Update opts.datasets with sythetic generated data: all subdirs of the synthetic networks dir
 	# Note: should be done only after the genertion, because new directories can be created
 	if opts.syntpo or not opts.datas:
-		if opts.syntpo is None:
-			opts.syntpo = SyntPathOpts(_SYNTDIR)
 		#popts = copy.copy(super(SyntPathOpts, opts.syntpo))
 		#popts.path = _NETSDIR.join((popts.path, '*/'))  # Change meaning of the path from base dir to the target dirs
 		opts.syntpo.path = _NETSDIR.join((opts.syntpo.path, '*/'))  # Change meaning of the path from base dir to the target dirs

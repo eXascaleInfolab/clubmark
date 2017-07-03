@@ -404,10 +404,10 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 	# Defaults: beta: 1.5, t1: 2, t2: 1
 
 	# Generate options for the networks generation using chosen variations of params
-	#varNmul = (1, 5, 20, 50)  # *N0 - sizes of the generating networks in thousands of nodes;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
-	#vark = (5, 25, 75)  # Average node degree (density of the network links)
-	varNmul = (1, 5)  # *N0 - sizes of the generating networks in thousands of nodes;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
-	vark = (5, 25)  # Average node degree (density of the network links)
+	varNmul = (1, 5, 20, 50)  # *N0 - sizes of the generating networks in thousands of nodes;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
+	vark = (5, 25, 75)  # Average node degree (density of the network links)
+	#varNmul = (1, 5)  # *N0 - sizes of the generating networks in thousands of nodes;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
+	#vark = (5, 25)  # Average node degree (density of the network links)
 	assert vark[-1] <= round(varNmul[0] * 1000 / rmaxK), 'Avg vs max degree validation failed'
 	#varkr = (0.5, 1, 5)  #, 20)  # Average relative density of network links in percents of the number of nodes
 	global _execpool
@@ -1161,6 +1161,8 @@ def benchmark(*args):
 	# Update opts.datasets with sythetic generated data: all subdirs of the synthetic networks dir
 	# Note: should be done only after the genertion, because new directories can be created
 	if opts.syntpo or not opts.datas:
+		if opts.syntpo is None:
+			opts.syntpo = SyntPathOpts(_SYNTDIR)
 		#popts = copy.copy(super(SyntPathOpts, opts.syntpo))
 		#popts.path = _NETSDIR.join((popts.path, '*/'))  # Change meaning of the path from base dir to the target dirs
 		opts.syntpo.path = _NETSDIR.join((opts.syntpo.path, '*/'))  # Change meaning of the path from base dir to the target dirs

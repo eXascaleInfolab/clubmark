@@ -14,6 +14,6 @@
 # $UID might not be defined in "sh"
 
 echo "Starting docker from \"`pwd`\" under user \"$USER\" with the benchmark arguments: $@"
-docker run -it -u `id -u $USER` -w /opt/benchmark -v `pwd`:/opt/benchmark --entrypoint python3 luaxi/pycabem:env-U16.04-v2.0 ./benchmark.py $@
+docker run -it -u `id -u $USER` -w /opt/benchmark -v `pwd`:/opt/benchmark --entrypoint python3 luaxi/pycabem:env-U16.04-v2.0 ./benchmark.py "$@"
 # Or to open "bash" shell in the benchmarking directory:
 # $ docker run -it -u `id -u $USER` -w /opt/benchmark -v `pwd`:/opt/benchmark --entrypoint bash luaxi/pycabem:env-U16.04-v2.0

@@ -162,6 +162,7 @@ To install the Docker on any other platform refer the [official installation ins
 
 Add your user to the docker group to use it without `sudo`:
 ```
+$ sudo groupadd docker
 $ sudo usermod -aG docker $USER
 ```
 Log out and log back in so that your group membership is re-evaluated, or execute:
@@ -181,12 +182,19 @@ $ docker version
 ```
 See also the [brief tutorial on Docker installation and usage](https://www.howtoforge.com/tutorial/docker-installation-and-usage-on-ubuntu-16.04/) or the [official getting started tutorial](https://docs.docker.com/get-started/).
 
-Optionally, the `PyCaBeM` Docker image can be built from the source Dockerfile::
+Optionally, the `PyCaBeM` Docker image can be built from the source Dockerfile.  
+First, clone the git repository to the `/opt/benchmark`:
+```
+$ git clone https://github.com/eXascaleInfolab/PyCABeM.git /opt/benchmark
+```
+and then perform the build by:
 ```
 $ docker build -t luaxi/pycabem:env-U16.04-v2.0 .
 ```
 Otherwise, the prebuilt image will be automatically pulled from the Docker Hub repository on first `run`.
 
+> The destination should be `/opt/benchmark` because both the docker image build and the container execution depend on the destination directory.  
+Otherwise, either make the required symbolic link `ln -s <pycabem_repository> /opt/benchmark`, or use the `--build-arg` to specify your non-default build directory and also update the volume mapping on the container execution.
 
 ### Direct Execution
 

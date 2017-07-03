@@ -16,7 +16,7 @@ UL_FILES=32768
 MAX_SWPNS=10
 
 
-if [ `sysctl fs.file-max` -lt $MAX_FILES ]
+if [ `cat /proc/sys/fs/file-max` -lt $MAX_FILES ]
 then
 	sudo sysctl -w fs.file-max=$MAX_FILES
 	echo "fs.file-max set to $MAX_FILES"
@@ -28,7 +28,7 @@ then
 	echo "ulimit files set to $UL_FILES"
 fi
 
-if [ `sysctl vm.swappiness` -lt $MAX_SWPNS ]
+if [ `cat /proc/sys/vm/swappiness` -gt $MAX_SWPNS ]
 then
 	sudo sysctl -w vm.swappiness=$MAX_SWPNS
 	echo "vm.swappiness set to $MAX_SWPNS"

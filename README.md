@@ -106,21 +106,24 @@ Basically the framework executes a set of applications on the specified datasets
 
 
 ## Prerequisites
-Operational System Environment
-Be sure that the operational system allows to work with lots of opened files and have adequate swapping policy.
+The benchmarking framework itself is a *cross-platform* application implemented purely on Python, and works on CPython 2/3 and Pypy interpreters.  
+However, the benchmark runs clustering algorithms and evaluation utilities implemented on C++ and built for the specific platform. The build is performed for *Linux Ubuntu 16.04 x64*, on other NIX systems dependencies might be missed and not easily solvable. [Docker](https://docs.docker.com/get-started/) image is prepared to run the build from the docker container on any other platform avoiding dependency related issues.
 
-Should be called only on the main host even if the benchmark is executed in the docker container. Should not be called in the container.
+> [Windows 10+ x64 provides Ubuntu-compatible bash shell](https://www.howtogeek.com/249966/how-to-install-and-use-the-linux-bash-shell-on-windows-10/), which allows to install and execute terminal Ubuntu apps and execute the benchmarking exactly as on Linux Ubuntu 16.04 x64.
+
+All subsequent steps are described for the *NIX* platforms including MaxOS.  
+To be sure that the operational system allows to work with lots of opened files and has adequate swapping policy, execute:
 ```
 $ ./prepare_hostenv.sh
 ```
 
-Or manually:
+> This script should be executed **on the host system event if the benchmark is executed from the docker container**, because the container shares resources of the host system (kernel, memory and swap).  
+The made changes will be reseted after the restart.
 
-> Even when run under **Docker**, the Docker uses kernel, memory and swap of the host.
-So system-wide host swappiness, file limits, etc. should be tuned.
+Alternatively, perform the following steps to tune the operational system environment permanently.
 
-- Max number of the opened files in the system`$ sysctl fs.file-max` should be large enough, the recommended value is `1048576`.
-- Max number of the opened files per a process`$ ulimit -n` should be at least `4096`, may be higher depending on the evaluating datasets and algorithms. The recommended value is `65536`.
+- The max number of the opened files in the system `$ sysctl fs.file-max` should be large enough, the recommended value is `1048576`.
+- The max number of the opened files per a process`$ ulimit -n` should be at least `4096`, the recommended value is `65536`.
 
 To setup `fs.file-max` permanently in the system add the following line to the `/etc/sysctl.conf`:
 ```
@@ -132,10 +135,8 @@ To setup the `ulimit` permanently add the following lines to the `/etc/security/
 *               hard    nofile          524288
 *               soft    nofile          4096  
 ```
-And then execute `ulimit -n 65536` or `ulimit -u unlimited` to set this value for the current process.
-
-Typically the benchmarking is expected to be executed in the RAM, so reduce the system swappiness setting it to 1 .. 10:
-`sysctl -w vm.swappiness=10` or setting it permanently in `/etc/sysctl.conf`:
+And then execute `ulimit -n 65536` to set this value for the current shell.  
+Reduce the system swappiness setting to 1 .. 10 by `sysctl -w vm.swappiness=10` or set it permanently in `/etc/sysctl.conf`:
 ```
 vm.swappiness = 10
 ``` 
@@ -143,54 +144,66 @@ vm.swappiness = 10
 
 ## Dependencies
 ### Overview
-There are some prerequisites related to the Operational System Environment, dependencies for the benchmarking itself and for each of the executing algorithms. Target OS is Ubuntu 16.04 x64, other OSes also can be used to run the benchmark itself, but there might be issues with the evaluation algorithms and evaluation utilities builds.
-
-> Use Docker image where all dependencies are already satisfied
+The benchmarking can be run directly on *Linux Ubuntu 16.04 x64* and via the [Docker](https://docs.docker.com/get-started/) container on any other platform.
 
 
 ### Docker Container
-On Linux Ubuntu 16.04 the Docker can be installed:
+
+> This section is optional if your host OS is *Linux Ubuntu 16.04 x64* and the benchmarking is run directly on the host OS.
+
+The *Docker* can be installed on Linux Ubuntu 16.04 executing:
 ```
 $ sudo apt-get update && apt-get upgrade
 $ sudo apt-get install -y docker.io
 ```
-See the [official site for the installation](https://docs.docker.com/engine/installation/) details on another platforms.
-To start docker on Linux
+To install the Docker on any other platform refer the [official installation instructions](https://docs.docker.com/engine/installation/).
+
+> It is recommended to use `overlay2` storage driver on any OS, see details in the [official documentation](https://docs.docker.com/engine/userguide/storagedriver/overlayfs-driver/#configure-docker-with-the-overlay-or-overlay2-storage-driver). `overlay2` requires Linux kernel v4.x, which can be updated from 3.x to 4.x on Red Hat / CentOS 7 / Scientific Linux as described in [this article](https://www.tecmint.com/install-upgrade-kernel-version-in-centos-7/).
+
+Add your user to the docker group to use it without `sudo`:
+```
+$ sudo usermod -aG docker $USER
+```
+Log out and log back in so that your group membership is re-evaluated, or execute:
+```
+su - $USER
+```
+Optionally, configure Docker to start on boot:
+```
+$ sudo systemctl enable docker
+```
+and see other [docker post-installation](https://docs.docker.com/engine/installation/linux/linux-postinstall/) steps.
+
+To start Docker on Linux, execute:
 ```
 $ sudo systemctl start docker
 $ docker version
 ```
 See also the [brief tutorial on Docker installation and usage](https://www.howtoforge.com/tutorial/docker-installation-and-usage-on-ubuntu-16.04/) or the [official getting started tutorial](https://docs.docker.com/get-started/).
 
-Optionally, the `PyCaBeM` Docker image can be built from the source file (otherwise it the prebuilt image will be pulled on `run`):
+Optionally, the `PyCaBeM` Docker image can be built from the source Dockerfile::
 ```
 $ docker build -t luaxi/pycabem:env-U16.04-v2.0 .
 ```
-otherwise it the prebuilt image will be pulled on the execution
+Otherwise, the prebuilt image will be automatically pulled from the Docker Hub repository on first `run`.
 
-To run the benchmark you can execute
-```
-$ docker run -it -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
-'''
-Or to open a shell in the benchmarking directory:
-'''
-$ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0
-```
-
-> $UID might not be defined in the non-bash shell (sh, etc), then use `id -u $USER` instead
-
-Where ``pwd`` projects to `<PYCABEM_REPOSITORY_PATH>`, which is the current directory and working directory of the benchmarking
-
-See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-with-examples).
 
 ### Direct Execution
 
-- Python 2.7+ (optionally [PyPy](http://pypy.org/) JIT for the fast execution).
+> This section should be omitted if the benchmarking is run on the docker container.
+
+The benchmarking is executed under Python 2.7+ including 3.x (works on both the official CPython and on [PyPy](http://pypy.org/) JIT for the faster execution).
 
 > Note: It is recommended to run the benchmark itself under PyPy. The measured algorithms can be ran either using the same python or under the dedicated interpreter / script / executable.
 
 
 #### Libraries
+
+
+```
+install_depends.sh
+```
+
 Full list of dependencies for execution:
 - Required for the clustering algorithms:
   - GANXiS:
@@ -246,6 +259,24 @@ $ sudo apt-get install libstdc++6
 
 
 ## Usage
+
+To run the benchmark you can execute
+```
+$ docker run -it -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
+'''
+Or to open a shell in the benchmarking directory:
+'''
+$ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0
+```
+
+> $UID might not be defined in the non-bash shell (sh, etc), then use `id -u $USER` instead
+
+Where ``pwd`` projects to `<PYCABEM_REPOSITORY_PATH>`, which is the current directory and working directory of the benchmarking
+
+See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-with-examples).
+
+
+
 - `./install_depends.sh`  - install dependencies (using apt-get)
 - `./benchmark.py`  - run the benchmark in the terminal (interactive mode)
 - `./benchmark_daemon.sh`  - run the benchmark in background (daemon mode)

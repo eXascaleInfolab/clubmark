@@ -45,7 +45,7 @@ RUN pip3 install --upgrade pip
 
 # Install Python dependencies
 # louvain_igraph.py:  python-igraph
-RUN pip install -r pyreqs.txt
+RUN pip install -r ./pyreqs.txt
 
 # Define environment variable
 #ENV DEBUG true
@@ -55,12 +55,12 @@ RUN pip install -r pyreqs.txt
 
 
 # Run something when the container launches
-#CMD ["python", "benchmark.py"]
+#CMD ["python", "./benchmark.py"]
 #
 # ATTENTION: Benchmarking in daemon mode should be run only if the Docker is run
 # in the interactive mode, not detached:
 # https://docs.docker.com/engine/reference/run/#detached--d
-# CMD ["python3", "benchmark_daemon.sh"]
+# CMD ["./benchmark_daemon.sh"]
 #
 # Notes:
 # - omitted if ENTRYPOINT is specified afterwards

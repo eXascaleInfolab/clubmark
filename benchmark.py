@@ -883,11 +883,11 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		return
 			jobsnum  - the number of scheduled jobs, typically 1
 		"""
+		jobsnum = 0
 		for ealg in execalgs:
 			try:
-				jobsnum = ealg(_execpool, net, asym=asymnet(net, asym), odir=netshf, timeout=timeout, pathid=pathid, seed=seed)
+				jobsnum += ealg(_execpool, net, asym=asymnet(net, asym), odir=netshf, timeout=timeout, pathid=pathid, seed=seed)
 			except Exception as err:
-				jobsnum = 0
 				errexectime = time.time() - exectime
 				print('WARNING, the "{}" is interrupted by the exception: {} with the callstack: {} on {:.4f} sec ({} h {} m {:.4f} s)'
 					.format(ealg.__name__, err, traceback.format_exc(), errexectime, *secondsToHms(errexectime)), file=sys.stderr)

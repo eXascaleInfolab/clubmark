@@ -76,19 +76,14 @@ RUN pip3 install -r /tmp/$PYREQS && rm /tmp/$PYREQS
 #EXPOSE 80
 
 # Run something when the container launches
-#CMD ["python", "./benchmark.py"]
-#
 # ATTENTION: Benchmarking in daemon mode should be run only if the Docker is run
 # in the interactive mode, not detached:
 # https://docs.docker.com/engine/reference/run/#detached--d
 # CMD ["./benchmark_daemon.sh"]
 #
-# Notes:
-# - omitted if ENTRYPOINT is specified afterwards
-# - appended as arguments to the ENTRYPOINT if the latter is specified beforehand
-#
-# Show bash in the working dir (omitted if ENTRYPOINT is set)
-CMD ["bash"]
+# Note:
+# - CMD is appended as arguments to the ENTRYPOINT if the latter is specified
+#CMD ["bash"]
 
 # Allows you to configure a container that will run as an executable and pass
 # arguments to the "benchmark.py"
@@ -96,8 +91,9 @@ CMD ["bash"]
 # - it overrides all elements specified using CMD
 # - "$ docker exec -it ..." can be used to run other command on the running container
 # - use --entrypoint="" in the docker run to overwrite the default ENTRYPOINT
-ENTRYPOINT ["python3"]
-CMD ["./benchmark.py"]
+#ENTRYPOINT ["python3"]
+#CMD ["./benchmark.py"]
+ENTRYPOINT ["python3", "./benchmark.py"]
 
 # Note: Docker uses kernel, memory and swap of the host, so system-wide host
 # swappiness, file limits, etc. should be tuned on the host
@@ -110,7 +106,7 @@ CMD ["./benchmark.py"]
 # Expected to be called as:
 # $ docker run -it -u $UID -v `pwd`:$WORK_DIR luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
 # Or to open a shell in the benchmarking directory:
-# $ docker run -it --entrypoint "" -u $UID -v `pwd`:$WORK_DIR luaxi/pycabem:env-U16.04-v2.0
+# $ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0
 #
 # Notes:
 # - "$UID" or "`id -u $USER`" is host user id, otherwise default user is "root",

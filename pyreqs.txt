@@ -1,6 +1,7 @@
 # Requirements for the not too heavy apps or that link libs and run under CPython
 
 # Benchmarking requirements:
+# psutil is required for the mpepool only
 psutil>=5.2
 # Future utils for Python2/3 compatibility (benchmarking & utils)
 future>=0.16

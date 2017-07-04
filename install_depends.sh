@@ -24,7 +24,14 @@ fi
 # "openjdk-8-jre" (java) is required for GaNXIS
 # "libboost-program-options1.58.0" for RGMC
 # "libtbb2" for gecmi (NMI ovp multi-resolution evaluation)
-sudo apt-get -y install libstdc++6 pypy \
-	libxml2-dev zlib1g-dev python-pip \
+sudo apt-get -y install python3 pypy \
+	libxml2-dev zlib1g-dev python3-pip \
 	openjdk-8-jre \
 	libtbb2
+
+# Note: Python3 and pip3 were installed on previous step
+sudo pip3 install --upgrade pip
+
+# Install Python dependencies
+# louvain_igraph.py:  python-igraph ...
+sudo pip3 install -r pyreqs.txt

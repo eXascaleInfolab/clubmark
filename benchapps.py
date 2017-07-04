@@ -482,8 +482,8 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		#print('> Starting job {} with args: {}'.format('_'.join((ktask, algname, kstrex)), args + [kstr]))
 		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ktask)), workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
-			# Note: increasing clique size k takes ~ k ** golden time to be evaluated (up to k ^ 2), which is more
-			# more reasonable to use than different category of the algorithm for the much more efficient filteration
+			# Note: increasing clique size k causes ~(k ** golden) increased consumption of both memory and time (up to k ^ 2),
+			# so it's better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
 			, category=algname, size=netsize * k ** golden, stdout=logfile, stderr=errfile))
 
 	return kmax + 1 - kmin
@@ -766,6 +766,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ctask)), workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
 			#, stdout=logfile  # Skip standard log, because there are too many files, which does not contain useful information
+			# Note: eps has not monotonous impact mainly on the exectution time, not large impact and the clustring is fast anyway
 			, category='_'.join((algname, prmex)), size=netsize, stdout=os.devnull, stderr=errfile))
 		eps += deps
 

@@ -183,9 +183,9 @@ $ docker version
 See also the [brief tutorial on Docker installation and usage](https://www.howtoforge.com/tutorial/docker-installation-and-usage-on-ubuntu-16.04/) or the [official getting started tutorial](https://docs.docker.com/get-started/).
 
 Optionally, the `PyCaBeM` Docker image can be built from the source Dockerfile.  
-First, clone the git repository to the `/opt/benchmark`:
+First, clone the git repository to the `/opt/pycabem`:
 ```
-$ git clone https://github.com/eXascaleInfolab/PyCABeM.git /opt/benchmark
+$ git clone https://github.com/eXascaleInfolab/PyCABeM.git /opt/pycabem
 ```
 and then perform the build by:
 ```
@@ -193,8 +193,8 @@ $ docker build -t luaxi/pycabem:env-U16.04-v2.0 .
 ```
 Otherwise, the prebuilt image will be automatically pulled from the Docker Hub repository on first `run`.
 
-> The destination should be `/opt/benchmark` because both the docker image build and the container execution depend on the destination directory.  
-Otherwise, either make the required symbolic link `ln -s <pycabem_repository> /opt/benchmark`, or use the `--build-arg` to specify your non-default build directory and also update the volume mapping on the container execution.
+> The destination should be `/opt/pycabem` because both the docker image build and the container execution depend on the destination directory.  
+Otherwise, either make the required symbolic link `ln -s <pycabem_repository> /opt/pycabem`, or use the `--build-arg` to specify your non-default build directory and also update the volume mapping on the container execution.
 
 ### Direct Execution
 
@@ -270,11 +270,11 @@ $ sudo apt-get install libstdc++6
 
 To run the benchmark you can execute
 ```
-$ docker run -it -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
+$ docker run -it -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
 '''
 Or to open a shell in the benchmarking directory:
 '''
-$ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/benchmark luaxi/pycabem:env-U16.04-v2.0
+$ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0
 ```
 
 > $UID might not be defined in the non-bash shell (sh, etc), then use `id -u $USER` instead

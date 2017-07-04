@@ -101,7 +101,7 @@ ENTRYPOINT ["python3", "./benchmark.py"]
 #-------------------------------------------------------------------------------
 
 # Expected to be built as
-# $ docker build [--squash] [--compress] -t luaxi/pycabem:env-U16.04-v2.0 .
+# $ docker build [--no-cache] [--squash] [--compress] -t luaxi/pycabem:env-U16.04-v2.0 .
 
 # Expected to be called as:
 # $ docker run -it -u $UID -v `pwd`:$WORK_DIR luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]

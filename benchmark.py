@@ -1267,4 +1267,4 @@ if __name__ == '__main__':
 
 
 # Extrenal API (exporting functions)
-__all__ = [generateNets, shuffleNets, convertNet, convertNets, runApps, evalResults, benchmark]
+__all__ = [generateNets, shuffleNets, convertNets, runApps, evalResults, benchmark]

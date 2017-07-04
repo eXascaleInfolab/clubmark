@@ -51,7 +51,7 @@ COPY ./$PYREQS /tmp/$PYREQS
 # -- gecmi:  libtbb2
 # -- remlinks.py: numpy future
 # Internal dependencies:
-# - wget is required to download pip for pypy
+# - wget is required to download pip for pypy (and as a useful tool)
 RUN apt-get update && apt-get install -y \
 	python3 python3-pip pypy \
 	libxml2-dev zlib1g-dev \
@@ -96,7 +96,6 @@ CMD ["bash"]
 # - it overrides all elements specified using CMD
 # - "$ docker exec -it ..." can be used to run other command on the running container
 # - use --entrypoint="" in the docker run to overwrite the default ENTRYPOINT
-#ENTRYPOINT ["pypy"]
 ENTRYPOINT ["python3"]
 CMD ["./benchmark.py"]
 

@@ -22,8 +22,14 @@ then
 	echo "fs.file-max set to $MAX_FILES"
 fi
 
+# Max number of the opened files by the process
 if [ `ulimit -n` -lt $UL_FILES ]
 then
+	UHLIMIT=`ulimit -Hn`  # Max allowed hard limit of the opened files
+	if [ $UL_FILES -gt $UHLIMIT ]
+	then
+		UL_FILES=$UHLIMIT
+	fi
 	ulimit -n $UL_FILES
 	echo "ulimit files set to $UL_FILES"
 fi

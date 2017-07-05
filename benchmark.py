@@ -184,6 +184,33 @@ def parseParams(args):
 		# Validate input format
 		if arg[0] != '-':
 			raise ValueError('Unexpected argument: ' + arg)
+		# Process long args
+		if arg[1] == '-':
+			if arg == '--stderr-stamp':
+				if len(args) == 1:
+					raise  ValueError('More input arguments are expected besides: ' + arg)
+				print(time.strftime('%Y-%m-%d %H:%M:%S ' + '-'*32, time.gmtime()), file=sys.stderr)
+				continue
+			elif arg.startswith('--generate'):
+				arg = '-g' + arg[len('--generate'):]
+			elif arg.startswith('--input'):
+				arg = '-i' + arg[len('--input'):]
+			elif arg.startswith('--apps'):
+				arg = '-a' + arg[len('--apps'):]
+			elif arg.startswith('--runapps'):
+				arg = '-r' + arg[len('--runapps'):]
+			elif arg.startswith('--quality'):
+				arg = '-q' + arg[len('--quality'):]
+			elif arg.startswith('--timeout'):
+				arg = '-t' + arg[len('--timeout'):]
+			elif arg.startswith('--seedfile'):
+				arg = '-d' + arg[len('--seedfile'):]
+			elif arg.startswith('--convret'):
+				arg = '-c' + arg[len('--convret'):]
+			elif arg.startswith('--summary'):
+				arg = '-s' + arg[len('--summary'):]
+			else:
+				raise  ValueError('Unexpected argument: ' + arg)
 
 		if arg[1] == 'g':
 			# [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]
@@ -1175,12 +1202,12 @@ def benchmark(*args):
 
 
 if __name__ == '__main__':
-	if len(sys.argv) <= 1 or (len(sys.argv) == 2 and sys.argv[1] == '-h'):
+	if len(sys.argv) <= 1 or (len(sys.argv) == 2 and sys.argv[1] in ('-h', '--help')):
 		print('\n'.join(('Usage:',
 			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
 			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
 			' [-c[f][r]] [-a="app1 app2 ..."] [-r] [-q[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]]'
-			' [-s=<eval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] | -h',
+			' [-s=<eval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] [--stderr-stamp] | -h',
 			'',
 			'Example:',
 			'  {0} -g=3.5 -r -q -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
@@ -1192,8 +1219,8 @@ if __name__ == '__main__':
 			'  - multiple paths can be specified via multiple -i, -s options (one per the item)',
 			'',
 			'Parameters:',
-			'  -h  - show this usage description',
-			'  -g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets'
+			'  --help, -h  - show this usage description',
+			'  --generate, -g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets'
 			' of the required format in the <outpdir> (default: {syntdir}), shuffling (randomly reordering network links'
 			' and saving under another name) each dataset <shuffles_number> times (default: 0).'
 			' If <number> is omitted or set to 0 then ONLY shuffling of <outpdir>/{netsdir}/* is performed.'
@@ -1202,7 +1229,7 @@ if __name__ == '__main__':
 			'    a  - generate networks specifined by arcs (directed) instead of edges (undirected)',
 			'  NOTE: shuffled datasets have the following naming format:',
 			'\t<base_name>[(seppars)<param1>...][{sepinst}<instance_index>][{sepshf}<shuffle_index>].<net_extension>',
-			'  -i[X][{gensepshuf}<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories'
+			'  --input, -i[X][{gensepshuf}<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories'
 			', which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension (.ns{{e,a}}).'
 			' Default: -ie={syntdir}{netsdir}*/, which are subdirs of the synthetic networks dir without shuffling.',
 			'    f  - make flat derivatives on shuffling instead of generating the dedicted directory (havng the file base name)'
@@ -1218,14 +1245,14 @@ if __name__ == '__main__':
 			'  - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]',
 			'  - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
 			' is up to the clustering algorithm',
-			'  -a[="app1 app2 ..."]  - apps (clustering algorithms) to be run or evaluated, default: all.'
+			'  --apps, -a[="app1 app2 ..."]  - apps (clustering algorithms) to be run or evaluated, default: all.'
 			' Available apps: scp louvain_igraph randcommuns hirecs oslom2 ganxis.'
 			' Impacts {{r, e}} options. Optional, all registered apps (see benchapps.py) are executed by default.',
 			'  NOTE: output results are stored in the "{resdir}<algname>/" directory',
 			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
-			'  -r  - run specified apps on the specidied datasets, default: all',
-			'  -q[X]  - evaluate quality of the results for the specified algorithms on the specified datasets'
-			' and form the summarized results. Default: all measures on all datasets',
+			'  --runapps, -r  - run specified apps on the specidied datasets, default: all',
+			'  --quality, -q[X]  - evaluate quality (including accuracy) of the results for the specified algorithms'
+			' on the specified datasets and form the summarized results. Default: all measures on all datasets',
 			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
 			'    e[Y]  - extrinsic measures for overlapping communities, default: all',
 			'      n[Z]  - NMI measure(s) for overlapping and multi-level communities: max, avg, min, sqrt',
@@ -1244,20 +1271,21 @@ if __name__ == '__main__':
 			'    i[Y]  - intrinsic measures for overlapping communities, default: all',
 			'      m  - modularity Q',
 			'      c  - conductance f',
-			'  -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network'
+			'  --timeout, -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network'
 			' in sec, min or hours; 0 sec - no timeout, default: {th} h {tm} min {ts} sec',
 			'    s  - time in seconds, default option',
 			'    m  - time in minutes',
 			'    h  - time in hours',
-			'  -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms'
+			'  --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms'
 			', contains uint64_t value. Default: {seedfile}',
 			'  NOTE: a seed file is not applicable to the shuffling, so the shuffles are different for the same seeed',
 			'',
 			'Advanced parameters:',
-			'  -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.)',
+			'  --stderr-stamp  - output a time stamp to the stderr on the benchmarking start to separate multiple reexectuions',
+			'  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.)',
 			'    f  - force the conversion even when the data is already exist',
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
-			'  -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
+			'  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
 			', which is useful to include external manual evaluations into the final summarized results.',
 			'  ATTENTION: <resval_path>  should include the algorithm name and target measure'
 			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=_RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
@@ -1265,7 +1293,6 @@ if __name__ == '__main__':
 				, th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60, seedfile=_SEEDFILE))
 	else:
 		benchmark(*sys.argv[1:])
-		print('bm completed', file=sys.stderr)
 
 
 # Extrenal API (exporting functions)

@@ -629,7 +629,7 @@ while True:
 			# Note: the shuffling might be scheduled even when the shuffles exist in case
 			# the origin network is traversed before it's shuffles
 			shuffle(Job(name=name, workdir=path + '/', params={'netext': netext, 'shfnum': shfnum}
-				, timeout=timeout1*shfnum), category='shuffle', size=os.path.getsize(netfile))
+				, timeout=timeout1*shfnum, category='shuffle', size=os.path.getsize(netfile)))
 			return shfnum  # The network is shuffled shfnum times
 
 		def prepareDir(dirname, netfile, bcksuffix=None):

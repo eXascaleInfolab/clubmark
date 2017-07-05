@@ -500,8 +500,8 @@ def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
 	Existing shuffles with the target name are skipped, redundant are deleted,
 	lacked are formed.
 
-	datas  - input datasets, wildcards of files or directories containing files
-		of the default extensions .ns{{e,a}}
+	datas  - input datasets, PathOpts with wildcards of files or directories
+		containing files of the default extensions .ns{{e,a}}
 	timeout1  - timeout for a single shuffle, >= 0
 	shftimeout  - total shuffling timeout, >= 0, 0 means unlimited time
 	"""
@@ -553,6 +553,7 @@ while i <= {shfnum}:
 					shfnet.write(body.decode())
 			else:
 				# The file does not have a header
+				# Note: "sort -R" sorts identical lines together unlike "shuf"
 				#subprocess.call(('sort', '-R', basenet, '-o', netfile))
 				subprocess.call(('shuf', basenet, '-o', netfile))
 	i += 1
@@ -677,7 +678,7 @@ while True:
 		if shftimeout <= 0:
 			shftimeout = shfnum * timeout1
 		_execpool.join(min(shftimeout, shfnum * timeout1))
-	print('Networks shuffling is completed')
+	print('Networks shuffling is completed. NOTE: shuffling does not support the random seed')
 
 
 def processPath(popt, handler, xargs=None):
@@ -1250,6 +1251,7 @@ if __name__ == '__main__':
 			'    h  - time in hours',
 			'  -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms'
 			', contains uint64_t value. Default: {seedfile}',
+			'  NOTE: a seed file is not applicable to the shuffling, so the shuffles are different for the same seeed',
 			'',
 			'Advanced parameters:',
 			'  -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.)',

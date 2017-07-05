@@ -1,10 +1,9 @@
 # PyCABeM (former HiCBeM) - Python Benchmarking Framework for the Clustering Algorithms Evaluation
-\brief Uses extrinsic (NMIs - normalized [mutual information](https://en.wikipedia.org/wiki/Mutual_information) for overlapping clusters) and intrinsic (Q - [modularity](https://en.wikipedia.org/wiki/Modularity_(networks))) measures for the clusters quality evaluation considering overlaps (nodes membership by multiple clusters)  
+\brief Uses extrinsic (Variety of Normalized [Mutual Informations](https://en.wikipedia.org/wiki/Mutual_information) (NMI) and Mean [F1 Scores](https://en.wikipedia.org/wiki/F1_score) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks)(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures for the clusters quality evaluation considering overlaps (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of some cluster and parent cluster of this cluster and parent of the parent, ...).
 \author: (c) Artem Lutov <artem@exascale.info>  
 \organizations: [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
 \keywords: overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
 
-Author (c)  Artem Lutov <artem@exascale.info>
 
 ## Content
 - [Motivation](#motivation)
@@ -12,14 +11,11 @@ Author (c)  Artem Lutov <artem@exascale.info>
   - [Generic Benchmarking Framework](#generic-benchmarking-framework)
   - [Clustering Algorithms Benchmark](#clustering-algorithms-benchmark)
 - [Prerequisites](#prerequisites)
-- [Dependencies](#dependencies)
+- [Requirements](#requirements)
   - [Overview](#overview)
   - [Docker Container](#docker-container)
   - [Direct Execution](#direct-execution)
-    - [Libraries](#libraries)
-    - [Accessory Utilities](#accessory-utilities)
 - [Usage](#usage)  
-  - [Usage Examples](#usage-examples)  
 - [Benchmark Structure](#benchmark-structure)  
 - [Benchmark Extension](#benchmark-extension)  
 - [Related Projects](#related-projects)  
@@ -105,9 +101,44 @@ All results and traces are stored into the corresponding files even in case of i
 Basically the framework executes a set of applications on the specified datasets in interactive or daemon mode, logging the resources consumption, output and exceptions, providing workflow management (termination by timeout, resistance to exceptions, etc.) and results aggregation.
 
 
+
+
+
+- daoc (former [hirecs](http://www.lumais.com/hirecs/)) for modularity evaluation of overlapping community structure with results compatible to the standard modularity value. It depends on:
+  * `libstdc++.so.6`: version GLIBCXX_3.4.20 (precompiled version for modularity evaluation). To install it on Ubuntu use: `sudo apt-get install libstdc++6` or
+```sh
+$ sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+$ sudo apt-get update
+$ sudo apt-get install libstdc++6
+```
+
+- [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`. It depends on:
+	* `libxml2` (and `libz` on Ubuntu 14), which are installed in Linux Ubuntu executing:  
+	`$ sudo apt-get install libxml2-dev`  (`lib32z1-dev` might be also required)
+
+- [`gecmi`](https://bitbucket.org/dsign/gecmi/wiki/Home) for the NMI_ovp evaluation depends on:
+	* `libboost_program_options`, to install execute: `$ sudo apt-get install libboost-program-options`. The older version of gecmi compiled under Ubuntu 14 depends on `libboost_program_options.so.1.54.0`, the newer one compiled under Ubuntu 16 depends on `libboost_program_options.so.1.58.0`.
+	* `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
+
+  > Note: gecmi dependencies are uploaded to `./algorithms/gecmi_deps/`.
+
+- [PyExPool](//github.com/eXascaleInfolab/PyExPool) for asynchronous jobs execution and results aggregation via tasks of jobs
+
+  > Note: it is uploaded to `./contrib/`.
+
+
+#### Accessory Utilities
+- [Extended LFR Benchmark](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) for the undirected weighted networks with overlaps (origins are here: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files)
+- [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption: https://bitbucket.org/lumais/exectime/
+- Clustering algorithms, used in the benchmarking: DAOC (former [HiReCS](http://www.lumais.com/hirecs)), [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm), [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/), pScan (binaries provided by the [author](http://www.cse.unsw.edu.au/~ljchang/)) and [CGGCi_RG](https://github.com/eXascaleInfolab/CGGC).
+
+
+
+
+
 ## Prerequisites
 The benchmarking framework itself is a *cross-platform* application implemented purely on Python, and works on CPython 2/3 and Pypy interpreters.  
-However, the benchmark runs clustering algorithms and evaluation utilities implemented on C++ and built for the specific platform. The build is performed for *Linux Ubuntu 16.04 x64*, on other NIX systems dependencies might be missed and not easily solvable. [Docker](https://docs.docker.com/get-started/) image is prepared to run the build from the docker container on any other platform avoiding dependency related issues.
+However, the benchmark runs clustering algorithms and evaluation utilities implemented on C++ and built for the specific platform. The build is performed for the *Linux Ubuntu 16.04 x64*, on other NIX systems requirements might be missed and not easily solvable. [Docker](https://docs.docker.com/get-started/) image is prepared to run the build from the docker container on any other platform avoiding dependency related issues.
 
 > [Windows 10+ x64 provides Ubuntu-compatible bash shell](https://www.howtogeek.com/249966/how-to-install-and-use-the-linux-bash-shell-on-windows-10/), which allows to install and execute terminal Ubuntu apps and execute the benchmarking exactly as on Linux Ubuntu 16.04 x64.
 
@@ -142,16 +173,19 @@ vm.swappiness = 10
 ``` 
 
 
-## Dependencies
+## Requirements
 ### Overview
-The benchmarking can be run directly on *Linux Ubuntu 16.04 x64* and via the [Docker](https://docs.docker.com/get-started/) container on any other platform.
+The benchmarking can be run either directly on the *Linux Ubuntu 16.04 x64* or via the [Docker](https://docs.docker.com/get-started/) container with the preinstalled environment on any platform. Anyway, the repository is required:
+```
+$ git clone https://github.com/eXascaleInfolab/PyCABeM.git
+```
 
 
 ### Docker Container
 
 > This section is optional if your host OS is *Linux Ubuntu 16.04 x64* and the benchmarking is run directly on the host OS.
 
-The *Docker* can be installed on Linux Ubuntu 16.04 executing:
+The *Docker* can be installed on the Linux Ubuntu 16.04 executing:
 ```
 $ sudo apt-get update && apt-get upgrade
 $ sudo apt-get install -y docker.io
@@ -173,97 +207,34 @@ Optionally, configure Docker to start on boot:
 ```
 $ sudo systemctl enable docker
 ```
-and see other [docker post-installation](https://docs.docker.com/engine/installation/linux/linux-postinstall/) steps.
+and check other [docker post-installation](https://docs.docker.com/engine/installation/linux/linux-postinstall/) steps.
 
-To start Docker on Linux, execute:
+Start Docker service:
 ```
 $ sudo systemctl start docker
 $ docker version
 ```
 See also the [brief tutorial on Docker installation and usage](https://www.howtoforge.com/tutorial/docker-installation-and-usage-on-ubuntu-16.04/) or the [official getting started tutorial](https://docs.docker.com/get-started/).
 
-Optionally, the `PyCaBeM` Docker image can be built from the source Dockerfile.  
-First, clone the git repository to the `/opt/pycabem`:
-```
-$ git clone https://github.com/eXascaleInfolab/PyCABeM.git /opt/pycabem
-```
-and then perform the build by:
+Optionally, the `PyCaBeM` docker image containing the execution environment can be built from the source [Dockerfile](Dockerfile) by executing from the repository directory:
 ```
 $ docker build -t luaxi/pycabem:env-U16.04-v2.0 .
 ```
-Otherwise, the prebuilt image will be automatically pulled from the Docker Hub repository on first `run`.
+Otherwise, the prebuilt image will be automatically pulled from the *Docker Hub* repository on first docker `run`.
 
-> The destination should be `/opt/pycabem` because both the docker image build and the container execution depend on the destination directory.  
-Otherwise, either make the required symbolic link `ln -s <pycabem_repository> /opt/pycabem`, or use the `--build-arg` to specify your non-default build directory and also update the volume mapping on the container execution.
 
 ### Direct Execution
 
-> This section should be omitted if the benchmarking is run on the docker container.
+> This section is optional if the benchmarking is run on the docker container.
 
-The benchmarking is executed under Python 2.7+ including 3.x (works on both the official CPython and on [PyPy](http://pypy.org/) JIT for the faster execution).
-
-> Note: It is recommended to run the benchmark itself under PyPy. The measured algorithms can be ran either using the same python or under the dedicated interpreter / script / executable.
-
-
-#### Libraries
-
-
+The target environment is *Linux Ubuntu 16.04 x64*. To install all the requirements there, execute from repository directory:
 ```
-install_depends.sh
+$ ./install_reqs.sh
 ```
+See [install_reqs.sh](install_reqs.sh) and [pyreqs.txt](pyreqs.txt) for details about the installing packages.
 
-Full list of dependencies for execution:
-- Required for the clustering algorithms:
-  - GANXiS:
-  `$ sudo apt-get install openjdk-8-jre`
-
-  - ...
-  pypy
-
-- Required for the evaluation applications:
-  - gecmi:
-  `$ sudo sudo apt-get install libboost-program-options1.58.0 libtbb2`
-
-Full list of dependencies for build and execution:
-  - Required for the clustering algorithms:
-    - GANXiS:
-    `$ sudo apt-get install openjdk-8-jdk`
-
-  - Required for the evaluation applications:
-    - gecmi:
-    `$ sudo sudo apt-get install libboost-program-options1.58-dev libtbb-dev`
-
-  - Required for the debugging:
-    `$ sudo apt install gdb`
-
-
-- daoc (former [hirecs](http://www.lumais.com/hirecs/)) for modularity evaluation of overlapping community structure with results compatible to the standard modularity value. It depends on:
-  * `libstdc++.so.6`: version GLIBCXX_3.4.20 (precompiled version for modularity evaluation). To install it on Ubuntu use: `sudo apt-get install libstdc++6` or
-```sh
-$ sudo add-apt-repository ppa:ubuntu-toolchain-r/test
-$ sudo apt-get update
-$ sudo apt-get install libstdc++6
-```
-
-- [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`. It depends on:
-	* `libxml2` (and `libz` on Ubuntu 14), which are installed in Linux Ubuntu executing:  
-	`$ sudo apt-get install libxml2-dev`  (`lib32z1-dev` might be also required)
-
-- [`gecmi`](https://bitbucket.org/dsign/gecmi/wiki/Home) for the NMI_ovp evaluation depends on:
-	* `libboost_program_options`, to install execute: `$ sudo apt-get install libboost-program-options`. The older version of gecmi compiled under Ubuntu 14 depends on `libboost_program_options.so.1.54.0`, the newer one compiled under Ubuntu 16 depends on `libboost_program_options.so.1.58.0`.
-	* `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
-
-  > Note: gecmi dependencies are uploaded to `./algorithms/gecmi_deps/`.
-
-- [PyExPool](//github.com/eXascaleInfolab/PyExPool) for asynchronous jobs execution and results aggregation via tasks of jobs
-
-  > Note: it is uploaded to `./contrib/`.
-
-
-#### Accessory Utilities
-- [Extended LFR Benchmark](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) for the undirected weighted networks with overlaps (origins are here: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files)
-- [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption: https://bitbucket.org/lumais/exectime/
-- Clustering algorithms, used in the benchmarking: DAOC (former [HiReCS](http://www.lumais.com/hirecs)), [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm), [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/), pScan (binaries provided by the [author](http://www.cse.unsw.edu.au/~ljchang/)) and [CGGCi_RG](https://github.com/eXascaleInfolab/CGGC).
+> The benchmarking framework can be executed under Python 2.7+ including 3.x (works on both the official CPython and on [PyPy](http://pypy.org/) JIT for the faster execution).  
+Some executing algorithms support only Python2 / pypy, others both Python3 and Python2. Selection of the appropriate interpreter is made automatically in runtime. At least Python2 is required to run the benchmarking, but the recommended environment, which is installed by the script is both Python3 and pypy.
 
 
 ## Usage
@@ -355,6 +326,7 @@ Timeout is 1 hour for each task on each network.
 $ pypy benchmark.py -s=results/scp/mod/*.mod
 ```
 Results aggregation is performed with automatic identification of the target clustering algorithm and evaluation measure by the specified path. It is performed automatically as the last step of the algorithm evaluation, but also can be called manually for the modified scope.
+
 
 ## Benchmark Structure
 - ./contrib/  - valuable patches to the external open source tools used as binaries

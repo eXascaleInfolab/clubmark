@@ -71,6 +71,10 @@ _VMLIMIT = 1024  # Set 1 TB or RAM to be automatically limited to the physical m
 #_TRACE = 1  # Tracing level: 0 - none, 1 - lightweight, 2 - debug, 3 - detailed
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
+# Pool of executors to process jobs, the global variable is required to terminate
+# the worker processes on external signal (TERM, KILL, etc.)
+_execpool = None
+
 
 # Data structures --------------------------------------------------------------
 class PathOpts(object):
@@ -437,6 +441,8 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 	assert vark[-1] <= round(varNmul[0] * 1000 / rmaxK), 'Avg vs max degree validation failed'
 	#varkr = (0.5, 1, 5)  #, 20)  # Average relative density of network links in percents of the number of nodes
 
+	global _execpool
+	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: set affinity in a way to maximize the CPU cache for each process
 	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, vmlimit=_VMLIMIT) as _execpool:
 		bmname =  os.path.split(genbin)[1]  # Benchmark name
@@ -519,6 +525,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 		# Note: insnum*netgenTimeout is max time required for the largest instances generation,
 		# insnum*2 to consider all smaller networks
 		_execpool.join(min(gentimeout, insnum*2*netgenTimeout))
+	_execpool = None
 	print('Synthetic networks files generation is completed')
 
 
@@ -536,6 +543,9 @@ def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
 		return
 	assert isinstance(datas[0], PathOpts), 'datas must be a container of PathOpts'
 	assert timeout1 + 0 >= 0, 'Non-negative shuffling timeout is expected'
+
+	global _execpool
+	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
 	with ExecPool(_WPROCSMAX, afnstep=1, vmlimit=_VMLIMIT) as _execpool:
 		def shuffle(job):
@@ -705,6 +715,7 @@ while True:
 		if shftimeout <= 0:
 			shftimeout = shfnum * timeout1
 		_execpool.join(min(shftimeout, shfnum * timeout1))
+	_execpool = None
 	print('Networks shuffling is completed. NOTE: shuffling does not support the random seed')
 
 
@@ -783,6 +794,8 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 	assert timeout1 + 0 >= 0, 'Non-negative network conversion timeout is expected'
 	print('Converting networks into the required formats (.hig, .lig, etc.)...')
 
+	global _execpool
+	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
 	with ExecPool(_WPROCSMAX, afnstep=1, vmlimit=_VMLIMIT) as _execpool:
 		def convertNet(inpnet, overwrite=False, resdub=False, timeout=7*60):  # 7 min
@@ -836,6 +849,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 		if convtimeout <= 0:
 			convtimeout =  netsnum * timeout1
 		_execpool.join(min(convtimeout, netsnum * timeout1))
+	_execpool = None
 	print('Networks conversion is completed, converted {} networks'.format(netsnum))
 
 
@@ -867,6 +881,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		return stub
 
 	starttime = time.time()  # Procedure start time; ATTENTION: .clock() should not be used, because it does not consider "sleep" time
+	global _execpool
+	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: set affinity in a way to maximize the CPU cache for each process
 	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, vmlimit=_VMLIMIT) as _execpool:
 		# Run all algs if not specified the concrete algorithms to be run
@@ -981,6 +997,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			print('Algorithms execution pool is interrupted by: {}. {}'
 				.format(err, traceback.format_exc()), file=sys.stderr)
 			raise
+	_execpool = None
 	starttime = time.time() - starttime
 	print('The apps execution is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(starttime, *secondsToHms(starttime)))
@@ -1006,6 +1023,8 @@ def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout, evalt
 		and timeout + 0 >= 0), 'Invalid input arguments'
 
 	starttime = time.time()  # Procedure start time
+	global _execpool
+	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: set affinity in a way to maximize the CPU cache for each process
 	# ATTENTION: NMI ovp multi-scale should be ealuated in the dedicated mode requiring all CPU cores
 	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, vmlimit=_VMLIMIT) as _execpool:
@@ -1109,6 +1128,7 @@ def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout, evalt
 			print('Results evaluation execution pool is interrupted by: {}. {}'
 				.format(err, traceback.format_exc()), file=sys.stderr)
 			raise
+	_execpool = None  # Reset global execpool
 	starttime = time.time() - starttime
 	print('Results evaluation is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(starttime, *secondsToHms(starttime)))
@@ -1199,6 +1219,27 @@ def benchmark(*args):
 	exectime = time.time() - exectime
 	print('The benchmark is completed in {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(exectime, *secondsToHms(exectime)))
+
+
+def terminationHandler(signal=None, frame=None, terminate=True):
+	"""Signal termination handler
+	signal  - raised signal
+	frame  - origin stack frame
+	terminate  - whether to terminate the application
+	"""
+	#if signal == signal.SIGABRT:
+	#	os.killpg(os.getpgrp(), signal)
+	#	os.kill(os.getpid(), signal)
+
+	global _execpool
+
+	if _execpool:
+		del _execpool  # Destructors are caled later
+		# Define _execpool to avoid unnessary trash in the error log, which might
+		# be caused by the attempt of subsequent deletion on destruction
+		_execpool = None  # Note: otherwise _execpool becomes undefined
+	if terminate:
+		sys.exit()  # exit(0), 0 is the default exit code.
 
 
 if __name__ == '__main__':
@@ -1292,6 +1333,16 @@ if __name__ == '__main__':
 				, sepinst=_SEPINST, seppars=_SEPPARS, sepshf=_SEPSHF, rsvpathsmb=(_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID)
 				, th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60, seedfile=_SEEDFILE))
 	else:
+		# Set handlers of external signals
+		signal.signal(signal.SIGTERM, terminationHandler)
+		signal.signal(signal.SIGHUP, terminationHandler)
+		signal.signal(signal.SIGINT, terminationHandler)
+		signal.signal(signal.SIGQUIT, terminationHandler)
+		signal.signal(signal.SIGABRT, terminationHandler)
+
+		# Set termination handler for the internal termination
+		atexit.register(terminationHandler, terminate=False)
+
 		benchmark(*sys.argv[1:])
 
 

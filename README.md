@@ -145,11 +145,12 @@ However, the benchmark runs clustering algorithms and evaluation utilities imple
 All subsequent steps are described for the *NIX* platforms including MaxOS.  
 To be sure that the operational system allows to work with lots of opened files and has adequate swapping policy, execute:
 ```
-$ ./prepare_hostenv.sh
+$ . ./prepare_hostenv.sh
 ```
 
 > This script should be executed **on the host system event if the benchmark is executed from the docker container**, because the container shares resources of the host system (kernel, memory and swap).  
-The made changes will be reseted after the restart.
+The made changes will be reseted after the restart.  
+ATTENTION: starting `.` or `source` is *required* to execute the script in the current shell environment instead of the new process.
 
 Alternatively, perform the following steps to tune the operational system environment permanently.
 
@@ -166,7 +167,10 @@ To setup the `ulimit` permanently add the following lines to the `/etc/security/
 *               hard    nofile          524288
 *               soft    nofile          32768  
 ```
-And then execute `ulimit -n 32768` to set this value for the current shell.  
+And then execute `ulimit -n 32768` to set this value for the current shell.
+
+> Ulimit can't be set higher than the hard limit `ulimit -Hn`, so if the latter < `32768` then call `ulimit -n `ulimit -Hn``
+
 Reduce the system swappiness setting to 1 .. 10 by `sysctl -w vm.swappiness=10` or set it permanently in `/etc/sysctl.conf`:
 ```
 vm.swappiness = 10

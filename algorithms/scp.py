@@ -809,9 +809,9 @@ helpstring=("Incremental k-clique percolation algorithm.\n"
 if len(sys.argv)>2:
 	filename=sys.argv[1]
 	k=int(sys.argv[2])
-	f=open(filename,'r')
-	net,stop=loadNet_edg(f)  # Note: symmetric network of edges by default is used, can be defined both only by edges and by all arcs
-	assert stop >= 3, "Network must have at least 3 links"
+	with open(filename,'r') as finp:
+		net, stop = loadNet_edg(finp)  # Note: symmetric network of edges by default is used, can be defined both only by edges and by all arcs
+		assert stop >= 3, "Network must have at least 3 links"
 	outbase = None
 if len(sys.argv)>3:
 	evaluations = int(sys.argv[3])

@@ -140,7 +140,7 @@ class Params(object):
 				0b11 - force conversion (overwrite all)
 			0b100 - resolve duplicated links on conversion
 		runalgs  - execute algorithm or not
-		evalres  - resulting measures to be evaluated:
+		quality  - quality measures to evaluate on the results:
 			Note: all the employed measures are applicable for overlapping clusters
 			0  - nothing
 			0b00000001  - NMI_max
@@ -165,7 +165,7 @@ class Params(object):
 		"""
 		self.syntpo = None  # SyntPathOpts()
 		self.runalgs = False
-		self.evalres = 0
+		self.quality = 0
 		self.datas = []  # Input datasets, list of PathOpts, where path is either dir or file wildcard
 		self.timeout = _TIMEOUT
 		self.algorithms = []
@@ -309,47 +309,47 @@ def parseParams(args):
 			#0x1xx  - Q (modularity)
 			#0x2xx  - f (conductance)
 			#0xFxx  - All intrinsic measures
-			evalres = 0  # Evaluation results bitmask
+			quality = 0  # Quality measures bitmask
 			pos = 2
 			if len(arg) == pos:
-				evalres = 0xFFF  # All extrinsic and intrinsic measures
+				quality = 0xFFF  # All extrinsic and intrinsic measures
 			elif arg[pos] == 'e':
 				pos += 1
 				if len(arg) == pos:
-					evalres |= 0xFF  # All extrinsic measures
+					quality |= 0xFF  # All extrinsic measures
 				elif arg[pos] == 'n':
 					pos += 1
 					if len(arg) == pos:
-						evalres |= 0b11  # All NMIs
+						quality |= 0b11  # All NMIs
 					elif arg[pos] == 'x':
-						evalres |= 0b01  # NMI_max
+						quality |= 0b01  # NMI_max
 				elif arg[pos] == 'o':
 					pos += 1
 					if len(arg) == pos:
-						evalres |= 0b1100  # All ONMIs
+						quality |= 0b1100  # All ONMIs
 					elif arg[pos] == 'x':
-						evalres |= 0b0100  # ONMI_max
+						quality |= 0b0100  # ONMI_max
 				elif arg[pos] == 'f':
 					pos += 1
 					if len(arg) == pos:
-						evalres |= 0b1110000  # All F1s
+						quality |= 0b1110000  # All F1s
 					elif arg[pos] == 'h':
-						evalres |= 0b0010000  # F1h
+						quality |= 0b0010000  # F1h
 					elif arg[pos] == 'p':
-						evalres |= 0b0100000  # F1p
+						quality |= 0b0100000  # F1p
 				elif arg[pos] == 'r':  # Recommended extrinsic measures
-					evalres |= 0b0110001  # NMI_max, F1h, F1p
+					quality |= 0b0110001  # NMI_max, F1h, F1p
 			elif arg[pos] == 'i':
 				pos += 1
 				if len(arg) == pos:
-					evalres |= 0xF00  # All intrinsic measures
+					quality |= 0xF00  # All intrinsic measures
 				elif arg[pos] == 'm':
-					evalres |= 0x100  # Modularity
+					quality |= 0x100  # Modularity
 				elif arg[pos] == 'c':
-					evalres |= 0x200  # Conductance
+					quality |= 0x200  # Conductance
 
-			if evalres:
-				opts.evalres |= evalres
+			if quality:
+				opts.quality |= quality
 			else:
 				raise ValueError('Unexpected argument: ' + arg)
 		elif arg[1] == 's':
@@ -1015,10 +1015,24 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	print('Execution statistics aggregated')
 
 
-def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout, evaltimeout=14*24*60*60):
+def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evaltimeout=14*24*60*60):
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
-	evalres  - evaluation flags: 0 - Skip evaluations, 1 - NMI, 2 - NMI_s, 4 - Q (modularity), 7 - all measures
+	quality  - evaluation measures mask
+		Note: all the employed measures are applicable for overlapping clusters
+		0  - nothing
+		0b00000001  - NMI_max
+		0b00000011  - all NMIs (max, min, avg, sqrt)
+		0b00000100  - ONMI_max
+		0b00001100  - all ONMIs (max, avg, lfk)
+		0b00010000  - Average F1h Score
+		0b00100000  - F1p measure
+		0b01110000  - All F1s (F1p, F1h, F1s)
+		0b10000000  - Default extrinsic measures (NMI_max, F1h and F1p)
+		0b1111'1111  - All extrinsic measures (NMI-s, ONMI-s, F1-s)
+		0x1xx  - Q (modularity)
+		0x2xx  - f (conductance)
+		0xFxx  - All intrinsic measures
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
 	algorithms  - list of the algorithms to be executed
 	datas  - input datasets, wildcards of files or directories containing files
@@ -1028,15 +1042,26 @@ def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout, evalt
 		of a single algorithm on a single network (all instances and shuffles), >= 0
 	evaltimeout  - timeout for all evaluations, >= 0, 0 means unlimited time
 	"""
-	assert (evalres and appsmodule and datas and exectime + 0 >= 0
+	assert (quality and appsmodule and datas and exectime + 0 >= 0
 		and timeout + 0 >= 0), 'Invalid input arguments'
 
 	starttime = time.time()  # Procedure start time
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
-	# Note: set affinity in a way to maximize the CPU cache for each process
-	# ATTENTION: NMI ovp multi-scale should be ealuated in the dedicated mode requiring all CPU cores
-	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, vmlimit=_VMLIMIT) as _execpool:
+	nmiMrsOvp = quality & 0b11  # NMI multiresolution (multiscale) and overlapping (gecmi)
+	nmiOvp = quality & 0b1100  # NMI overlapping (onmi)
+	intrinsics = quality & 0xF00  # Q and f (daoc)
+	quality &= 0xF0  # F1-s (xmeasures)
+
+	# Explicitly reassign default extrinsic measures (NMI_max, F1h and F1p)
+	if quality == 0x80:  # 0b10000000
+		nmiMrsOvp = 1  # NMI_max
+		quality = 0x30  # F1h and F1p: 0b00010000 | 0b00100000
+	# ATTENTION: NMI ovp multiresolution should be ealuated in the dedicated mode requiring all CPU cores.
+	# Use affinity to assign 2 aps on half of the 
+	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
+	# Note: afnstep=_AFNSTEP sets affinity in a way to maximize the CPU cache for each process
+	with ExecPool(_WPROCSMAX, afnstep=_1, vmlimit=_VMLIMIT) as _execpool:
 		def evaluate(measure, basefile, asym, jobsnum, pathid=''):
 			"""Evaluate algorithms on the specified network
 
@@ -1056,7 +1081,7 @@ def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout, evalt
 				try:
 					evalAlgorithm(_execpool, algname, basefile, measure, timeout, evagg, pathid)
 					## Evaluate also nmi_s besides nmi if required
-					if evalres & im == 3:
+					if quality & im == 3:
 					#if measure == 'nmi':
 						evalAlgorithm(_execpool, algname, basefile, 'nmi_s', timeout, evagg_s, pathid)
 				except Exception as err:
@@ -1071,14 +1096,14 @@ def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout, evalt
 		evaggs = []  # Evaluation results aggregators
 		for im, msr in viewitems(measures):  # .items()  Note: the number of measures is small
 			# Evaluate only required measures
-			if evalres & im == 0:
+			if quality & im == 0:
 				continue
 			if im == 3:
-				# Exclude NMI if it is aplied, but evalres & 1 == 0
-				if evalres & 1 == 0:
+				# Exclude NMI if it is aplied, but quality & 1 == 0
+				if quality & 1 == 0:
 					msr[0] = 'nmi_s'
 					msr[2] = 'NMI_s'
-				elif evalres & 2 == 0:
+				elif quality & 2 == 0:
 					msr[2] = 'NMI'
 				else:
 					evagg_s = EvalsAgg('nmi_s')  # Reserve also second results aggregator for nmi_s
@@ -1162,7 +1187,7 @@ def benchmark(*args):
 	print('The benchmark is started, parsed params:\n\tsyntpo: "{}"\n\tconvnets: 0b{:b}'
 		'\n\trunalgs: {}\n\tevalres: 0b{:b}\n\tdatas: {}\n\talgorithms: {}'
 		'\n\taggrespaths: {}\n\ttimeout: {} h {} m {:.4f} sec'
-		.format(opts.syntpo, opts.convnets, opts.runalgs, opts.evalres
+		.format(opts.syntpo, opts.convnets, opts.runalgs, opts.quality
 			, '; '.join([str(pathopts) for pathopts in opts.datas])  # Note: ';' because internal separator is ','
 			, ', '.join(opts.algorithms) if opts.algorithms else ''
 			, ', '.join(opts.aggrespaths) if opts.aggrespaths else '', *secondsToHms(opts.timeout)))
@@ -1219,8 +1244,8 @@ def benchmark(*args):
 			, exectime=exectime, timeout=opts.timeout, runtimeout=10*24*60*60)  # 10 days
 
 	# Evaluate results
-	if opts.evalres:
-		evalResults(opts.evalres, benchapps, opts.algorithms, opts.datas, exectime, opts.timeout, evaltimeout=14*24*60*60)  # 14 days
+	if opts.quality:
+		evalResults(quality=opts.quality, appsmodule=benchapps, algorithms=opts.algorithms, datas=opts.datas, exectime=exectime, timeout=opts.timeout, evaltimeout=14*24*60*60)  # 14 days
 
 	if opts.aggrespaths:
 		aggEvaluations(opts.aggrespaths)

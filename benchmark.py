@@ -1296,9 +1296,9 @@ if __name__ == '__main__':
 			'  - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]',
 			'  - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
 			' is up to the clustering algorithm',
-			'  --apps, -a[="app1 app2 ..."]  - apps (clustering algorithms) to be run or evaluated, default: all.',
+			'  --apps, -a[="app1 app2 ..."]  - apps (clustering algorithms) to be run, default: all.',
 			'Available apps ({anppsnum}): {apps}.',
-			'Impacts {{r, e}} options. Optional, all registered apps (see benchapps.py) are executed by default.',
+			'Impacts {{r, q}} options. Optional, all registered apps (see benchapps.py) are executed by default.',
 			'NOTE: output results are stored in the "{resdir}<algname>/" directory',
 			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
 			'  --runapps, -r  - run specified apps on the specidied datasets, default: all',

@@ -853,6 +853,15 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 	print('Networks conversion is completed, converted {} networks'.format(netsnum))
 
 
+def appnames(appsmodule):
+	"""Get names of the executable applications from the module
+
+	appsmodule  - module that implements execution of the apps
+	return  - list of the apps names
+	"""
+	return [funcToAppName(func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
+
+
 def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=10*24*60*60):  # 10 days
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
@@ -890,7 +899,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			# Algorithms callers
 			execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
 			# Save algorithms names to perform resutls aggregation after the execution
-			algorithms = [funcToAppName(func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
+			algorithms = appnames(appsmodule)
 		else:
 			# Execute only specified algorithms
 			execalgs = [getattr(appsmodule, _PREFEXEC + alg
@@ -1079,7 +1088,7 @@ def evalResults(evalres, appsmodule, algorithms, datas, exectime, timeout, evalt
 
 			if not algorithms:
 				# Fetch available algorithms
-				evalalgs = [funcToAppName(funcname) for funcname in dir(appsmodule) if funcname.startswith(_PREFEXEC)]
+				evalalgs = appnames(appsmodule)
 			else:
 				evalalgs = [alg for alg in algorithms]  # .lower()
 			evalalgs = tuple(evalalgs)
@@ -1244,6 +1253,7 @@ def terminationHandler(signal=None, frame=None, terminate=True):
 
 if __name__ == '__main__':
 	if len(sys.argv) <= 1 or (len(sys.argv) == 2 and sys.argv[1] in ('-h', '--help')):
+		apps = appnames(benchapps)
 		print('\n'.join(('Usage:',
 			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
 			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
@@ -1268,7 +1278,7 @@ if __name__ == '__main__':
 			' The generated networks are automatically added to the begin of the input datasets.',
 			'    o  - overwrite existing network instances (old data is backuped) instead of skipping generation',
 			'    a  - generate networks specifined by arcs (directed) instead of edges (undirected)',
-			'  NOTE: shuffled datasets have the following naming format:',
+			'NOTE: shuffled datasets have the following naming format:',
 			'\t<base_name>[(seppars)<param1>...][{sepinst}<instance_index>][{sepshf}<shuffle_index>].<net_extension>',
 			'  --input, -i[X][{gensepshuf}<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories'
 			', which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension (.ns{{e,a}}).'
@@ -1278,7 +1288,7 @@ if __name__ == '__main__':
 			'    NOTE: variance over the shuffles of each network instance is evaluated only for the non-flat structure.',
 			'    a  - the dataset is specified by arcs (asymmetric, directed links) instead of edges (undirected links)'
 			', considered only for not .ns{{a,e}} extensions.',
-			'  NOTE:',
+			'NOTE:',
 			'  - The following symbols in the path name have specific semantic and processed respectively: {rsvpathsmb}',
 			'  - Paths may contain wildcards: *, ?, +',
 			'  - Multiple directories and files wildcards can be specified via multiple -i options',
@@ -1286,10 +1296,10 @@ if __name__ == '__main__':
 			'  - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]',
 			'  - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
 			' is up to the clustering algorithm',
-			'  --apps, -a[="app1 app2 ..."]  - apps (clustering algorithms) to be run or evaluated, default: all.'
-			' Available apps: scp louvain_igraph randcommuns hirecs oslom2 ganxis.'
-			' Impacts {{r, e}} options. Optional, all registered apps (see benchapps.py) are executed by default.',
-			'  NOTE: output results are stored in the "{resdir}<algname>/" directory',
+			'  --apps, -a[="app1 app2 ..."]  - apps (clustering algorithms) to be run or evaluated, default: all.',
+			'Available apps ({anppsnum}): {apps}.',
+			'Impacts {{r, e}} options. Optional, all registered apps (see benchapps.py) are executed by default.',
+			'NOTE: output results are stored in the "{resdir}<algname>/" directory',
 			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
 			'  --runapps, -r  - run specified apps on the specidied datasets, default: all',
 			'  --quality, -q[X]  - evaluate quality (including accuracy) of the results for the specified algorithms'
@@ -1319,7 +1329,7 @@ if __name__ == '__main__':
 			'    h  - time in hours',
 			'  --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms'
 			', contains uint64_t value. Default: {seedfile}',
-			'  NOTE: a seed file is not applicable to the shuffling, so the shuffles are different for the same seeed',
+			'NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seeed',
 			'',
 			'Advanced parameters:',
 			'  --stderr-stamp  - output a time stamp to the stderr on the benchmarking start to separate multiple reexectuions',
@@ -1327,11 +1337,11 @@ if __name__ == '__main__':
 			'    f  - force the conversion even when the data is already exist',
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
 			'  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
-			', which is useful to include external manual evaluations into the final summarized results.',
-			'  ATTENTION: <resval_path>  should include the algorithm name and target measure'
+			', which is useful to include external manual evaluations into the final summarized results',
+			'ATTENTION: <resval_path>  should include the algorithm name and target measure'
 			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=_RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=_SEPINST, seppars=_SEPPARS, sepshf=_SEPSHF, rsvpathsmb=(_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID)
-				, th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60, seedfile=_SEEDFILE))
+				, anppsnum=len(apps), apps=', '.join(apps), th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60, seedfile=_SEEDFILE))
 	else:
 		# Set handlers of external signals
 		signal.signal(signal.SIGTERM, terminationHandler)

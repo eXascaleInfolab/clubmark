@@ -444,7 +444,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: set affinity in a way to maximize the CPU cache for each process
-	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, vmlimit=_VMLIMIT, name='gennets') as _execpool:
+	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, memlimit=_VMLIMIT, name='gennets') as _execpool:
 		bmname =  os.path.split(genbin)[1]  # Benchmark name
 		genbin = os.path.relpath(genbin, basedir)  # Update path to the executable relative to the job workdir
 		# Copy benchmark seed to the syntnets seed
@@ -548,7 +548,7 @@ def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
 	shufnets = 0  # The number of shuffled networks
-	with ExecPool(_WPROCSMAX, afnstep=1, vmlimit=_VMLIMIT, name='shufnets') as _execpool:
+	with ExecPool(_WPROCSMAX, afnstep=1, memlimit=_VMLIMIT, name='shufnets') as _execpool:
 		def shuffle(job):
 			"""Shufle network instance specified by the job"""
 			#assert job.params, 'Job params should be defined'
@@ -800,7 +800,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
-	with ExecPool(_WPROCSMAX, afnstep=1, vmlimit=_VMLIMIT, name='convnets') as _execpool:
+	with ExecPool(_WPROCSMAX, afnstep=1, memlimit=_VMLIMIT, name='convnets') as _execpool:
 		def convertNet(inpnet, overwrite=False, resdub=False, timeout=7*60):  # 7 min
 			"""Convert input networks to another formats
 
@@ -896,7 +896,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: set affinity in a way to maximize the CPU cache for each process
-	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, vmlimit=_VMLIMIT, name='runapps') as _execpool:
+	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, memlimit=_VMLIMIT, name='runapps') as _execpool:
 		def runapp(net, asym, netshf, pathid=''):
 			"""Execute algorithms on the specified network counting number of ran jobs
 
@@ -1066,7 +1066,7 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 	# Use affinity to assign 2 aps on half of the
 	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
 	# Note: afnstep=_AFNSTEP sets affinity in a way to maximize the CPU cache for each process
-	with ExecPool(_WPROCSMAX, afnstep=1, vmlimit=_VMLIMIT, name='revalres') as _execpool:
+	with ExecPool(_WPROCSMAX, afnstep=1, memlimit=_VMLIMIT, name='revalres') as _execpool:
 		def evalapp(net, asym, netshf, pathid=''):
 			"""Evaluate algorithms results on the specified network counting number of ran jobs
 

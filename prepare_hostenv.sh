@@ -13,7 +13,7 @@ MAX_FILES=1048576
 # Max number of the opened files by the process
 UL_FILES=32768
 # Max swappiness, should be 1..10
-MAX_SWPNS=10
+MAX_SWAP=5
 
 
 if [ `cat /proc/sys/fs/file-max` -lt $MAX_FILES ]
@@ -34,8 +34,8 @@ then
 	echo "ulimit files set to $UL_FILES"
 fi
 
-if [ `cat /proc/sys/vm/swappiness` -gt $MAX_SWPNS ]
+if [ `cat /proc/sys/vm/swappiness` -gt $MAX_SWAP ]
 then
-	sudo sysctl -w vm.swappiness=$MAX_SWPNS
-	echo "vm.swappiness set to $MAX_SWPNS"
+	sudo sysctl -w vm.swappiness=$MAX_SWAP
+	echo "vm.swappiness set to $MAX_SWAP"
 fi

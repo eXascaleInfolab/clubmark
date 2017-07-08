@@ -15,9 +15,12 @@ try:
 except ImportError:
 	Graph = None  # Note: for some functions the Graph class is not required
 
+_DEBUG_TRACE = False  # Trace start / stop and other events to stderr;  1 - brief, 2 - detailed, 3 - in-cycles
+
 
 def asymnet(netext, asym=None):
 	"""Whether the network is asymmetric (directed, specified by arcs rather than edges)
+	Note: file extension based value overwrites asym parameter for the known extensions
 
 	netext  - network extension (starts with '.'): .nse or .nsa
 	asym  - whether the network is asymmetric (directed), considered only for the non-standard network file extensions
@@ -37,17 +40,38 @@ def dflnetext(asym):
 	return '.ns' + ('a' if asym else 'e')
 
 
-def loadNsl(network, directed=None):
-	"""Load the graph from NSL(nse, nsa) file"""
-	if Graph is None:
-		raise ImportError('ERROR, the igraph.Graph is required to be imported')
+class NetInfo(object):
+	"""Network information (description) encoded in the file header"""
+	def __init__(self, directed, ndsnum, lnsnum, weighted):
+		"""Network information attributes
 
-	if directed is None:
-		directed = asymnet(os.path.splitext(network)[1].lower())
-		assert directed is not None, ('Nsl file with either standart extension or'
-			' explicit network type specification is expected')
+		directed  - the input network is directed (can me asymmetric)
+		ndsnum  - the number of nodes in the network
+		lnsnum  - the number of links (arcs if directed, otherwise edges) in the network
+		weighted  - the network is weighted
+		"""
+		assert (isinstance(directed, bool) and isinstance(ndsnum, int)
+			and isinstance(lnsnum, int) and isinstance(weighted, bool)
+			), 'Invalid type of arguments'
+		self.directed = directed
+		self.ndsnum = ndsnum
+		self.lnsnum = lnsnum
+		self.weighted = weighted
 
-	graph = None
+
+def parseHeaderNsl(network, directed=None):
+	"""Load the header of NSL(nse, nsa) file
+
+	network  - file name of the input network
+	directed  - whether the input network is directed
+		None  - define automatically by the file extension
+
+	return NetInfo  - network information fetched from the header
+	"""
+	directed = asymnet(os.path.splitext(network)[1].lower())
+	assert directed is not None, ('Nsl file with either standart extension or'
+		' explicit network type specification is expected')
+
 	with open(network) as finp:
 		# Prase the header if exists
 		ndsnum = 0  # The number of nodes
@@ -59,16 +83,43 @@ def loadNsl(network, directed=None):
 				continue
 			if ln[0] == '#':
 				ln = ln[1:].split(None, 6)
-				if len(ln) >= 2 and ln[0].lower() == 'nodes:':
-					ndsnum = int(ln[1].rstrip(','))
+				for sep in ':,':
+					lnx = []
+					for part in ln:
+						lnx.extend(part.rstrip(sep).split(sep, 3))
+					ln = lnx
+				if _DEBUG_TRACE:
+					print('  "{}" header tokens: {}'.format(network, ln))
+				if len(ln) >= 2 and ln[0].lower() == 'nodes':
+					ndsnum = int(ln[1])
 				# Parse arcs/edges number optionally
 				i = 2
-				if len(ln) >= i+2 and ln[i].lower() == ('arcs:' if directed else 'edges:'):
-					#lnsnum = int(ln[3].rstrip(','))
+				if len(ln) >= i+2 and ln[i].lower() == ('arcs' if directed else 'edges'):
+					lnsnum = int(ln[3])
 					i += 2
-				if len(ln) >= i+2 and ln[i].lower() == 'weighted:':
-					weighted = bool(int(ln[5].rstrip(',')))  # Note: int() is required because bool('0') is True
+				if len(ln) >= i+2 and ln[i].lower() == 'weighted':
+					weighted = bool(int(ln[5]))  # Note: int() is required because bool('0') is True
 			break
+
+	return NetInfo(directed=directed, ndsnum=ndsnum, lnsnum=lnsnum, weighted=weighted)
+
+
+def loadNsl(network, directed=None):
+	"""Load the graph from NSL(nse, nsa) file
+
+	network  - file name of the input network
+	directed  - whether the input network is directed
+		None  - define automatically by the file extension
+	"""
+	if Graph is None:
+		raise ImportError('ERROR, the igraph.Graph is required to be imported')
+
+	graph = None
+	with open(network) as finp:
+		# Prase the header if exists
+		netinfo = parseHeaderNsl(finp, directed)
+		directed = netinfo.directed
+		weighted = netinfo.weighted
 
 		links = []
 		weights = []
@@ -97,14 +148,14 @@ def loadNsl(network, directed=None):
 			if len(parts) > 2:
 				weights.append(float(parts[2]))
 
-		assert not ndsnum or len(nodes) == ndsnum, 'Validation of the number of nodes failed'
-		if not ndsnum:
-			ndsnum = len(nodes)
+		assert not netinfo.ndsnum or len(nodes) == netinfo.ndsnum, 'Validation of the number of nodes failed'
+		if not netinfo.ndsnum:
+			netinfo.ndsnum = len(nodes)
 		#nodes = list(nodes)
 		#nodes.sort()
 		nodes = tuple(nodes)
 
-		graph = Graph(n=ndsnum, directed=directed)
+		graph = Graph(n=netinfo.ndsnum, directed=directed)
 		graph.vs["name"] = nodes
 		# Make a map from the input ids to the internal ids of the vertices
 		ndsmap = {name: i for i, name in enumerate(nodes)}

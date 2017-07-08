@@ -32,14 +32,15 @@ import sys
 import inspect  # To automatically fetch algorithm name
 import traceback  # Stacktrace
 import subprocess
-import numbers  # To verify that a variable is a number (int or float)
 # import re
 
+from numbers import Number  # To verify that a variable is a number (int or float)
 from datetime import datetime
 from sys import executable as PYEXEC  # Full path to the current Python interpreter
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, tobackup, escapePathWildcards, _SEPPARS, _UTILDIR
 from benchevals import _SEPNAMEPART, _ALGSDIR, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
 from utils.mpepool import Job
+from algorithms.utils.parser_nsl import parseHeaderNsl
 
 
 _EXTLOG = '.log'  # Extension for the logs
@@ -270,6 +271,13 @@ class PyBin(object):
 	# Initialized existing Python interpreters once
 	try:
 		with open(os.devnull, 'wb') as fdevnull:
+			# Note: More accurate solution is not check "python -V" output, but it fails on Python2 for the
+			# 'python -V' (but works for the 'python -h')
+			# pyverstr = subprocess.check_output([PYEXEC, '-V']).decode()  # Note: Xcoding is required for Python3
+			##pyverstr = subprocess.Popen((PYEXEC, '-V'), stdout=subprocess.PIPE).communicate()[0].decode()
+			# pyver = int(reFirstDigits.search(pyverstr).group())  # Take the first digits, i.e. the magor version
+			# pybin = 'python' if pyver >= 3 else PYEXEC
+			#
 			# Check for the pypy interpreter/JIT in the system if required
 			# ATTENTION: due to some bug 'python -V' does not output results
 			# to the specified pipe and .check_output() also fails to deliver results,
@@ -415,9 +423,11 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		.format(execpool, netfile, asym, timeout))
 
 	# Evaluate relative network size considering whether the network is directed (asymmetric)
-	netsize = os.path.getsize(netfile)
-	if not asym:
-		netsize *= 2
+	netinfo = parseHeaderNsl(netfile, asym)
+	asym = netinfo.directed
+	#netsize = os.path.getsize(netfile)
+	#if not asym:
+	#	netsize *= 2
 	# Fetch the task name
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Base name of the network
 	assert task, 'The network name should exists'
@@ -429,25 +439,9 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
 	netfile = relpath(netfile)
 
-	# Set the best possible interpreter
+	# Set the best possible interpreter, run under pypy if possible
 	# ATTENTION: Scp doesn't work correctly under Python 3
 	pybin = PyBin.bestof(pypy=True, v3=False)
-	# Note: More accurate solution is not check "python -V" output, but it fails on Python2 for the
-	# 'python -V' (but works for the 'python -h')
-	# pyverstr = subprocess.check_output([PYEXEC, '-V']).decode()  # Note: Xcoding is required for Python3
-	##pyverstr = subprocess.Popen((PYEXEC, '-V'), stdout=subprocess.PIPE).communicate()[0].decode()
-	# pyver = int(reFirstDigits.search(pyverstr).group())  # Take the first digits, i.e. the magor version
-	# pybin = 'python' if pyver >= 3 else PYEXEC
-	#
-	# Note: run SCP under pypy if possible
-	try:
-		with open(os.devnull, 'wb') as fdevnull:
-			# NOTE: 'pypy -V' is outputted into the stdout even when another file is specified for pypy/Python2,
-			# it works fine only on Python3
-			if pybin.find('pypy') == -1 and not subprocess.call(('pypy', '-h'), stdout=fdevnull):
-				pybin = 'pypy'
-	except OSError:
-		pass
 
 	# def tidy(job):
 	# 	# The network might lack large cliques, so for some parameters the resulting
@@ -459,6 +453,8 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	kmax = 8  # Max clique size (~ min node degree to be considered)
 	steps = '10'  # Use 10 scale levels as in Ganxis
 	golden = (1 + 5 ** 0.5) * 0.5  # Golden section const
+	arcsnum = netinfo.lnsnum * (1 + (not netinfo.directed))
+	avgnls = arcsnum / float(netinfo.ndsnum)  # Average number of arcs per node
 	# Run for range of clique sizes
 	for k in range(kmin, kmax + 1):
 		# A single argument is k-clique size
@@ -484,7 +480,9 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
 			# Note: increasing clique size k causes ~(k ** golden) increased consumption of both memory and time (up to k ^ 2),
 			# so it's better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
-			, category=algname, size=netsize * k ** golden, stdout=logfile, stderr=errfile))
+			, category=algname  # '_'.join((algname, kstrex))
+			, size=arcsnum * avgnls * (k ** golden if k >= avgnls else (avgnls - k) ** (-1/golden))  # Average number of links per node;  for k > avgnls
+			, stdout=logfile, stderr=errfile))
 
 	return kmax + 1 - kmin
 
@@ -560,7 +558,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 	gamma  - resolution parameter gamma, <0 means automatic identification of the optimal dymamic value, number (float or int)
 	"""
 	assert isinstance(algname, str) and algname and execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and 0 < rlevout <= 1 and isinstance(gamma, numbers.Number), (  # Verify that gamma is a numeric value (int or float)
+		) and timeout + 0 >= 0 and 0 < rlevout <= 1 and isinstance(gamma, Number), (  # Verify that gamma is a numeric value (int or float)
 		'Invalid input parameters:\n\talgname: {},\n\texecpool: {},\n\tnet: {}'
 		',\n\tasym: {},\n\ttimeout: {},\n\trlevout: {},\n\tgamma: {}'
 		.format(execpool, netfile, asym, timeout, rlevout, gamma))

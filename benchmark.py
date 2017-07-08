@@ -444,7 +444,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: set affinity in a way to maximize the CPU cache for each process
-	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, vmlimit=_VMLIMIT) as _execpool:
+	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, vmlimit=_VMLIMIT, name='gennets') as _execpool:
 		bmname =  os.path.split(genbin)[1]  # Benchmark name
 		genbin = os.path.relpath(genbin, basedir)  # Update path to the executable relative to the job workdir
 		# Copy benchmark seed to the syntnets seed
@@ -519,14 +519,14 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 								, startdelay=startdelay, category='generate_' + str(k), size=N))
 				else:
 					print('ERROR: network parameters file "{}" does not exist'.format(fnamex), file=sys.stderr)
-		print('Parameter files generation is completed')
+		print('Parameter files generation completed')
 		if gentimeout <= 0:
 			gentimeout = insnum * netgenTimeout
 		# Note: insnum*netgenTimeout is max time required for the largest instances generation,
 		# insnum*2 to consider all smaller networks
 		_execpool.join(min(gentimeout, insnum*2*netgenTimeout))
 	_execpool = None
-	print('Synthetic networks files generation is completed')
+	print('Synthetic networks files generation completed')
 
 
 def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
@@ -547,7 +547,8 @@ def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
-	with ExecPool(_WPROCSMAX, afnstep=1, vmlimit=_VMLIMIT) as _execpool:
+	shufnets = 0  # The number of shuffled networks
+	with ExecPool(_WPROCSMAX, afnstep=1, vmlimit=_VMLIMIT, name='shufnets') as _execpool:
 		def shuffle(job):
 			"""Shufle network instance specified by the job"""
 			#assert job.params, 'Job params should be defined'
@@ -711,12 +712,14 @@ while True:
 						# Backup existing flat shuffles if any (expanding the base path), which will be updated the subsequent shuffling
 						tobackup(path, True, bcksuffix, move=False)  # Copy to the backup
 						shfnum += shuffleNet(path, popt.shfnum)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
+				shufnets += 1
 
 		if shftimeout <= 0:
 			shftimeout = shfnum * timeout1
 		_execpool.join(min(shftimeout, shfnum * timeout1))
 	_execpool = None
-	print('Networks shuffling is completed. NOTE: shuffling does not support the random seed')
+	if shufnets:
+		print('Networks ({}) shuffling completed. NOTE: random seed is not supported for the shuffling'.format(shufnets))
 
 
 def processPath(popt, handler, xargs=None):
@@ -797,7 +800,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
-	with ExecPool(_WPROCSMAX, afnstep=1, vmlimit=_VMLIMIT) as _execpool:
+	with ExecPool(_WPROCSMAX, afnstep=1, vmlimit=_VMLIMIT, name='convnets') as _execpool:
 		def convertNet(inpnet, overwrite=False, resdub=False, timeout=7*60):  # 7 min
 			"""Convert input networks to another formats
 
@@ -850,7 +853,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 			convtimeout =  netsnum * timeout1
 		_execpool.join(min(convtimeout, netsnum * timeout1))
 	_execpool = None
-	print('Networks conversion is completed, converted {} networks'.format(netsnum))
+	print('Networks ({}) conversion completed'.format(netsnum))
 
 
 def appnames(appsmodule):
@@ -893,7 +896,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: set affinity in a way to maximize the CPU cache for each process
-	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, vmlimit=_VMLIMIT) as _execpool:
+	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, vmlimit=_VMLIMIT, name='runapps') as _execpool:
 		def runapp(net, asym, netshf, pathid=''):
 			"""Execute algorithms on the specified network counting number of ran jobs
 
@@ -1063,7 +1066,7 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 	# Use affinity to assign 2 aps on half of the
 	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
 	# Note: afnstep=_AFNSTEP sets affinity in a way to maximize the CPU cache for each process
-	with ExecPool(_WPROCSMAX, afnstep=_1, vmlimit=_VMLIMIT) as _execpool:
+	with ExecPool(_WPROCSMAX, afnstep=1, vmlimit=_VMLIMIT, name='revalres') as _execpool:
 		def evalapp(net, asym, netshf, pathid=''):
 			"""Evaluate algorithms results on the specified network counting number of ran jobs
 
@@ -1346,7 +1349,7 @@ def benchmark(*args):
 		aggEvaluations(opts.aggrespaths)
 
 	exectime = time.time() - exectime
-	print('The benchmark is completed in {:.4f} sec ({} h {} m {:.4f} s)'
+	print('The benchmark completed in {:.4f} sec ({} h {} m {:.4f} s)'
 		.format(exectime, *secondsToHms(exectime)))
 
 

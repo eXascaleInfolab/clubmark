@@ -261,9 +261,12 @@ class Job(object):
 			and the process has multiple treads
 		category  - classification category, typically semantic context or part of the name;
 			used for _CHAINED_CONSTRAINTS to identify related jobs
-		size  - size of the processing data, >= 0, where 0 means undefined size and prevents
-			jobs chaining on constraints violation; used for _LIMIT_WORKERS_RAM and _CHAINED_CONSTRAINTS
-		slowdown  - execution slowdown ratio (inversely to the [estimated] execution speed), E (0, inf)
+		size  - expected relative memory complexity of the jobs of the same category,
+			typically it is size of the processing data, >= 0, 0 means undefined size
+			and prevents jobs chaining on constraints violation;
+			used on _LIMIT_WORKERS_RAM or _CHAINED_CONSTRAINTS
+		slowdown  - execution slowdown ratio, >= 0, where (0, 1) - speedup, > 1 - slowdown; 1 by default;
+			used for the accurate timeout estimation of the jobs having the same .category and .size.
 		vmemkind  - kind of virtual memory to be evaluated (actually, the average of virtual and
 			resident memory to not overestimate the instant potential consumption of RAM):
 			0  - vmem for the process itself omitting the spawned sub-processes (if any)
@@ -276,8 +279,9 @@ class Job(object):
 		tstop  - termination / completion time after ondone
 			NOTE: onstart() and ondone() callbacks execution is included in the job execution time
 		proc  - process of the job, can be used in the ondone() to read it's PIPE
-		vmem  - consuming virtual memory (smooth max, not just the current value) or the least expected value
-			inherited from the jobs of the same category having non-smaller size; requires _LIMIT_WORKERS_RAM
+		vmem  - consuming memory (smooth max, not just the current value of imlementation-defined memory type)
+			or the least expected value inherited from the jobs of the same category having non-smaller size;
+			requires _LIMIT_WORKERS_RAM
 		"""
 		assert isinstance(name, str) and timeout >= 0 and (task is None or isinstance(task, Task)
 			) and size >= 0 and slowdown > 0 and 0 <= vmemkind <= 2, 'Parameters validaiton failed'
@@ -313,13 +317,13 @@ class Job(object):
 		self._omitafn = omitafn
 		self.vmemkind = vmemkind
 		if _LIMIT_WORKERS_RAM or _CHAINED_CONSTRAINTS:
-			self.size = size  # Size of the processing data
-			# Consumed VM on execution in gigabytes or the least expected (inherited from the
-			# related jobs having the same category and non-smaller size)
+			self.size = size  # Expected memory complexity of the job, typcally it's size of the processing data
+			# Consumed implementation-defined type of memory on execution in gigabytes or the least expected
+			# (inherited from the related jobs having the same category and non-smaller size)
 			self.vmem = 0.
 		if _CHAINED_CONSTRAINTS:
 			self.category = category  # Job name
-			self.slowdown = slowdown  # Execution slowdown ratio, ~ 1 / exec_speed
+			self.slowdown = slowdown  # Execution slowdown ratio, >= 0, where (0, 1) - speedup, > 1 - slowdown
 			self.chtermtime = None  # Chained termination by time: None, False - by memory, True - by time
 		if _LIMIT_WORKERS_RAM:
 			# Note: wkslim is used only internally for the cross-category ordering
@@ -373,10 +377,10 @@ class Job(object):
 		return self.vmem
 
 
-	def lessVmem(self, job):
-		"""Whether vmem or estimated vmem is less than in the specified job
+	def lessmem(self, job):
+		"""Whether the [estimated] memory consumption is less than in the specified job
 
-		job  - another job for the vmem comparison
+		job  - another job for the .vmem or .size comparison
 
 		return  - [estimated] vmem is less
 		"""
@@ -534,7 +538,7 @@ class ExecPool(object):
 	jmemtrr = 1.5  # Memory threshold ratio, multiplier for the job to have a gap and reduce the number of reschedulings, reccommended value: 1.2 .. 1.6
 	assert jmemtrr >= 1, 'Memory threshold retio should be >= 1'
 
-	def __init__(self, wksnum=cpu_count(), afnstep=None, vmlimit=0., latency=0.):
+	def __init__(self, wksnum=cpu_count(), afnstep=None, vmlimit=0., latency=0., name=None):
 		"""Execution Pool constructor
 
 		wksnum  - number of resident worker processes, >=1. The reasonable value is
@@ -563,9 +567,12 @@ class ExecPool(object):
 					jobs in RAM almost without the swapping
 		latency  - approximate minimal latency of the workers monitoring in sec, float >= 0.
 			0 means automatically defined value (recommended, typically 2-3 sec).
+		name  - name of the execution pool to distinuguish traces from subsequently
+			created execution pools (only on creation or termination)
 		"""
 		assert wksnum >= 1 and (afnstep is None or afnstep <= cpu_count()
 			) and vmlimit >= 0 and latency >= 0, 'Input parameters are invalid'
+		self.name = name
 
 		# Verify and update wksnum and afnstep if required
 		if afnstep:
@@ -573,14 +580,16 @@ class ExecPool(object):
 			try:
 				subprocess.call([_AFFINITYBIN, '-V'])
 				if afnstep > cpu_count() / wksnum:
-					print('WARNING, the number of worker processes is reduced'
+					print('WARNING{}, the number of worker processes is reduced'
 						' ({wlim0} -> {wlim} to satisfy the affinity step'
-						.format(wlim0=wksnum, wlim=cpu_count() // afnstep), file=sys.stderr)
+						.format('' if not self.name else ' ' + self.name
+						,wlim0=wksnum, wlim=cpu_count() // afnstep), file=sys.stderr)
 					wksnum = cpu_count() // afnstep
 			except OSError as err:
 				afnstep = None
-				print('WARNING, {afnbin} does not exists in the system to fix affinity: {err}'
-					.format(afnbin=_AFFINITYBIN, err=err), file=sys.stderr)
+				print('WARNING{}, {afnbin} does not exists in the system to fix affinity: {err}'
+					.format('' if not self.name else ' ' + self.name
+					, afnbin=_AFFINITYBIN, err=err), file=sys.stderr)
 		self._wkslim = wksnum  # Max number of resident workers
 		self._workers = set()  # Scheduled and started jobs, i.e. worker processes:  {executing_job, }
 		self._jobs = collections.deque()  # Scheduled jobs that have not been started yet:  deque(job)
@@ -600,8 +609,9 @@ class ExecPool(object):
 		self.__termlock = Lock()  # Lock for the __terminate() to avoid simultaneous call by the signal and normal execution flow
 
 		if self._vmlimit and self._vmlimit != vmlimit:
-			print('WARNING, total memory limit is reduced to guarantee the in-RAM'
-				' computations: {:.6f} -> {:.6f} Gb'.format(vmlimit, self._vmlimit), file=sys.stderr)
+			print('WARNING{}, total memory limit is reduced to guarantee the in-RAM'
+				' computations: {:.6f} -> {:.6f} Gb'.format('' if not self.name else ' ' + self.name
+				, vmlimit, self._vmlimit), file=sys.stderr)
 
 
 	def __enter__(self):
@@ -648,10 +658,10 @@ class ExecPool(object):
 		# # Note: On python3 del might already release the objects
 		# if not hasattr(self, '_jobs') or not hasattr(self, '_workers') or (not self._jobs and not self._workers):
 		# 	return
-		print('WARNING, terminating the execution pool with {} nonstarted jobs and {} workers'
+		print('WARNING{}, terminating the execution pool with {} nonstarted jobs and {} workers'
 			', executed {} h {} m {:.4f} s, callstack fragment:'
-			.format(len(self._jobs), len(self._workers), *secondsToHms(
-			0 if self._tstart is None else time.time() - self._tstart)), file=sys.stderr)
+			.format('' if not self.name else ' ' + self.name, len(self._jobs), len(self._workers)
+			, *secondsToHms(0 if self._tstart is None else time.time() - self._tstart)), file=sys.stderr)
 		traceback.print_stack(limit=5, file=sys.stderr)
 
 		# Shut down all [nonstarted] jobs
@@ -978,7 +988,7 @@ class ExecPool(object):
 							# Note: job !== jorg, because jorg terminates and job does not
 							if (job.category == jorg.category  # Skip already terminating items
 							and job is not jorg
-							and not job.lessVmem(jorg)):
+							and not job.lessmem(jorg)):
 								job.chtermtime = False  # Chained termination by memory
 								if job.terminates:
 									break  # Switch to the following job
@@ -1012,7 +1022,7 @@ class ExecPool(object):
 						# Memory limit constraints
 						for jorg in viewvalues(jmorigs):
 							if (job.category == jorg.category  # Skip already terminating items
-							and not job.lessVmem(jorg)):
+							and not job.lessmem(jorg)):
 								# Remove the item
 								self._jobs.rotate(-ij)
 								jrot += ij
@@ -1214,7 +1224,7 @@ class ExecPool(object):
 				errcode = self.__start(job)
 		else:
 			errcode = self.__start(job, False)
-			# Note: sync job is completed automatically on fails
+			# Note: sync job is completed automatically on any fails
 		return errcode
 
 
@@ -1697,7 +1707,7 @@ import subprocess
 import os
 from sys import executable as PYEXEC
 
-fnull = open(os.devnull, 'w')
+fnull = open(os.devnull, 'wb')
 subprocess.call(args=('time', PYEXEC, '-c', '''{cprog}'''), stderr=fnull)
 """.format(mprog=mprog, cprog=cprog)
 #subprocess.call(args=('./exectime', PYEXEC, '-c', '''{cprog}'''))

@@ -15,7 +15,7 @@ try:
 except ImportError:
 	Graph = None  # Note: for some functions the Graph class is not required
 
-_DEBUG_TRACE = False  # Trace start / stop and other events to stderr;  1 - brief, 2 - detailed, 3 - in-cycles
+_DEBUG_TRACE = True  # Trace start / stop and other events to stderr;  1 - brief, 2 - detailed, 3 - in-cycles
 
 
 def asymnet(netext, asym=None):
@@ -45,14 +45,16 @@ class NetInfo(object):
 	def __init__(self, directed, ndsnum, lnsnum, weighted):
 		"""Network information attributes
 
-		directed  - the input network is directed (can me asymmetric)
+		directed  - the input network is directed (can me asymmetric),
+			None  - not specified explicitly (symmetric, undirected by default)
 		ndsnum  - the number of nodes in the network
 		lnsnum  - the number of links (arcs if directed, otherwise edges) in the network
 		weighted  - the network is weighted
 		"""
-		assert (isinstance(directed, bool) and isinstance(ndsnum, int)
+		assert ((directed is None or isinstance(directed, bool)) and isinstance(ndsnum, int)
 			and isinstance(lnsnum, int) and isinstance(weighted, bool)
-			), 'Invalid type of arguments'
+			), ('Invalid type of arguments, directed: {}, ndsnum: {}, lnsnum: {}, weighted: {}'
+			.format(directed, ndsnum, lnsnum, weighted))
 		self.directed = directed
 		self.ndsnum = ndsnum
 		self.lnsnum = lnsnum
@@ -69,19 +71,25 @@ def parseHeaderNsl(network, directed=None):
 	return NetInfo  - network information fetched from the header
 	"""
 	directed = asymnet(os.path.splitext(network)[1].lower())
-	assert directed is not None, ('Nsl file with either standart extension or'
-		' explicit network type specification is expected')
+	#assert directed is not None, ('Nsl file with either standart extension or'
+	#	' explicit network type specification is expected')
 
 	with open(network) as finp:
 		# Prase the header if exists
 		ndsnum = 0  # The number of nodes
-		#lnsnum = 0  # The number of links (edges or arcs)
+		lnsnum = 0  # The number of links (edges or arcs)
 		weighted = None  # The network is weighted
+		# Marker of the header start
+		mark = 'nodes:'
+		marklen = len(mark)
 		for ln in finp:
 			#ln = ln.lstrip()
 			if not ln:
 				continue
 			if ln[0] == '#':
+				# The header should start whith the mark
+				if ln[1:].lstrip()[:marklen].lower() != mark:
+					continue
 				ln = ln[1:].split(None, 6)
 				for sep in ':,':
 					lnx = []
@@ -121,31 +129,32 @@ def loadNsl(network, directed=None):
 		directed = netinfo.directed
 		weighted = netinfo.weighted
 
-		links = []
-		weights = []
+		# ATTENTION: links and weights should be synchronized
+		links = []  # Pairs (tuples) of links
+		weights = []  # Weight for each pair of links
 		nodes = set()
 		lastnode = None
 		for ln in finp:
 			# Skip empty lines and comments
+			# Note: only whole line comments are allowed
 			#ln = ln.lstrip()
 			if not ln or ln[0] == '#':
 				continue
 			parts = ln.split(None, 2)
-			if weighted is not None:
-				if len(parts) != 2 + weighted:
-					raise ValueError('Weights are inconsistent; weighted: {}, line: {}'
-						.format(weighted, ' '.join(parts)))
-			else:
+			if weighted is None:
 				weighted = len(parts) == 3
+			elif len(parts) != 2 + weighted:
+				raise ValueError('Weights are inconsistent; weighted: {}, line: {}'
+					.format(weighted, ' '.join(parts)))
 
 			if lastnode != parts[0]:
 				lastnode = parts[0]
 				nodes.add(lastnode)
 			links.append((parts[0], parts[1]))
-			# Extend nodes with dest node for the undirected network
+			# Extend nodes with dest node for the undirected network to not miss the nodes
 			if not directed:
 				nodes.add(parts[1])
-			if len(parts) > 2:
+			if weighted:
 				weights.append(float(parts[2]))
 
 		assert not netinfo.ndsnum or len(nodes) == netinfo.ndsnum, 'Validation of the number of nodes failed'
@@ -161,5 +170,6 @@ def loadNsl(network, directed=None):
 		ndsmap = {name: i for i, name in enumerate(nodes)}
 		graph.add_edges([(ndsmap[ln[0]], ndsmap[ln[1]]) for ln in links])
 		if weights:
+			assert len(links) == len(weights), 'Weights are not synchronized with links'
 			graph.es["weight"] = weights
 	return graph

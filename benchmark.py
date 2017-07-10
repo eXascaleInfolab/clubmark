@@ -1001,7 +1001,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 
 		# Flush the formed fpathids
 		if fpathids:
-			if fpathids is not sys.stdout:
+			if fpathids is not sys.stdout and fpathids is not sys.stderr:
 				fpathids.close()
 			else:
 				fpathids.flush()

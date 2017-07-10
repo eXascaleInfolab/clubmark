@@ -1363,6 +1363,9 @@ def benchmark(*args):
 		.format(exectime, *secondsToHms(exectime)))
 
 
+_signals = {}  # Signals mapping
+
+
 def terminationHandler(signal=None, frame=None, terminate=True):
 	"""Signal termination handler
 	signal  - raised signal
@@ -1376,6 +1379,9 @@ def terminationHandler(signal=None, frame=None, terminate=True):
 	global _execpool
 
 	if _execpool:
+		print('WARNING{}, execpool is terminating by the exteral signal {} ({})'
+			.format('' if not _execpool.name else ' ' + _execpool.name, signal
+			, _signals.get(signal, '-')))  # Note: this is a trace log record
 		del _execpool  # Destructors are caled later
 		# Define _execpool to avoid unnessary trash in the error log, which might
 		# be caused by the attempt of subsequent deletion on destruction
@@ -1478,6 +1484,10 @@ if __name__ == '__main__':
 				, sepinst=_SEPINST, seppars=_SEPPARS, sepshf=_SEPSHF, rsvpathsmb=(_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID)
 				, anppsnum=len(apps), apps=', '.join(apps), th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60, seedfile=_SEEDFILE))
 	else:
+		# Fill signals mapping {value: name}
+		_signals = {sv: sn for sn, sv in viewitems(signal.__dict__)
+			if sn.startswith('SIG') and not sn.startswith('SIG_')}
+
 		# Set handlers of external signals
 		signal.signal(signal.SIGTERM, terminationHandler)
 		signal.signal(signal.SIGHUP, terminationHandler)

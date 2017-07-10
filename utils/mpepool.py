@@ -785,6 +785,8 @@ class ExecPool(object):
 		Internal attributes:
 		alive  - whether the execution pool is alive or terminating, bool.
 			Should be reseted to True on resuse after the termination.
+			NOTE: should be reseted to True if the execution pool is reused
+			after the joining or termination.
 		"""
 		assert (wksnum >= 1 and (afnmask is None or isinstance(afnmask, AffinityMask))
 			and memlimit >= 0 and latency >= 0 and (name is None or isinstance(name, str))
@@ -834,7 +836,17 @@ class ExecPool(object):
 
 	def __enter__(self):
 		"""Context entrence"""
-		self.alive = True
+		# Reuse execpool if possible
+		if not self.alive:
+			if not self._workers and not self._jobs:
+				print('WARNING{}, the non-cleared execution pool is reused'
+					.format('' if not self.name else ' ' + self.name))
+				self._tstart = None
+				self.alive = True
+			else:
+				raise ValueError('Terminating dirty execution pool can not be reentered:'
+					'  alive: {}, {} workers, {} jobs'.format(self.alive
+					, len(self._workers), len(self._jobs)))
 		return self
 
 
@@ -1505,12 +1517,15 @@ if __name__ == '__main__':
 	# Note: to check specific testcase use:
 	# $ python -m unittest mpepool.TestExecPool.test_jobTimeoutChained
 	if len(sys.argv) <= 1:
-		import mpetests
-		suite = mpetests.unittest.TestLoader().loadTestsFromModule(mpetests)
-		if mpetests.mock is not None:
-			print('')  # Indent from doctests
-			if not mpetests.unittest.TextTestRunner().run(suite).wasSuccessful():  # TextTestRunner(verbosity=2)
-			#if unittest.main().result:  # verbosity=2
-				print('Try to reexecute the tests (hot run) or set x2-3 larger TEST_LATENCY')
-		else:
-			print('WARNING, the unit tests are skipped because the mock module is not installed', file=sys.stderr)
+		try:
+			import mpetests
+			suite = mpetests.unittest.TestLoader().loadTestsFromModule(mpetests)
+			if mpetests.mock is not None:
+				print('')  # Indent from doctests
+				if not mpetests.unittest.TextTestRunner().run(suite).wasSuccessful():  # TextTestRunner(verbosity=2)
+				#if unittest.main().result:  # verbosity=2
+					print('Try to reexecute the tests (hot run) or set x2-3 larger TEST_LATENCY')
+			else:
+				print('WARNING, the unit tests are skipped because the mock module is not installed', file=sys.stderr)
+		except ImportError as err:
+			print('WARNING, Unit tests skipped because of the failed import: ', err, sys.stderr)

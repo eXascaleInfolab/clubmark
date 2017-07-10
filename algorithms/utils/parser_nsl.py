@@ -15,7 +15,7 @@ try:
 except ImportError:
 	Graph = None  # Note: for some functions the Graph class is not required
 
-_DEBUG_TRACE = True  # Trace start / stop and other events to stderr;  1 - brief, 2 - detailed, 3 - in-cycles
+_DEBUG_TRACE = False  # Trace start / stop and other events to stderr;  1 - brief, 2 - detailed, 3 - in-cycles
 
 
 def asymnet(netext, asym=None):
@@ -49,11 +49,11 @@ class NetInfo(object):
 			None  - not specified explicitly (symmetric, undirected by default)
 		ndsnum  - the number of nodes in the network
 		lnsnum  - the number of links (arcs if directed, otherwise edges) in the network
-		weighted  - the network is weighted
+		weighted  - the network is weighted, None means undefined
 		"""
 		assert ((directed is None or isinstance(directed, bool)) and isinstance(ndsnum, int)
-			and isinstance(lnsnum, int) and isinstance(weighted, bool)
-			), ('Invalid type of arguments, directed: {}, ndsnum: {}, lnsnum: {}, weighted: {}'
+			and isinstance(lnsnum, int) and (weighted is None or isinstance(weighted, bool))
+			), ('Invalid type of arguments:  directed: {}, ndsnum: {}, lnsnum: {}, weighted: {}'
 			.format(directed, ndsnum, lnsnum, weighted))
 		self.directed = directed
 		self.ndsnum = ndsnum
@@ -90,23 +90,27 @@ def parseHeaderNsl(network, directed=None):
 				# The header should start whith the mark
 				if ln[1:].lstrip()[:marklen].lower() != mark:
 					continue
-				ln = ln[1:].split(None, 6)
-				for sep in ':,':
-					lnx = []
-					for part in ln:
-						lnx.extend(part.rstrip(sep).split(sep, 3))
-					ln = lnx
-				if _DEBUG_TRACE:
-					print('  "{}" header tokens: {}'.format(network, ln))
-				if len(ln) >= 2 and ln[0].lower() == 'nodes':
-					ndsnum = int(ln[1])
-				# Parse arcs/edges number optionally
-				i = 2
-				if len(ln) >= i+2 and ln[i].lower() == ('arcs' if directed else 'edges'):
-					lnsnum = int(ln[3])
-					i += 2
-				if len(ln) >= i+2 and ln[i].lower() == 'weighted':
-					weighted = bool(int(ln[5]))  # Note: int() is required because bool('0') is True
+				try:
+					ln = ln[1:].split(None, 6)
+					for sep in ':,':
+						lnx = []
+						for part in ln:
+							lnx.extend(part.rstrip(sep).split(sep, 3))
+						ln = lnx
+					if _DEBUG_TRACE:
+						print('  "{}" header tokens: {}'.format(network, ln))
+					if len(ln) >= 2 and ln[0].lower() == 'nodes':
+						ndsnum = int(ln[1])
+					# Parse arcs/edges number optionally
+					i = 2
+					if len(ln) >= i+2 and ln[i].lower() == ('arcs' if directed else 'edges'):
+						lnsnum = int(ln[3])
+						i += 2
+					if len(ln) >= i+2 and ln[i].lower() == 'weighted':
+						weighted = bool(int(ln[5]))  # Note: int() is required because bool('0') is True
+				except ValueError as err:
+					# Part of the attributes could be initialized, others just have initial values
+					print('WARNING, NSL header is corrupted: ', err)  # Note: this is a minor issue
 			break
 
 	return NetInfo(directed=directed, ndsnum=ndsnum, lnsnum=lnsnum, weighted=weighted)

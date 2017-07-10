@@ -25,6 +25,15 @@
 """
 
 from __future__ import print_function, division  # Required for stderr output, must be the first import
+# Required to efficiently traverse items of dictionaries in both Python 2 and 3
+try:
+	from future.builtins import range
+except ImportError:
+	# Replace range() implementation for Python2
+	try:
+		range = xrange
+	except NameError:
+		pass  # xrange is not defined in Python3, which is fine
 import os
 import shutil
 import glob
@@ -131,7 +140,7 @@ def aggexec(algs):
 					outres.write('\t{}'.format(alg))
 				outres.write('\n')
 				# Output results for each network
-				for netname, netstats in viewitems(measures[imsr]):  # Note: .items() are not efficient on Python2
+				for netname, netstats in viewitems(measures[imsr]):
 					outres.write(netname)
 					outresx.write(netname)
 					for ialg, stat in enumerate(netstats):
@@ -283,13 +292,22 @@ class PyBin(object):
 			# to the specified pipe and .check_output() also fails to deliver results,
 			# always outputting to the stdout (which is not desirable in our case);
 			# 'python -V' works fine only for the Python3 that is why it is not used here.
-			if not subprocess.call(('pypy3', '-h'), stdout=fdevnull):
-				_pypy3 = 'pypy3'
-			if not subprocess.call(('pypy', '-h'), stdout=fdevnull):
-				_pypy = 'pypy'
-			if not subprocess.call(('python3', '-h'), stdout=fdevnull):
-				_python3 = 'python3'
-	except OSError:
+			try:
+				if not subprocess.call(('pypy3', '-h'), stdout=fdevnull):
+					_pypy3 = 'pypy3'
+			except OSError:
+				pass
+			try:
+				if not subprocess.call(('pypy', '-h'), stdout=fdevnull):
+					_pypy = 'pypy'
+			except OSError:
+				pass
+			try:
+				if not subprocess.call(('python3', '-h'), stdout=fdevnull):
+					_python3 = 'python3'
+			except OSError:
+				pass
+	except IOError:
 		# Note: the required interpreter existance in the system can't be checked here,
 		# only 'python' is assumed to be present by default.
 		pass
@@ -425,9 +443,15 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	# Evaluate relative network size considering whether the network is directed (asymmetric)
 	netinfo = parseHeaderNsl(netfile, asym)
 	asym = netinfo.directed
-	#netsize = os.path.getsize(netfile)
-	#if not asym:
-	#	netsize *= 2
+	if not netinfo.lnsnum:
+		# Use network size if the number of links is not availbale
+		size = os.path.getsize(netfile) * (1 + (not asym))  # Multiply by 2 for the symmetric (undirected) network
+		avgnls = None
+	else:
+		# The number of arcs in the network
+		size = netinfo.lnsnum * (1 + (not netinfo.directed))  # arcs = edges * 2
+		avgnls = size / float(netinfo.ndsnum)  # Average number of arcs per node
+		size *= avgnls
 	# Fetch the task name
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Base name of the network
 	assert task, 'The network name should exists'
@@ -442,6 +466,8 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	# Set the best possible interpreter, run under pypy if possible
 	# ATTENTION: Scp doesn't work correctly under Python 3
 	pybin = PyBin.bestof(pypy=True, v3=False)
+	if _DEBUG_TRACE:
+		print('  Selected Python interpreter:  {}', pybin)
 
 	# def tidy(job):
 	# 	# The network might lack large cliques, so for some parameters the resulting
@@ -453,8 +479,6 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	kmax = 8  # Max clique size (~ min node degree to be considered)
 	steps = '10'  # Use 10 scale levels as in Ganxis
 	golden = (1 + 5 ** 0.5) * 0.5  # Golden section const
-	arcsnum = netinfo.lnsnum * (1 + (not netinfo.directed))
-	avgnls = arcsnum / float(netinfo.ndsnum)  # Average number of arcs per node
 	# Run for range of clique sizes
 	for k in range(kmin, kmax + 1):
 		# A single argument is k-clique size
@@ -480,8 +504,8 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
 			# Note: increasing clique size k causes ~(k ** golden) increased consumption of both memory and time (up to k ^ 2),
 			# so it's better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
-			, category=algname  # '_'.join((algname, kstrex))
-			, size=arcsnum * avgnls * (k ** golden if k >= avgnls else (avgnls - k) ** (-1/golden))  # Average number of links per node;  for k > avgnls
+			, category=algname if avgnls is not None else '_'.join((algname, kstrex))
+			, size=size * (k ** golden if avgnls is None or k >= avgnls else (avgnls - k) ** (-1/golden))
 			, stdout=logfile, stderr=errfile))
 
 	return kmax + 1 - kmin

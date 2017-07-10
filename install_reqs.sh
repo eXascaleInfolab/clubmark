@@ -20,13 +20,18 @@ fi
 # sudo add-apt-repository ppa:ubuntu-toolchain-r/test  # Required on the outdated Ubuntu (before 16.04)
 
 # Install applications dependencies:
+# "hwloc" (includes lstopo) is required to identify enumeration type of CPUs
+#  to perform correct CPU affinity masking
 # "libxml2-dev zlib1g-dev python-pip" required for python-igraph, which is required for Louvain (igraph)
 # "openjdk-8-jre" (java) is required for GaNXIS
 # "libboost-program-options1.58.0" for RGMC
 # "libtbb2" for gecmi (NMI ovp multi-resolution evaluation)
-sudo apt-get -y install python3 pypy \
-	libxml2-dev zlib1g-dev python3-pip \
+sudo apt-get install -y \
+	hwloc \
+	python3 python3-pip pypy \
+	libxml2-dev zlib1g-dev \
 	openjdk-8-jre \
+	libboost-program-options1.58.0 \
 	libtbb2
 
 # Note: Python3 and pip3 were installed on previous step

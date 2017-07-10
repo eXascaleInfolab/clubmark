@@ -12,7 +12,7 @@
 # \Version: 1.1
 
 # CNL format specification:
-# Comments are marked with '#' symbol
+# Comments are marked with '#' symbol and allowed only in the begin of the line
 # Optional Header as a special comment:
 # [Clusters: <clusters_num>[,]  Nodes: <nodes_num>[,] [Fuzzy: {0, 1}]][,] [Numbered: {0, 1}]]
 # Note: the comma is either always present as a delimiter or always absent

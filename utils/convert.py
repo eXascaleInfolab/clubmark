@@ -29,6 +29,8 @@ Input formats:
 Output formats:
 	- rcg format: http://www.lumais.com/docs/format.rcg  (hig_format.hig)
 	- nsl (stands for nse/nsa)
+	
+Note: works on both Python3 and Python2 / pypy
 
 (c) RCG (Readable Compact Graph)
 \author: Artem Lutov <luart@ya.ru>
@@ -37,6 +39,37 @@ Output formats:
 """
 
 from __future__ import print_function, division  # Required for stderr output, must be the first import
+# Required to efficiently traverse items of dictionaries in both Python 2 and 3
+try:
+	from future.utils import viewitems, viewkeys, viewvalues  # External package: pip install future
+	from future.builtins import range
+except ImportError:
+	def viewMethod(obj, method):
+		"""Fetch view method of the object
+
+		obj  - the object to be processed
+		method  - name of the target method, str
+
+		return  target method or AttributeError
+
+		>>> callable(viewMethod(dict(), 'items'))
+		True
+		"""
+		viewmeth = 'view' + method
+		ometh = getattr(obj, viewmeth, None)
+		if not ometh:
+			ometh = getattr(obj, method)
+		return ometh
+
+	viewitems = lambda dct: viewMethod(dct, 'items')()
+	viewkeys = lambda dct: viewMethod(dct, 'keys')()
+	viewvalues = lambda dct: viewMethod(dct, 'values')()
+	
+	# Replace range() implementation for Python2
+	try:
+		range = xrange
+	except NameError:
+		pass  # xrange is not defined in Python3, which is fine
 import sys
 import os
 import argparse
@@ -516,7 +549,7 @@ def printLinks(outfmt, printer, parsed, remdub, final):
 			# ATTENTION: full arc weight is used for the edge, so the edge weight is doubled if the back arc does not exist
 			# Note: parsed.links are modified
 			postdel = []  # Postponed deletion
-			for ndls in parsed.links.items():
+			for ndls in viewitems(parsed.links):
 				edges = []
 				sid = int(ndls[0])
 				for ln in ndls[1]:
@@ -534,7 +567,7 @@ def printLinks(outfmt, printer, parsed, remdub, final):
 
 		# Accumulate or print the links
 		if remdub:
-			for ndls in parsed.links.items():
+			for ndls in viewitems(parsed.links):
 				slinks = outfmt.printed.ndslinks.setdefault(ndls[0], {})
 				for link in ndls[1]:
 					slinks[link[0]] = link[1]  # Overwrite dest if exists
@@ -542,7 +575,7 @@ def printLinks(outfmt, printer, parsed, remdub, final):
 				outfmt.printed.ndslinks.setdefault(xlink[0], {})[xlink[1]] = xlink[2]  # Overwrite dest if exists
 		else:
 			# Print result to the output file
-			for ndls in parsed.links.items():
+			for ndls in viewitems(parsed.links):
 				printer(ndls[1], ndls[0], not parsed.directed and outfmt.printed.directed)
 				# Note: the reminer is skipped here, this edges will be constructed by the backlinks
 				# Update the total number of outputted arcs
@@ -554,7 +587,7 @@ def printLinks(outfmt, printer, parsed, remdub, final):
 			printer(outfmt.printed.ndslinks)
 			# Update the total number of outputted arcs
 			remnum = 0
-			for ndls in outfmt.printed.ndslinks.values():
+			for ndls in viewvalues(outfmt.printed.ndslinks):
 				remnum += len(ndls)
 			outfmt.printed.arcstot += remnum * (1 + (not outfmt.printed.directed))
 		#outfmt.printed.ndslinks.clear()
@@ -627,9 +660,9 @@ def printBlockRcg(outfmt, fout, parsed, remdub, frcedg, commented, unweight, fin
 		elif links is not None:
 			# ATTENTION: backlinks are already considered in the accumulated links
 			# Accumulated links of the whole nework are dict of dict
-			for ndls in links.items():
+			for ndls in viewitems(links):
 				fout.write(ndls[0] + '>')
-				for link in ndls[1].items():
+				for link in viewitems(ndls[1]):
 					linkToStream(fout, link)
 				fout.write('\n')
 		elif commented:
@@ -738,8 +771,8 @@ def printBlockNsl(directed):
 			elif links is not None:
 				# ATTENTION: backlinks are already considered in the accumulated links
 				# Accumulated links of the whole nework are dict of dict
-				for ndls in links.items():
-					fout.writelines([linkToStr(ndls[0], link) for link in ndls[1].items()])
+				for ndls in viewitems(links):
+					fout.writelines([linkToStr(ndls[0], link) for link in viewitems(ndls[1])])
 			elif commented:
 				# Print total number of arcs as a comment (edges * 2 for the sections with edges)
 				fout.write('# Arcs: {}\n'.format(outfmt.printed.arcstot))  # ATTENTION: some algorithms (GANXiS) do not accept empty lines
@@ -931,7 +964,7 @@ def inputFormats():
 {0}eweight  - edge weight, integer >= 1""".format(ntspan)
   		, exts=('graph', 'mtg', 'met'))
 
-	#print('Formats formed: ' +  ','.join(inpfmts.keys()))
+	#print('Formats formed: ' +  ','.join(viewkeys(inpfmts)))
 	return {fmt.id: fmt for fmt in (pjk, nse, nsa, mts)}
 
 
@@ -1027,7 +1060,7 @@ def parseArgs(params=None):
 	ipars = parser.add_argument_group('Input Format')
 	# Note: to init with the FormatSpec use argparse.Action(option_strings, dest, nargs=None
 	# , const=None, default=None, type=None, choices=None, required=False, help=None, metavar=None)
-	ipars.add_argument('-i', '--inpfmt', dest='inpfmt', choices=inpfmts.keys()
+	ipars.add_argument('-i', '--inpfmt', dest='inpfmt', choices=viewkeys(inpfmts)
 		, help='input network (graph) format')  # , default='pjk'
 
 	mpars = parser.add_argument_group('Additional Modifiers')
@@ -1046,7 +1079,7 @@ def parseArgs(params=None):
 
 	opars = parser.add_argument_group('Output Format')
 	opars.add_argument('-o', '--outfmt', dest='outfmt'
-		, choices=[x.id for x in inpfmts.values() if x.native()] + [rcg.id]
+		, choices=[x.id for x in viewvalues(inpfmts) if x.native()] + [rcg.id]
 		, default=rcg.id, help='output format for the network (graph)')
 	opars.add_argument('-r', '--resolve', dest='resolve', choices=('o', 'r', 's')
 		, default='o', help='resolution strategy in case the output file is already exists:'
@@ -1060,7 +1093,7 @@ def parseArgs(params=None):
 	# Show detailed format specifiction and exit if required
 	if args.showfmt:
 		allfmts = [rcg]
-		allfmts.extend(inpfmts.values())
+		allfmts.extend(viewvalues(inpfmts))
 		print('Supported I/O formats:\n\n> {}'.format('\n\n> '.join(
 			[str(x) for x in allfmts])))
 		sys.exit(0)
@@ -1073,7 +1106,7 @@ def parseArgs(params=None):
 			ext = ext[1:]
 			if ext:
 				allfmts = [rcg]
-				allfmts.extend(inpfmts.values())
+				allfmts.extend(viewvalues(inpfmts))
 				for fmt in allfmts:
 					if ext in fmt.exts:
 						args.inpfmt = fmt

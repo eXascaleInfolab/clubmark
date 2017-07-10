@@ -34,6 +34,15 @@
 """
 
 from __future__ import print_function, division  # Required for stderr output, must be the first import
+# Required to efficiently traverse items of dictionaries in both Python 2 and 3
+try:
+	from future.builtins import range
+except ImportError:
+	# Replace range() implementation for Python2
+	try:
+		range = xrange
+	except NameError:
+		pass  # xrange is not defined in Python3, which is fine
 import atexit  # At exit termination handleing
 import sys
 import time
@@ -52,7 +61,7 @@ import benchapps  # Required for the functions name mapping to/from the app name
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR
 from benchapps import PYEXEC, aggexec, funcToAppName, _EXTCLNODES, _PREFEXEC
 from benchevals import evalAlgorithm, aggEvaluations, EvalsAgg, _RESDIR, _EXTEXECTIME
-from utils.mpepool import cpucorethreads, ExecPool, Job, secondsToHms
+from utils.mpepool import AffinityMask, ExecPool, Job, secondsToHms
 from algorithms.utils.parser_nsl import asymnet, dflnetext
 
 
@@ -63,9 +72,8 @@ assert _RESDIR.endswith('/'), 'A directory should have a valid terminator'
 _SEEDFILE = _RESDIR + 'seed.txt'
 _TIMEOUT = 36 * 60*60  # Default execution timeout for each algorithm for a single network instance
 _GENSEPSHF = '%'  # Shuffle number separator in the synthetic networks generation parameters
-_WPROCSMAX = max(cpu_count() - 1, 1)  # Maximal number of the worker processes, should be >= 1
+_WPROCSMAX = max(cpu_count()-1, 1)  # Maximal number of the worker processes, should be >= 1
 assert _WPROCSMAX >= 1, 'Natural number is expected not exceeding the number of system cores'
-_AFNSTEP = cpucorethreads()  # Affinity step to maximize the dedicated CPU cache
 _VMLIMIT = 1024  # Set 1 TB or RAM to be automatically limited to the physical memory of the computer
 
 #_TRACE = 1  # Tracing level: 0 - none, 1 - lightweight, 2 - debug, 3 - detailed
@@ -443,8 +451,9 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
-	# Note: set affinity in a way to maximize the CPU cache for each process
-	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, memlimit=_VMLIMIT, name='gennets') as _execpool:
+	# Note: set affinity in a way to maximize the CPU cache L1/2 for each process
+	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(AffinityMask.CORE_THREADS)
+	, memlimit=_VMLIMIT, name='gennets') as _execpool:
 		bmname =  os.path.split(genbin)[1]  # Benchmark name
 		genbin = os.path.relpath(genbin, basedir)  # Update path to the executable relative to the job workdir
 		# Copy benchmark seed to the syntnets seed
@@ -467,7 +476,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 						genopts.update({'N': N, 'k': k})
 						genopts.update({'maxk': evalmaxk(genopts), 'muw': evalmuw(genopts), 'minc': evalminc(genopts)
 							, 'maxc': evalmaxc(genopts), 'on': evalon(genopts), 'name': name})
-						for opt in viewitems(genopts):  # .items()  Note: the number of genopts is small
+						for opt in viewitems(genopts):
 							fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
 				else:
 					assert os.path.isfile(fnamex), '{} should be a file'.format(fnamex)
@@ -548,7 +557,7 @@ def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
 	shufnets = 0  # The number of shuffled networks
-	with ExecPool(_WPROCSMAX, afnstep=1, memlimit=_VMLIMIT, name='shufnets') as _execpool:
+	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='shufnets') as _execpool:
 		def shuffle(job):
 			"""Shufle network instance specified by the job"""
 			#assert job.params, 'Job params should be defined'
@@ -800,7 +809,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
-	with ExecPool(_WPROCSMAX, afnstep=1, memlimit=_VMLIMIT, name='convnets') as _execpool:
+	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='convnets') as _execpool:
 		def convertNet(inpnet, overwrite=False, resdub=False, timeout=7*60):  # 7 min
 			"""Convert input networks to another formats
 
@@ -895,8 +904,9 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	starttime = time.time()  # Procedure start time; ATTENTION: .clock() should not be used, because it does not consider "sleep" time
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
-	# Note: set affinity in a way to maximize the CPU cache for each process
-	with ExecPool(_WPROCSMAX, afnstep=_AFNSTEP, memlimit=_VMLIMIT, name='runapps') as _execpool:
+	# Note: set affinity in a way to maximize the CPU cache L1/2 for each process
+	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(AffinityMask.CORE_THREADS)
+	, memlimit=_VMLIMIT, name='runapps') as _execpool:
 		def runapp(net, asym, netshf, pathid=''):
 			"""Execute algorithms on the specified network counting number of ran jobs
 
@@ -1065,8 +1075,8 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 	# so it will be scheduled separately after other measures
 	# Use affinity to assign 2 aps on half of the
 	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
-	# Note: afnstep=_AFNSTEP sets affinity in a way to maximize the CPU cache for each process
-	with ExecPool(_WPROCSMAX, afnstep=1, memlimit=_VMLIMIT, name='revalres') as _execpool:
+	# Note: afnstep=AffinityMask.CORE_THREADS sets affinity in a way to maximize the CPU cache L1/2 for each process
+	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='revalres') as _execpool:
 		def evalapp(net, asym, netshf, pathid=''):
 			"""Evaluate algorithms results on the specified network counting number of ran jobs
 

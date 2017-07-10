@@ -21,7 +21,7 @@ import traceback  # Stacktrace
 from datetime import datetime
 from subprocess import PIPE
 
-from benchutils import ItemsStatistic, parseFloat, parseName, escapePathWildcards, envVarDefined, viewvalues, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID
+from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, escapePathWildcards, envVarDefined, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID
 from utils.mpepool import Task, Job
 
 
@@ -124,7 +124,7 @@ class ShufflesAgg(object):
 		task  - the task that calls results fixation
 		"""
 		if self.levels:
-			itlevs = self.levels.iteritems()
+			itlevs = iter(viewitems(self.levels))
 			self.bestlev = itlevs.next()
 			self.bestlev[1].fix()
 			for name, val in itlevs:
@@ -196,7 +196,7 @@ class EvalsAgg(object):
 		naparams = {}  # Algorithm parameters for the network that correspond to the best result, format:  AlgName: AlgParams
 		if nameps:
 			netsev = {}
-			for net, algsev in self.netsev.iteritems():
+			for net, algsev in viewitems(self.netsev):
 				# Cut params from the network name
 				pos = net.find(_SEPNAMEPART)
 				if pos != -1:
@@ -208,7 +208,7 @@ class EvalsAgg(object):
 				napars = naparams.setdefault(net, {})
 				# Retain only the highest value among params
 				uaev = netsev.setdefault(net, {})
-				for alg, netstat in algsev.iteritems():
+				for alg, netstat in viewitems(algsev):
 					netstat.fix()  # Process aggregated results
 					uns = uaev.get(alg)
 					#print('uns.avg: {:.6}, netstat.avg: {:.6}'.format(uns.avg if uns else None, netstat.avg))
@@ -231,7 +231,7 @@ class EvalsAgg(object):
 			# Extended output has notations in each row
 			fmeasevx.write('# --- {} ---\n'.format(timestamp))  # format = Q_avg: Q_min Q_max, Q_sd count;
 			header = True  # Output header
-			for net, algsev in self.netsev.iteritems():
+			for net, algsev in viewitems(self.netsev):
 				if header:
 					fmeasev.write('# <network>')
 					for alg in self.algs:
@@ -240,7 +240,7 @@ class EvalsAgg(object):
 					# Brief header for the extended results
 					fmeasevx.write('# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n')
 					header = False
-				algsev = iter(sorted(algsev.iteritems(), key=lambda x: x[0]))
+				algsev = iter(sorted(viewitems(algsev), key=lambda x: x[0]))
 				ialgs = iter(self.algs)
 				firstcol = True
 				# Algorithms and their params for the best values on this network

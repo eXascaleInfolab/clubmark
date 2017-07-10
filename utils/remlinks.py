@@ -8,7 +8,36 @@
 \date: 2015-06
 """
 from __future__ import print_function, division  # Required for stderr output, must be the first import
-from future.utils import viewitems
+try:
+	# Required to efficiently traverse items of dictionaries in both Python 2 and 3
+	from future.utils import viewitems
+	from future.builtins import range
+except ImportError as err:
+	# Use own implementation of view methods	
+	def viewMethod(obj, method):
+		"""Fetch view method of the object
+
+		obj  - the object to be processed
+		method  - name of the target method, str
+
+		return  target method or AttributeError
+
+		>>> callable(viewMethod(dict(), 'items'))
+		True
+		"""
+		viewmeth = 'view' + method
+		ometh = getattr(obj, viewmeth, None)
+		if not ometh:
+			ometh = getattr(obj, method)
+		return ometh
+
+	viewitems = lambda dct: viewMethod(dct, 'items')()
+	
+	# Replace range() implementation for Python2
+	try:
+		range = xrange
+	except NameError:
+		pass  # xrange is not defined in Python3, which is fine
 import sys
 import os
 import random

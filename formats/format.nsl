@@ -10,7 +10,7 @@
 
 
 # NSL[A,E] format specification:
-# Comments are marked with '#' symbol
+# Comments are marked with '#' symbol and allowed only in the begin of the line
 # Optional Header as a special comment:
 # [Nodes: <nodes_num>[,]	<Links>: <links_num>[,] [Weighted: {0, 1}]]
 # Note: the comma is either always present as a delimiter or always absent

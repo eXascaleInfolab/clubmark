@@ -38,6 +38,9 @@ WORKDIR $WORK_DIR
 COPY ./$PYREQS /tmp/$PYREQS
 
 # Install Ubuntu dependencies
+# - wget is required to download pip for pypy (and as a useful tool)
+# - hwloc (includes lstopo) is required to identify enumeration type of CPUs
+#  to perform correct CPU affinity masking
 # - Python scripts:  python
 # Python2 can be used for all .py files, but it is recommended to use
 # Python3 for most of the files (scp.py supports only Python2) and pypy[2]
@@ -50,15 +53,14 @@ COPY ./$PYREQS /tmp/$PYREQS
 # - Evaluation Apps & Utilities:
 # -- gecmi:  libtbb2
 # -- remlinks.py: numpy future
-# Internal dependencies:
-# - wget is required to download pip for pypy (and as a useful tool)
 RUN apt-get update && apt-get install -y \
+	wget \
+	hwloc \
 	python3 python3-pip pypy \
 	libxml2-dev zlib1g-dev \
 	openjdk-8-jre \
 	libboost-program-options1.58.0 \
-	libtbb2\
-	wget
+	libtbb2
 
 ## Install pip to pypy
 #RUN set -o pipefail && wget -qO - https://bootstrap.pypa.io/get-pip.py | pypy

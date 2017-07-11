@@ -18,15 +18,17 @@ import shutil
 import glob
 import sys
 import traceback  # Stacktrace
+# from collections import namedtuple
 from datetime import datetime
 from subprocess import PIPE
 
-from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, escapePathWildcards, envVarDefined, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID
+
+from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
+	escapePathWildcards, envVarDefined, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR
 from utils.mpepool import Task, Job
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
-_ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
 _RESDIR = 'results/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm, specified RELATIVE to _ALGSDIR
 _CLSDIR = 'clusters/'  # Clusters directory for the resulting clusters of algorithms execution
 _EXTERR = '.err'
@@ -38,6 +40,53 @@ _EXTAGGRESEXT = '.resx'  # Extended aggregated results
 _SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not apear in a file name, which can be part of job name)
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
+
+
+def execGecmi(execpool, clsfile, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
+	pass
+
+
+def execOnmi(execpool, clsfile, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
+	pass
+
+
+def execXmeasures(execpool, clsfile, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
+	pass
+
+
+def execDaoc(execpool, clsfile, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
+	pass
+
+
+def evaluators(quality):
+	"""Fetch tuple of the evaluation executable calling functions for the specified measures
+
+	quality  - quality measures mask
+		Note: all measures are applicable for the overlapping clusters
+		0  - nothing
+		0b00000001  - NMI_max
+		0b00000011  - all NMIs (max, min, avg, sqrt)
+		0b00000100  - ONMI_max
+		0b00001100  - all ONMIs (max, avg, lfk)
+		0b00010000  - Average F1h Score
+		0b00100000  - F1p measure
+		0b01110000  - All F1s (F1p, F1h, F1s)
+		0b10000000  - Default extrinsic measures (NMI_max, F1h and F1p)
+		0b1111'1111  - All extrinsic measures (NMI-s, ONMI-s, F1-s)
+		0x1xx  - Q (modularity)
+		0x2xx  - f (conductance)
+		0xFxx  - All intrinsic measures
+	"""
+	evals = []
+	if quality & 0b11:  # NMI multiresolution (multiscale) and overlapping (gecmi)
+		evals.append(execGecmi)
+	if quality & 0b1100:  # NMI overlapping (onmi)
+		evals.append(execOnmi)
+	if quality & 0xF0:  # F1-s (xmeasures)
+		evals.append(execXmeasures)
+	if quality & 0xF00:  # Intrinsic measures: Q and f (daoc)
+		evals.append(execDaoc)
+	return tuple(evals)
 
 
 class ShufflesAgg(object):

@@ -28,7 +28,7 @@ _SEPPARS = '!'  # Network parameters separator, must be a char
 _SEPINST = '^'  # Network instances separator, must be a char
 _SEPSHF = '%'  # Network shuffles separator, must be a char; ~
 _SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
-_UTILDIR = 'utils/'  # Utilities (external applicaions) directory
+_UTILDIR = 'utils/'  # Utilities directory with external applicaions for quality evaluation and other things
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 

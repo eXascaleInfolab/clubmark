@@ -47,11 +47,12 @@ from numbers import Number  # To verify that a variable is a number (int or floa
 from datetime import datetime
 from sys import executable as PYEXEC  # Full path to the current Python interpreter
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, tobackup, escapePathWildcards, _SEPPARS, _UTILDIR
-from benchevals import _SEPNAMEPART, _ALGSDIR, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
+from benchevals import _SEPNAMEPART, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
 from utils.mpepool import Job
 from algorithms.utils.parser_nsl import parseHeaderNsl
 
 
+_ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
 _EXTLOG = '.log'  # Extension for the logs
 _EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
 _EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
@@ -221,7 +222,7 @@ def prepareResDir(appname, task, odir, pathid):
 	task  - task name
 	odir  - whether to output results to the dedicated dir named by the instance name,
 		which actual the the shuffles with non-flat structure
-	pathid  - pather id of the input networks file
+	pathid  - path id (including the leading separator) of the input networks file, str
 
 	return resulting directory without the ending '/' terminator
 	"""
@@ -346,7 +347,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	odir  - whether to output results to the dedicated dir named by the instance name,
 		which is actual for the shuffles with non-flat structure
 	timeout  - processing (clustering) timeout of the input file
-	pathid  - pather id of the input networks file
+	pathid  - path id (including the leading separator) of the input networks file, str
 	workdir  - relative working directory of the app, actual when the app contains libs
 	seed  - random seed, uint64_t
 

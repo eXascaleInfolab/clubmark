@@ -59,8 +59,8 @@ from multiprocessing import cpu_count  # Returns the number of multi-core CPU un
 # PYEXEC - current Python interpreter
 import benchapps  # Required for the functions name mapping to/from the app names
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR
-from benchapps import PYEXEC, aggexec, funcToAppName, _EXTCLNODES, _PREFEXEC
-from benchevals import evalAlgorithm, aggEvaluations, EvalsAgg, _RESDIR, _EXTEXECTIME
+from benchapps import PYEXEC, aggexec, funcToAppName, _ALGSDIR, _EXTCLNODES, _PREFEXEC
+from benchevals import evaluators, evalAlgorithm, aggEvaluations, EvalsAgg, _RESDIR, _EXTEXECTIME
 from utils.mpepool import AffinityMask, ExecPool, Job, secondsToHms
 from algorithms.utils.parser_nsl import asymnet, dflnetext
 
@@ -70,6 +70,7 @@ _SYNTDIR = 'syntnets/'  # Default base directory for the synthetic datasets (bot
 _NETSDIR = 'networks/'  # Networks sub-directory of the synthetic networks (inside _SYNTDIR)
 assert _RESDIR.endswith('/'), 'A directory should have a valid terminator'
 _SEEDFILE = _RESDIR + 'seed.txt'
+_PATHIDFILE = _RESDIR + 'pathid.map'  # Path id map file for the results iterpratation (mapping back to the input networks)
 _TIMEOUT = 36 * 60*60  # Default execution timeout for each algorithm for a single network instance
 _GENSEPSHF = '%'  # Shuffle number separator in the synthetic networks generation parameters
 _WPROCSMAX = max(cpu_count()-1, 1)  # Maximal number of the worker processes, should be >= 1
@@ -149,7 +150,7 @@ class Params(object):
 			0b100 - resolve duplicated links on conversion
 		runalgs  - execute algorithm or not
 		quality  - quality measures to evaluate on the results:
-			Note: all the employed measures are applicable for overlapping clusters
+			Note: all measures are applicable for overlapping clusters
 			0  - nothing
 			0b00000001  - NMI_max
 			0b00000011  - all NMIs (max, min, avg, sqrt)
@@ -731,17 +732,19 @@ while True:
 		print('Networks ({}) shuffling completed. NOTE: random seed is not supported for the shuffling'.format(shufnets))
 
 
-def processPath(popt, handler, xargs=None):
+def processPath(popt, handler, xargs=None, dflextfn=dflnetext):
 	"""Process the specified path with the specified handler
 
-	popt  - processing path (directory of file, not a wildcard) options, PathOpts
-	handler  - handler to be called as handler(netfile, netshf, xargs)
+	popt  - processing path options (the path is directory of file, not a wildcard), PathOpts
+	handler  - handler to be called as handler(netfile, netshf, xargs),
+		netshf means that the processing networks is a shuffle in the non-flat dir structure
 	xargs  - extra arguments of the handler following after the processing network file
+	dflextfn  - function(asymflag) for the default extension of the input files in the path
 	"""
 	assert os.path.exists(popt.path), 'Target path should exist'
 
 	path = popt.path  # Assign path to a local variable to not corrupt the input data
-	dflext = dflnetext(popt.asym)  # Default network extension for files in dirs
+	dflext = dflextfn(popt.asym)  #  dflnetext(popt.asym)  # Default network extension for files in dirs
 	if os.path.isdir(path):
 		# Traverse over the instances in the specified directory
 		# Use the same path separator on all OSs
@@ -763,6 +766,7 @@ def processPath(popt, handler, xargs=None):
 				# the origin network itself is linked to the shufles dir (inside it)
 				dirname, ext = os.path.splitext(net)
 				if os.path.isdir(dirname):
+					# Shuffles exist for this network and located in the subdir together with the copy of origin
 					for desnet in glob.iglob('/*'.join((dirname, ext))):
 						handler(desnet, True, xargs)  # True - shuffle is processed in the non-flat dir structure
 				else:
@@ -855,7 +859,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 			pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
 			for path in glob.iglob(popt.path):  # Allow wildcards
 				pcuropt.path = path
-				processPath(pcuropt, converter, xargs)  # Calls converter(net, netshf, xargs)
+				processPath(pcuropt, converter, xargs=xargs)  # Calls converter(net, netshf, xargs)
 
 		netsnum = xargs['netsnum']
 		if convtimeout <= 0:
@@ -907,6 +911,17 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	# Note: set affinity in a way to maximize the CPU cache L1/2 for each process
 	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(AffinityMask.CORE_THREADS)
 	, memlimit=_VMLIMIT, name='runapps') as _execpool:
+		# Run all algs if not specified the concrete algorithms to be run
+		if not algorithms:
+			# Algorithms callers
+			execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
+			# Save algorithms names to perform resutls aggregation after the execution
+			algorithms = appnames(appsmodule)
+		else:
+			# Execute only specified algorithms
+			execalgs = [getattr(appsmodule, _PREFEXEC + alg, unknownApp(_PREFEXEC + alg)) for alg in algorithms]
+			#algorithms = [alg.lower() for alg in algorithms]
+
 		def runapp(net, asym, netshf, pathid=''):
 			"""Execute algorithms on the specified network counting number of ran jobs
 
@@ -939,33 +954,20 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			xargs['jobsnum'] += tnum
 			xargs['netcount'] += tnum != 0
 
-		# Run all algs if not specified the concrete algorithms to be run
-		if not algorithms:
-			# Algorithms callers
-			execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
-			# Save algorithms names to perform resutls aggregation after the execution
-			algorithms = appnames(appsmodule)
-		else:
-			# Execute only specified algorithms
-			execalgs = [getattr(appsmodule, _PREFEXEC + alg
-				, unknownApp(_PREFEXEC + alg)) for alg in algorithms]
-			#algorithms = [alg.lower() for alg in algorithms]
-
 		# Prepare resulting paths mapping file
 		fpathids = None  # File of pathes ids
 		if not os.path.exists(_RESDIR):
 			os.mkdir(_RESDIR)
-		pathidsMap = _RESDIR + 'path_ids.map'  # Path ids map file for the results iterpratation
 		try:
-			fpathids = open(pathidsMap, 'a')
+			fpathids = open(_PATHIDFILE, 'a')
 		except IOError as err:
 			print('WARNING, creation of the path ids map file is failed: {}. The mapping is outputted to stdout.'
 				.format(err), file=sys.stderr)
 			fpathids = sys.stdout
 		# Write header if required
 		timestamp = datetime.utcnow()
-		if not os.path.getsize(pathidsMap):
-			fpathids.write('# ID(#)\tPath\n')  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
+		if not os.path.getsize(_PATHIDFILE):
+			fpathids.write('# Name{}ID\tPath\n'.format(_SEPPATHID))  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
 		fpathids.write('# --- {time} (seed: {seed}) ---\n'.format(time=timestamp, seed=seed))  # Write timestamp
 
 		xargs = {'asym': False,  # Asymmetric network
@@ -974,23 +976,26 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 				 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
 		# Track processed file names to resolve cases when files with the same name present in different input dirs
 		# Note: pathids are required at least to set concise job names to see what is executed in runtime
-		paths = set()
+		netnames = set()
 		for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
 			xargs['asym'] = popt.asym
 			# Resolve wildcards
 			pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
 			for pathid, path in enumerate(glob.iglob(popt.path)):  # Allow wildcards
-				# Form non-empty pathid string for the duplicated paths
-				if path not in paths:
-					paths.add(path)
+				# Form non-empty pathid string for the duplicated nfile names
+				mpath = os.path.splitext(path)[0]
+				net = os.path.split(mpath)[1]
+				if net not in netnames:
+					netnames.add(net)
 				else:
-					xargs['pathidstr'] = _SEPPATHID + str(pathid)
-					fpathids.write('{}\t{}\n'.format(xargs['pathidstr'][len(_SEPPATHID):], path))
+					nameid = _SEPPATHID + str(pathid)
+					xargs['pathidstr'] = nameid
+					fpathids.write('{}\t{}\n'.format(net + nameid, mpath))
 				pcuropt.path = path
 				if _DEBUG_TRACE:
-					print('  Scheduling apps execution for (flat: {flat}, asym: {asym}, shfnum: {shfnum}) path: {path}'
-						.format(flat=pcuropt.flat, asym=pcuropt.asym, shfnum=pcuropt.shfnum, path=path))
-				processPath(pcuropt, runner, xargs)
+					print('  Scheduling apps execution for the path options ({})'.format(str(pcuropt)))
+				processPath(pcuropt, runner, xargs=xargs)
+		netnames = None  # Free memory from filenames
 
 		# Extend algorithms execution tracing files (.rcp) with time tracing, once per an executing algorithm
 		# to distinguish different executions (benchmark runs)
@@ -1005,7 +1010,6 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 				fpathids.close()
 			else:
 				fpathids.flush()
-		paths = None  # Free memory from filenames
 
 		if runtimeout <= 0:
 			runtimeout = timeout * xargs['jobsnum']
@@ -1032,7 +1036,7 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
 	quality  - evaluation measures mask
-		Note: all the employed measures are applicable for overlapping clusters
+		Note: all measures are applicable for the overlapping clusters
 		0  - nothing
 		0b00000001  - NMI_max
 		0b00000011  - all NMIs (max, min, avg, sqrt)
@@ -1058,63 +1062,80 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 	assert (quality and appsmodule and datas and exectime + 0 >= 0
 		and timeout + 0 >= 0), 'Invalid input arguments'
 
-	starttime = time.time()  # Procedure start time
-	global _execpool
-	assert _execpool is None, 'The global execution pool should not exist'
-	nmiMrsOvp = quality & 0b11  # NMI multiresolution (multiscale) and overlapping (gecmi)
+	nmix = quality & 0b11  # NMI multiresolution (multiscale) and overlapping (gecmi)
 
-	nmiOvp = quality & 0b1100  # NMI overlapping (onmi)
-	intrinsics = quality & 0xF00  # Q and f (daoc)
+	nmio = quality & 0b1100  # NMI overlapping (onmi)
+	intrins = quality & 0xF00  # Intrinsic measures: Q and f (daoc)
 	quality &= 0xF0  # F1-s (xmeasures)
 
 	# Explicitly reassign default extrinsic measures (NMI_max, F1h and F1p)
 	if quality == 0x80:  # 0b10000000
-		nmiMrsOvp = 1  # NMI_max
+		nmix = 1  # NMI_max
 		quality = 0x30  # F1h and F1p: 0b00010000 | 0b00100000
+
+	starttime = time.time()  # Procedure start time
+	print('Starting quality evaluations...')
+	# Run evaluations for all algs if not specified the concrete algorithms to be run
+	if not algorithms:
+		algorithms = appnames(appsmodule)
+
+	# Load paths ids dictionary
+	pathids = {}
+	if os.path.isfile(_PATHIDFILE):
+		with open(_PATHIDFILE) as fpais:
+			for ln in fpais:
+				# Skip comments
+				if not ln or ln[0] == '#':
+					continue
+				fnamex, path = ln.split(None, 1)  # Filename extended with id, full path to the input file
+				pathids[fnamex] = path
+		if pathids:
+			print('Pathid mapping loaded: {} items'.format(len(pathids)))
+	else:
+		print('WARNING, pathid mapping does not exist', file=sys.stderr)
+
+
+	def evalquality(execpool, evalapps, net, asym, netshf, pathids=None):
+		"""Evaluate algorithms results on the specified network counting number of ran jobs
+
+		net  - network to be processed
+		asym  - whether the network is asymmetric (directed), considered only for the non-standard network file extensions
+		netshf  - whether this network is a shuffle in the non-flat dir structure
+		pathid  - path id of the net to distinguish nets with the same name located in different dirs
+
+		return
+			jobsnum  - the number of scheduled jobs, typically 1
+		"""
+		jobsnum = 0
+		for eapp in evalapps:
+			try:
+				jobsnum += eapp(execpool, net, asym=asymnet(net, asym), odir=netshf, timeout=timeout, pathids=pathids, seed=seed)
+			except Exception as err:
+				errexectime = time.time() - exectime
+				print('WARNING, the "{}" is interrupted by the exception: {} with the callstack: {} on {:.4f} sec ({} h {} m {:.4f} s)'
+					.format(eapp.__name__, err, traceback.format_exc(), errexectime, *secondsToHms(errexectime)), file=sys.stderr)
+		return jobsnum
+
+	def evaluator(net, netshf, xargs):
+		"""Network evaluation helper
+
+		net  - network file name
+		netshf  - whether this network is a shuffle in the non-flat dir structure
+		xargs  - extra custom parameters
+		"""
+		tnum = evalquality(xargs['execpool'], xargs['evaluators'], net, xargs['asym'], netshf, pathids)
+		xargs['jobsnum'] += tnum
+		xargs['netcount'] += tnum != 0
+
+	global _execpool
+	assert _execpool is None, 'The global execution pool should not exist'
 	# ATTENTION: NMI ovp multiresolution should be ealuated in the dedicated mode requiring multiple CPU cores,
 	# so it will be scheduled separately after other measures
-	# Use affinity to assign 2 aps on half of the
-	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
-	# Note: afnstep=AffinityMask.CORE_THREADS sets affinity in a way to maximize the CPU cache L1/2 for each process
+	# Note: afnstep = 1 to maximize parallelization the same time binding single-treaded apps to the logical CPUs (hardware threads)
 	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='revalres') as _execpool:
-		def evalapp(net, asym, netshf, pathid=''):
-			"""Evaluate algorithms results on the specified network counting number of ran jobs
-
-			net  - network to be processed
-			asym  - whether the network is asymmetric (directed), considered only for the non-standard network file extensions
-			netshf  - whether this network is a shuffle in the non-flat dir structure
-			pathid  - path id of the net to distinguish nets with the same name located in different dirs
-
-			return
-				jobsnum  - the number of scheduled jobs, typically 1
-			"""
-			jobsnum = 0
-			for ealg in execalgs:
-				try:
-					jobsnum += ealg(_execpool, net, asym=asymnet(net, asym), odir=netshf, timeout=timeout, pathid=pathid, seed=seed)
-				except Exception as err:
-					errexectime = time.time() - exectime
-					print('WARNING, the "{}" is interrupted by the exception: {} with the callstack: {} on {:.4f} sec ({} h {} m {:.4f} s)'
-						.format(ealg.__name__, err, traceback.format_exc(), errexectime, *secondsToHms(errexectime)), file=sys.stderr)
-			return jobsnum
-
-		def evaler(net, netshf, xargs):
-			"""Network evaluation helper
-
-			net  - network file name
-			netshf  - whether this network is a shuffle in the non-flat dir structure
-			xargs  - extra custom parameters
-			"""
-			tnum = runapp(net, xargs['asym'], netshf, xargs['pathidstr'])
-			xargs['jobsnum'] += tnum
-			xargs['netcount'] += tnum != 0
-
-		print('Starting quality evaluations...')
-		# Run evaluations for all algs if not specified the concrete algorithms to be run
-		if not algorithms:
-			algorithms = appnames(appsmodule)
-
-		xargs = {'asym': False,  # Asymmetric network, required for the intrinsic measures
+		xargs = {'execpool': _execpool,
+				 'evaluators': evaluators(quality),
+				 'asym': False,  # Asymmetric network, required for the intrinsic measures
 				 'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
 				 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
 		# Track processed file names to resolve cases when files with the same name present in different input dirs
@@ -1124,20 +1145,20 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 			xargs['asym'] = popt.asym
 			# Resolve wildcards
 			pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
-			for pathid, path in enumerate(glob.iglob(popt.path)):  # Allow wildcards
+			for path in glob.iglob(popt.path):  # Allow wildcards
 				# Form non-empty pathid string for the duplicated paths
 				if path not in paths:
 					paths.add(path)
 				pcuropt.path = path
 				if _DEBUG_TRACE:
-					print('  Scheduling apps execution for (flat: {flat}, asym: {asym}, shfnum: {shfnum}) path: {path}'
-						.format(flat=pcuropt.flat, asym=pcuropt.asym, shfnum=pcuropt.shfnum, path=path))
-				processPath(pcuropt, evaler, xargs)
+					print('  Scheduling quality evaluation for the path options ({})'.format(str(pcuropt)))
+				processPath(pcuropt, evaluator, xargs=xargs)
 
-		# Extend algorithms execution tracing files (.rcp) with time tracing, once per an executing algorithm
-		# to distinguish different executions (benchmark runs)
+		# Extend quality evaluation tracing files (.rcp) with time tracing to distinguish different executions (benchmark runs)
+		evaluator.mark(algorithms, seed)
+
 		for alg in algorithms:
-			aexecres = ''.join((_RESDIR, alg, '/', alg, _EXTEXECTIME))
+			aexecres = ''.join((_RESDIR, alg, '/', measure, _EXTEXECTIME))
 			with open(aexecres, 'a') as faexres:
 				faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=timestamp, seed=seed))  # Write timestamp
 
@@ -1353,7 +1374,8 @@ def benchmark(*args):
 
 	# Evaluate results
 	if opts.quality:
-		evalResults(quality=opts.quality, appsmodule=benchapps, algorithms=opts.algorithms, datas=opts.datas, exectime=exectime, timeout=opts.timeout, evaltimeout=14*24*60*60)  # 14 days
+		evalResults(quality=opts.quality, appsmodule=benchapps, algorithms=opts.algorithms
+			, datas=opts.datas, exectime=exectime, timeout=opts.timeout, evaltimeout=14*24*60*60)  # 14 days
 
 	if opts.aggrespaths:
 		aggEvaluations(opts.aggrespaths)

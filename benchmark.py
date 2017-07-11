@@ -982,11 +982,12 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			# Resolve wildcards
 			pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
 			for pathid, path in enumerate(glob.iglob(popt.path)):  # Allow wildcards
-				# Form non-empty pathid string for the duplicated nfile names
+				# Form non-empty pathid string for the duplicated file names
 				mpath = os.path.splitext(path)[0]
 				net = os.path.split(mpath)[1]
 				if net not in netnames:
 					netnames.add(net)
+					xargs['pathidstr'] = ''
 				else:
 					nameid = _SEPPATHID + str(pathid)
 					xargs['pathidstr'] = nameid
@@ -1079,22 +1080,6 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 	if not algorithms:
 		algorithms = appnames(appsmodule)
 
-	# Load paths ids dictionary
-	pathids = {}
-	if os.path.isfile(_PATHIDFILE):
-		with open(_PATHIDFILE) as fpais:
-			for ln in fpais:
-				# Skip comments
-				if not ln or ln[0] == '#':
-					continue
-				fnamex, path = ln.split(None, 1)  # Filename extended with id, full path to the input file
-				pathids[fnamex] = path
-		if pathids:
-			print('Pathid mapping loaded: {} items'.format(len(pathids)))
-	else:
-		print('WARNING, pathid mapping does not exist', file=sys.stderr)
-
-
 	def evalquality(execpool, evalapps, net, asym, netshf, pathids=None):
 		"""Evaluate algorithms results on the specified network counting number of ran jobs
 
@@ -1127,28 +1112,88 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 		xargs['jobsnum'] += tnum
 		xargs['netcount'] += tnum != 0
 
+	xargs = {'execpool': None,  # Execution pool to schedule evaluators
+			 'evaluators': None,  # Evaluating functions
+			 'asym': False,  # Asymmetric network, required for the intrinsic measures
+			 'pathidstr': '',  # Id of the dublicated path shortcut to have the unique shortcut
+			 'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
+			 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
+
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 	# ATTENTION: NMI ovp multiresolution should be ealuated in the dedicated mode requiring multiple CPU cores,
 	# so it will be scheduled separately after other measures
 	# Note: afnstep = 1 to maximize parallelization the same time binding single-treaded apps to the logical CPUs (hardware threads)
-	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='revalres') as _execpool:
-		xargs = {'execpool': _execpool,
-				 'evaluators': evaluators(quality),
-				 'asym': False,  # Asymmetric network, required for the intrinsic measures
-				 'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
-				 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
+	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='qualityst') as _execpool:
+		xargs['execpool'] = _execpool
+		xargs['evaluators'] = evaluators(quality & 0xFFFC)  # Skip gecmi (Multiresolution Overlapping NMI) because it requires special scheduling
+		print('  Scheduling quality evaluation for the evaluators: ', ', '.join(
+			[funcToAppName(func.__name__) for func in xargs['evaluators']]))
+		# Load pathid mapping (nameid: fullpath)
+		pathids = {}
+		if os.path.isfile(_PATHIDFILE):
+			with open(_PATHIDFILE) as fpais:
+				for ln in fpais:
+					# Skip comments
+					if not ln or ln[0] == '#':
+						continue
+					fnamex, path = ln.split(None, 1)  # Filename extended with id, full path to the input file
+					pathids[fnamex] = path
+			if pathids:
+				print('Pathid mapping loaded: {} items'.format(len(pathids)))
+		else:
+			print('WARNING, pathid mapping does not exist', file=sys.stderr)
+
 		# Track processed file names to resolve cases when files with the same name present in different input dirs
 		# Note: pathids are required at least to set concise job names to see what is executed in runtime
-		paths = set()
+		netnames = {}  # Names of the evaluating networks
 		for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
 			xargs['asym'] = popt.asym
 			# Resolve wildcards
 			pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
-			for path in glob.iglob(popt.path):  # Allow wildcards
-				# Form non-empty pathid string for the duplicated paths
-				if path not in paths:
-					paths.add(path)
+			for pathid, path in enumerate(glob.iglob(popt.path)):  # Allow wildcards
+				# Form non-empty pathid string for the duplicated file names
+				mpath = os.path.splitext(path)[0]
+				net = os.path.split(mpath)[1]
+				if net not in netnames:
+					netnames.add(net)
+					xargs['pathidstr'] = ''
+				else:
+					nameid = _SEPPATHID + str(pathid)
+					xargs['pathidstr'] = nameid
+					# Validate loaded pathids mapping
+					if pathids.get(nameid) != mpath:
+						raise ValueError('ERROR, "{}" mapping validation failed.'
+							' Can not find correspondence of the ground truth files to the evaluating clusterings.')
+				pcuropt.path = path
+				if _DEBUG_TRACE:
+					print('  Scheduling quality evaluation for the path options ({})'.format(str(pcuropt)))
+				processPath(pcuropt, evaluator, xargs=xargs)
+		netnames.clear()
+		pathids = None  # Release loaded pathid mapping
+
+	# Schedule NMI multiresolution overlapping evalautions (gecmi) either on the whole NUMA node or
+	# on the whole server because gecmi is multi-threaded app with huge number of threads
+	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(AffinityMask.NODE_CPUS), memlimit=_VMLIMIT, name='qualitymt') as _execpool:
+		xargs['execpool'] = _execpool
+		xargs['evaluators'] = evaluators(quality & 0b11)  # Skip gecmi (Multiresolution Overlapping NMI) because it requires special scheduling
+		print('  Scheduling quality evaluation for the evaluators: ', ', '.join(
+			[funcToAppName(func.__name__) for func in xargs['evaluators']]))
+
+		# Track processed file names to resolve cases when files with the same name present in different input dirs
+		# Note: pathids are required at least to set concise job names to see what is executed in runtime
+		for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
+			xargs['asym'] = popt.asym
+			# Resolve wildcards
+			pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
+			for pathid, path in enumerate(glob.iglob(popt.path)):  # Allow wildcards
+				# Form non-empty pathid string for the duplicated file names
+				net = os.path.splitext(os.path.split(path)[1])[0]
+				if net not in netnames:
+					netnames.add(net)
+				else:
+					nameid = _SEPPATHID + str(pathid)
+					xargs['pathidstr'] = nameid
 				pcuropt.path = path
 				if _DEBUG_TRACE:
 					print('  Scheduling quality evaluation for the path options ({})'.format(str(pcuropt)))
@@ -1161,8 +1206,6 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 			aexecres = ''.join((_RESDIR, alg, '/', measure, _EXTEXECTIME))
 			with open(aexecres, 'a') as faexres:
 				faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=timestamp, seed=seed))  # Write timestamp
-
-		paths = None  # Free memory from filenames
 
 		if runtimeout <= 0:
 			runtimeout = timeout * xargs['jobsnum']

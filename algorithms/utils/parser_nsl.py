@@ -42,6 +42,7 @@ def dflnetext(asym):
 
 class NetInfo(object):
 	"""Network information (description) encoded in the file header"""
+	
 	def __init__(self, directed, ndsnum, lnsnum, weighted):
 		"""Network information attributes
 
@@ -61,6 +62,56 @@ class NetInfo(object):
 		self.weighted = weighted
 
 
+def parseHeaderNslFile(finp, directed=None):
+	"""Load the header of NSL(nse, nsa) file
+
+	finp  - opened for the reading file of the input network
+	directed  - whether the input network is directed
+		None  - unknown, interpreted by default as undirected
+
+	return NetInfo  - network information fetched from the header
+	"""
+	# Prase the header if exists
+	ndsnum = 0  # The number of nodes
+	lnsnum = 0  # The number of links (edges or arcs)
+	weighted = None  # The network is weighted
+	# Marker of the header start
+	mark = 'nodes:'
+	marklen = len(mark)
+	for ln in finp:
+		#ln = ln.lstrip()
+		if not ln:
+			continue
+		if ln[0] == '#':
+			# The header should start whith the mark
+			if ln[1:].lstrip()[:marklen].lower() != mark:
+				continue
+			try:
+				ln = ln[1:].split(None, 6)
+				for sep in ':,':
+					lnx = []
+					for part in ln:
+						lnx.extend(part.rstrip(sep).split(sep, 3))
+					ln = lnx
+				if _DEBUG_TRACE:
+					print('  "{}" header tokens: {}'.format(network, ln))
+				if len(ln) >= 2 and ln[0].lower() == 'nodes':
+					ndsnum = int(ln[1])
+				# Parse arcs/edges number optionally
+				i = 2
+				if len(ln) >= i+2 and ln[i].lower() == ('arcs' if directed else 'edges'):
+					lnsnum = int(ln[3])
+					i += 2
+				if len(ln) >= i+2 and ln[i].lower() == 'weighted':
+					weighted = bool(int(ln[5]))  # Note: int() is required because bool('0') is True
+			except ValueError as err:
+				# Part of the attributes could be initialized, others just have initial values
+				print('WARNING, NSL header is corrupted: ', err)  # Note: this is a minor issue
+		break
+
+	return NetInfo(directed=directed, ndsnum=ndsnum, lnsnum=lnsnum, weighted=weighted)
+
+
 def parseHeaderNsl(network, directed=None):
 	"""Load the header of NSL(nse, nsa) file
 
@@ -73,47 +124,10 @@ def parseHeaderNsl(network, directed=None):
 	directed = asymnet(os.path.splitext(network)[1].lower())
 	#assert directed is not None, ('Nsl file with either standart extension or'
 	#	' explicit network type specification is expected')
-
 	with open(network) as finp:
-		# Prase the header if exists
-		ndsnum = 0  # The number of nodes
-		lnsnum = 0  # The number of links (edges or arcs)
-		weighted = None  # The network is weighted
-		# Marker of the header start
-		mark = 'nodes:'
-		marklen = len(mark)
-		for ln in finp:
-			#ln = ln.lstrip()
-			if not ln:
-				continue
-			if ln[0] == '#':
-				# The header should start whith the mark
-				if ln[1:].lstrip()[:marklen].lower() != mark:
-					continue
-				try:
-					ln = ln[1:].split(None, 6)
-					for sep in ':,':
-						lnx = []
-						for part in ln:
-							lnx.extend(part.rstrip(sep).split(sep, 3))
-						ln = lnx
-					if _DEBUG_TRACE:
-						print('  "{}" header tokens: {}'.format(network, ln))
-					if len(ln) >= 2 and ln[0].lower() == 'nodes':
-						ndsnum = int(ln[1])
-					# Parse arcs/edges number optionally
-					i = 2
-					if len(ln) >= i+2 and ln[i].lower() == ('arcs' if directed else 'edges'):
-						lnsnum = int(ln[3])
-						i += 2
-					if len(ln) >= i+2 and ln[i].lower() == 'weighted':
-						weighted = bool(int(ln[5]))  # Note: int() is required because bool('0') is True
-				except ValueError as err:
-					# Part of the attributes could be initialized, others just have initial values
-					print('WARNING, NSL header is corrupted: ', err)  # Note: this is a minor issue
-			break
+		netinf = parseHeaderNslFile(finp, directed)
 
-	return NetInfo(directed=directed, ndsnum=ndsnum, lnsnum=lnsnum, weighted=weighted)
+	return netinf
 
 
 def loadNsl(network, directed=None):
@@ -129,7 +143,7 @@ def loadNsl(network, directed=None):
 	graph = None
 	with open(network) as finp:
 		# Prase the header if exists
-		netinfo = parseHeaderNsl(finp, directed)
+		netinfo = parseHeaderNslFile(finp, asymnet(os.path.splitext(network)[1].lower()))
 		directed = netinfo.directed
 		weighted = netinfo.weighted
 

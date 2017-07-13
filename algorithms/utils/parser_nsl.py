@@ -31,7 +31,7 @@ def asymnet(netext, asym=None):
 
 
 def dflnetext(asym):
-	"""Get default networks extension for the network
+	"""Get default file extension for the inptut network
 
 	asym  - whether the network is asymmetric (directed) or symmetric (undirected)
 

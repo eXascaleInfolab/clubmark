@@ -1033,7 +1033,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	print('Execution statistics aggregated')
 
 
-def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evaltimeout=14*24*60*60):
+def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout, evaltimeout=14*24*60*60):
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
 	quality  - evaluation measures mask
@@ -1055,6 +1055,8 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 	algorithms  - list of the algorithms to be executed
 	datas  - input datasets, wildcards of files or directories containing files
 		of the default extensions .ns{{e,a}}
+	seed  - benchmark seed, natural number
+		ATTENTION: seed is not supported by [some] evaluation apps (gecmi)
 	exectime  - elapsed time since the benchmarking started
 	timeout  - timeout per each evaluation run, a single measure applied to the results
 		of a single algorithm on a single network (all instances and shuffles), >= 0
@@ -1101,8 +1103,8 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 					.format(eapp.__name__, err, traceback.format_exc(), errexectime, *secondsToHms(errexectime)), file=sys.stderr)
 		return jobsnum
 
-	def evaluator(net, netshf, xargs):
-		"""Network evaluation helper
+	def runeval(net, netshf, xargs):  # TODO: default ext
+		"""Clustering evaluation runner
 
 		net  - network file name
 		netshf  - whether this network is a shuffle in the non-flat dir structure
@@ -1111,6 +1113,15 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 		tnum = evalquality(xargs['execpool'], xargs['evaluators'], net, xargs['asym'], netshf, pathids)
 		xargs['jobsnum'] += tnum
 		xargs['netcount'] += tnum != 0
+
+	def dflclsext(asym=None):
+		"""Get default file extension for the resulting clustering
+
+		asym  - whether the input network is asymmetric (directed) or symmetric (undirected)
+
+		return  - respective extension of the network file having leading '.'
+		"""
+		return '.cnl'
 
 	xargs = {'execpool': None,  # Execution pool to schedule evaluators
 			 'evaluators': None,  # Evaluating functions
@@ -1168,13 +1179,17 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 				pcuropt.path = path
 				if _DEBUG_TRACE:
 					print('  Scheduling quality evaluation for the path options ({})'.format(str(pcuropt)))
-				processPath(pcuropt, evaluator, xargs=xargs)
+				processPath(pcuropt, runeval, xargs=xargs, dflextfn=dflclsext)
 		netnames.clear()
 		pathids = None  # Release loaded pathid mapping
 
 	# Schedule NMI multiresolution overlapping evalautions (gecmi) either on the whole NUMA node or
 	# on the whole server because gecmi is multi-threaded app with huge number of threads
-	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(AffinityMask.NODE_CPUS), memlimit=_VMLIMIT, name='qualitymt') as _execpool:
+	# Reuse execpool
+	_execpool.name = 'qualitymt'
+	_execpool.alive = True
+	_execpool.afnmask = AffinityMask(AffinityMask.NODE_CPUS)
+	with _execpool:
 		xargs['execpool'] = _execpool
 		xargs['evaluators'] = evaluators(quality & 0b11)  # Skip gecmi (Multiresolution Overlapping NMI) because it requires special scheduling
 		print('  Scheduling quality evaluation for the evaluators: ', ', '.join(
@@ -1191,13 +1206,17 @@ def evalResults(quality, appsmodule, algorithms, datas, exectime, timeout, evalt
 				net = os.path.splitext(os.path.split(path)[1])[0]
 				if net not in netnames:
 					netnames.add(net)
+					xargs['pathidstr'] = ''
 				else:
 					nameid = _SEPPATHID + str(pathid)
 					xargs['pathidstr'] = nameid
 				pcuropt.path = path
 				if _DEBUG_TRACE:
 					print('  Scheduling quality evaluation for the path options ({})'.format(str(pcuropt)))
-				processPath(pcuropt, evaluator, xargs=xargs)
+				processPath(pcuropt, runeval, xargs=xargs, dflextfn=dflclsext)
+		netnames = None
+
+
 
 		# Extend quality evaluation tracing files (.rcp) with time tracing to distinguish different executions (benchmark runs)
 		evaluator.mark(algorithms, seed)

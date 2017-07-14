@@ -766,7 +766,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 	# Run for range of eps
 	deps = (epsMax - eps) / steps  # Epsilon delta for each step
 	while eps <= epsMax:
-		prm = str(eps)  # Alg params (eps) as string
+		prm = '{:3g}'.format(eps)  # Alg params (eps) as string
 		prmex = 'e' + prm
 		# Embed params into the task name
 		taskbasex = delPathSuffix(task, True)

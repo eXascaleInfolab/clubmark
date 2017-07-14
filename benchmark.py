@@ -534,7 +534,12 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 			gentimeout = insnum * netgenTimeout
 		# Note: insnum*netgenTimeout is max time required for the largest instances generation,
 		# insnum*2 to consider all smaller networks
-		_execpool.join(min(gentimeout, insnum*2*netgenTimeout))
+		try:
+			_execpool.join(min(gentimeout, insnum*2*netgenTimeout))
+		except BaseException as err:  # Consider also system iteruptions not captured by the Exception
+			print('ERROR, network generation execution pool is interrupted by: {}. {}'
+				.format(err, traceback.format_exc()), file=sys.stderr)
+			raise
 	_execpool = None
 	print('Synthetic networks files generation completed')
 
@@ -964,53 +969,62 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			print('WARNING, creation of the path ids map file is failed: {}. The mapping is outputted to stdout.'
 				.format(err), file=sys.stderr)
 			fpathids = sys.stdout
-		# Write header if required
-		timestamp = datetime.utcnow()
-		if not os.path.getsize(_PATHIDFILE):
-			fpathids.write('# Name{}ID\tPath\n'.format(_SEPPATHID))  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
-		fpathids.write('# --- {time} (seed: {seed}) ---\n'.format(time=timestamp, seed=seed))  # Write timestamp
+		try:
+			# Write header if required
+			timestamp = datetime.utcnow()
+			if not os.path.getsize(_PATHIDFILE):
+				fpathids.write('# Name{}ID\tPath\n'.format(_SEPPATHID))  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
+			fpathids.write('# --- {time} (seed: {seed}) ---\n'.format(time=timestamp, seed=seed))  # Write timestamp
 
-		xargs = {'asym': False,  # Asymmetric network
-				 'pathidstr': '',  # Id of the dublicated path shortcut to have the unique shortcut
-				 'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
-				 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
-		# Track processed file names to resolve cases when files with the same name present in different input dirs
-		# Note: pathids are required at least to set concise job names to see what is executed in runtime
-		netnames = set()
-		for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
-			xargs['asym'] = popt.asym
-			# Resolve wildcards
-			pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
-			for pathid, path in enumerate(glob.iglob(popt.path)):  # Allow wildcards
-				# Form non-empty pathid string for the duplicated file names
-				mpath = os.path.splitext(path)[0]
-				net = os.path.split(mpath)[1]
-				if net not in netnames:
-					netnames.add(net)
-					xargs['pathidstr'] = ''
+			xargs = {'asym': False,  # Asymmetric network
+					 'pathidstr': '',  # Id of the dublicated path shortcut to have the unique shortcut
+					 'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
+					 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
+			# Track processed file names to resolve cases when files with the same name present in different input dirs
+			# Note: pathids are required at least to set concise job names to see what is executed in runtime
+			netnames = set()
+			for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
+				xargs['asym'] = popt.asym
+				# Resolve wildcards
+				pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
+				for pathid, path in enumerate(glob.iglob(popt.path)):  # Allow wildcards
+					# Form non-empty pathid string for the duplicated file names
+					if os.path.isdir(path):
+						# ATTENTION: required to process directories ending with '/' correctly
+						# Note: normpath() may change semantics in case symbolic link is used with parent dir:
+						# base/linkdir/../a -> base/a, which might be undesirable
+						mpath = path.rstrip('/')  # os.path.normpath(path)
+					else:
+						mpath = os.path.splitext(path)[0]
+					net = os.path.split(mpath)[1]
+					if net not in netnames:
+						netnames.add(net)
+						xargs['pathidstr'] = ''
+					else:
+						nameid = _SEPPATHID + str(pathid)
+						xargs['pathidstr'] = nameid
+						fpathids.write('{}\t{}\n'.format(net + nameid, mpath))
+					#if _DEBUG_TRACE >= 2:
+					#	print('  Processing "{}", net: {}, pathidstr: {}'.format(path, net, xargs['pathidstr']))
+					pcuropt.path = path
+					if _DEBUG_TRACE:
+						print('  Scheduling apps execution for the path options ({})'.format(str(pcuropt)))
+					processPath(pcuropt, runner, xargs=xargs)
+			netnames = None  # Free memory from filenames
+
+			# Extend algorithms execution tracing files (.rcp) with time tracing, once per an executing algorithm
+			# to distinguish different executions (benchmark runs)
+			for alg in algorithms:
+				aexecres = ''.join((_RESDIR, alg, '/', alg, _EXTEXECTIME))
+				with open(aexecres, 'a') as faexres:
+					faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=timestamp, seed=seed))  # Write timestamp
+		finally:
+			# Flush the formed fpathids
+			if fpathids:
+				if fpathids is not sys.stdout and fpathids is not sys.stderr:
+					fpathids.close()
 				else:
-					nameid = _SEPPATHID + str(pathid)
-					xargs['pathidstr'] = nameid
-					fpathids.write('{}\t{}\n'.format(net + nameid, mpath))
-				pcuropt.path = path
-				if _DEBUG_TRACE:
-					print('  Scheduling apps execution for the path options ({})'.format(str(pcuropt)))
-				processPath(pcuropt, runner, xargs=xargs)
-		netnames = None  # Free memory from filenames
-
-		# Extend algorithms execution tracing files (.rcp) with time tracing, once per an executing algorithm
-		# to distinguish different executions (benchmark runs)
-		for alg in algorithms:
-			aexecres = ''.join((_RESDIR, alg, '/', alg, _EXTEXECTIME))
-			with open(aexecres, 'a') as faexres:
-				faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=timestamp, seed=seed))  # Write timestamp
-
-		# Flush the formed fpathids
-		if fpathids:
-			if fpathids is not sys.stdout and fpathids is not sys.stderr:
-				fpathids.close()
-			else:
-				fpathids.flush()
+					fpathids.flush()
 
 		if runtimeout <= 0:
 			runtimeout = timeout * xargs['jobsnum']
@@ -1020,7 +1034,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
 		try:
 			_execpool.join(timelim)
-		except Exception as err:
+		except BaseException as err:  # Consider also system iteruptions not captured by the Exception
 			print('ERROR, Algorithms execution pool is interrupted by: {}. {}'
 				.format(err, traceback.format_exc()), file=sys.stderr)
 			raise
@@ -1164,7 +1178,13 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout,
 			pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
 			for pathid, path in enumerate(glob.iglob(popt.path)):  # Allow wildcards
 				# Form non-empty pathid string for the duplicated file names
-				mpath = os.path.splitext(path)[0]
+				if os.path.isdir(path):
+					# ATTENTION: required to process directories ending with '/' correctly
+					# Note: normpath() may change semantics in case symbolic link is used with parent dir:
+					# base/linkdir/../a -> base/a, which might be undesirable
+					mpath = path.rstrip('/')  # os.path.normpath(path)
+				else:
+					mpath = os.path.splitext(path)[0]
 				net = os.path.split(mpath)[1]
 				if net not in netnames:
 					netnames.add(net)
@@ -1203,7 +1223,14 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout,
 			pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
 			for pathid, path in enumerate(glob.iglob(popt.path)):  # Allow wildcards
 				# Form non-empty pathid string for the duplicated file names
-				net = os.path.splitext(os.path.split(path)[1])[0]
+				if os.path.isdir(path):
+					# ATTENTION: required to process directories ending with '/' correctly
+					# Note: normpath() may change semantics in case symbolic link is used with parent dir:
+					# base/linkdir/../a -> base/a, which might be undesirable
+					net = path.rstrip('/')  # os.path.normpath(path)
+				else:
+					net = os.path.splitext(path)[0]
+				net = os.path.split(net)[1]
 				if net not in netnames:
 					netnames.add(net)
 					xargs['pathidstr'] = ''
@@ -1234,7 +1261,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout,
 			.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
 		try:
 			_execpool.join(timelim)
-		except Exception as err:
+		except BaseException as err:  # Consider also system iteruptions not captured by the Exception
 			print('ERROR, Quality evaluation execution pool is interrupted by: {}. {}'
 				.format(err, traceback.format_exc()), file=sys.stderr)
 			raise
@@ -1346,7 +1373,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout,
 		# 	.format(jobsnum, timelim, *secondsToHms(timelim)))
 		# try:
 		# 	_execpool.join(timelim)  # max(timelim, exectime * 2) - Twice the time of the algorithms execution
-		# except Exception as err:
+		# except BaseException as err:  # Consider also system iteruptions not captured by the Exception
 		# 	print('ERROR, Results evaluation execution pool is interrupted by: {}. {}'
 		# 		.format(err, traceback.format_exc()), file=sys.stderr)
 		# 	raise

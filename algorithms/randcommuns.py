@@ -90,7 +90,7 @@ def parseParams(args):
 	if not prm.outdir:
 		prm.outdir = os.path.split(prm.network)[0]
 		if not prm.outdir:
-			prm.outdir = './'
+			prm.outdir = '.'
 	if not prm.randseed:
 		try:
 			prm.randseed = ''.join([str(ord(c)) for c in os.urandom(8)])

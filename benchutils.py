@@ -103,6 +103,7 @@ def delPathSuffix(path, nameonly=False):
 	#>>> delPathSuffix('scp/mod/1K10^1!k5#1.mod') == 'scp/mod/1K10'
 	#True
 	"""
+	path = path.rstrip('/')  # Allow dir name processing (at least for the path id extraction)
 	# Separate path into base dir and name
 	if not nameonly:
 		pdir, pname = os.path.split(path)
@@ -173,6 +174,7 @@ def parseName(path, nameonly=False):
 	>>> parseName('2K5.dhrh^1') == ("2K5.dhrh", '', '^1', '', '')
 	True
 	"""
+	path = path.rstrip('/')  # Allow dir name processing (at least for the path id extraction)
 	# Separate path into base dir and name
 	if not nameonly:
 		pdir, pname = os.path.split(path)
@@ -496,10 +498,12 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 		SyncValue is expected
 	suffix  - suffix to be added to the backup name
 	"""
-	path = os.path.normpath(escapePathWildcards(path))
-	name = os.path.split(path)[1]  # Extract dir of file name
+	# Note: normpath() may change semantics in case symbolic link is used with parent dir:
+	# base/linkdir/../a -> base/a, which might be undesirable
+	path = escapePathWildcards(path).rstrip('/')  # os.path.normpath(escapePathWildcards(path))
 	if not path:
 		raise ValueError('Specified path is empty')
+	name = os.path.split(path)[1]  # Extract dir of file name
 	# Prepend the suffix with separator
 	if suffix:
 		suffix = '_' + suffix
@@ -550,7 +554,9 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 		return
 	#print('Backuping "{}"{}...'.format(basepath, 'with synctime' if synctime else ''))
 	# Remove trailing path separator if exists
-	basepath = os.path.normpath(escapePathWildcards(basepath))
+	# Note: normpath() may change semantics in case symbolic link is used with parent dir:
+	# base/linkdir/../a -> base/a, which might be undesirable
+	basepath = escapePathWildcards(basepath).rstrip('/')  # os.path.normpath(escapePathWildcards(basepath))
 	# Create backup/ if required
 	basedir = os.path.split(basepath)[0]
 	if not basedir:

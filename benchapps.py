@@ -554,8 +554,8 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	if odir:
 		originpbase = os.path.split(netfile)[0]
 		if not originpbase:
-			assert 0, 'odir parameter validation failed, netfile should have a base directory'
-			originpbase = os.path.splitext(netfile)[0]
+			assert 0, 'odir parameter validation failed, netfile should have some base directory'
+			originpbase = os.path.splitext(netfile)[0]  # Take wile name without the extension instead of the parent dir
 	gtfile = originpbase + _EXTCLNODES
 
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10

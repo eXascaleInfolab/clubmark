@@ -49,7 +49,7 @@ from sys import executable as PYEXEC  # Full path to the current Python interpre
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, tobackup, escapePathWildcards, _SEPPARS, _UTILDIR
 from benchevals import _SEPNAMEPART, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
 from utils.mpepool import Job
-from algorithms.utils.parser_nsl import parseHeaderNsl
+from algorithms.utils.parser_nsl import parseHeaderNslFile, asymnet
 
 
 _ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
@@ -130,7 +130,7 @@ def aggexec(algs):
 		try:
 			with open(resfile, 'a') as outres, open(resxfile, 'a') as outresx:
 				# The header is unified for multiple outputs only for the outresx
-				if not os.path.getsize(resxfile):
+				if not os.fstat(outresx.fileno()).st_size:
 					outresx.write('# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n')  # ExecTime(sec), ExecTime_avg(sec), ExecTime_min\tExecTime_max
 				# Output timestamp
 				outres.write('# --- {} ---\n'.format(timestamp))
@@ -441,22 +441,24 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
 
-	# Evaluate relative network size considering whether the network is directed (asymmetric)
-	netinfo = parseHeaderNsl(netfile, asym)
-	asym = netinfo.directed
-	if not netinfo.lnsnum:
-		# Use network size if the number of links is not availbale
-		size = os.path.getsize(netfile) * (1 + (not asym))  # Multiply by 2 for the symmetric (undirected) network
-		avgnls = None
-	else:
-		# The number of arcs in the network
-		size = netinfo.lnsnum * (1 + (not netinfo.directed))  # arcs = edges * 2
-		avgnls = size / float(netinfo.ndsnum)  # Average number of arcs per node
-		size *= avgnls
 	# Fetch the task name
 	task, netext = os.path.splitext(os.path.split(netfile)[1])  # Base name of the network
 	assert task, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'scp'
+
+	# Evaluate relative network size considering whether the network is directed (asymmetric)
+	with open(netfile) as finp:
+		netinfo = parseHeaderNslFile(finp, asym)
+		asym = netinfo.directed
+		if not netinfo.lnsnum:
+			# Use network size if the number of links is not availbale
+			size = os.fstat(finp.fileno()).st_size * (1 + (not asym))  # Multiply by 2 for the symmetric (undirected) network
+			avgnls = None
+		else:
+			# The number of arcs in the network
+			size = netinfo.lnsnum * (1 + (not netinfo.directed))  # arcs = edges * 2
+			avgnls = size / float(netinfo.ndsnum)  # Average number of arcs per node
+			size *= avgnls
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
 	# Evaluate relative paths

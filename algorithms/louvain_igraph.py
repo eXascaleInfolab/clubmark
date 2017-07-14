@@ -36,7 +36,7 @@ def louvain(args):
 	elif args.inpfmt == 'pjk':
 		graph = Graph.Read_Pajek(args.network)
 	elif args.inpfmt in ('nse', 'nsa'):
-		graph = loadNsl(args.network, asymnet(os.path.splitext(args.network)[1], args.inpfmt == 'nsa'))
+		graph = loadNsl(args.network, asymnet(os.path.splitext(args.network)[1].lower(), args.inpfmt == 'nsa'))
 	else:
 		raise ValueError('Unknown network format: ' + args.inpfmt)
 

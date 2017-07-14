@@ -27,6 +27,7 @@ def asymnet(netext, asym=None):
 
 	return  - the networks is asymmetric (specified by arcs)
 	"""
+	assert netext and netext[0] == '.', 'Extension is expected'
 	return asym if netext not in ('.nse', '.nsa') else netext == '.nsa'
 
 
@@ -42,7 +43,7 @@ def dflnetext(asym):
 
 class NetInfo(object):
 	"""Network information (description) encoded in the file header"""
-	
+
 	def __init__(self, directed, ndsnum, lnsnum, weighted):
 		"""Network information attributes
 
@@ -68,6 +69,7 @@ def parseHeaderNslFile(finp, directed=None):
 	finp  - opened for the reading file of the input network
 	directed  - whether the input network is directed
 		None  - unknown, interpreted by default as undirected
+		Note: overwrited by the network header specification (if exists)
 
 	return NetInfo  - network information fetched from the header
 	"""
@@ -75,6 +77,7 @@ def parseHeaderNslFile(finp, directed=None):
 	ndsnum = 0  # The number of nodes
 	lnsnum = 0  # The number of links (edges or arcs)
 	weighted = None  # The network is weighted
+	#directed = None  # The input network is directed; None - unknown, False by default
 	# Marker of the header start
 	mark = 'nodes:'
 	marklen = len(mark)
@@ -94,16 +97,21 @@ def parseHeaderNslFile(finp, directed=None):
 						lnx.extend(part.rstrip(sep).split(sep, 3))
 					ln = lnx
 				if _DEBUG_TRACE:
-					print('  "{}" header tokens: {}'.format(network, ln))
+					#print('  "{}" header tokens: {}'.format(network, ln))
+					print('  Header tokens: {}'.format(ln))
 				if len(ln) >= 2 and ln[0].lower() == 'nodes':
 					ndsnum = int(ln[1])
-				# Parse arcs/edges number optionally
-				i = 2
-				if len(ln) >= i+2 and ln[i].lower() == ('arcs' if directed else 'edges'):
-					lnsnum = int(ln[3])
-					i += 2
-				if len(ln) >= i+2 and ln[i].lower() == 'weighted':
-					weighted = bool(int(ln[5]))  # Note: int() is required because bool('0') is True
+					# Parse arcs/edges number optionally
+					i = 2
+					if len(ln) >= i+2:
+						lsname = ln[i].lower()
+						if lsname in ('arcs', 'edges'):
+							# Overwrite directed
+							directed = lsname == 'arcs'
+							lnsnum = int(ln[3])
+							i += 2
+						if len(ln) >= i+2 and ln[i].lower() == 'weighted':
+							weighted = bool(int(ln[5]))  # Note: int() is required because bool('0') is True
 			except ValueError as err:
 				# Part of the attributes could be initialized, others just have initial values
 				print('WARNING, NSL header is corrupted: ', err)  # Note: this is a minor issue
@@ -118,10 +126,11 @@ def parseHeaderNsl(network, directed=None):
 	network  - file name of the input network
 	directed  - whether the input network is directed
 		None  - define automatically by the file extension
+		Note: overwrited by the network header specification (if exists)
 
 	return NetInfo  - network information fetched from the header
 	"""
-	directed = asymnet(os.path.splitext(network)[1].lower())
+	#directed = asymnet(os.path.splitext(network)[1].lower(), directed)
 	#assert directed is not None, ('Nsl file with either standart extension or'
 	#	' explicit network type specification is expected')
 	with open(network) as finp:
@@ -143,7 +152,7 @@ def loadNsl(network, directed=None):
 	graph = None
 	with open(network) as finp:
 		# Prase the header if exists
-		netinfo = parseHeaderNslFile(finp, asymnet(os.path.splitext(network)[1].lower()))
+		netinfo = parseHeaderNslFile(finp, asymnet(os.path.splitext(network)[1].lower(), directed))
 		directed = netinfo.directed
 		weighted = netinfo.weighted
 

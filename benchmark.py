@@ -202,7 +202,7 @@ def parseParams(args):
 			if arg == '--stderr-stamp':
 				if len(args) == 1:
 					raise  ValueError('More input arguments are expected besides: ' + arg)
-				print(time.strftime('%Y-%m-%d %H:%M:%S ' + '-'*32, time.gmtime()), file=sys.stderr)
+				print(('# --- {} ' + '-'*32).format(datetime.utcnow()), file=sys.stderr)
 				continue
 			elif arg.startswith('--generate'):
 				arg = '-g' + arg[len('--generate'):]
@@ -939,9 +939,10 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 				jobsnum  - the number of scheduled jobs, typically 1
 			"""
 			jobsnum = 0
+			netext = os.path.splitext(net)[1].lower()
 			for ealg in execalgs:
 				try:
-					jobsnum += ealg(_execpool, net, asym=asymnet(net, asym), odir=netshf, timeout=timeout, pathid=pathid, seed=seed)
+					jobsnum += ealg(_execpool, net, asym=asymnet(netext, asym), odir=netshf, timeout=timeout, pathid=pathid, seed=seed)
 				except Exception as err:
 					errexectime = time.time() - exectime
 					print('WARNING, the "{}" is interrupted by the exception: {} with the callstack: {} on {:.4f} sec ({} h {} m {:.4f} s)'
@@ -972,7 +973,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		try:
 			# Write header if required
 			timestamp = datetime.utcnow()
-			if not os.path.getsize(_PATHIDFILE):
+			if not os.fstat(fpathids.fileno()).st_size:
 				fpathids.write('# Name{}ID\tPath\n'.format(_SEPPATHID))  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
 			fpathids.write('# --- {time} (seed: {seed}) ---\n'.format(time=timestamp, seed=seed))  # Write timestamp
 
@@ -1108,9 +1109,10 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout,
 			jobsnum  - the number of scheduled jobs, typically 1
 		"""
 		jobsnum = 0
+		netext = os.path.splitext(net)[1].lower()
 		for eapp in evalapps:
 			try:
-				jobsnum += eapp(execpool, net, asym=asymnet(net, asym), odir=netshf, timeout=timeout, pathids=pathids, seed=seed)
+				jobsnum += eapp(execpool, net, asym=asymnet(netext, asym), odir=netshf, timeout=timeout, pathids=pathids, seed=seed)
 			except Exception as err:
 				errexectime = time.time() - exectime
 				print('WARNING, the "{}" is interrupted by the exception: {} with the callstack: {} on {:.4f} sec ({} h {} m {:.4f} s)'

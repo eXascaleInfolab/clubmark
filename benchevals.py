@@ -595,7 +595,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 			task.params.addraw(taskoutp, clslev, mod)  # Note: task.params is shuffles aggregator
 			# Log results
 			with open(taskoutp, 'a') as tmod:  # Append to the end
-				if not os.path.getsize(taskoutp):
+				if not os.fstat(tmod.fileno()).st_size:
 					tmod.write('# Q\tlevel[/shuffle]\n')
 					tmod.flush()
 				# Define result caption
@@ -667,7 +667,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 				task.params.addraw(taskoutp, clslev, nmi)  # Note: task.params is shuffles aggregator
 				# Log results
 				with open(taskoutp, 'a') as tnmi:  # Append to the end
-					if not os.path.getsize(taskoutp):
+					if not os.fstat(tnmi.fileno()).st_size:
 						tnmi.write('# NMI\tlevel[/shuffle]\n')
 						tnmi.flush()
 					# Define result caption
@@ -715,7 +715,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 				task.params.addraw(taskoutp, clslev, nmi)  # Note: task.params is shuffles aggregator
 				# Log results
 				with open(taskoutp, 'a') as tnmi:  # Append to the end
-					if not os.path.getsize(taskoutp):
+					if not os.fstat(tnmi.fileno()).st_size:
 						tnmi.write('# NMI_s\tlevel[/shuffle]\n')
 						tnmi.flush()
 					# Define result caption

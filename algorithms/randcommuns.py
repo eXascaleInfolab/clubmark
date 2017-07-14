@@ -72,7 +72,7 @@ def parseParams(args):
 			pos += 1
 			prm.network = arg[pos:]
 			prm.outname, netext = os.path.splitext(os.path.split(prm.network)[1])
-			prm.dirnet = asymnet(netext, arg[2] == 'd')
+			prm.dirnet = asymnet(netext.lower(), arg[2] == 'd')
 			if not prm.outname:
 				raise ValueError('Invalid network name (is a directory): ' + prm.network)
 		elif arg[1] == 'n':

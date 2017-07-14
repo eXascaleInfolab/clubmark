@@ -29,7 +29,7 @@ Input formats:
 Output formats:
 	- rcg format: http://www.lumais.com/docs/format.rcg  (hig_format.hig)
 	- nsl (stands for nse/nsa)
-	
+
 Note: works on both Python3 and Python2 / pypy
 
 (c) RCG (Readable Compact Graph)
@@ -64,7 +64,7 @@ except ImportError:
 	viewitems = lambda dct: viewMethod(dct, 'items')()
 	viewkeys = lambda dct: viewMethod(dct, 'keys')()
 	viewvalues = lambda dct: viewMethod(dct, 'values')()
-	
+
 	# Replace range() implementation for Python2
 	try:
 		range = xrange
@@ -1000,7 +1000,7 @@ def convert(args):
 			if args.resolve == 'o':
 				act = 'overwriting...'
 			elif args.resolve == 'r':
-				mtime = time.strftime('_%y%m%d_%M%S', time.gmtime(os.path.getmtime(foutName)))
+				mtime = time.strftime('_%y%m%d_%H%M%S', time.gmtime(os.path.getmtime(foutName)))
 				renamed = foutName + mtime
 				os.rename(foutName, renamed)
 				act = 'renaming the old one into {}...'.format(renamed)

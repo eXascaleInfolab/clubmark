@@ -55,7 +55,7 @@ import traceback  # Stacktrace;  To print a stacktrace fragment: traceback.print
 import subprocess
 import errno
 
-from multiprocessing import cpu_count, Value, Lock  #, active_children
+from multiprocessing import cpu_count, Value, Lock
 
 # Required to efficiently traverse items of dictionaries in both Python 2 and 3
 try:
@@ -1348,10 +1348,6 @@ class ExecPool(object):
 		# mark the completed dependent jobs to not be restarted / postponed
 		# Note: jobs complete execution relatively seldom, so set with fast
 		# search is more suitable than full scan of the list
-		#
-		#if completed:
-		#	# Note: required to join terminated procs and avoid zombies, but does not help in practice
-		#	active_children()  # Return list of all live children of the current process, joining any processes which have already finished
 		for job in completed:
 			self._workers.remove(job)
 		# self._workers = [w for w in self._workers if w not in completed]

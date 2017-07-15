@@ -299,7 +299,21 @@ def parseParams(args):
 		elif arg[1] == 'a':
 			if not (arg[:3] == '-a=' and len(arg) >= 4):
 				raise ValueError('Unexpected argument: ' + arg)
-			opts.algorithms = arg[3:].strip('"\'').split()  # Note: argparse automatically performs this escaping
+			inverse = arg[3] == '-'  # Consider inversing (run all except)
+			if inverse and len(arg) <= 4:
+				raise ValueError('Unexpected argument: ' + arg)
+			opts.algorithms = arg[3 + inverse:].strip('"\'').split()  # Note: argparse automatically performs this escaping
+			# Exclude algorithms if required
+			if opts.algorithms and inverse:
+				algs = appnames(benchapps)
+				try:
+					for alg in opts.algorithms:
+						algs.remove(alg)
+				except ValueError as err:
+					print('ERROR, "{}" does not exist: {}'.format(alg, err))
+					raise
+				opts.algorithms = algs
+			# Note: all algs are run if not specified
 		elif arg[1] == 'r':
 			if len(arg) > 2:
 				raise ValueError('Unexpected argument: ' + arg)
@@ -1509,7 +1523,7 @@ if __name__ == '__main__':
 		print('\n'.join(('Usage:',
 			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
 			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
-			' [-c[f][r]] [-a="app1 app2 ..."] [-r] [-q[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]]'
+			' [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]]'
 			' [-s=<eval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] [--stderr-stamp] | -h',
 			'',
 			'Example:',
@@ -1548,8 +1562,8 @@ if __name__ == '__main__':
 			'  - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]',
 			'  - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
 			' is up to the clustering algorithm',
-			'  --apps, -a[="app1 app2 ..."]  - apps (clustering algorithms) to be run, default: all.',
-			'Available apps ({anppsnum}): {apps}.',
+			'  --apps, -a[=[-]"app1 app2 ..."]  - apps (clustering algorithms) to be applied, default: all.',
+			'Leading "-" means applying of all except the specified apps. Available apps ({anppsnum}): {apps}.',
 			'Impacts {{r, q}} options. Optional, all registered apps (see benchapps.py) are executed by default.',
 			'NOTE: output results are stored in the "{resdir}<algname>/" directory',
 			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',

@@ -55,7 +55,7 @@ import traceback  # Stacktrace;  To print a stacktrace fragment: traceback.print
 import subprocess
 import errno
 
-from multiprocessing import cpu_count, Value, Lock
+from multiprocessing import cpu_count, Value, Lock, active_children
 
 # Required to efficiently traverse items of dictionaries in both Python 2 and 3
 try:
@@ -1402,12 +1402,14 @@ class ExecPool(object):
 			memall = self.memlimit + memov  # Note: memov is negative here
 
 		# Process completed (and terminated) jobs: execute callbacks and remove the workers
+		cterminated = False  # Completed terminated procs processed
 		for job in completed:
 			self.__clearAffinity(job)  # Note: the affinity must be updated before the job restart or on completion
 			job.complete(not job.terminates and not job.proc.returncode)  # The completion is graceful only if the termination requests were not received
 			exectime = job.tstop - job.tstart
 			# Restart the job if it was terminated and should be restarted
 			if not job.terminates:
+				cterminated = True
 				continue
 			print('WARNING, "{}" #{} is terminated because of the {} violation'
 				', chtermtime: {}, consumes {:.4f} / {:.4f} Gb, timeout {:.4f} sec, executed: {:.4f} sec ({} h {} m {:.4f} s)'
@@ -1448,6 +1450,10 @@ class ExecPool(object):
 				# but now can be started successfully and will be satrted soon
 				self.__postpone(job, True)
 		# Note: the number of workers is not reduced to less than 1
+
+		if cterminated:
+			# Note: required to join terminated child procs and avoid zombies
+			active_children()   # Return list of all live children of the current process, joining any processes which have already finished
 
 		# Start subsequent job if it is required
 		if _DEBUG_TRACE >= 2:

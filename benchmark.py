@@ -1311,7 +1311,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout,
 		# # Measures is a dict with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
 		# measures = {3: ['nmi', _EXTCLNODES, 'NMIs'], 4: ['mod', '.hig', 'Q']}
 		# evaggs = []  # Evaluation results aggregators
-		# for im, msr in viewitems(measures):  # .items()  Note: the number of measures is small
+		# for im, msr in viewitems(measures):  # Note: the number of measures is small
 		# 	# Evaluate only required measures
 		# 	if quality & im == 0:
 		# 		continue

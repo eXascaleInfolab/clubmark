@@ -24,6 +24,34 @@ Changelog by Artem Lutov (luart@ya.ru):
 ATTENTION: works somehow only on Python2, cliques are not merged into clusters on Python3
 """
 from __future__ import print_function, division  # Required for stderr output, must be the first import
+try:
+	from future.utils import viewkeys
+	from future.builtins import range
+except ImportError:
+	def viewMethod(obj, method):
+		"""Fetch view method of the object
+
+		obj  - the object to be processed
+		method  - name of the target method, str
+
+		return  target method or AttributeError
+
+		>>> callable(viewMethod(dict(), 'items'))
+		True
+		"""
+		viewmeth = 'view' + method
+		ometh = getattr(obj, viewmeth, None)
+		if not ometh:
+			ometh = getattr(obj, method)
+		return ometh
+
+	viewkeys = lambda dct: viewMethod(dct, 'keys')()
+
+	# Replace range() implementation for Python2
+	try:
+		range = xrange
+	except NameError:
+		pass  # xrange is not defined in Python3, which is fine
 from functools import reduce
 from operator import mul
 import sys, math
@@ -102,7 +130,7 @@ class Net(object):
 				self[args,dest]=0
 
 	def __iter__(self):
-		return self._nodes.keys().__iter__()
+		return iter(viewkeys(self._nodes))
 
 	def isSymmetric(self):
 		return False
@@ -118,8 +146,8 @@ class Node(object):
 	def __iter__(self):
 		if not self.index in self.net._nodes:
 			return iter([])
-		return self.net._nodes[self.index].keys().__iter__()
-		#return self.net._nodes[self.index].__iter__()
+		return iter(viewkeys(self.net._nodes[self.index]))
+		#return iter(self.net._nodes[self.index])
 
 	def __getitem__(self, index):
 		return self.net[self.index, index]
@@ -392,7 +420,7 @@ class NodeFamily:
 				return 1.0
 
 		sizeSum=0
-		for key in sd.keys():
+		for key in viewkeys(sd):
 				sizeSum+=key*sd[key]
 
 		#If no size is given, assume that also communities of size 1 are included
@@ -404,11 +432,11 @@ class NodeFamily:
 			assert(sus>=0)
 
 		#Remove largest component
-		gc=max(sd.keys())
+		gc=max(viewkeys(sd))
 		sd[gc]=0
 
 		#Calculate the susceptibility
-		for key in sd.keys():
+		for key in viewkeys(sd):
 			sus+=key*key*sd[key]
 		if (size-gc)==0:
 			return 0.0

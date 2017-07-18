@@ -5,6 +5,8 @@
 psutil>=5.2
 # Future utils for Python2/3 compatibility (benchmarking & utils)
 future>=0.16
+# h5py for the quality evaluations serialization to HDF5 file
+h5py>=2.7
 
 # Algorithms requirements:
 ## louvain_igraph.py:

@@ -997,13 +997,12 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 					 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
 			# Track processed file names to resolve cases when files with the same name present in different input dirs
 			# Note: pathids are required at least to set concise job names to see what is executed in runtime
-			netnames = set()
+			netnames = {}  # Name to pathid mapping: {Name: counter}
 			for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
 				xargs['asym'] = popt.asym
 				# Resolve wildcards
 				pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
-				for pathid, path in enumerate(glob.iglob(popt.path)):  # Allow wildcards
-					# Form non-empty pathid string for the duplicated file names
+				for path in glob.iglob(popt.path):  # Allow wildcards
 					if os.path.isdir(path):
 						# ATTENTION: required to process directories ending with '/' correctly
 						# Note: normpath() may change semantics in case symbolic link is used with parent dir:
@@ -1012,10 +1011,13 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 					else:
 						mpath = os.path.splitext(path)[0]
 					net = os.path.split(mpath)[1]
-					if net not in netnames:
-						netnames.add(net)
+					pathid = netnames.get(net)
+					if pathid is None:
+						netnames[net] = 0
 						xargs['pathidstr'] = ''
 					else:
+						pathid += 1
+						netnames[net] = pathid
 						nameid = _SEPPATHID + str(pathid)
 						xargs['pathidstr'] = nameid
 						fpathids.write('{}\t{}\n'.format(net + nameid, mpath))
@@ -1187,12 +1189,12 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout,
 
 		# Track processed file names to resolve cases when files with the same name present in different input dirs
 		# Note: pathids are required at least to set concise job names to see what is executed in runtime
-		netnames = {}  # Names of the evaluating networks
+		netnames = {}  # Name to pathid mapping: {Name: counter}
 		for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
 			xargs['asym'] = popt.asym
 			# Resolve wildcards
 			pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
-			for pathid, path in enumerate(glob.iglob(popt.path)):  # Allow wildcards
+			for path in glob.iglob(popt.path):  # Allow wildcards
 				# Form non-empty pathid string for the duplicated file names
 				if os.path.isdir(path):
 					# ATTENTION: required to process directories ending with '/' correctly
@@ -1202,10 +1204,13 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout,
 				else:
 					mpath = os.path.splitext(path)[0]
 				net = os.path.split(mpath)[1]
-				if net not in netnames:
-					netnames.add(net)
+				pathid = netnames.get(net)
+				if pathid is None:
+					netnames[net] = 0
 					xargs['pathidstr'] = ''
 				else:
+					pathid += 1
+					netnames[net] = pathid
 					nameid = _SEPPATHID + str(pathid)
 					xargs['pathidstr'] = nameid
 					# Validate loaded pathids mapping
@@ -1237,7 +1242,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout,
 			xargs['asym'] = popt.asym
 			# Resolve wildcards
 			pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
-			for pathid, path in enumerate(glob.iglob(popt.path)):  # Allow wildcards
+			for path in glob.iglob(popt.path):  # Allow wildcards
 				# Form non-empty pathid string for the duplicated file names
 				if os.path.isdir(path):
 					# ATTENTION: required to process directories ending with '/' correctly
@@ -1247,10 +1252,13 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout,
 				else:
 					net = os.path.splitext(path)[0]
 				net = os.path.split(net)[1]
-				if net not in netnames:
-					netnames.add(net)
+				pathid = netnames.get(net)
+				if pathid is None:
+					netnames[net] = 0
 					xargs['pathidstr'] = ''
 				else:
+					pathid += 1
+					netnames[net] = pathid
 					nameid = _SEPPATHID + str(pathid)
 					xargs['pathidstr'] = nameid
 				pcuropt.path = path

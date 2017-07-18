@@ -44,9 +44,9 @@ import subprocess
 # import re
 
 from numbers import Number  # To verify that a variable is a number (int or float)
-from datetime import datetime
 from sys import executable as PYEXEC  # Full path to the current Python interpreter
-from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, tobackup, escapePathWildcards, _SEPPARS, _UTILDIR
+from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, \
+	tobackup, escapePathWildcards, _SEPPARS, _UTILDIR, _TIMESTAMP_START_HEADER
 from benchevals import _SEPNAMEPART, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
 from utils.mpepool import Job
 from algorithms.utils.parser_nsl import parseHeaderNslFile, asymnet
@@ -123,7 +123,6 @@ def aggexec(algs):
 		print('WARNING, there are no any algortihms execution results to be aggregated.', file=sys.stderr)
 		return
 	# Output resutls
-	timestamp = datetime.utcnow()
 	for imsr, measure in enumerate(mnames):
 		resfile = ''.join((_RESDIR, measure, _EXTAGGRES))
 		resxfile = ''.join((_RESDIR, measure, _EXTAGGRESEXT))
@@ -133,8 +132,9 @@ def aggexec(algs):
 				if not os.fstat(outresx.fileno()).st_size:
 					outresx.write('# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n')  # ExecTime(sec), ExecTime_avg(sec), ExecTime_min\tExecTime_max
 				# Output timestamp
-				outres.write('# --- {} ---\n'.format(timestamp))
-				outresx.write('# --- {} ---\n'.format(timestamp))
+				# Note: print() unlike .write() outputs also ending '\n'
+				print(_TIMESTAMP_START_HEADER, file=outres)
+				print(_TIMESTAMP_START_HEADER, file=outresx)
 				# Output header, which might differ for distinct runs by number of algs
 				outres.write('# <network>')
 				for alg in malgs:

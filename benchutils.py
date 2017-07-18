@@ -29,6 +29,8 @@ _SEPINST = '^'  # Network instances separator, must be a char
 _SEPSHF = '%'  # Network shuffles separator, must be a char; ~
 _SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
 _UTILDIR = 'utils/'  # Utilities directory with external applicaions for quality evaluation and other things
+_TIMESTAMP_START_STR = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
+_TIMESTAMP_START_HEADER = ' '.join(('# ---', _TIMESTAMP_START_STR, '-'*32))
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 

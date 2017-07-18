@@ -19,12 +19,12 @@ import glob
 import sys
 import traceback  # Stacktrace
 # from collections import namedtuple
-from datetime import datetime
 from subprocess import PIPE
 
 
 from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
-	escapePathWildcards, envVarDefined, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR
+	escapePathWildcards, envVarDefined, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR, \
+	_TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
 from utils.mpepool import Task, Job
 
 
@@ -275,10 +275,11 @@ class EvalsAgg(object):
 		resbase = _RESDIR + self.measure
 		with open(resbase + _EXTAGGRES, 'a') as fmeasev, open(resbase + _EXTAGGRESEXT, 'a') as fmeasevx:
 			# Append to the results and extended results
-			timestamp = datetime.utcnow()
-			fmeasev.write('# --- {}, output:  Q_avg\n'.format(timestamp))  # format = Q_avg: Q_min Q_max, Q_sd count;
+			#timestamp = datetime.utcnow()
+			fmeasev.write('# --- {}, output:  Q_avg\n'.format(_TIMESTAMP_START_STR))  # format = Q_avg: Q_min Q_max, Q_sd count;
 			# Extended output has notations in each row
-			fmeasevx.write('# --- {} ---\n'.format(timestamp))  # format = Q_avg: Q_min Q_max, Q_sd count;
+			# Note: print() unlike .write() outputs also ending '\n'
+			print(_TIMESTAMP_START_HEADER, file=fmeasevx)
 			header = True  # Output header
 			for net, algsev in viewitems(self.netsev):
 				if header:

@@ -53,12 +53,12 @@ import glob
 import traceback  # Stacktrace
 import copy
 from math import sqrt
-from datetime import datetime
 from multiprocessing import cpu_count  # Returns the number of multi-core CPU units if defined
 
 # PYEXEC - current Python interpreter
 import benchapps  # Required for the functions name mapping to/from the app names
-from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR
+from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, \
+	_SEPSHF, _SEPPATHID, _UTILDIR, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
 from benchapps import PYEXEC, aggexec, funcToAppName, _ALGSDIR, _EXTCLNODES, _PREFEXEC
 from benchevals import evaluators, evalAlgorithm, aggEvaluations, EvalsAgg, _RESDIR, _EXTEXECTIME
 from utils.mpepool import AffinityMask, ExecPool, Job, secondsToHms
@@ -202,7 +202,7 @@ def parseParams(args):
 			if arg == '--stderr-stamp':
 				if len(args) == 1:
 					raise  ValueError('More input arguments are expected besides: ' + arg)
-				print(('# --- {} ' + '-'*32).format(datetime.utcnow()), file=sys.stderr)
+				print(_TIMESTAMP_START_HEADER, file=sys.stderr)
 				continue
 			elif arg.startswith('--generate'):
 				arg = '-g' + arg[len('--generate'):]
@@ -986,10 +986,10 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			fpathids = sys.stdout
 		try:
 			# Write header if required
-			timestamp = datetime.utcnow()
+			#timestamp = datetime.utcnow()
 			if not os.fstat(fpathids.fileno()).st_size:
 				fpathids.write('# Name{}ID\tPath\n'.format(_SEPPATHID))  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
-			fpathids.write('# --- {time} (seed: {seed}) ---\n'.format(time=timestamp, seed=seed))  # Write timestamp
+			fpathids.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
 
 			xargs = {'asym': False,  # Asymmetric network
 					 'pathidstr': '',  # Id of the dublicated path shortcut to have the unique shortcut
@@ -1034,7 +1034,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			for alg in algorithms:
 				aexecres = ''.join((_RESDIR, alg, '/', alg, _EXTEXECTIME))
 				with open(aexecres, 'a') as faexres:
-					faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=timestamp, seed=seed))  # Write timestamp
+					faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
 		finally:
 			# Flush the formed fpathids
 			if fpathids:
@@ -1275,7 +1275,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout,
 		for alg in algorithms:
 			aexecres = ''.join((_RESDIR, alg, '/', measure, _EXTEXECTIME))
 			with open(aexecres, 'a') as faexres:
-				faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=timestamp, seed=seed))  # Write timestamp
+				faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
 
 		if runtimeout <= 0:
 			runtimeout = timeout * xargs['jobsnum']

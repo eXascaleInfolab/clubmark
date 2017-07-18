@@ -98,7 +98,9 @@ def timeheader(timestamp=time.gmtime()):
 	return  - timetamp string for the file header
 	"""
 	assert isinstance(timestamp, time.struct_time), 'Unexpected type of timestamp'
-	return time.strftime('# --- %Y-%m-%d %H:%M:%S ' + '-'*32, timestamp)
+	# ATTENTION: MPE pool timestamp [prefix] intentionally differs a bit from the
+	# benchmark timestamp to easily find/filter each of them
+	return time.strftime('# ----- %Y-%m-%d %H:%M:%S ' + '-'*30, timestamp)
 
 
 # Limit the amount of memory consumption by worker processes.
@@ -817,7 +819,8 @@ class ExecPool(object):
 		if afnmask:
 			# Check whether _AFFINITYBIN exists in the system
 			try:
-				subprocess.call([_AFFINITYBIN, '-V'])
+				with open(os.devnull, 'wb') as fdevnull:
+					subprocess.call([_AFFINITYBIN, '-V'], stdout=fdevnull)
 				if afnmask.afnstep * wksnum > afnmask.CPUS:
 					print('WARNING{}, the number of worker processes is reduced'
 						' ({wlim0} -> {wlim} to satisfy the affinity step'

@@ -29,7 +29,8 @@ _SEPINST = '^'  # Network instances separator, must be a char
 _SEPSHF = '%'  # Network shuffles separator, must be a char; ~
 _SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
 _UTILDIR = 'utils/'  # Utilities directory with external applicaions for quality evaluation and other things
-_TIMESTAMP_START_STR = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
+_TIMESTAMP_START = time.gmtime()  # struct_time
+_TIMESTAMP_START_STR = time.strftime('%Y-%m-%d %H:%M:%S', _TIMESTAMP_START)
 _TIMESTAMP_START_HEADER = ' '.join(('# ---', _TIMESTAMP_START_STR, '-'*32))
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
@@ -498,7 +499,7 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 	expand  - whether to expand (take derivatives from this template) the path
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
-	suffix  - suffix to be added to the backup name
+	suffix  - suffix to be added to the backup name before the time suffix
 	"""
 	# Note: normpath() may change semantics in case symbolic link is used with parent dir:
 	# base/linkdir/../a -> base/a, which might be undesirable
@@ -545,7 +546,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
 	compress  - compress or just copy spesified paths
-	xsuffix  - extra suffix to be added to the backup name
+	xsuffix  - extra suffix to be added to the backup name before the time suffix
 	move  - whether to move or copy data to the backup
 
 	ATTENTION: All paths are MOVED to the dedicated timestamped dir / archive

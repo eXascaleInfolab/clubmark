@@ -60,7 +60,7 @@ import benchapps  # Required for the functions name mapping to/from the app name
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, \
 	_SEPSHF, _SEPPATHID, _UTILDIR, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
 from benchapps import PYEXEC, aggexec, funcToAppName, _ALGSDIR, _EXTCLNODES, _PREFEXEC
-from benchevals import evaluators, evalAlgorithm, aggEvaluations, EvalsAgg, _RESDIR, _EXTEXECTIME
+from benchevals import evaluators, prepareEvaluations, aggEvaluations, _RESDIR, _EXTEXECTIME
 from utils.mpepool import AffinityMask, ExecPool, Job, secondsToHms
 from algorithms.utils.parser_nsl import asymnet, dflnetext
 
@@ -164,17 +164,23 @@ class Params(object):
 			0x1xx  - Q (modularity)
 			0x2xx  - f (conductance)
 			0xFxx  - All intrinsic measures
-		datas: PathOpts  - list of datasets to be run with asym flag (asymmetric / symmetric links weights):
+		updqual  - update quality evaluations storage rewriting existed values
+			instead of creating a new storage. Allowed only for the same seed.
+			The existed quality evaluations are backed up anyway.
+		datas: PathOpts  - list of datasets to be run with asym flag (asymmetric
+			/ symmetric links weights):
 			[PathOpts, ...] , where path is either dir or file [wildcard]
 		netext  - network file extension, should have the leading '.'
 		timeout  - execution timeout in sec per each algorithm
 		algorithms  - algorithms to be executed (just names as in the code)
-		aggrespaths = paths for the evaluated resutls aggregation (to be done for already existent evaluations)
+		aggrespaths = paths for the evaluated resutls aggregation (to be done for
+			already existent evaluations)
 		seedfile  - seed file name
 		"""
 		self.syntpo = None  # SyntPathOpts()
 		self.runalgs = False
 		self.quality = 0
+		self.updqual = False
 		self.datas = []  # Input datasets, list of PathOpts, where path is either dir or file wildcard
 		self.timeout = _TIMEOUT
 		self.algorithms = []
@@ -335,7 +341,7 @@ def parseParams(args):
 			quality = 0  # Quality measures bitmask
 			pos = 2
 			if len(arg) == pos:
-				quality = 0xFFF  # All extrinsic and intrinsic measures
+				quality = 0b10000000  # Use default extrinsic measures
 			elif arg[pos] == 'e':
 				pos += 1
 				if len(arg) == pos:
@@ -370,6 +376,9 @@ def parseParams(args):
 					quality |= 0x100  # Modularity
 				elif arg[pos] == 'c':
 					quality |= 0x200  # Conductance
+			elif arg[pos] == 'u' and len(arg) == pos+1:
+				opts.updqual = True
+				continue
 
 			if quality:
 				opts.quality |= quality
@@ -1064,7 +1073,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	print('Execution statistics aggregated')
 
 
-def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout, evaltimeout=14*24*60*60):
+def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout
+, evaltimeout=14*24*60*60, update=False):
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
 	quality  - evaluation measures mask
@@ -1086,26 +1096,33 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout,
 	algorithms  - list of the algorithms to be executed
 	datas  - input datasets, wildcards of files or directories containing files
 		of the default extensions .ns{{e,a}}
-	seed  - benchmark seed, natural number
+	seed  - benchmark seed, natural number. Used to mark evaluations file via
+		the HDF5 user block.
 		ATTENTION: seed is not supported by [some] evaluation apps (gecmi)
 	exectime  - elapsed time since the benchmarking started
 	timeout  - timeout per each evaluation run, a single measure applied to the results
 		of a single algorithm on a single network (all instances and shuffles), >= 0
 	evaltimeout  - timeout for all evaluations, >= 0, 0 means unlimited time
+	update  - update evalautions file or create a new one, anyway existed evaluations
+		are backed up.
 	"""
 	assert (quality and appsmodule and datas and exectime + 0 >= 0
 		and timeout + 0 >= 0), 'Invalid input arguments'
+	assert isinstance(seed, int) and seed >=0, 'Seed value is invalid'
 
-	nmix = quality & 0b11  # NMI multiresolution (multiscale) and overlapping (gecmi)
+	# Prepare HDF5 evaluations store
+	prepareEvaluations(seed, update)
 
-	nmio = quality & 0b1100  # NMI overlapping (onmi)
-	intrins = quality & 0xF00  # Intrinsic measures: Q and f (daoc)
-	quality &= 0xF0  # F1-s (xmeasures)
-
-	# Explicitly reassign default extrinsic measures (NMI_max, F1h and F1p)
-	if quality == 0x80:  # 0b10000000
-		nmix = 1  # NMI_max
-		quality = 0x30  # F1h and F1p: 0b00010000 | 0b00100000
+	# nmix = quality & 0b11  # NMI multiresolution (multiscale) and overlapping (gecmi)
+	#
+	# nmio = quality & 0b1100  # NMI overlapping (onmi)
+	# intrins = quality & 0xF00  # Intrinsic measures: Q and f (daoc)
+	# quality &= 0xF0  # F1-s (xmeasures)
+	#
+	# # Explicitly reassign default extrinsic measures (NMI_max, F1h and F1p)
+	# if quality == 0x80:  # 0b10000000
+	# 	nmix = 1  # NMI_max
+	# 	quality = 0x30  # F1h and F1p: 0b00010000 | 0b00100000
 
 	starttime = time.time()  # Procedure start time
 	print('Starting quality evaluations...')
@@ -1427,9 +1444,9 @@ def benchmark(*args):
 
 	opts = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tsyntpo: "{}"\n\tconvnets: 0b{:b}'
-		'\n\trunalgs: {}\n\tevalres: 0b{:b}\n\tdatas: {}\n\talgorithms: {}'
+		'\n\trunalgs: {}\n\tquality: 0b{:b}\n\tupdqual: {}\n\tdatas: {}\n\talgorithms: {}'
 		'\n\taggrespaths: {}\n\ttimeout: {} h {} m {:.4f} sec'
-		.format(opts.syntpo, opts.convnets, opts.runalgs, opts.quality
+		.format(opts.syntpo, opts.convnets, opts.runalgs, opts.quality, opts.updqual
 			, '; '.join([str(pathopts) for pathopts in opts.datas])  # Note: ';' because internal separator is ','
 			, ', '.join(opts.algorithms) if opts.algorithms else ''
 			, ', '.join(opts.aggrespaths) if opts.aggrespaths else '', *secondsToHms(opts.timeout)))
@@ -1488,7 +1505,8 @@ def benchmark(*args):
 	# Evaluate results
 	if opts.quality:
 		evalResults(quality=opts.quality, appsmodule=benchapps, algorithms=opts.algorithms
-			, datas=opts.datas, exectime=exectime, timeout=opts.timeout, evaltimeout=14*24*60*60)  # 14 days
+			, datas=opts.datas, seed=seed, exectime=exectime, timeout=opts.timeout
+			, evaltimeout=14*24*60*60, update=opts.updqual)  # 14 days
 
 	if opts.aggrespaths:
 		aggEvaluations(opts.aggrespaths)
@@ -1584,6 +1602,7 @@ if __name__ == '__main__':
 			'    e[Y]  - extrinsic measures for overlapping communities, default: all',
 			'      n[Z]  - NMI measure(s) for overlapping and multi-level communities: max, avg, min, sqrt',
 			'        x  - NMI_max,',
+			'      NOTE: unified NMI evaluaiton is stochastic and does not provide the seed parameter.',
 			#'        a  - NMI_avg (also known as NMI_sum),',
 			#'        n  - NMI_min,',
 			#'        r  - NMI_sqrt',
@@ -1598,6 +1617,9 @@ if __name__ == '__main__':
 			'    i[Y]  - intrinsic measures for overlapping communities, default: all',
 			'      m  - modularity Q',
 			'      c  - conductance f',
+			'    u  - update quality evaluations storage rewriting existed values instead of creating a new storage.'
+			' Allowed only for the same seed. The existed quality evaluations are backed up anyway.',
+			'NOTE: multiple quality evaluaiton options can be specified via the multiple -q opitons',
 			'  --timeout, -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network'
 			' in sec, min or hours; 0 sec - no timeout, default: {th} h {tm} min {ts} sec',
 			'    s  - time in seconds, default option',
@@ -1605,7 +1627,7 @@ if __name__ == '__main__':
 			'    h  - time in hours',
 			'  --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms'
 			', contains uint64_t value. Default: {seedfile}',
-			'NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seeed',
+			'NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seed',
 			'',
 			'Advanced parameters:',
 			'  --stderr-stamp  - output a time stamp to the stderr on the benchmarking start to separate multiple reexectuions',

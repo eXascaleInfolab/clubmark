@@ -18,19 +18,23 @@ import shutil
 import glob
 import sys
 import traceback  # Stacktrace
+import h5py  # HDF5 storage
+import time
 # from collections import namedtuple
 from subprocess import PIPE
 
 
 from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
-	escapePathWildcards, envVarDefined, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR, \
-	_TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
+	escapePathWildcards, envVarDefined, SyncValue, tobackup, \
+	_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR, \
+	_TIMESTAMP_START, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
 from utils.mpepool import Task, Job
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 _RESDIR = 'results/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm, specified RELATIVE to _ALGSDIR
 _CLSDIR = 'clusters/'  # Clusters directory for the resulting clusters of algorithms execution
+_QUALITY_STORAGE = 'quality.hdf5'  # Quality evaluation storage file name
 _EXTERR = '.err'
 #_EXTLOG = '.log'  # Extension for the logs
 #_EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
@@ -40,6 +44,53 @@ _EXTAGGRESEXT = '.resx'  # Extended aggregated results
 _SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not apear in a file name, which can be part of job name)
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
+_STORAGE_FILE = None  # HDF5 storage file object, automatically saved even if not closed on the benchmarking completion/terminaiton
+
+
+def prepareEvaluations(seed, update=False):
+	"""Prepare for evaluations creating HDF5 storage bound to _STORAGE_FILE
+
+	Check whether the storage exist, copy/move old storage to the backup and
+	create the new one if the storage is not exist.
+
+	seed  - benchmarking seed, natural number
+	update  - update existing storage (or create if not exists), or create a new one
+	"""
+	storage = _RESDIR + _QUALITY_STORAGE
+	ublocksize = 512  # Userblock size in bytes
+	ublocksep = ':'  # Userblock vals separator
+	timefmt = '%y%m%d_%H%M%S'  # Time format
+	timestamp = time.strftime(timefmt, _TIMESTAMP_START)  # Timestamp string
+	if os.path.exists(storage):
+		# Read userblock: seed and timestamps, validate new seed and estimate whether
+		# there is enought space for one more timestamp
+		with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
+			# Note: userblock contains '<seed>:<timestamp1>:<timestamp2>...',
+			# where timestamp has timefmt
+			ublocksize = fstore.userblock_size
+			ublock = fstore.read(ublocksize).rstrip('\0')
+			ubparts = ublock.split(ublocksep)
+			if update and int(ubparts[0]) != seed:
+				update = False
+				print('WARNING, update is supported only for the same seed.'
+					' Specified seed {} != {} storage seed. New storage will be created.'
+					.format(seed, ubparts[0]), file=sys.stderr)
+			# Update userblock if possible
+			if len(ublock) + len(ublocksep) + len(timestamp) <= ublocksize:
+				fstore.seek(len(ublock))
+				fstore.write(ublocksep + timestamp)
+			else:
+				update = False
+				print('WARNING, update can not be performed because the userblock is already full.'
+					' New storage will be created.'
+					.format(seed, ubparts[0]), file=sys.stderr)
+		if len(ubparts) < 2:
+			raise ValueError('Userblock should contain at least 2 items (seed and 1+ timestamp): ' + ublock)
+		bcksuffix = SyncValue(time.strptime(ubparts[-1], timefmt))  # Use last benchmarking start time
+		tobackup(storage, False, bcksuffix, move=not update)  # Copy/move to the backup
+	global _STORAGE_FILE
+	# Mode: append; core driver is memory-mapped file, block_size is default (64 Kb)
+	_STORAGE_FILE = h5py.File(storage, driver='core', libver='latest', userblock_size=ublocksize)
 
 
 def execGecmi(execpool, clsfile, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):

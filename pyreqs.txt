@@ -4,9 +4,12 @@
 # psutil is required for the mpepool only
 psutil>=5.2
 # Future utils for Python2/3 compatibility (benchmarking & utils)
-future>=0.16
+future>=0.16.0
 # h5py for the quality evaluations serialization to HDF5 file
-h5py>=2.7
+h5py>=2.7.0
+# numpy Structured array is used to write data to the HDF5 store
+numpy>=1.11
+# TODO: matplotlib or +pandas or +(scipy and seaborn) for results visualization
 
 # Algorithms requirements:
 ## louvain_igraph.py:
@@ -14,5 +17,5 @@ python-igraph>=0.7
 
 # Evaluations & Utils requirements
 # Note: numpy interactions are slow on pypy
-numpy>=1.11
+numpy>=1.11  # Already listed
 future>=0.16  # Already listed

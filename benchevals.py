@@ -20,21 +20,27 @@ import sys
 import traceback  # Stacktrace
 import h5py  # HDF5 storage
 import time
+
 # from collections import namedtuple
 from subprocess import PIPE
-
-
+from multiprocessing import Process, Queue   # Required to asynchronously save evaluated quality measures to the persistent storage
 from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
 	escapePathWildcards, envVarDefined, SyncValue, tobackup, \
 	_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR, \
 	_TIMESTAMP_START, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
 from utils.mpepool import Task, Job
 
+# Identify type of the Variable-length ASCII (bytes) for the HDF5 storage
+try:
+	_h5str = h5py.special_dtype(vlen=bytes)  # For Python3
+except NameError:
+	_h5str = h5py.special_dtype(vlen=str)  # For Python2
+
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 _RESDIR = 'results/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm, specified RELATIVE to _ALGSDIR
 _CLSDIR = 'clusters/'  # Clusters directory for the resulting clusters of algorithms execution
-_QUALITY_STORAGE = 'quality.hdf5'  # Quality evaluation storage file name
+_QUALITY_STORAGE = 'quality.h5'  # Quality evaluation storage file name
 _EXTERR = '.err'
 #_EXTLOG = '.log'  # Extension for the logs
 #_EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
@@ -44,68 +50,207 @@ _EXTAGGRESEXT = '.resx'  # Extended aggregated results
 _SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not apear in a file name, which can be part of job name)
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
-_STORAGE_FILE = None  # HDF5 storage file object, automatically saved even if not closed on the benchmarking completion/terminaiton
 
 
-def prepareEvaluations(seed, update=False):
-	"""Prepare for evaluations creating HDF5 storage bound to _STORAGE_FILE
+class Measures(object):
+	"""Quality Measures"""
+	def __init__(self, nmi_max=None, nmi_sqrt=None, nmi_num=0, onmi_max=None, onmi_sqrt=None
+	, f1p=None, f1h=None, f1s=None, q=None, f=None):
+		"""Quality Measures to be saved
 
-	Check whether the storage exist, copy/move old storage to the backup and
-	create the new one if the storage is not exist.
-
-	seed  - benchmarking seed, natural number
-	update  - update existing storage (or create if not exists), or create a new one
-	"""
-	storage = _RESDIR + _QUALITY_STORAGE
-	ublocksize = 512  # Userblock size in bytes
-	ublocksep = ':'  # Userblock vals separator
-	timefmt = '%y%m%d_%H%M%S'  # Time format
-	timestamp = time.strftime(timefmt, _TIMESTAMP_START)  # Timestamp string
-	if os.path.exists(storage):
-		# Read userblock: seed and timestamps, validate new seed and estimate whether
-		# there is enought space for one more timestamp
-		with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
-			# Note: userblock contains '<seed>:<timestamp1>:<timestamp2>...',
-			# where timestamp has timefmt
-			ublocksize = fstore.userblock_size
-			ublock = fstore.read(ublocksize).rstrip('\0')
-			ubparts = ublock.split(ublocksep)
-			if update and int(ubparts[0]) != seed:
-				update = False
-				print('WARNING, update is supported only for the same seed.'
-					' Specified seed {} != {} storage seed. New storage will be created.'
-					.format(seed, ubparts[0]), file=sys.stderr)
-			# Update userblock if possible
-			if len(ublock) + len(ublocksep) + len(timestamp) <= ublocksize:
-				fstore.seek(len(ublock))
-				fstore.write(ublocksep + timestamp)
-			else:
-				update = False
-				print('WARNING, update can not be performed because the userblock is already full.'
-					' New storage will be created.'
-					.format(seed, ubparts[0]), file=sys.stderr)
-		if len(ubparts) < 2:
-			raise ValueError('Userblock should contain at least 2 items (seed and 1+ timestamp): ' + ublock)
-		bcksuffix = SyncValue(time.strptime(ubparts[-1], timefmt))  # Use last benchmarking start time
-		tobackup(storage, False, bcksuffix, move=not update)  # Copy/move to the backup
-	global _STORAGE_FILE
-	# Mode: append; core driver is memory-mapped file, block_size is default (64 Kb)
-	_STORAGE_FILE = h5py.File(storage, driver='core', libver='latest', userblock_size=ublocksize)
+		nmi_max  - NMI multiresolution overlapping (gecmi) normalized by max (default)
+		nmi_sqrt  - NMI multiresolution overlapping (gecmi) normalized by sqrt
+		nmi_num  - number of the NMI evaluation (gecmi provides stochastic results), 0 .. 9
+		onmi_max  - Overlapping nonstandard NMI (onmi) normalized by max (default)
+		onmi_sqrt  - Overlapping nonstandard NMI (onmi) normalized by sqrt
+		f1p  - F1p measure (harmonic mean of partial probabilities)
+		f1h  - harmonic F1-score measure (harmonic mean of weighted average F1 measures)
+		f1s  - average F1-score measure (arithmetic mean of weighted average F1 measures)
+		q  - modularity
+		f  - conductance
+		"""
+		assert ((nmi_max is None or 0. <= nmi_max <= 1.) and (nmi_sqrt is None or 0. <= nmi_sqrt <= 1.) and
+			isinstance(nmi_num, int) and 0 <= nmi_num <= 9 and (onmi_max is None or 0. <= onmi_max <= 1.) and
+			(onmi_sqrt is None or 0. <= onmi_sqrt <= 1.) and (f1p is None or 0. <= f1p <= 1.) and
+			(f1h is None or 0. <= f1h <= 1.) and (f1s is None or 0. <= f1s <= 1.) and
+			(q is None or -0.5 <= q <= 1.) and (f is None or 0. <= f <= 1.)), (
+			'Parameters validation failed  nmi_max: {}, nmi_sqrt: {}, nmi_num: {}, onmi_max: {}, onmi_sqrt: {}'
+			', f1p: {}, f1h: {}, f1s: {}, q: {}, f: {}'.format(nmi_max, nmi_sqrt, nmi_num
+			, onmi_max, onmi_sqrt, f1p, f1h, f1s, q, f))
+		self.nmi_max = nmi_max
+		self.nmi_sqrt = nmi_sqrt
+		self.nmi_num = nmi_num
+		self.onmi_max = onmi_max
+		self.onmi_sqrt = onmi_sqrt
+		self.f1p = f1p
+		self.f1h = f1h
+		self.f1s = f1s
+		self.q = q  # Modularity
+		self.f = f  # Conductance
 
 
-def execGecmi(execpool, clsfile, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
+	def __str__(self):
+		"""String conversion"""
+		return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
+
+
+class QualityEntry(object):
+	"""Quality evaluations etry to be saved in the persistent storage"""
+	def __init__(self, measures, appname, netname, appargs=None, level=0, instance=0, shuffle=0):
+		"""Quality evaluations to be saved
+
+		measures  - quality measures to be saved, Measures
+		appname  - application (algorithm) name, str
+		netname  - network (dataset) name, str
+		appargs  - non-deault application parameters packed into ASCII encoded str if any, byte str
+		level  - level of the results (clustering hierarchy level) if any, natural 0 number
+		instance  - network instance if any, actual for the synthetic networks with the same params,
+			natural 0 number
+		shuffle  - network shuffle if any, actula for the shuffled networks, natural 0 number
+		"""
+		assert (isinstance(measures, Measures) and isinstance(appname, str) and isinstance(netname, str)
+			and (appargs is None or isinstance(appargs, _h5str)) and isinstance(level, int) and level >= 0
+			and isinstance(instance, int) and instance >= 0 and isinstance(shuffle, int) and shuffle >= 0
+			), ('Parameters validation failed  measures type: {}, appname: {}, netname: {}, appargs: {}'
+			', level: {}, instance: {}, shuffle: {}'.format(type(measures)
+			, appname, netname, appargs, level, instance, shuffle))
+		self.measures = measures
+		self.appname = appname
+		self.netname = netname
+		self.appargs = appargs
+		self.level = level
+		self.instance = instance
+		self.shuffle = shuffle
+
+
+	def __str__(self):
+		"""String conversion"""
+		return ', '.join((str(self.measures),
+			', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__) if name != 'measures'])))
+
+
+class QualitySaver(object):
+	"""Quality evaluations serializer to HDF5 sotrage"""
+
+	@staticmethod
+	def _datasaver(qualsaver):
+		"""Save data to the persistent storage
+
+		qualsaver  - quality saver wrapper containing the storage and queue
+			of the evaluating measures
+		"""
+		while qualsaver._active or not qualsaver._measque.empty():
+			qms = qualsaver._measque.get()  # Meagures to be stored
+			assert isinstance(qms, Measures), 'Unexpected type of the measures'
+			for qname, qval in viewitems(qms.__dict__):
+				# Skip undefined quality measures nad store remained {qname: qval}
+				if qval is None:
+					continue
+				# TODO: save data to HDF5
+
+
+	def __init__(self, apps, seed, update=False):
+		"""Prepare for evaluations creating HDF5 storage
+
+		Check whether the storage exist, copy/move old storage to the backup and
+		create the new one if the storage is not exist.
+
+		apps  - evaluating applicaitons (algorithms), list of strings
+		seed  - benchmarking seed, natural number
+		update  - update existing storage (or create if not exists), or create a new one
+		"""
+		storage = _RESDIR + _QUALITY_STORAGE
+		ublocksize = 512  # Userblock size in bytes
+		ublocksep = ':'  # Userblock vals separator
+		timefmt = '%y%m%d_%H%M%S'  # Time format
+		timestamp = time.strftime(timefmt, _TIMESTAMP_START)  # Timestamp string
+		if os.path.exists(storage):
+			# Read userblock: seed and timestamps, validate new seed and estimate whether
+			# there is enought space for one more timestamp
+			with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
+				# Note: userblock contains '<seed>:<timestamp1>:<timestamp2>...',
+				# where timestamp has timefmt
+				ublocksize = fstore.userblock_size
+				ublock = fstore.read(ublocksize).rstrip('\0')
+				ubparts = ublock.split(ublocksep)
+				if update and int(ubparts[0]) != seed:
+					update = False
+					print('WARNING, update is supported only for the same seed.'
+						' Specified seed {} != {} storage seed. New storage will be created.'
+						.format(seed, ubparts[0]), file=sys.stderr)
+				# Update userblock if possible
+				if len(ublock) + len(ublocksep) + len(timestamp) <= ublocksize:
+					fstore.seek(len(ublock))
+					fstore.write(ublocksep + timestamp)
+				else:
+					update = False
+					print('WARNING, update can not be performed because the userblock is already full.'
+						' New storage will be created.'
+						.format(seed, ubparts[0]), file=sys.stderr)
+			if len(ubparts) < 2:
+				raise ValueError('Userblock should contain at least 2 items (seed and 1+ timestamp): ' + ublock)
+			bcksuffix = SyncValue(time.strptime(ubparts[-1], timefmt))  # Use last benchmarking start time
+			tobackup(storage, False, bcksuffix, move=not update)  # Copy/move to the backup
+		# Mode: append; core driver is memory-mapped file, block_size is default (64 Kb)
+		self.storage = h5py.File(storage, driver='core', libver='latest', userblock_size=ublocksize)
+		# Initialize apps datasets holding algorithms parameters as ASCII strings of variable length
+		self._apps = {}  # Datasets for each algorithm holding params
+		appsdir = self.storage.require_group('apps')  # Applications / algorithms
+		for app in apps:
+			# Open or create dataset for each app
+			# Allocate chunks of 10 items starting with empty dataset and with possibility
+			# to resize up to 500 items (params combinations)
+			self.apps[app] = appsdir.require_dataset(app, shape=(0,), dtype=h5py.special_dtype(vlen=_h5str)
+				, chunks=(10,), maxshape=(500,))  # , maxshape=(None,), fletcher32=True
+		self.evals = self.storage.require_group('evals')  # Quality evaluations dir (group)
+
+
+	def __enter__(self):
+		"""Context entrence"""
+		self._active = True
+		# 1024 - max number of the buffered items in the queue until blocking puttinng, >> then expected
+		self._measque = Queue(1024)
+		self._executor = Process(target=self._datasaver, args=(self,))
+		self._executor.start()
+		return self
+
+
+	def __exit__(self, etype, evalue, traceback):
+		"""Contex exit
+
+		etype  - exception type
+		evalue  - exception value
+		traceback  - exception traceback
+		"""
+		#self._apps.clear()
+		#self.storage.close()
+		try:
+			self._active = False
+			self._measque.close()  # No more data can be put in the queue
+			self._measque.join_thread()
+			self._executor.join()
+		finally:
+			self.storage.flush()  # Allow to reuse the instance in several context managers
+		# Note: the exception (if any) is propagated if True is not returned here
+
+
+	def save(measures, netname, level=0, instance=None, shuffle=None):  # appname, appargs
+		pass
+
+
+def execGecmi(execpool, qualsaver, gtruth, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
 	pass
 
 
-def execOnmi(execpool, clsfile, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
+def execOnmi(execpool, qualsaver, gtruth, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
 	pass
 
 
-def execXmeasures(execpool, clsfile, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
+def execXmeasures(execpool, qualsaver, gtruth, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
 	pass
 
 
-def execDaoc(execpool, clsfile, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
+def execDaoc(execpool, qualsaver, gtruth, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
 	pass
 
 
@@ -116,9 +261,9 @@ def evaluators(quality):
 		Note: all measures are applicable for the overlapping clusters
 		0  - nothing
 		0b00000001  - NMI_max
-		0b00000011  - all NMIs (max, min, avg, sqrt)
+		0b00000011  - all NMIs (max, sqrt, avg, min), only max and sqrt are saved
 		0b00000100  - ONMI_max
-		0b00001100  - all ONMIs (max, avg, lfk)
+		0b00001100  - all ONMIs (max, sqrt, avg, lfk), only max and sqrt are saved
 		0b00010000  - Average F1h Score
 		0b00100000  - F1p measure
 		0b01110000  - All F1s (F1p, F1h, F1s)

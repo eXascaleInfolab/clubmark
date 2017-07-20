@@ -7,7 +7,7 @@
 	specified parameters on the specified datasets,	and optionally evaluates
 	results of the execution using specified executable(s).
 
-	All executions are traced and logged also as resources consumption:
+	All executions are traced and resources consumption is logged as:
 	CPU (user, kernel, etc.) and memory (RSS RAM).
 	Traces are saved even in case of internal / external interruptions and crashes.
 
@@ -52,15 +52,15 @@ import signal  # Intercept kill signals
 import glob
 import traceback  # Stacktrace
 import copy
+import benchapps  # Required for the functions name mapping to/from the app names
+
 from math import sqrt
 from multiprocessing import cpu_count  # Returns the number of multi-core CPU units if defined
-
-# PYEXEC - current Python interpreter
-import benchapps  # Required for the functions name mapping to/from the app names
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, \
 	_SEPSHF, _SEPPATHID, _UTILDIR, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
+# PYEXEC - current Python interpreter
 from benchapps import PYEXEC, aggexec, funcToAppName, _ALGSDIR, _EXTCLNODES, _PREFEXEC
-from benchevals import evaluators, prepareEvaluations, aggEvaluations, _RESDIR, _EXTEXECTIME
+from benchevals import QualitySaver, evaluators, aggEvaluations, _RESDIR, _EXTEXECTIME
 from utils.mpepool import AffinityMask, ExecPool, Job, secondsToHms
 from algorithms.utils.parser_nsl import asymnet, dflnetext
 
@@ -106,8 +106,8 @@ class PathOpts(object):
 		self.shfnum = shfnum  # Number of shuffles for each network instance to be produced, >= 0
 
 	def __str__(self):
-		return ', '.join(('path: ' + self.path, 'flat: ' + str(self.flat), 'asym: ' + str(self.asym)
-			, 'shfnum: ' + str(self.shfnum)))
+		"""String conversion"""
+		return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
 
 
 class SyntPathOpts(PathOpts):
@@ -132,6 +132,7 @@ class SyntPathOpts(PathOpts):
 		self.overwrite = overwrite
 
 	def __str__(self):
+		"""String conversion"""
 		return ', '.join((super(SyntPathOpts, self).__str__(), 'netins: ' + str(self.netins)
 			, 'overwrite: ' + str(self.overwrite)))
 
@@ -933,7 +934,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		stub.__name__ = name  # Set original name to the stub func
 		return stub
 
-	starttime = time.time()  # Procedure start time; ATTENTION: .clock() should not be used, because it does not consider "sleep" time
+	stime = time.time()  # Procedure start time; ATTENTION: .clock() should not be used, because it does not consider "sleep" time
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: set affinity in a way to maximize the CPU cache L1/2 for each process
@@ -1065,9 +1066,9 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 				.format(err, traceback.format_exc()), file=sys.stderr)
 			raise
 	_execpool = None
-	starttime = time.time() - starttime
+	stime = time.time() - stime
 	print('The apps execution is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
-		.format(starttime, *secondsToHms(starttime)))
+		.format(stime, *secondsToHms(stime)))
 	print('Aggregating execution statistics...')
 	aggexec(algorithms)
 	print('Execution statistics aggregated')
@@ -1110,329 +1111,338 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout
 		and timeout + 0 >= 0), 'Invalid input arguments'
 	assert isinstance(seed, int) and seed >=0, 'Seed value is invalid'
 
-	# Prepare HDF5 evaluations store
-	prepareEvaluations(seed, update)
-
-	# nmix = quality & 0b11  # NMI multiresolution (multiscale) and overlapping (gecmi)
-	#
-	# nmio = quality & 0b1100  # NMI overlapping (onmi)
-	# intrins = quality & 0xF00  # Intrinsic measures: Q and f (daoc)
-	# quality &= 0xF0  # F1-s (xmeasures)
-	#
-	# # Explicitly reassign default extrinsic measures (NMI_max, F1h and F1p)
-	# if quality == 0x80:  # 0b10000000
-	# 	nmix = 1  # NMI_max
-	# 	quality = 0x30  # F1h and F1p: 0b00010000 | 0b00100000
-
-	starttime = time.time()  # Procedure start time
+	stime = time.time()  # Procedure start time
 	print('Starting quality evaluations...')
 	# Run evaluations for all algs if not specified the concrete algorithms to be run
 	if not algorithms:
 		algorithms = appnames(appsmodule)
 
-	def evalquality(execpool, evalapps, net, asym, netshf, pathids=None):
-		"""Evaluate algorithms results on the specified network counting number of ran jobs
-
-		net  - network to be processed
-		asym  - whether the network is asymmetric (directed), considered only for the non-standard network file extensions
-		netshf  - whether this network is a shuffle in the non-flat dir structure
-		pathid  - path id of the net to distinguish nets with the same name located in different dirs
-
-		return
-			jobsnum  - the number of scheduled jobs, typically 1
-		"""
-		jobsnum = 0
-		netext = os.path.splitext(net)[1].lower()
-		for eapp in evalapps:
-			try:
-				jobsnum += eapp(execpool, net, asym=asymnet(netext, asym), odir=netshf, timeout=timeout, pathids=pathids, seed=seed)
-			except Exception as err:
-				errexectime = time.time() - exectime
-				print('WARNING, the "{}" is interrupted by the exception: {} with the callstack: {} on {:.4f} sec ({} h {} m {:.4f} s)'
-					.format(eapp.__name__, err, traceback.format_exc(), errexectime, *secondsToHms(errexectime)), file=sys.stderr)
-		return jobsnum
-
-	def runeval(net, netshf, xargs):  # TODO: default ext
-		"""Clustering evaluation runner
-
-		net  - network file name
-		netshf  - whether this network is a shuffle in the non-flat dir structure
-		xargs  - extra custom parameters
-		"""
-		tnum = evalquality(xargs['execpool'], xargs['evaluators'], net, xargs['asym'], netshf, pathids)
-		xargs['jobsnum'] += tnum
-		xargs['netcount'] += tnum != 0
-
-	def dflclsext(asym=None):
-		"""Get default file extension for the resulting clustering
-
-		asym  - whether the input network is asymmetric (directed) or symmetric (undirected)
-
-		return  - respective extension of the network file having leading '.'
-		"""
-		return '.cnl'
-
-	xargs = {'execpool': None,  # Execution pool to schedule evaluators
-			 'evaluators': None,  # Evaluating functions
-			 'asym': False,  # Asymmetric network, required for the intrinsic measures
-			 'pathidstr': '',  # Id of the dublicated path shortcut to have the unique shortcut
-			 'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
-			 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
-
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
-	# ATTENTION: NMI ovp multiresolution should be ealuated in the dedicated mode requiring multiple CPU cores,
-	# so it will be scheduled separately after other measures
-	# Note: afnstep = 1 to maximize parallelization the same time binding single-treaded apps to the logical CPUs (hardware threads)
-	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='qualityst') as _execpool:
-		xargs['execpool'] = _execpool
-		xargs['evaluators'] = evaluators(quality & 0xFFFC)  # Skip gecmi (Multiresolution Overlapping NMI) because it requires special scheduling
-		print('  Scheduling quality evaluation for the evaluators: ', ', '.join(
-			[funcToAppName(func.__name__) for func in xargs['evaluators']]))
-		# Load pathid mapping (nameid: fullpath)
-		pathids = {}
-		if os.path.isfile(_PATHIDFILE):
-			with open(_PATHIDFILE) as fpais:
-				for ln in fpais:
-					# Skip comments
-					if not ln or ln[0] == '#':
-						continue
-					fnamex, path = ln.split(None, 1)  # Filename extended with id, full path to the input file
-					pathids[fnamex] = path
-			if pathids:
-				print('Pathid mapping loaded: {} items'.format(len(pathids)))
-		else:
-			print('WARNING, pathid mapping does not exist', file=sys.stderr)
+	# Prepare HDF5 evaluations store
+	with QualitySaver(apps=algorithms, seed=seed, update=update) as qualsaver:
+		def evalquality(execpool, evalapps, net, asym, netshf, pathids=None):
+			"""Evaluate algorithms results on the specified network counting number of ran jobs
 
-		# Track processed file names to resolve cases when files with the same name present in different input dirs
-		# Note: pathids are required at least to set concise job names to see what is executed in runtime
-		netnames = {}  # Name to pathid mapping: {Name: counter}
-		for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
-			xargs['asym'] = popt.asym
-			# Resolve wildcards
-			pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
-			for path in glob.iglob(popt.path):  # Allow wildcards
-				# Form non-empty pathid string for the duplicated file names
-				if os.path.isdir(path):
-					# ATTENTION: required to process directories ending with '/' correctly
-					# Note: normpath() may change semantics in case symbolic link is used with parent dir:
-					# base/linkdir/../a -> base/a, which might be undesirable
-					mpath = path.rstrip('/')  # os.path.normpath(path)
-				else:
-					mpath = os.path.splitext(path)[0]
-				net = os.path.split(mpath)[1]
-				pathid = netnames.get(net)
-				if pathid is None:
-					netnames[net] = 0
-					xargs['pathidstr'] = ''
-				else:
-					pathid += 1
-					netnames[net] = pathid
-					nameid = _SEPPATHID + str(pathid)
-					xargs['pathidstr'] = nameid
-					# Validate loaded pathids mapping
-					if pathids.get(nameid) != mpath:
-						raise ValueError('ERROR, "{}" mapping validation failed.'
-							' Can not find correspondence of the ground truth files to the evaluating clusterings.')
-				pcuropt.path = path
-				if _DEBUG_TRACE:
-					print('  Scheduling quality evaluation for the path options ({})'.format(str(pcuropt)))
-				processPath(pcuropt, runeval, xargs=xargs, dflextfn=dflclsext)
-		netnames.clear()
-		pathids = None  # Release loaded pathid mapping
+			net  - network to be processed
+			asym  - whether the network is asymmetric (directed), considered only for the non-standard network file extensions
+			netshf  - whether this network is a shuffle in the non-flat dir structure
+			pathid  - path id of the net to distinguish nets with the same name located in different dirs
 
-	# Schedule NMI multiresolution overlapping evalautions (gecmi) either on the whole NUMA node or
-	# on the whole server because gecmi is multi-threaded app with huge number of threads
-	# Reuse execpool
-	_execpool.name = 'qualitymt'
-	_execpool.alive = True
-	_execpool.afnmask = AffinityMask(AffinityMask.NODE_CPUS)
-	with _execpool:
-		xargs['execpool'] = _execpool
-		xargs['evaluators'] = evaluators(quality & 0b11)  # Skip gecmi (Multiresolution Overlapping NMI) because it requires special scheduling
-		print('  Scheduling quality evaluation for the evaluators: ', ', '.join(
-			[funcToAppName(func.__name__) for func in xargs['evaluators']]))
+			return
+				jobsnum  - the number of scheduled jobs, typically 1
+			"""
+			jobsnum = 0
+			netext = os.path.splitext(net)[1].lower()
+			for eapp in evalapps:
+				try:
+					jobsnum += eapp(execpool, qualsaver, net, asym=asymnet(netext, asym), odir=netshf, timeout=timeout, pathids=pathids, seed=seed)
+				except Exception as err:
+					errexectime = time.time() - exectime
+					print('WARNING, the "{}" is interrupted by the exception: {} with the callstack: {} on {:.4f} sec ({} h {} m {:.4f} s)'
+						.format(eapp.__name__, err, traceback.format_exc(), errexectime, *secondsToHms(errexectime)), file=sys.stderr)
+			# Note: jobs are executed asynchronously, so here none of them is completed
+			#_STORAGE_FILE.flush()  # Write results to the persistent storage
+			return jobsnum
 
-		# Track processed file names to resolve cases when files with the same name present in different input dirs
-		# Note: pathids are required at least to set concise job names to see what is executed in runtime
-		for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
-			xargs['asym'] = popt.asym
-			# Resolve wildcards
-			pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
-			for path in glob.iglob(popt.path):  # Allow wildcards
-				# Form non-empty pathid string for the duplicated file names
-				if os.path.isdir(path):
-					# ATTENTION: required to process directories ending with '/' correctly
-					# Note: normpath() may change semantics in case symbolic link is used with parent dir:
-					# base/linkdir/../a -> base/a, which might be undesirable
-					net = path.rstrip('/')  # os.path.normpath(path)
-				else:
-					net = os.path.splitext(path)[0]
-				net = os.path.split(net)[1]
-				pathid = netnames.get(net)
-				if pathid is None:
-					netnames[net] = 0
-					xargs['pathidstr'] = ''
-				else:
-					pathid += 1
-					netnames[net] = pathid
-					nameid = _SEPPATHID + str(pathid)
-					xargs['pathidstr'] = nameid
-				pcuropt.path = path
-				if _DEBUG_TRACE:
-					print('  Scheduling quality evaluation for the path options ({})'.format(str(pcuropt)))
-				processPath(pcuropt, runeval, xargs=xargs, dflextfn=dflclsext)
-		netnames = None
+		def runeval(net, netshf, xargs):  # TODO: default ext
+			"""Clustering evaluation runner
 
+			net  - network file name
+			netshf  - whether this network is a shuffle in the non-flat dir structure
+			xargs  - extra custom parameters
+			"""
+			tnum = evalquality(xargs['execpool'], xargs['evaluators'], net, xargs['asym'], netshf, pathids)
+			xargs['jobsnum'] += tnum
+			xargs['netcount'] += tnum != 0
 
+		def dflclsext(asym=None):
+			"""Get default file extension for the resulting clustering
 
-		# Extend quality evaluation tracing files (.rcp) with time tracing to distinguish different executions (benchmark runs)
-		evaluator.mark(algorithms, seed)
+			asym  - whether the input network is asymmetric (directed) or symmetric (undirected)
 
-		for alg in algorithms:
-			aexecres = ''.join((_RESDIR, alg, '/', measure, _EXTEXECTIME))
-			with open(aexecres, 'a') as faexres:
-				faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
+			return  - respective extension of the network file having leading '.'
+			"""
+			return '.cnl'
 
-		if runtimeout <= 0:
-			runtimeout = timeout * xargs['jobsnum']
-		timelim = min(timeout * xargs['jobsnum'], runtimeout)
-		print('Waiting for the apps execution on {} jobs from {} networks'
-			' with {} sec ({} h {} m {:.4f} s) timeout ...'
-			.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
-		try:
-			_execpool.join(timelim)
-		except BaseException as err:  # Consider also system iteruptions not captured by the Exception
-			print('ERROR, Quality evaluation execution pool is interrupted by: {}. {}'
-				.format(err, traceback.format_exc()), file=sys.stderr)
-			raise
-	# _execpool = None
-	# starttime = time.time() - starttime
-	# print('The apps execution is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
-	# 	.format(starttime, *secondsToHms(starttime)))
-	# print('Aggregating execution statistics...')
-	# aggexec(algorithms)
-	# print('Execution statistics aggregated')
+		xargs = {'execpool': None,  # Execution pool to schedule evaluators
+				 'evaluators': None,  # Evaluating functions
+				 'asym': False,  # Asymmetric network, required for the intrinsic measures
+				 'pathidstr': '',  # Id of the dublicated path shortcut to have the unique shortcut
+				 'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
+				 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
 
+		# ATTENTION: NMI ovp multiresolution should be ealuated in the dedicated mode requiring multiple CPU cores,
+		# so it will be scheduled separately after other measures
+		# Note: afnstep = 1 to maximize parallelization the same time binding single-treaded apps to the logical CPUs (hardware threads)
+		with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='qualityst') as _execpool:
+			xargs['execpool'] = _execpool
+			xargs['evaluators'] = evaluators(quality & 0xFFFC)  # Skip gecmi (Multiresolution Overlapping NMI) because it requires special scheduling
+			print('  Scheduling quality evaluation for the evaluators: ', ', '.join(
+				[funcToAppName(func.__name__) for func in xargs['evaluators']]))
+			# Load pathid mapping (nameid: fullpath)
+			pathids = {}
+			if os.path.isfile(_PATHIDFILE):
+				with open(_PATHIDFILE) as fpais:
+					for ln in fpais:
+						# Skip comments
+						if not ln or ln[0] == '#':
+							continue
+						fnamex, path = ln.split(None, 1)  # Filename extended with id, full path to the input file
+						pathids[fnamex] = path
+				if pathids:
+					print('Pathid mapping loaded: {} items'.format(len(pathids)))
+			else:
+				print('WARNING, pathid mapping does not exist', file=sys.stderr)
 
+			# Track processed file names to resolve cases when files with the same name present in different input dirs
+			# Note: pathids are required at least to set concise job names to see what is executed in runtime
+			netnames = {}  # Name to pathid mapping: {Name: counter}
+			for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
+				xargs['asym'] = popt.asym
+				# Resolve wildcards
+				pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
+				for path in glob.iglob(popt.path):  # Allow wildcards
+					# Form non-empty pathid string for the duplicated file names
+					if os.path.isdir(path):
+						# ATTENTION: required to process directories ending with '/' correctly
+						# Note: normpath() may change semantics in case symbolic link is used with parent dir:
+						# base/linkdir/../a -> base/a, which might be undesirable
+						mpath = path.rstrip('/')  # os.path.normpath(path)
+					else:
+						mpath = os.path.splitext(path)[0]
+					net = os.path.split(mpath)[1]
+					pathid = netnames.get(net)
+					if pathid is None:
+						netnames[net] = 0
+						xargs['pathidstr'] = ''
+					else:
+						pathid += 1
+						netnames[net] = pathid
+						nameid = _SEPPATHID + str(pathid)
+						xargs['pathidstr'] = nameid
+						# Validate loaded pathids mapping
+						if pathids.get(nameid) != mpath:
+							raise ValueError('ERROR, "{}" mapping validation failed.'
+								' Can not find correspondence of the ground truth files to the evaluating clusterings.')
+					pcuropt.path = path
+					if _DEBUG_TRACE:
+						print('  Scheduling quality evaluation for the path options ({})'.format(str(pcuropt)))
+					processPath(pcuropt, runeval, xargs=xargs, dflextfn=dflclsext)
+			netnames.clear()
+			pathids = None  # Release loaded pathid mapping
+			if evaltimeout <= 0:
+				evaltimeout = timeout * xargs['jobsnum']
+			timelim = min(timeout * xargs['jobsnum'], evaltimeout)
+			print('Waiting for the quality evaluation on {} jobs from {} networks'
+				' with {} sec ({} h {} m {:.4f} s) timeout ...'
+				.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
+			try:
+				_execpool.join(timelim)
+			except BaseException as err:  # Consider also system iteruptions not captured by the Exception
+				print('ERROR{}, quality evaluation execution pool is interrupted by: {}. {}'
+					.format('' if not _execpool.name else ' ' + _execpool.name
+					, err, traceback.format_exc()), file=sys.stderr)
+				raise
 
+		# Schedule NMI multiresolution overlapping evalautions (gecmi) either on the whole NUMA node or
+		# on the whole server because gecmi is multi-threaded app with huge number of threads
+		# Reuse execpool
+		_execpool.name = 'qualitymt'
+		_execpool.alive = True
+		_execpool.afnmask = AffinityMask(AffinityMask.NODE_CPUS)
+		with _execpool:
+			xargs['execpool'] = _execpool
+			xargs['evaluators'] = evaluators(quality & 0b11)  # Skip gecmi (Multiresolution Overlapping NMI) because it requires special scheduling
+			print('  Scheduling quality evaluation for the evaluators: ', ', '.join(
+				[funcToAppName(func.__name__) for func in xargs['evaluators']]))
 
+			# Track processed file names to resolve cases when files with the same name present in different input dirs
+			# Note: pathids are required at least to set concise job names to see what is executed in runtime
+			for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
+				xargs['asym'] = popt.asym
+				# Resolve wildcards
+				pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
+				for path in glob.iglob(popt.path):  # Allow wildcards
+					# Form non-empty pathid string for the duplicated file names
+					if os.path.isdir(path):
+						# ATTENTION: required to process directories ending with '/' correctly
+						# Note: normpath() may change semantics in case symbolic link is used with parent dir:
+						# base/linkdir/../a -> base/a, which might be undesirable
+						net = path.rstrip('/')  # os.path.normpath(path)
+					else:
+						net = os.path.splitext(path)[0]
+					net = os.path.split(net)[1]
+					pathid = netnames.get(net)
+					if pathid is None:
+						netnames[net] = 0
+						xargs['pathidstr'] = ''
+					else:
+						pathid += 1
+						netnames[net] = pathid
+						nameid = _SEPPATHID + str(pathid)
+						xargs['pathidstr'] = nameid
+					pcuropt.path = path
+					if _DEBUG_TRACE:
+						print('  Scheduling quality evaluation for the path options ({})'.format(str(pcuropt)))
+					processPath(pcuropt, runeval, xargs=xargs, dflextfn=dflclsext)
+			netnames = None
 
-		# def evaluate(measure, basefile, asym, jobsnum, pathid=''):
-		# 	"""Evaluate algorithms on the specified network
-		#
-		# 	measure  - target measure to be evaluated: {nmi, mod}
-		# 	basefile  - ground truth result, or initial network file or another measure-related file
-		# 	asym  - network links weights are asymmetric (in/outbound weights can be different)
-		# 	jobsnum  - accumulated number of scheduled jobs
-		# 	pathid  - path id of the basefile to distinguish files with the same name located in different dirs
-		# 		Note: pathid includes pathid separator
-		#
-		# 	return
-		# 		jobsnum  - updated accumulated number of scheduled jobs
-		# 	"""
-		# 	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
-		#
-		# 	for algname in evalalgs:
-		# 		try:
-		# 			evalAlgorithm(_execpool, algname, basefile, measure, timeout, evagg, pathid)
-		# 			## Evaluate also nmi_s besides nmi if required
-		# 			if quality & im == 3:
-		# 			#if measure == 'nmi':
-		# 				evalAlgorithm(_execpool, algname, basefile, 'nmi_s', timeout, evagg_s, pathid)
-		# 		except Exception as err:
-		# 			print('WARNING, "{}" evaluation of "{}" is interrupted by the exception: {}. {}'
-		# 				.format(measure, algname, err, traceback.format_exc()), file=sys.stderr)
-		# 		else:
-		# 			jobsnum += 1
-		# 	return jobsnum
-		#
-		# # Measures is a dict with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
-		# measures = {3: ['nmi', _EXTCLNODES, 'NMIs'], 4: ['mod', '.hig', 'Q']}
-		# evaggs = []  # Evaluation results aggregators
-		# for im, msr in viewitems(measures):  # Note: the number of measures is small
-		# 	# Evaluate only required measures
-		# 	if quality & im == 0:
-		# 		continue
-		# 	if im == 3:
-		# 		# Exclude NMI if it is aplied, but quality & 1 == 0
-		# 		if quality & 1 == 0:
-		# 			msr[0] = 'nmi_s'
-		# 			msr[2] = 'NMI_s'
-		# 		elif quality & 2 == 0:
-		# 			msr[2] = 'NMI'
-		# 		else:
-		# 			evagg_s = EvalsAgg('nmi_s')  # Reserve also second results aggregator for nmi_s
-		# 			evaggs.append(evagg_s)
-		# 	evagg = EvalsAgg(msr[0])  # Evaluation results aggregator
-		# 	evaggs.append(evagg)
-		#
-		# 	if not algorithms:
-		# 		# Fetch available algorithms
-		# 		evalalgs = appnames(appsmodule)
-		# 	else:
-		# 		evalalgs = [alg for alg in algorithms]  # .lower()
-		# 	evalalgs = tuple(evalalgs)
-		#
-		# print('Starting {} evaluation...'.format(msr[2]))
-		# jobsnum = 0
-		# measure = msr[0]
-		# fileext = msr[1]  # Initial networks in .hig formatare required for mod, clusters for NMIs
-		# # Track processed file names to resolve cases when files with the same name present in different input dirs
-		# filenames = set()
-		# for pathid, (asym, ddir) in enumerate(datadirs):
-		# 	pathid = _SEPPATHID + str(pathid)
-		# 	# Read ground truth
-		# 	for basefile in glob.iglob('*'.join((ddir, fileext))):  # Allow wildcards in the names
-		# 		netname = os.path.split(basefile)[1]
-		# 		ambiguous = False  # Net name is unambigues even without the dir
-		# 		if netname not in filenames:
-		# 			filenames.add(netname)
-		# 		else:
-		# 			ambiguous = True
-		# 		evaluate(measure, basefile, asym, jobsnum, pathid if ambiguous else '')
-		# for pathid, (asym, basefile) in enumerate(datafiles):
-		# 	#pathid = ''.join((_SEPPATHID, _PATHID_FILE, str(pathid)))
-		# 	pathid = ''.join((_SEPPATHID, str(pathid)))
-		# 	# Use files with required extension
-		# 	basefile = os.path.splitext(basefile)[0] + fileext
-		# 	netname = os.path.split(basefile)[1]
-		# 	ambiguous = False  # Net name is unambigues even without the dir
-		# 	if netname not in filenames:
-		# 		filenames.add(netname)
-		# 	else:
-		# 		ambiguous = True
-		# 	evaluate(basefile, asym, jobsnum, pathid if ambiguous else '')
-		# print('{} evaluation is scheduled'.format(msr[2]))
-		# filenames = None  # Free memory from filenames
-		#
-		# if evaltimeout <= 0:
-		# 	evaltimeout = timeout * jobsnum
-		# timelim = min(timeout * jobsnum, evaltimeout)  # Global timeout, up to N days
-		# print('Waiting for the evaluations execution on {} jobs'
-		# 	' with {} sec ({} h {} m {:.4f} s) timeout ...'
-		# 	.format(jobsnum, timelim, *secondsToHms(timelim)))
-		# try:
-		# 	_execpool.join(timelim)  # max(timelim, exectime * 2) - Twice the time of the algorithms execution
-		# except BaseException as err:  # Consider also system iteruptions not captured by the Exception
-		# 	print('ERROR, Results evaluation execution pool is interrupted by: {}. {}'
-		# 		.format(err, traceback.format_exc()), file=sys.stderr)
-		# 	raise
+			# Extend quality evaluation tracing files (.rcp) with time tracing to distinguish different executions (benchmark runs)
+			evaluator.mark(algorithms, seed)
+
+			for alg in algorithms:
+				aexecres = ''.join((_RESDIR, alg, '/', measure, _EXTEXECTIME))
+				with open(aexecres, 'a') as faexres:
+					faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
+
+			if runtimeout <= 0:
+				runtimeout = timeout * xargs['jobsnum']
+			timelim = min(timeout * xargs['jobsnum'], runtimeout)
+			elapsed = time.time() - stime  # Elapsed time
+			timelim -= elapsed
+			if timelim > 0:
+				print('Waiting for the quality evaluation on {} jobs from {} networks'
+					' with {} sec ({} h {} m {:.4f} s) timeout ...'
+					.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
+				try:
+					_execpool.join(timelim)
+				except BaseException as err:  # Consider also system iteruptions not captured by the Exception
+					print('ERROR{}, quality evaluation execution pool is interrupted by: {}. {}'
+						.format('' if not _execpool.name else ' ' + _execpool.name
+						, err, traceback.format_exc()), file=sys.stderr)
+					raise
+			else:
+				print('WARNING {}, the execution pool is terminated by timeout of {} sec,'
+					', executed {} sec ({} h {} m {:.4f} s)'.format(
+					'' if not _execpool.name else ' ' + _execpool.name
+					, timelim + elapsed, elapsed, *secondsToHms(elapsed), file=sys.stderr))
+		# _execpool = None
+		# stime = time.time() - stime
+		# print('The apps execution is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
+		# 	.format(stime, *secondsToHms(stime)))
+		# print('Aggregating execution statistics...')
+		# aggexec(algorithms)
+		# print('Execution statistics aggregated')
 
 
 
+
+
+			# def evaluate(measure, basefile, asym, jobsnum, pathid=''):
+			# 	"""Evaluate algorithms on the specified network
+			#
+			# 	measure  - target measure to be evaluated: {nmi, mod}
+			# 	basefile  - ground truth result, or initial network file or another measure-related file
+			# 	asym  - network links weights are asymmetric (in/outbound weights can be different)
+			# 	jobsnum  - accumulated number of scheduled jobs
+			# 	pathid  - path id of the basefile to distinguish files with the same name located in different dirs
+			# 		Note: pathid includes pathid separator
+			#
+			# 	return
+			# 		jobsnum  - updated accumulated number of scheduled jobs
+			# 	"""
+			# 	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
+			#
+			# 	for algname in evalalgs:
+			# 		try:
+			# 			evalAlgorithm(_execpool, algname, basefile, measure, timeout, evagg, pathid)
+			# 			## Evaluate also nmi_s besides nmi if required
+			# 			if quality & im == 3:
+			# 			#if measure == 'nmi':
+			# 				evalAlgorithm(_execpool, algname, basefile, 'nmi_s', timeout, evagg_s, pathid)
+			# 		except Exception as err:
+			# 			print('WARNING, "{}" evaluation of "{}" is interrupted by the exception: {}. {}'
+			# 				.format(measure, algname, err, traceback.format_exc()), file=sys.stderr)
+			# 		else:
+			# 			jobsnum += 1
+			# 	return jobsnum
+			#
+			# # Measures is a dict with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
+			# measures = {3: ['nmi', _EXTCLNODES, 'NMIs'], 4: ['mod', '.hig', 'Q']}
+			# evaggs = []  # Evaluation results aggregators
+			# for im, msr in viewitems(measures):  # Note: the number of measures is small
+			# 	# Evaluate only required measures
+			# 	if quality & im == 0:
+			# 		continue
+			# 	if im == 3:
+			# 		# Exclude NMI if it is aplied, but quality & 1 == 0
+			# 		if quality & 1 == 0:
+			# 			msr[0] = 'nmi_s'
+			# 			msr[2] = 'NMI_s'
+			# 		elif quality & 2 == 0:
+			# 			msr[2] = 'NMI'
+			# 		else:
+			# 			evagg_s = EvalsAgg('nmi_s')  # Reserve also second results aggregator for nmi_s
+			# 			evaggs.append(evagg_s)
+			# 	evagg = EvalsAgg(msr[0])  # Evaluation results aggregator
+			# 	evaggs.append(evagg)
+			#
+			# 	if not algorithms:
+			# 		# Fetch available algorithms
+			# 		evalalgs = appnames(appsmodule)
+			# 	else:
+			# 		evalalgs = [alg for alg in algorithms]  # .lower()
+			# 	evalalgs = tuple(evalalgs)
+			#
+			# print('Starting {} evaluation...'.format(msr[2]))
+			# jobsnum = 0
+			# measure = msr[0]
+			# fileext = msr[1]  # Initial networks in .hig formatare required for mod, clusters for NMIs
+			# # Track processed file names to resolve cases when files with the same name present in different input dirs
+			# filenames = set()
+			# for pathid, (asym, ddir) in enumerate(datadirs):
+			# 	pathid = _SEPPATHID + str(pathid)
+			# 	# Read ground truth
+			# 	for basefile in glob.iglob('*'.join((ddir, fileext))):  # Allow wildcards in the names
+			# 		netname = os.path.split(basefile)[1]
+			# 		ambiguous = False  # Net name is unambigues even without the dir
+			# 		if netname not in filenames:
+			# 			filenames.add(netname)
+			# 		else:
+			# 			ambiguous = True
+			# 		evaluate(measure, basefile, asym, jobsnum, pathid if ambiguous else '')
+			# for pathid, (asym, basefile) in enumerate(datafiles):
+			# 	#pathid = ''.join((_SEPPATHID, _PATHID_FILE, str(pathid)))
+			# 	pathid = ''.join((_SEPPATHID, str(pathid)))
+			# 	# Use files with required extension
+			# 	basefile = os.path.splitext(basefile)[0] + fileext
+			# 	netname = os.path.split(basefile)[1]
+			# 	ambiguous = False  # Net name is unambigues even without the dir
+			# 	if netname not in filenames:
+			# 		filenames.add(netname)
+			# 	else:
+			# 		ambiguous = True
+			# 	evaluate(basefile, asym, jobsnum, pathid if ambiguous else '')
+			# print('{} evaluation is scheduled'.format(msr[2]))
+			# filenames = None  # Free memory from filenames
+			#
+			# if evaltimeout <= 0:
+			# 	evaltimeout = timeout * jobsnum
+			# timelim = min(timeout * jobsnum, evaltimeout)  # Global timeout, up to N days
+			# print('Waiting for the evaluations execution on {} jobs'
+			# 	' with {} sec ({} h {} m {:.4f} s) timeout ...'
+			# 	.format(jobsnum, timelim, *secondsToHms(timelim)))
+			# try:
+			# 	_execpool.join(timelim)  # max(timelim, exectime * 2) - Twice the time of the algorithms execution
+			# except BaseException as err:  # Consider also system iteruptions not captured by the Exception
+			# 	print('ERROR, Results evaluation execution pool is interrupted by: {}. {}'
+			# 		.format(err, traceback.format_exc()), file=sys.stderr)
+			# 	raise
+
+	qualsaver.storage.close()
 	_execpool = None  # Reset global execpool
-	starttime = time.time() - starttime
+	stime = time.time() - stime
 	print('Results evaluation is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
-		.format(starttime, *secondsToHms(starttime)))
+		.format(stime, *secondsToHms(stime)))
 	# Aggregate results and output
-	starttime = time.time()
+	stime = time.time()
 	print('Starting processing of aggregated results ...')
-	for evagg in evaggs:
-		evagg.aggregate()
-	starttime = time.time() - starttime
+	#for evagg in evaggs:
+	#	evagg.aggregate()
+	stime = time.time() - stime
 	print('Processing of aggregated results completed in {:.4f} sec ({} h {} m {:.4f} s)'
-		.format(starttime, *secondsToHms(starttime)))
+		.format(stime, *secondsToHms(stime)))
 
 
 def benchmark(*args):
@@ -1532,7 +1542,7 @@ def terminationHandler(signal=None, frame=None, terminate=True):
 	global _execpool
 
 	if _execpool:
-		print('WARNING{}, execpool is terminating by the exteral signal {} ({})'
+		print('WARNING{}, execpool is terminating by the signal {} ({})'
 			.format('' if not _execpool.name else ' ' + _execpool.name, signal
 			, _signals.get(signal, '-')))  # Note: this is a trace log record
 		del _execpool  # Destructors are caled later

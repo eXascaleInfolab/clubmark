@@ -768,7 +768,8 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 	# Run for range of eps
 	deps = (epsMax - eps) / steps  # Epsilon delta for each step
 	while eps <= epsMax:
-		prm = '{:3g}'.format(eps)  # Alg params (eps) as string
+		#prm = '{:3g}'.format(eps)  # Alg params (eps) as string
+		prm = '{:.2f}'.format(eps)  # Alg params (eps) as string
 		prmex = 'e' + prm
 		# Embed params into the task name
 		taskbasex = delPathSuffix(task, True)
@@ -784,7 +785,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 		# ATTENTION: a single argument is k-clique size, specified later
 		# ./pscan -e 0.7 -o graph-e7.cnl -f NSE graph.nse
 		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ctask, pathid)), '-s=/etime_' + algname
-			, './pscan', '-e', '{:.2f}'.format(eps), '-o', ''.join((reltaskpath, '/', ctask, _EXTCLNODES))
+			, './pscan', '-e', prm, '-o', ''.join((reltaskpath, '/', ctask, _EXTCLNODES))
 			, '-f', 'NSA' if asym else 'NSE', netfile)
 
 		#print('> Starting job {} with args: {}'.format('_'.join((ctask, algname, prmex)), args + [prm]))

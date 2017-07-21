@@ -171,9 +171,9 @@ And then execute `ulimit -n 32768` to set this value for the current shell.
 
 > Ulimit can't be set higher than the hard limit `ulimit -Hn`, so if the latter < `32768` then call `ulimit -n `ulimit -Hn``
 
-Reduce the system swappiness setting to 1 .. 10 by `sysctl -w vm.swappiness=10` or set it permanently in `/etc/sysctl.conf`:
+Reduce the system swappiness setting to 1 .. 10 by `$ sudo sysctl -w vm.swappiness=5` or set it permanently in `/etc/sysctl.conf`:
 ```
-vm.swappiness = 10
+vm.swappiness = 5
 ``` 
 
 

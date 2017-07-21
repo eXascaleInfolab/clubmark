@@ -155,8 +155,8 @@ def aggexec(algs):
 					outres.write('\n')
 					outresx.write('\n')
 		except IOError as err:
-			print('ERROR, "{}" results output execution is failed: {}. {}'
-				.format(measure, err, traceback.format_exc()), file=sys.stderr)
+			print('ERROR, "{}" resources consumption output is failed: {}. {}'
+				.format(measure, err, traceback.format_exc(5)), file=sys.stderr)
 
 
 def	preparePath(taskpath):  # , netshf=False

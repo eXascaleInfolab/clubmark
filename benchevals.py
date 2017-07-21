@@ -95,7 +95,7 @@ class Measures(object):
 
 
 class QualityEntry(object):
-	"""Quality evaluations etry to be saved in the persistent storage"""
+	"""Quality evaluations etry to be saved to the persistent storage"""
 	def __init__(self, measures, appname, netname, appargs=None, level=0, instance=0, shuffle=0):
 		"""Quality evaluations to be saved
 
@@ -130,17 +130,23 @@ class QualityEntry(object):
 
 
 class QualitySaver(object):
-	"""Quality evaluations serializer to HDF5 sotrage"""
+	# Max number of the buffered items in the queue that have not been processed
+	# before blocking the caller on appending more items
+	# Shuold not be too much to save them into the persistent store on the
+	# program termination or any external interruptions
+	QUEUE_SIZEMAX = 128
 
+	"""Quality evaluations serializer to the persistent sotrage"""
 	@staticmethod
 	def _datasaver(qualsaver):
-		"""Save data to the persistent storage
+		"""Worker process function to save data to the persistent storage
 
 		qualsaver  - quality saver wrapper containing the storage and queue
 			of the evaluating measures
 		"""
-		while qualsaver._active or not qualsaver._measque.empty():
-			qms = qualsaver._measque.get()  # Meagures to be stored
+		while qualsaver._active or not qualsaver._dpool.empty():
+			# TODO: fetch QualityEntry item, not just Measures
+			qms = qualsaver._dpool.get()  # Measures to be stored
 			assert isinstance(qms, Measures), 'Unexpected type of the measures'
 			for qname, qval in viewitems(qms.__dict__):
 				# Skip undefined quality measures nad store remained {qname: qval}
@@ -159,6 +165,7 @@ class QualitySaver(object):
 		seed  - benchmarking seed, natural number
 		update  - update existing storage (or create if not exists), or create a new one
 		"""
+		self.storage = None  # Persistent storage object (file)
 		storage = _RESDIR + _QUALITY_STORAGE
 		ublocksize = 512  # Userblock size in bytes
 		ublocksep = ':'  # Userblock vals separator
@@ -194,7 +201,7 @@ class QualitySaver(object):
 		# Mode: append; core driver is memory-mapped file, block_size is default (64 Kb)
 		self.storage = h5py.File(storage, driver='core', libver='latest', userblock_size=ublocksize)
 		# Initialize apps datasets holding algorithms parameters as ASCII strings of variable length
-		self._apps = {}  # Datasets for each algorithm holding params
+		self.apps = {}  # Datasets for each algorithm holding params
 		appsdir = self.storage.require_group('apps')  # Applications / algorithms
 		for app in apps:
 			# Open or create dataset for each app
@@ -205,13 +212,27 @@ class QualitySaver(object):
 		self.evals = self.storage.require_group('evals')  # Quality evaluations dir (group)
 
 
+	def __del__(self):
+		"""Destructor"""
+		self._active = False
+		if not self._dpool.empty():
+			print('WARNING, terminating the persistency layer with {} queued data entries, callstack fragment: {}'
+				.format(self._dpool.qsize(), traceback.format_exc(5)), file=sys.stderr)
+		try:
+			self._dpool.close()  # No more data can be put in the queue
+			self._dpool.join_thread()
+			self._persister.join()
+		finally:
+			if self.storage is not None:
+				self.storage.close()
+
+
 	def __enter__(self):
 		"""Context entrence"""
 		self._active = True
-		# 1024 - max number of the buffered items in the queue until blocking puttinng, >> then expected
-		self._measque = Queue(1024)
-		self._executor = Process(target=self._datasaver, args=(self,))
-		self._executor.start()
+		self._dpool = Queue(self.QUEUE_SIZEMAX)  # Qulity measures persistance queue, data pool
+		self._persister = Process(target=self._datasaver, args=(self,))
+		self._persister.start()
 		return self
 
 
@@ -222,35 +243,53 @@ class QualitySaver(object):
 		evalue  - exception value
 		traceback  - exception traceback
 		"""
-		#self._apps.clear()
+		#self.apps.clear()
 		#self.storage.close()
+		self._active = False
 		try:
-			self._active = False
-			self._measque.close()  # No more data can be put in the queue
-			self._measque.join_thread()
-			self._executor.join()
+			self._dpool.close()  # No more data can be put in the queue
+			self._dpool.join_thread()
+			self._persister.join()
 		finally:
 			self.storage.flush()  # Allow to reuse the instance in several context managers
 		# Note: the exception (if any) is propagated if True is not returned here
 
 
-	def save(measures, netname, level=0, instance=None, shuffle=None):  # appname, appargs
-		pass
+	def save(self, qualentry, timeout=None):  # appname, appargs
+		"""Save evaluated quality measures to the persistent store
+
+		qualentry  - evaluated quality measures by the specified app on the
+			specified dataset to be saved
+		timeout  - blocking timeout if the queue is full, None or >= 0 sec;
+			None - wait forewer until the queue will have free slots
+		"""
+		assert isinstance(qualentry, QualityEntry), 'Unexpected type of the data'
+		if not self._active:
+			print('WARNING, the persistency layer is shutting down discarding'
+				' the saving for ({}).'.format(str(qualentry)), file=sys.stderr)
+			return
+		try:
+			self._dpool.put(qualentry, timeout=timeout)  # Note: evaluators should not be delayed
+		except Exception as err:
+			print('WARNING, the quality entry ({}) saving is cancelled: {}'.format(str(qualentry), err))
+			# Rerase the exception if interruption is not by the timeout
+			if not (isinstance(err, Queue.Full) or isinstance(err, AssertionError)):
+				raise
 
 
-def execGecmi(execpool, qualsaver, gtruth, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
+def execGecmi(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=_UTILDIR, seed=None):
 	pass
 
 
-def execOnmi(execpool, qualsaver, gtruth, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
+def execOnmi(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=_UTILDIR, seed=None):
 	pass
 
 
-def execXmeasures(execpool, qualsaver, gtruth, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
+def execXmeasures(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=_UTILDIR, seed=None):
 	pass
 
 
-def execDaoc(execpool, qualsaver, gtruth, asym, odir, timeout, pathid='', workdir=_UTILDIR, seed=None):
+def execDaoc(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=_UTILDIR, seed=None):
 	pass
 
 
@@ -727,7 +766,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 			try:
 				execpool.execute(job)
 			except Exception as err:
-				print('WARNING, "{}" job is interrupted by the exception: {}. {}'
+				print('ERROR, "{}" job is interrupted by the exception: {}. {}'
 					.format(job.name, err, traceback.format_exc()), file=sys.stderr)
 	else:
 		print('WARNING, "{}" clusters from "{}" do not exist to be evaluated'

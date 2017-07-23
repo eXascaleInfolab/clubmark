@@ -1,11 +1,12 @@
-# PyCABeM (former HiCBeM) - Python Benchmarking Framework for the Clustering Algorithms Evaluation
-\brief Uses extrinsic (Variety of Normalized [Mutual Informations](https://en.wikipedia.org/wiki/Mutual_information) (NMI) and Mean [F1 Scores](https://en.wikipedia.org/wiki/F1_score) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks)(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures for the clusters quality evaluation considering overlaps (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of some cluster and parent cluster of this cluster and parent of the parent, ...).
+# PyCABeM - Benchmarking Framework for the Clustering Algorithms Evaluation implemented on Python
+\brief Benchmarking of the clustering (community detection) algorithms using extrinsic (various Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information) (NMI) and Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) measures) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks)(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures, considering overlaps (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of some cluster and parent cluster of this cluster and parent of the parent, ...).
 \author: (c) Artem Lutov <artem@exascale.info>  
 \organizations: [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
 \keywords: overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
 
 
 ## Content
+- [Points of Differentiation](#points-of-differentiation)
 - [Motivation](#motivation)
 - [Functionality](#functionality)
   - [Generic Benchmarking Framework](#generic-benchmarking-framework)
@@ -19,6 +20,20 @@
 - [Benchmark Structure](#benchmark-structure)  
 - [Benchmark Extension](#benchmark-extension)  
 - [Related Projects](#related-projects)  
+
+
+##Points of Differentiation
+PyCABeM is a general-purpose modular benchmarking framework, which is specialized for the clustering (community detection) algorithms evaluation.  
+PyCABeM has the (optional) major properties listed as follows. General properties:
+- Data preprocessing (synthetic networks generation, shuffling, etc.);
+- Fine-grained resource consumption limits: per the evaluating app (clustering algorithm) and global constraints of the maximal execution time and memory consumption limits until the app/benchmarking termination;
+- Binding of the evaluating apps to the specified set of CPUs (affinity masking). It allows to use all advantages of NUMA hardware executing as many apps in parallel as possible not affecting each other and having hot and dedicated L1/2/3 CPU cache;
+- Load balancing of the evaluating apps. It allows to avoid postponing lots of lightweight apps because of a few memory-hungry or long-running apps.
+
+Clustering algorithms specific benchmarking properties:
+- Evaluation of extrinsic (modularity, conductance), intrinsic (various NMIs and F1-Scores) quality measures and resource consumption (various timings, memory) for the generalized clustering algorithms (considering overlaps and multiple resolutions/scales if any);
+- Evaluation of both parameter-free and parameter-dependent algorithms, automatically selecting the best specified parameters of the algorithm(s) in average on all input networks;
+- Evaluation of both average value and deviation of the measures when multiple instances and/or shuffles of the input networks are used.
 
 
 ## Motivation

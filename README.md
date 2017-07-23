@@ -6,11 +6,12 @@
 
 
 ## Content
-- [Points of Differentiation](#points-of-differentiation)
-- [Motivation](#motivation)
-- [Functionality](#functionality)
-  - [Generic Benchmarking Framework](#generic-benchmarking-framework)
-  - [Clustering Algorithms Benchmark](#clustering-algorithms-benchmark)
+- [Overview](#overview)
+  - [Points of Differentiation](#points-of-differentiation)
+  - [Motivation](#motivation)
+  - [Functionality](#functionality)
+    - [Generic Benchmarking](#generic-benchmarking)
+    - [Clustering Specific Benchmarking](#clustering-specific-benchmarking)
 - [Prerequisites](#prerequisites)
 - [Requirements](#requirements)
   - [Overview](#overview)
@@ -22,7 +23,8 @@
 - [Related Projects](#related-projects)  
 
 
-##Points of Differentiation
+## Overview
+### Points of Differentiation
 PyCABeM is a general-purpose modular benchmarking framework, which is specialized for the clustering (community detection) algorithms evaluation.  
 PyCABeM has the (optional) major properties listed as follows. General properties:
 - Data preprocessing (synthetic networks generation, shuffling, etc.);
@@ -33,10 +35,10 @@ PyCABeM has the (optional) major properties listed as follows. General propertie
 Clustering algorithms specific benchmarking properties:
 - Evaluation of extrinsic (modularity, conductance), intrinsic (various NMIs and F1-Scores) quality measures and resource consumption (various timings, memory) for the generalized clustering algorithms (considering overlaps and multiple resolutions/scales if any);
 - Evaluation of both parameter-free and parameter-dependent algorithms, automatically selecting the best specified parameters of the algorithm(s) in average on all input networks;
-- Evaluation of both average value and deviation of the measures when multiple instances and/or shuffles of the input networks are used.
+- Evaluation of both average value and deviation of the measures when multiple instances and/or shuffles (reordering of nodes and links) of the input networks are used.
 
 
-## Motivation
+### Motivation
 I did to find any open source cross-platform framework for the \[efficient\] execution and evaluation of custom applications, which have  significant variation of the time/memory complexity and custom constraints, so decided to write the own one.  
 Particularly, I had to evaluate various clustering (community detection) algorithms on large networks using specific measures. The main challenges there are the following:
 - the computing applications (clustering algorithms) being benchmarked have very different (orders of magnitude) time and memory complexity and represented by the applications implemented on various languages (mainly C++, Java, C and Python);
@@ -53,9 +55,9 @@ There were available two open source frameworks for "Community Detection Algorit
 Circulo is an excellent framework until you don't run evaluations on the large networks, don't need to specify per-algorithm time/memory constraints and in case the default pipeline is sufficient, which was not the case for me.
 
 
-## Functionality
-### Generic Benchmarking Framework
-The generic functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool), which provides \[external\] applications scheduling for the in-RAM execution on NUMA architecture with capabilities of the affinity control, CPU cache vs parallelization  maximization, limitation of the consumed memory and maximal execution time for the whole execution pool and per each executor process (called worker, which is an executing job).
+### Functionality
+#### Generic Benchmarking
+The generic benchmarking functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool), which provides \[external\] applications scheduling for the in-RAM execution on NUMA architecture with capabilities of the affinity control, CPU cache vs parallelization  maximization, limitation of the consumed memory and maximal execution time for the whole execution pool and per each executor process (called worker, which is an executing job).
 
 The benchmarking framework specifies structure and provides API for the:
 - optional *generation of datasets* using specified executable(s);
@@ -71,7 +73,7 @@ It is possible to have multiple input directories with similarly named files ins
 If any application is crashed, the crash is logged and does not affect execution of the remaining applications. The benchmark can be terminated by timeout or manually.
 
 
-### Clustering Algorithms Benchmark
+#### Clustering Specific Benchmarking
 The benchmark is implemented as customization of the Generic Benchmarking Framework to evaluate various *Clustering Algorithms* (Community Detection Algorithms) including *Hierarchical Clustering Algorithms with Overlaps and Consensus*:
 - produces synthetic networks with specified number of instances for each set of parameters, generating them by the extended [LFR Framework](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) ("Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti and Santo Fortunato)
 - shuffles specified networks (reorders nodes) specified number of times, which is required to evaluate stability / determinism of the clustering algorithms
@@ -319,6 +321,11 @@ Parameters:
     Xm  - time in minutes
     Xh  - time in hours
 ```
+
+> _REPRODUCIBILITY NOTICE_: Use seed to reproduce the evaluations, but be aware that:
+- the seed is not applicable for the shuffling (reordering of the network nodes and links, which is truly random) and
+- not all clustering algorithms might support the seed.
+So, in case of shuffling, the original shuffles should be provided to reproduce exactly the same results (for either deterministic algorithms or algorithms that have the input seed).
 
 
 ### Synthetic networks generation, clustering algorithms execution and evaluation

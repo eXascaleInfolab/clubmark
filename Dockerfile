@@ -6,8 +6,8 @@ FROM ubuntu:16.04
 # Note: spaces and quotes (") should be either escaped (with '\') or the spaces
 # can be taken into quotes
 LABEL vendor="eXascale Infolab" \
-      info.exascale.pycabem.version="2.0.0-env" \
-      info.exascale.pycabem.release-date="2017-07-01"
+      info.exascale.pycabem.version="2.0.2-env" \
+      info.exascale.pycabem.release-date="2017-07-21"
 
 # Make the working directory an optional build parameter specified by --build-arg
 ARG WORK_DIR=/opt/pycabem
@@ -110,9 +110,17 @@ ENTRYPOINT ["python3", "./benchmark.py"]
 # $ docker run -it -u $UID -v `pwd`:$WORK_DIR luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
 # Or to open a shell in the benchmarking directory:
 # $ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0
-#
+
 # Notes:
 # - "$UID" or "`id -u $USER`" is host user id, otherwise default user is "root",
 #  which results in read-only files owned by the root created on benchmarking execution.
 #  $UID might not be defined in non-bash shells unlike $USER.
 # - "-w /opt/pycabem" should be used if the WORKDIR was omitted in the build file
+
+#-------------------------------------------------------------------------------
+# Change log:
+#
+# 2.0.2  - h5py added for the evaluations output to the HDF5 file
+# 2.0.1  - hwloc added for the automatic identification of the CPUs enumeration
+#	type (required for the affinity masking)
+# 2.0.0  - Initial environment for the benchmarking made as a docker container

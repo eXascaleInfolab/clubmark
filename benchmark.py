@@ -552,7 +552,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 								#, ondone=shuffle if shfnum > 0 else None
 								, startdelay=startdelay, category='generate_' + str(k), size=N))
 				else:
-					print('ERROR: network parameters file "{}" does not exist'.format(fnamex), file=sys.stderr)
+					print('ERROR, network parameters file "{}" does not exist'.format(fnamex), file=sys.stderr)
 		print('Parameter files generation completed')
 		if gentimeout <= 0:
 			gentimeout = insnum * netgenTimeout
@@ -1572,7 +1572,7 @@ if __name__ == '__main__':
 			' [-s=<eval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] [--stderr-stamp] | -h',
 			'',
 			'Example:',
-			'  {0} -g=3.5 -r -q -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
+			'  {0} -g=3{gensepshuf}5 -r -q -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
 			'NOTE:',
 			'  - The benchmark should be executed exclusively from the current directory (./)',
 			'  - The expected format of input datasets (networks) is .ns<l> - network specified by'

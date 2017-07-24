@@ -766,7 +766,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 			try:
 				execpool.execute(job)
 			except Exception as err:
-				print('ERROR, "{}" job is interrupted by the exception: {}. {}'
+				print('ERROR, "{}" job execution failed: {}. {}'
 					.format(job.name, err, traceback.format_exc()), file=sys.stderr)
 	else:
 		print('WARNING, "{}" clusters from "{}" do not exist to be evaluated'

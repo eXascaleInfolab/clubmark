@@ -17,5 +17,5 @@ python-igraph>=0.7
 
 # Evaluations & Utils requirements
 # Note: numpy interactions are slow on pypy
-numpy>=1.11  # Already listed
-future>=0.16  # Already listed
+#numpy>=1.11  # Already listed
+#future>=0.16  # Already listed

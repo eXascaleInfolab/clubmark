@@ -23,7 +23,7 @@ import time
 
 # from collections import namedtuple
 from subprocess import PIPE
-from multiprocessing import Process, Queue   # Required to asynchronously save evaluated quality measures to the persistent storage
+from multiprocessing import cpu_count, Process, Queue   # Required to asynchronously save evaluated quality measures to the persistent storage
 from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
 	escapePathWildcards, envVarDefined, SyncValue, tobackup, \
 	_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR, \
@@ -54,39 +54,40 @@ _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 class Measures(object):
 	"""Quality Measures"""
-	def __init__(self, nmi_max=None, nmi_sqrt=None, nmi_num=0, onmi_max=None, onmi_sqrt=None
-	, f1p=None, f1h=None, f1s=None, q=None, f=None):
+	def __init__(self, eval_num=None, nmi_max=None, nmi_sqrt=None, onmi_max=None, onmi_sqrt=None
+	, f1p=None, f1h=None, f1s=None, mod=None, cdt=None):
 		"""Quality Measures to be saved
 
+		eval_num  - number/id of the evaluation to take average over multiple (re)evaluaitons
+			(NMI from gecmi provides stochastic results), uint8 or None
 		nmi_max  - NMI multiresolution overlapping (gecmi) normalized by max (default)
 		nmi_sqrt  - NMI multiresolution overlapping (gecmi) normalized by sqrt
-		nmi_num  - number of the NMI evaluation (gecmi provides stochastic results), 0 .. 9
 		onmi_max  - Overlapping nonstandard NMI (onmi) normalized by max (default)
 		onmi_sqrt  - Overlapping nonstandard NMI (onmi) normalized by sqrt
 		f1p  - F1p measure (harmonic mean of partial probabilities)
 		f1h  - harmonic F1-score measure (harmonic mean of weighted average F1 measures)
 		f1s  - average F1-score measure (arithmetic mean of weighted average F1 measures)
-		q  - modularity
-		f  - conductance
+		mod  - modularity
+		cdt  - conductance
 		"""
-		assert ((nmi_max is None or 0. <= nmi_max <= 1.) and (nmi_sqrt is None or 0. <= nmi_sqrt <= 1.) and
-			isinstance(nmi_num, int) and 0 <= nmi_num <= 9 and (onmi_max is None or 0. <= onmi_max <= 1.) and
-			(onmi_sqrt is None or 0. <= onmi_sqrt <= 1.) and (f1p is None or 0. <= f1p <= 1.) and
-			(f1h is None or 0. <= f1h <= 1.) and (f1s is None or 0. <= f1s <= 1.) and
-			(q is None or -0.5 <= q <= 1.) and (f is None or 0. <= f <= 1.)), (
-			'Parameters validation failed  nmi_max: {}, nmi_sqrt: {}, nmi_num: {}, onmi_max: {}, onmi_sqrt: {}'
-			', f1p: {}, f1h: {}, f1s: {}, q: {}, f: {}'.format(nmi_max, nmi_sqrt, nmi_num
-			, onmi_max, onmi_sqrt, f1p, f1h, f1s, q, f))
+		assert ((eval_num is None or (isinstance(eval_num, int) and 0 <= eval_num <= 0xFF)) and
+			(nmi_max is None or 0. <= nmi_max <= 1.) and (nmi_sqrt is None or 0. <= nmi_sqrt <= 1.) and
+			(onmi_max is None or 0. <= onmi_max <= 1.) and(onmi_sqrt is None or 0. <= onmi_sqrt <= 1.) and
+			(f1p is None or 0. <= f1p <= 1.) and (f1h is None or 0. <= f1h <= 1.) and (f1s is None or 0. <= f1s <= 1.) and
+			(mod is None or -0.5 <= mod <= 1.) and (cdt is None or 0. <= cdt <= 1.)), (
+			'Parameters validation failed  nmi_max: {}, nmi_sqrt: {}, eval_num: {}, onmi_max: {}, onmi_sqrt: {}'
+			', f1p: {}, f1h: {}, f1s: {}, q: {}, cdt: {}'.format(nmi_max, nmi_sqrt, eval_num
+			, onmi_max, onmi_sqrt, f1p, f1h, f1s, mod, cdt))
+		self._eval_num = eval_num  # Note: distinct attr name prefix ('_') is used to distinguish from the measure name
 		self.nmi_max = nmi_max
 		self.nmi_sqrt = nmi_sqrt
-		self.nmi_num = nmi_num
 		self.onmi_max = onmi_max
 		self.onmi_sqrt = onmi_sqrt
 		self.f1p = f1p
 		self.f1h = f1h
 		self.f1s = f1s
-		self.q = q  # Modularity
-		self.f = f  # Conductance
+		self.mod = mod  # Modularity
+		self.cdt = cdt  # Conductance
 
 
 	def __str__(self):
@@ -96,29 +97,31 @@ class Measures(object):
 
 class QualityEntry(object):
 	"""Quality evaluations etry to be saved to the persistent storage"""
-	def __init__(self, measures, appname, netname, appargs=None, level=0, instance=0, shuffle=0):
+	def __init__(self, measures, appname, netname, appargs=None, levhash=0, instance=0, shuffle=0):
 		"""Quality evaluations to be saved
 
 		measures  - quality measures to be saved, Measures
 		appname  - application (algorithm) name, str
 		netname  - network (dataset) name, str
 		appargs  - non-deault application parameters packed into ASCII encoded str if any, byte str
-		level  - level of the results (clustering hierarchy level) if any, natural 0 number
+		levhash  - hash of the filename do distinguish clustering hierarchy levels if any, int.
+			NOTE: named levhash instead of levnum, because for some algorithms levels are defined
+			by the parameter(s) variation, for example Ganxis varies r = 0.01 .. 0.5 by default
 		instance  - network instance if any, actual for the synthetic networks with the same params,
 			natural 0 number
 		shuffle  - network shuffle if any, actula for the shuffled networks, natural 0 number
 		"""
 		assert (isinstance(measures, Measures) and isinstance(appname, str) and isinstance(netname, str)
-			and (appargs is None or isinstance(appargs, _h5str)) and isinstance(level, int) and level >= 0
+			and (appargs is None or isinstance(appargs, _h5str)) and isinstance(levhash, int)
 			and isinstance(instance, int) and instance >= 0 and isinstance(shuffle, int) and shuffle >= 0
 			), ('Parameters validation failed  measures type: {}, appname: {}, netname: {}, appargs: {}'
-			', level: {}, instance: {}, shuffle: {}'.format(type(measures)
-			, appname, netname, appargs, level, instance, shuffle))
+			', levhash: {}, instance: {}, shuffle: {}'.format(type(measures)
+			, appname, netname, appargs, levhash, instance, shuffle))
 		self.measures = measures
 		self.appname = appname
 		self.netname = netname
 		self.appargs = appargs
-		self.level = level
+		self.levhash = levhash
 		self.instance = instance
 		self.shuffle = shuffle
 
@@ -134,7 +137,7 @@ class QualitySaver(object):
 	# before blocking the caller on appending more items
 	# Shuold not be too much to save them into the persistent store on the
 	# program termination or any external interruptions
-	QUEUE_SIZEMAX = 128
+	QUEUE_SIZEMAX = max(128, cpu_count() * 2)  # At least 128 or twice the number of the logical CPUs in the system
 
 	"""Quality evaluations serializer to the persistent sotrage"""
 	@staticmethod
@@ -153,6 +156,7 @@ class QualitySaver(object):
 				if qval is None:
 					continue
 				# TODO: save data to HDF5
+				# pscan01 = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
 
 
 	def __init__(self, apps, seed, update=False):

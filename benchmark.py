@@ -55,7 +55,7 @@ import copy
 import benchapps  # Required for the functions name mapping to/from the app names
 
 from math import sqrt
-from multiprocessing import cpu_count  # Returns the number of multi-core CPU units if defined
+from multiprocessing import cpu_count  # Returns the number of logical CPU units (hw treads) if defined
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, \
 	_SEPSHF, _SEPPATHID, _UTILDIR, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
@@ -1636,9 +1636,11 @@ if __name__ == '__main__':
 			'    i[Y]  - intrinsic measures for overlapping communities, default: all',
 			'      m  - modularity Q',
 			'      c  - conductance f',
-			'    u  - update quality evaluations storage rewriting existed values instead of creating a new storage.'
-			' Does not include default measures. Allowed only for the same seed. The existed quality evaluations are backed up anyway.',
-			'NOTE: multiple quality evaluaiton options can be specified via the multiple -q opitons',
+			'    u  - update quality evaluations appending the new results to the existing stored evaluaitons (if any)'
+			' and then aggregate everything to the final summarized results skipping older duplicates (if any).',
+			'  ATTENTION: "-qu" requires at least one more "-qX" flag to indicate what measures should be (re)evaluated.'
+			' Applicable only for the same seed as existed evaluations had. The existed quality evaluations are backed up anyway.',
+			'NOTE: multiple quality evaluaiton options can be specified via the multiple -q opitons.',
 			'  --timeout, -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on'
 			' each network in sec, min or hours; 0 sec - no timeout, default: {th} h {tm} min {ts} sec',
 			'    s  - time in seconds, default option',

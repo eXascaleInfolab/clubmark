@@ -577,17 +577,19 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 # DAOC Options
 class DaocOpts(object):
 	"""DAOC execution options"""
-	def __init__(self, rlevout=0.8, gamma=1, reduction=None, significance=None):
+	def __init__(self, rlevout=None, gamma=1, reduction=None, significance=None):
 		"""DAOC execution options initialization
 
-		rlevout  - ratio (at least) of output levels shrinking starting from the widest (bottom) level, (0, 1]. Default: 0.8
+		rlevout  - ratio (at least) of output levels shrinking starting from the widest (bottom) level, (0, 1].
+			Recommended (if used): 0.75 .. 0.9.
 		gamma  - resolution parameter, float:
 			> 0 - static manual gamma for all clusters (1 is the default manual value)
 			-1  - dynamic automatic identification for each cluster
-		reduction  - items links reduction policy on clustering:
-			a - ACCURATE
-			m - MEAN (recommended)
-			s - SEVERE
+		reduction  - items links reduction policy on clustering, X[w], where X:
+			a  - ACCURATE
+			m  - MEAN (recommended)
+			s  - SEVERE
+			'' - default reduction policy (-m)
 		significance  - significant clusters output policy. Instead of the multi-level clusters output into distinct files with
 		the rlevout step, output to the single file only significant (representative) clusers from all levels starting from the
 		hierarhy root (top) and including all descendants that have higher density of the cluster structure than:
@@ -595,10 +597,16 @@ class DaocOpts(object):
 			ad  - all direct owners
 			sh  - single (one any of) direct upper hierarchy of owners
 			ah  - all upper hierarchy of owners
+			''  - default policy for the significant clasters
 		"""
+		# Note the significance potentially can be more precise: 'ad%0.86/0.14~'
 		assert ((rlevout is None and significance is not None) or rlevout > 0 and isinstance(gamma, Number)
-			and (reduction is None or reduction in 'ams') and (significance is None)
-			or significance in ('sd','ad','sh','ah')), ('Invalid input parameters:\n\trlevout: {},\n\tgamma: {}'
+			and (reduction is None or reduction == ''
+				or (1 <= len(reduction) <= 2 and reduction[0] in 'ams' and (len(reduction) == 1 or reduction[1] == 'w')))
+			and (significance is None or significance in ('', 'sd','ad','sh','ah'))
+			# Note: either significant clusters are outputted or multilev clusters output is performed with the specified ratio
+			and ((rlevout is None) ^ (significance is None))
+			), ('Invalid input parameters:\n\trlevout: {},\n\tgamma: {}'
 			'\n\treduction: {}\n\tsignificance: {}'.format(rlevout, gamma, reduction, significance))
 		self.rlevout = rlevout
 		self.gamma = gamma
@@ -612,7 +620,7 @@ class DaocOpts(object):
 
 
 # DAOC wit parameterized gamma
-def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None, opts=DaocOpts()):
+def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None, opts=DaocOpts(rlevout=0.8)):
 	"""Execute DAOC, Deterministic (including input order independent) Agglomerative Overlapping Clustering
 	using standard modularity as optimization function
 
@@ -648,47 +656,66 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 	# ./daoc -w -g=1 -te -cxl[:/0.8]s=../../results/Daoc/karate.cnl ../../realnets/karate.nse.txt
 	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
 		, './daoc', '-t']  # Trace timing
-	if opts.reduction:
-		args += opts.reduction
-	args +=  ['-g=' + str(opts.gamma)  # Resolution parameter = 1 (standard modularity)
+	if opts.reduction is not None:
+		args.append('-r' + opts.reduction)
+	clsouto = ''  # Clusters optput options
+	if opts.rlevout is not None:
+		clsouto = str(opts.rlevout).join(('[:/', ']'))
+	elif opts.significance is not None:
+		clsouto = 's' + opts.significance
+	args += ['-g=' + str(opts.gamma)  # Resolution parameter = 1 (standard modularity)
 		, '-n' + ('a' if asym else 'e')
 		# Output only max shares, per-level clusters output with step 0.8 in the simple format (with the header but without the share value)
-		, ''.join(('-s' + opts.significance) if opts.significance else str(opts.rlevout).join(('-cxl[:/', ']')), 's=', taskpath, _EXTCLNODES)
-		, netfile]
+		, ''.join(('-cx', clsouto, 's=', taskpath, _EXTCLNODES)), netfile]
+	#print(''.join((algname, ' called with args: ', str(args))), file=sys.stderr)
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
 		, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 	return 1
 
 
-# DAOC (using standard modularity as an optimizatio function, non-generelized)
+# DAOC (using standard modularity as an optimization function, non-generelized)
 def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
-, opts=DaocOpts(rlevout=0.8, gamma=1)):
+, opts=DaocOpts(rlevout=0.8, gamma=1, reduction=None, significance=None)):
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, opts)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
-def execDaoc_a(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
-, opts=DaocOpts(rlevout=0.8, gamma=-1)):
+def execDaocA(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
+, opts=DaocOpts(rlevout=0.8, gamma=-1, reduction=None, significance=None)):
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, opts)
 
 
-# DAOC (using standard modularity as an optimizatio function, non-generelized)
-def execDaoc_rm(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
-# 1 - ACCURATE, 2 - MEAN;
-, opts=DaocOpts(rlevout=0.8, gamma=1, reduction='m')):
+# DAOC (using standard modularity as an optimization function, non-generelized)
+def execDaoc_s_r(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
+, opts=DaocOpts(gamma=1, significance='', reduction='')):  # Note: '' values mean use default
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, opts)
 
 
-# DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
-def execDaoc_ssh_rm(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
-#SIGNIF_OWNSHIER = 0xA
-, opts=DaocOpts(gamma=1, significance='sh')):
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
+# DAOC (using standard modularity as an optimization function, non-generelized)
+def execDaocA_s_r(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
+, opts=DaocOpts(gamma=-1, significance='', reduction='')):  # Note: '' values mean use default
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA_s_r'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, opts)
+
+
+# # DAOC (using standard modularity as an optimization function, non-generelized)
+# def execDaoc_rm(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
+# # 1 - ACCURATE, 2 - MEAN;
+# , opts=DaocOpts(rlevout=0.8, gamma=1, reduction='m')):
+# 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
+# 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, opts)
+#
+#
+# # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
+# def execDaoc_ssh_rm(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
+# #SIGNIF_OWNSHIER = 0xA
+# , opts=DaocOpts(gamma=1, significance='sh')):
+# 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
+# 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, opts)
 
 
 # Ganxis (SLPA)

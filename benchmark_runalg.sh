@@ -5,7 +5,7 @@
 #
 # \author Artem V L <luart@ya.ru>  http://exascale.info, http://lumais.com
 
-if [ $# -lt 2 ]
+if [ $# -lt 1 ]
 then
 	echo "Usage: $0 <dir1> <dir2> ...\n"\
 		" Executes and evaluates predefined algorithm on the specified input directories."
@@ -13,22 +13,25 @@ then
 fi
 
 
-PYTHON=`whereis pypy | grep "/"`
-echo PYTHON1: $PYTHON
+# Note: pypy also can be used, but psutil should be installed there first, also as h5py
+PYTHON=`whereis python3 | grep "/"`
 if [ "$PYTHON" ]
 then
-	PYTHON="pypy"
+	PYTHON="python3"
 else 
 	PYTHON="python"
 fi
+#echo "Starting under" $PYTHON
 
-ALG="scp"  # Algorithm to be evaluated
+ALG="DaocA_s_r"  # Algorithm to be evaluated;  Scp;  DaocA, DaocA_s_r
 TIMEOUT=3  # Hours
+
+mkdir "results/${ALG}" 2> /dev/null
 for dir in "$@"
 do
 	# Skip dir path, leaving only the name
 	dirname=`echo $dir | sed 's/.*\/\([^/]*\)/\1/'`
 	#echo $dirname
-	nohup $PYTHON ./benchmark.py -i="$dir" -a=$ALG -e -th=$TIMEOUT > "results/${ALG}/bench_${dirname}.log" \
+	nohup $PYTHON ./benchmark.py -i="$dir" -a=$ALG -r -th=$TIMEOUT > "results/${ALG}/bench_${dirname}.log" \
 		2> "results/${ALG}/bench_${dirname}.err" &
 done

@@ -569,7 +569,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 
 
 def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
-	"""Shuffle specified networks backing up and updateing exsinting shuffles.
+	"""Shuffle specified networks backing up and updating exsinting shuffles.
 	Existing shuffles with the target name are skipped, redundant are deleted,
 	lacked are formed.
 
@@ -582,6 +582,16 @@ def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
 		return
 	assert isinstance(datas[0], PathOpts), 'datas must be a container of PathOpts'
 	assert timeout1 + 0 >= 0, 'Non-negative shuffling timeout is expected'
+
+	# Check whether the shufflng is required at all
+	noshuf = True
+	for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
+		# Skip paths that do not require any shuffling
+		if not popt.shfnum:
+			continue
+		noshuf = False
+	if noshuf:
+		return
 
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'

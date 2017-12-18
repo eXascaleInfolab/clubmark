@@ -5,7 +5,7 @@
 #
 # \author Artem V L <luart@ya.ru>  http://exascale.info, http://lumais.com
 
-# Note: pypy also can be used, but psutil should be installed there first
+# Note: pypy also can be used, but psutil should be installed there first, also as h5py
 PYTHON=`whereis python3 | grep "/"`
 if [ "$PYTHON" ]
 then

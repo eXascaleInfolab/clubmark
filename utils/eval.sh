@@ -5,14 +5,32 @@
 #
 # \author Artem V L <luart@ya.ru>  http://exascale.info, http://lumais.com
 
-DFL_EVALNAME=nmi  # Default name of the evaluation algorithm
+DFL_EVALNAME=nmi  # Default name (and file extension) of the evaluation algorithm
+DFL_ERRLOG=elog  # Default extension for the error log
+
+# Parse eval app args if any (start with "-")
+while [ $2 ]
+do
+	case $2 in
+	-*)
+		EOPTS="$EOPTS $2"  # Evalaution options
+		shift
+		;;
+	*)
+		break
+		;;
+	esac
+done
+#echo "EvalApp: $1, EvalOpts: $EOPTS, src: $2"
+#exit 1
 
 if [ $# -lt 4 ]
 then
-	echo "Usage: $0 <evalbin> <src> <dst_dir> <algname> [<evalname>=$DFL_EVALNAME]\n"\
+	echo "Usage: $0 <evalbin> [-eval_arg...] <src> <dst_dir> <algname> [<evalname>=$DFL_EVALNAME]\n"\
 		" Evaluates files in the <dst_dir> (levels of the hierarchy),"\
 		" selects the max value and stores it in the separate file."\
 		"  evalbin  - file name of the evaluation application\n"\
+		"  -eval_arg...  - evalaution app args having prefix '-'"\
 		"  src  - file name of original network to be compared\n"\
 		"  dst_dir  - directory name of the files to be compared to the origin\n"\
 		"  algname  - name of the algorithm that produced the data under evaluation\n"\
@@ -20,19 +38,23 @@ then
 	exit 0
 fi
 
-
 EVALNAME=${5:-$DFL_EVALNAME}
 #echo "EVALNAME: $EVALNAME from $5"
 FOUTP=$3_$4.$EVALNAME
+FELOG=$3_$4.elog
 
-if [ -f $FOUTP ]
+# Append the timestamp If the output files exist
+if [ -f $FOUTP -o -f $FELOG ]
 then
-	rm $FOUTP
+	TIMESTAMP="\n--- "`date +"%Y-%m-%d %H:%M:%S UTC" -u`" ---"
+	echo $TIMESTAMP >> $FOUTP
+	echo $TIMESTAMP >> $FELOG
 fi
 
 for f in `find $3 -type f`
 do
-	echo `LD_LIBRARY_PATH=. $1 $2 $f 2> /dev/null | tail -n 1` "\t$f" >> $FOUTP
+	#echo "Processing: $f"
+	echo `LD_LIBRARY_PATH=. $1 $EOPTS $2 $f 2>> $FELOG | tail -n 1` "\t$f" >> $FOUTP  # 2> /dev/null
 done
 
 BESTVAL=`sort -g -r $FOUTP | head -n 1`

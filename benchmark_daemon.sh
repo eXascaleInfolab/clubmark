@@ -29,8 +29,11 @@ fi
 
 echo "Starting the benchmark in the daemom mode under $PYTHON..."
 #  -dw=${DATASETS}
-nohup $PYTHON benchmark.py -g=3%5 -r -q -t$TIMEOUT_UNIT=$TIMEOUT --stderr-stamp \
+nohup $PYTHON benchmark.py -g=3%5 -r -q  -i='realnets/*/' -t$TIMEOUT_UNIT=$TIMEOUT \
   1>> $RESDIR/${EXECLOG} 2>> $RESDIR/${EXECERR} &
 
 # utils/exectime -o=results/bench.rcp -n=netgen_3%5_pypy pypy benchmark.py -g=3%5 -th=8\
-# --stderr-stamp 1>>results/bench.log 2>>results/bench.err
+# 1>>results/bench.log 2>>results/bench.err
+
+# Examples of the stand-alone execution:
+# $ python3 benchmark.py -a="DaocA_s_r Daoc_s_r" -r -i="realnets/*/" -th=42 1>>./results/bench.log 2>>./results/bench.err

@@ -23,3 +23,7 @@ WORK_DIR=/opt/pycabem  # Working directory of the benchmark
 docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint python3 luaxi/pycabem:env-U16.04-v2.0 ./benchmark.py "$@"
 # Or to open "bash" shell in the benchmarking directory:
 # $ docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint bash luaxi/pycabem:env-U16.04-v2.0
+
+# Examples:
+# $ ./benchmark_docker.sh -a="LouvainIg Randcommuns" -i="syntnets/networks/*/" -i=./realnets -r -th=42 1>>./results/bench.log 2>>./results/bench.err
+# $ ./benchmark_docker.sh -a="LouvainIg Scp Randcommuns Pscan" -i%2=./realnets -r -th=42 1>> ./results/bench.log 2>> ./results/bench.err

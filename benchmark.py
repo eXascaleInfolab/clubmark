@@ -204,14 +204,19 @@ def parseParams(args):
 		# Validate input format
 		if arg[0] != '-':
 			raise ValueError('Unexpected argument: ' + arg)
+		# Always output _TIMESTAMP_START_HEADER to both stdout and stderr
+		print(_TIMESTAMP_START_HEADER)
+		print(_TIMESTAMP_START_HEADER, file=sys.stderr)
 		# Process long args
 		if arg[1] == '-':
-			if arg == '--stderr-stamp':
-				if len(args) == 1:
-					raise  ValueError('More input arguments are expected besides: ' + arg)
-				print(_TIMESTAMP_START_HEADER, file=sys.stderr)
-				continue
-			elif arg.startswith('--generate'):
+			# if arg.startswith('--std'):
+			# 	if arg == '--stderr-stamp':  # or arg == '--stdout-stamp':
+			# 		#if len(args) == 1:
+			# 		#	raise  ValueError('More input arguments are expected besides: ' + arg)
+			# 		print(_TIMESTAMP_START_HEADER, file=sys.stderr if arg == '--stderr-stamp' else sys.stdout)
+			# 		continue
+			# 	raise ValueError('Unexpected argument: ' + arg)
+			if arg.startswith('--generate'):
 				arg = '-g' + arg[len('--generate'):]
 			elif arg.startswith('--input'):
 				arg = '-i' + arg[len('--input'):]
@@ -230,7 +235,7 @@ def parseParams(args):
 			elif arg.startswith('--summary'):
 				arg = '-s' + arg[len('--summary'):]
 			else:
-				raise  ValueError('Unexpected argument: ' + arg)
+				raise ValueError('Unexpected argument: ' + arg)
 
 		if arg[1] == 'g':
 			# [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]
@@ -1579,7 +1584,7 @@ if __name__ == '__main__':
 			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
 			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
 			' [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]]'
-			' [-s=<eval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] [--stderr-stamp] | -h',
+			' [-s=<eval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] | -h',
 			'',
 			'Example:',
 			'  {0} -g=3{gensepshuf}5 -r -q -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
@@ -1661,7 +1666,7 @@ if __name__ == '__main__':
 			'NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seed',
 			'',
 			'Advanced parameters:',
-			'  --stderr-stamp  - output a time stamp to the stderr on the benchmarking start to separate multiple reexectuions',
+			#'  --stderr-stamp  - output a time stamp to the stderr on the benchmarking start to separate multiple reexectuions',
 			'  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.)',
 			'    f  - force the conversion even when the data is already exist',
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',

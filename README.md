@@ -285,41 +285,71 @@ See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-
 
 To see possible input parameters run the benchmark without arguments: `$ ./benchmark.py`:  
 ```
-$ ./benchmark.py
-Usage: ./benchmark.py [-g[f][=[<number>][.<shuffles_number>][=<outpdir>]] [-c[f][r]] [-a="app1 app2 ..."] [-r] [-e[n][s][e][m]] [-d[g]{a,s}=<datasets_dir>] [-f[g]{a,s}=<dataset>] [-t[{s,m,h}]=<timeout>]
+$ ./benchmark.py 
+Usage:
+  ./benchmark.py [-g[o][a]=[<number>][%<shuffles_number>][=<outpdir>] [-i[f][a][%<shuffles_number>]=<datasets_{dir,file}_wildcard> [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[e[{n[x],o[x],f[{h,p}],d}][i[{m,c}]]] [-s=<eval_path>] [-t[{s,m,h}]=<timeout>] [-d=<seed_file>] | -h
+
+Example:
+  ./benchmark.py -g=3%5 -r -q -th=2.5 1> results/bench.log 2> results/bench.err
+NOTE:
+  - The benchmark should be executed exclusively from the current directory (./)
+  - The expected format of input datasets (networks) is .ns<l> - network specified by <links> (arcs / edges), a generalization of the .snap, .ncol and Edge/Arcs Graph formats.
+  - paths can contain wildcards: *, ?, +
+  - multiple paths can be specified via multiple -i, -s options (one per the item)
+
 Parameters:
-  -g[f][=[<number>][.<shuffles_number>][=<outpdir>]]  - generate <number> (5 by default) >= 0 synthetic datasets in the <outpdir> ("syntnets/" by default), shuffling each <shuffles_number> (0 by default) >= 0 times. If <number> is omitted or set to 0 then ONLY shuffling of the specified datasets should be performed including the <outpdir>/networks//*.
-    Xf  - force the generation even when the data already exists (existent datasets are moved to backup)
-  NOTE:
-    - shuffled datasets have the following naming format: <base_name>[^<instance_index>][(seppars)<param1>...][.<shuffle_index>].<net_extension>
-    - use "-g0" to execute existing synthetic networks not changing them
-  -c[X]  - convert existing networks into the .hig, .lig, etc. formats
-    Xf  - force the conversion even when the data is already exist
-    Xr  - resolve (remove) duplicated links on conversion. Note: this option is recommended to be used
-  NOTE: files with .nsa are looked for in the specified dirs to be converted
-  -a="app1 app2 ..."  - apps (clustering algorithms) to run/benchmark among the implemented. Available: scp louvain_igraph randcommuns daoc oslom2 ganxis. Impacts {r, e} options. Optional, all apps are executed by default.
-  NOTE: output results are stored in the "algorithms/<algname>outp/" directory
-  -r  - run the benchmarking apps on the prepared data
-  -e[X]  - evaluate quality of the results. Default: apply all measurements
-    Xn  - evaluate results accuracy using NMI measure for overlapping communities
-    Xs  - evaluate results accuracy using NMI_s measure for overlapping communities
-    Xe  - evaluate results accuracy using extrinsic measures (both NMIs) for overlapping communities (same as Xns)
-    Xm  - evaluate results quality by modularity
-  -d[X]=<datasets_dir>  - directory of the datasets.
-  -f[X]=<dataset>  - dataset (network, graph) file name.
-    Xg  - generate directory with the network file name without extension for each input network (*.nsa) when shuffling is performed (to avoids flooding of the base directory with network shuffles). Previously existed shuffles are backuped
-    Xa  - the dataset is specified by asymmetric links (in/outbound weights of the link might differ), arcs
-    Xs  - the dataset is specified by symmetric links, edges. Default option
-    NOTE:
-	 - datasets file names must not contain "." (besides the extension), because it is used as indicator of the shuffled datasets
-    - paths can contain wildcards: *, ?, +    - multiple directories and files can be specified via multiple -d/f options (one per the item)
-    - datasets should have the following format: <node_src> <node_dest> [<weight>]
-    - {a,s} is considered only if the network file has no corresponding metadata (formats like SNAP, ncol, nsa, ...)
-    - ambiguity of links weight resolution in case of duplicates (or edges specified in both directions) is up to the clustering algorithm
-  -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network in sec, min or hours. Default: 0 sec  - no timeout
-    Xs  - time in seconds. Default option
-    Xm  - time in minutes
-    Xh  - time in hours
+  --help, -h  - show this usage description
+  --generate, -g[o][a]=[<number>][%<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets of the required format in the <outpdir> (default: syntnets/), shuffling (randomly reordering network links and saving under another name) each dataset <shuffles_number> times (default: 0). If <number> is omitted or set to 0 then ONLY shuffling of <outpdir>/networks//* is performed. The generated networks are automatically added to the begin of the input datasets.
+    o  - overwrite existing network instances (old data is backuped) instead of skipping generation
+    a  - generate networks specifined by arcs (directed) instead of edges (undirected)
+NOTE: shuffled datasets have the following naming format:
+	<base_name>[(seppars)<param1>...][^<instance_index>][%<shuffle_index>].<net_extension>
+  --input, -i[X][%<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories, which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension (.ns{e,a}). Default: -ie=syntnets/networks/*/, which are subdirs of the synthetic networks dir without shuffling.
+    f  - make flat derivatives on shuffling instead of generating the dedicted directory (havng the file base name) for each input network, might cause flooding of the base directory. Existed shuffles are backuped.
+    NOTE: variance over the shuffles of each network instance is evaluated only for the non-flat structure.
+    a  - the dataset is specified by arcs (asymmetric, directed links) instead of edges (undirected links), considered only for not .ns{a,e} extensions.
+NOTE:
+  - The following symbols in the path name have specific semantic and processed respectively: ('!', '^', '%', '#')
+  - Paths may contain wildcards: *, ?, +
+  - Multiple directories and files wildcards can be specified via multiple -i options
+  - Shuffles backup and OVERWRITE previously excisting shuffles
+  - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]
+  - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions) is up to the clustering algorithm
+  --apps, -a[=[-]"app1 app2 ..."]  - apps (clustering algorithms) to be applied, default: all.
+Leading "-" means applying of all except the specified apps. Available apps (13): CggcRg, CggciRg, Daoc, DaocA, DaocA_s_r, Daoc_s_r, Ganxis, LouvainIg, Oslom2, Pscan, Randcommuns, Scd, Scp.
+Impacts {r, q} options. Optional, all registered apps (see benchapps.py) are executed by default.
+NOTE: output results are stored in the "results/<algname>/" directory
+  --runapps, -r  - run specified apps on the specidied datasets, default: all
+  --quality, -q[X]  - evaluate quality (including accuracy) of the results for the specified algorithms on the specified datasets and form the summarized results. Default: NMI_max, F1h and F1p measures on all datasets
+    e[Y]  - extrinsic measures for overlapping communities, default: all
+      n[Z]  - NMI measure(s) for overlapping and multi-level communities: max, avg, min, sqrt
+        x  - NMI_max,
+      NOTE: unified NMI evaluaiton is stochastic and does not provide the seed parameter.
+      o[Z]  - overlapping NMI measure(s) for overlapping communities that are not multi-level: max, sum, lfk. Note: it is much faster than generalized NMI
+        x  - NMI_max
+      f[Z]  - avg F1-Score(s) for overlapping and multi-level communities: avg, hmean, pprob
+        h  - harmonic mean of F1-Score
+        p  - F1p measure (harmonic mean of the weighted average of partial probabilities)
+      r  - recommended extrinsic measures (NMI_max, F1_h, F1_p) for overlapping multi-level communities
+    i[Y]  - intrinsic measures for overlapping communities, default: all
+      m  - modularity Q
+      c  - conductance f
+    u  - update quality evaluations appending the new results to the existing stored evaluaitons (if any) and then aggregate everything to the final summarized results skipping older duplicates (if any).
+  ATTENTION: "-qu" requires at least one more "-qX" flag to indicate what measures should be (re)evaluated. Applicable only for the same seed as existed evaluations had. The existed quality evaluations are backed up anyway.
+NOTE: multiple quality evaluaiton options can be specified via the multiple -q opitons.
+  --timeout, -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network in sec, min or hours; 0 sec - no timeout, default: 36 h 0 min 0 sec
+    s  - time in seconds, default option
+    m  - time in minutes
+    h  - time in hours
+  --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms, contains uint64_t value. Default: results/seed.txt
+NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seed
+
+Advanced parameters:
+  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.)
+    f  - force the conversion even when the data is already exist
+    r  - resolve (remove) duplicated links on conversion (recommended to be used)
+  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results, which is useful to include external manual evaluations into the final summarized results
+ATTENTION: <resval_path>  should include the algorithm name and target measure
 ```
 
 > _REPRODUCIBILITY NOTICE_: Use seed to reproduce the evaluations, but be aware that:
@@ -330,7 +360,7 @@ So, in case of shuffling, the original shuffles should be provided to reproduce 
 
 ### Synthetic networks generation, clustering algorithms execution and evaluation
 ```
-$ pypy ./benchmark.py -g=3.2=syntnets_i3_s4 -cr -a="scp oslom2" -r -emn -tm=90
+$ pypy ./benchmark.py -g=3%2=syntnets_i3_s4 -cr -a="scp oslom2" -r -q -tm=90
 ```
 Run the benchmark under PyPy.  
 Generate synthetic networks producing 3 instances of each network with 2 shuffles (random reordering of network nodes) of each instance, having 3*2=6 sythetic networks of each type (for each set of network generation parameters). Generated networks are stored in the ./syntnets_i3_s4/ directory.  
@@ -338,9 +368,9 @@ Convert all networks into the .hig format resolving duзlicated links. This conv
 Run `scp` and `oslom2` clustering algorithms for each generated network and evaluate modularity and NMI measures for these algorithms.  
 Tшmeout is 90 min for each task of each network processing, where the tasks are: networks generation, clustering and evaluation by each specified measure. The network is each shuffle of each instance of each network type.  
 
-### Shuffling existing network instances, clustering algorithm execution and evaluation
+### Shuffling existing network instances, clustering algorithm execution and evaluation using NMI_max with 1h timeout for any task
 ```
-$ ./benchmark.py -g=.4 -d=syntnets_i3_s4 -a=oslom2 -es -th=1
+$ ./benchmark.py -g=.4 -i=syntnets_i3_s4 -a=oslom2 -qenx -th=1
 ```
 Run the benchmark for the networks located in ./syntnets_i3_s4/ directory.  
 Produce 4 shuffles of the specified networks, previously existed shuffles are backed up.  

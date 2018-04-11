@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-\descr: Evaluation of results produced by each executed application.
+:Description: Evaluation of results produced by each executed application.
 
 	Resulting cluster/community structure is evluated using extrinsic (NMI, NMI_s)
 	and intrinsic (Q - modularity) measures considering overlaps.
 
-\author: (c) Artem Lutov <artem@exascale.info>
-\organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>
-\date: 2015-12
+:Authors: (c) Artem Lutov <artem@exascale.info>
+:Organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>
+:Date: 2015-12
 """
 
 from __future__ import print_function, division  # Required for stderr output, must be the first import

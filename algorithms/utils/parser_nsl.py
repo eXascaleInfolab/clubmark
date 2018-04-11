@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-\descr: Implementation of the NSL (Network Specified By <Links>(Edges / Args)) parser
+:Description: Implementation of the NSL (Network Specified By <Links>(Edges / Args)) parser
 	NSL format is a generalizaiton of NCOL, SNAP and  and Edge/Arcs Graph formats.
-\author: Artem Lutov <luart@ya.ru>
-\organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
-\date: 2016-07
+:Authors: Artem Lutov <luart@ya.ru>
+:Organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>,
+	Lumais <http://www.lumais.com/>
+:Date: 2016-07
 """
 
 from __future__ import print_function, division  # Required for stderr output, must be the first import
@@ -145,6 +146,8 @@ def loadNsl(network, directed=None):
 	network  - file name of the input network
 	directed  - whether the input network is directed
 		None  - define automatically by the file extension
+
+	return Graph  - loaded graph
 	"""
 	if Graph is None:
 		raise ImportError('ERROR, the igraph.Graph is required to be imported')
@@ -192,11 +195,11 @@ def loadNsl(network, directed=None):
 		nodes = tuple(nodes)
 
 		graph = Graph(n=netinfo.ndsnum, directed=directed)
-		graph.vs["name"] = nodes
+		graph.vs["name"] = nodes  #pylint: disable=E1137
 		# Make a map from the input ids to the internal ids of the vertices
 		ndsmap = {name: i for i, name in enumerate(nodes)}
 		graph.add_edges([(ndsmap[ln[0]], ndsmap[ln[1]]) for ln in links])
 		if weights:
 			assert len(links) == len(weights), 'Weights are not synchronized with links'
-			graph.es["weight"] = weights
+			graph.es["weight"] = weights  #pylint: disable=E1137
 	return graph

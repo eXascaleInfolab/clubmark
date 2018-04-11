@@ -60,5 +60,13 @@ target/
 .hgignore
 
 # Project related ignore
-syntnets/params/
-syntnets/
+_oldDirs/
+backup/
+clscriteria
+distrib/
+realnets/
+results/
+syntnets*/
+test/
+results_bench16
+*.komodoproject

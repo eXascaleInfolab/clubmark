@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-\descr: Show statistics about communities specified in ncl file:
+:Description: Show statistics about communities specified in ncl file:
 	- the number of communities
 	- the number of distinct nodes
 	- the number of overlaps
 	...
-\author: Artem Lutov <luart@ya.ru>
-\organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
-\date: 2016-11
+:Authors: Artem Lutov <luart@ya.ru>
+:Organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>,
+	Lumais <http://www.lumais.com/>
+:Date: 2016-11
 """
 
 from __future__ import print_function, division  # Required for stderr output, must be the first import

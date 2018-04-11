@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-\descr: Produces rand disjoint communities (clusters) for the given network with sizes similar in the ground truth.
+:Brief: Produces rand disjoint communities (clusters) for the given network with sizes similar in the ground truth.
+:Description:
 	Takes number of the resulting communities and their sizes from the specified groundtruth (actually any sample
 	of the community structure, the real ground truth is not required) and fills stubs of the clusters with
 	randomly selected nodes from the input network with all their neighbors.
 	Note: Produced result is a random disjoint partitioning, so if the 'ground truth' had overlapping clusters, then
 	the number of nodes in the last cluster will be less than in the sample.
 
-\author: Artem Lutov <luart@ya.ru>
-\organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
-\date: 2015-07
+:Authors: Artem Lutov <luart@ya.ru>
+:Organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>,
+	Lumais <http://www.lumais.com/>
+:Date: 2015-07
 """
 
 from __future__ import print_function, division  # Required for stderr output, must be the first import
@@ -18,7 +20,7 @@ import sys
 import os  # Pathes processing
 #import igraph as ig
 import random as rand
-from utils.parser_nsl import asymnet, loadNsl
+from .utils.parser_nsl import asymnet, loadNsl
 
 # Default number of the resulting clusterings (partitions, i.e files that contain disjoint clusters)
 _RESNUM = 1
@@ -45,6 +47,7 @@ class Params(object):
 		self.randseed = None
 		self.outpseed = False
 		self.outdir = None
+		self.outname = None
 		self.outext = ''
 
 
@@ -105,11 +108,11 @@ def randcommuns(*args):
 	"""Generate random clusterings for the specified network"""
 	prm = parseParams(args)
 	print('Starting randcommuns clustering:'
-		'\n\tgroundtruth: {}'
-		'\n\t{} network: {}'
-		'\n\t{} {} in {} with randseed: {}'
-		.format(prm.groundtruth, 'directed' if prm.dirnet else 'undirected', prm.network
-			, prm.outnum, prm.outname + prm.outext, prm.outdir, prm.randseed))
+	 '\n\tgroundtruth: {}'
+	 '\n\t{} network: {}'
+	 '\n\t{} {} in {} with randseed: {}'
+	 .format(prm.groundtruth, 'directed' if prm.dirnet else 'undirected', prm.network
+	  , prm.outnum, prm.outname + prm.outext, prm.outdir, prm.randseed))
 	# Load Data from simple real-world networks
 	graph = loadNsl(prm.network, prm.dirnet)  # ig.Graph.Read_Ncol(network, directed=dirnet)  # , weights=False
 
@@ -126,7 +129,8 @@ def randcommuns(*args):
 	rand.seed(prm.randseed)
 	while prm.outnum > 0:
 		prm.outnum -= 1
-		actnodes = set(graph.vs.indices)  # Active (remained) nodes indices of the input network
+		# Active (remained) nodes indices of the input network
+		actnodes = set(graph.vs.indices)  #pylint: disable=E1101
 		clusters = []  # Forming clusters
 		# Reference size of the ground truth clusters (they migh have overlaps unlike the current partitioning)
 		for clmarg in groundstat:
@@ -141,7 +145,7 @@ def randcommuns(*args):
 			inds = 0  # Index of the node in the current cluster
 			# Select neighbors of the selected nodes to fill the clusters
 			while len(nodes) < clmarg and actnodes:
-				for nd in graph.vs[nodes[inds]].neighbors():
+				for nd in graph.vs[nodes[inds]].neighbors():  #pylint: disable=E1136
 					if nd.index not in actnodes:
 						continue
 					actnodes.remove(nd.index)
@@ -155,7 +159,7 @@ def randcommuns(*args):
 					nodes.append(ind)
 
 			# Use original labels of the nodes
-			clusters.append([graph.vs[ind]['name'] for ind in nodes])
+			clusters.append([graph.vs[ind]['name'] for ind in nodes])  #pylint: disable=E1136
 		# Output resulting clusters
 		with open('/'.join((prm.outdir, ''.join((prm.outname, '_', str(prm.outnum), prm.outext)))), 'w') as fout:
 			for cl in clusters:

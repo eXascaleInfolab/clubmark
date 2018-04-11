@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-\descr: copy network omitting some links
+:Description: copy network omitting some links
 
-\author: (c) Artem Lutov <artem@exascale.info>
-\organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
-\date: 2015-06
+:Authors: (c) Artem Lutov <artem@exascale.info>
+:Organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
+:Date: 2015-06
 """
 from __future__ import print_function, division  # Required for stderr output, must be the first import
 try:
@@ -13,7 +13,7 @@ try:
 	from future.utils import viewitems
 	from future.builtins import range
 except ImportError as err:
-	# Use own implementation of view methods	
+	# Use own implementation of view methods
 	def viewMethod(obj, method):
 		"""Fetch view method of the object
 
@@ -32,7 +32,7 @@ except ImportError as err:
 		return ometh
 
 	viewitems = lambda dct: viewMethod(dct, 'items')()
-	
+
 	# Replace range() implementation for Python2
 	try:
 		range = xrange
@@ -111,7 +111,7 @@ def remlinks(*args):
 		# Check whether the network directed or not
 		directed = True
 		sid, did = next(iter(network))
-		if network.get((did,sid)) is None:
+		if network.get((did, sid)) is None:
 			directed = False  # Undirected
 		else:
 			linksNum /= 2  # Links on both directions should be removed
@@ -174,7 +174,8 @@ if __name__ == '__main__':
 	else:
 		print('\n'.join(('Usage: {0} <num_links>[%] <inp_network> [<outp_network>]',
 			'Copies dataset, omitting specified number / percent of links randomly, but avoiding hanging nodes.'
-			'Network is specified via links: "<src_id: integer> <dst_id: integer> [<weight: float>]" respecting comments (#) and direction (the link in both directions is removed).',
+			'Network is specified via links: "<src_id: integer> <dst_id: integer> [<weight: float>]" respecting comments'
+			' (#) and direction (the link in both directions is removed).',
 			'  <num_links>[%]  - number / float percent of links to be omitted',
 			'    Note: a link can be removed from the node only if it has more than one link, i.e. hanging nodes are not formed',
 			'  <inp_network>  - file of the original network to be processed, format: <src_id> <dst_id> [<weight>]',

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-\descr: Datasets converter from Pajek, Metis and .nsl formats (including .ncol,
+:Description: Datasets converter from Pajek, Metis and .nsl formats (including .ncol,
 Stanford SNAP and Edge/Arcs Graph) to .nsl (.nse/a that are more common than .ncol,
 i.e. the output can be stanford .snap and .ncol) and .rcg (Readable Compact Graph,
 former .hig; used by DAOC / HiReCS libs) formats.
@@ -33,9 +33,10 @@ Output formats:
 Note: works on both Python3 and Python2 / pypy
 
 (c) RCG (Readable Compact Graph)
-\author: Artem Lutov <luart@ya.ru>
-\organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
-\date: 2016-10
+:Authors: Artem Lutov <luart@ya.ru>
+:Organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>,
+	Lumais <http://www.lumais.com/>
+:Date: 2016-10
 """
 
 from __future__ import print_function, division  # Required for stderr output, must be the first import

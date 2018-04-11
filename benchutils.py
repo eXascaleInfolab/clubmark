@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 """
-\descr:  Common routines of the modular benchmark (Python Clustering Algorithms BenchMark).
+:Description:  Common routines of the modular benchmark (Python Clustering Algorithms BenchMark).
 
-\author: (c) Artem Lutov <artem@exascale.info>
-\organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>
-\date: 2015-11
+:Authors: (c) Artem Lutov <artem@exascale.info>
+:Organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>
+:Date: 2015-11
 """
 
 from __future__ import print_function, division  # Required for stderr output, must be the first import
@@ -139,7 +139,7 @@ def delPathSuffix(path, nameonly=False):
 					int(pname[pos + 1:pose])
 				except ValueError as err:
 					print('WARNING, invalid suffix or separator "{}" represents part of the path name "{}"'
-						', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
+					 ', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
 					continue  # Check following separator candidate
 			# Note: threat param separator as alvays valid
 			pname = pname[:pos]
@@ -207,7 +207,7 @@ def parseName(path, nameonly=False):
 					int(pname[pos + 1:pose])
 				except ValueError as err:
 					print('WARNING, invalid suffix or separator "{}" represents part of the path name "{}"'
-						', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
+					 ', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
 					continue  # Check following separator candidate
 			# Note: threat param separator as alvays valid
 			if basename is pname:
@@ -347,7 +347,7 @@ def envVarDefined(value, name=None, evar=None):
 	return  True if the var is defined as specified, otherwise FALSE
 	"""
 	assert isinstance(value, str) and (name is None or isinstance(name, str)) and (
-		evar is None or isinstance(evar, str)), 'Environmental vars are strings'
+	 evar is None or isinstance(evar, str)), 'Environmental vars are strings'
 	if evar is None:
 		assert name, 'Evnironmental variable name must be specified if the value is not provided'
 		evar = os.environ.get(name, '')
@@ -404,7 +404,7 @@ def escapePathWildcards(path):
 	"""Escape wildcards in the path"""
 	# TODO: Implement this manually if not supported by the current vresion of Python.
 	# Though, it is not very important, because occurs extremely seldom
-	return glob.escape(path) if hasattr(glob, 'escape') else path
+	return glob.escape(path) if hasattr(glob, 'escape') else path  #pylint: disable=E1101
 
 
 def dirempty(dirpath):
@@ -581,7 +581,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 				os.rename(archname, bckname)
 			except Exception as err:
 				print('WARNING, removing old backup file "{}", as its renaming failed: {}'
-					.format(archname, err), file=sys.stderr)
+				 .format(archname, err), file=sys.stderr)
 				os.remove(archname)
 		# Move data to the archive
 		with tarfile.open(archname, 'w:gz', bufsize=128*1024, compresslevel=6) as tar:
@@ -605,7 +605,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 				os.rename(basename, bckname)
 			except Exception as err:
 				print('WARNING, removing old backup dir "{}", as its renaming failed: {}'
-					.format(basename, err), file=sys.stderr)
+				 .format(basename, err), file=sys.stderr)
 				shutil.rmtree(basename)
 		# Move data to the backup
 		if not os.path.exists(basename):

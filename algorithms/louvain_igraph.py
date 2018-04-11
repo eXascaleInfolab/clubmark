@@ -1,18 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-\descr: Implementation of the Louvain algorithm using igraph framework with input/
+:Description: Implementation of the Louvain algorithm using igraph framework with input/
 	output formats adapted to the NMIs evaluation.
-\author: Artem Lutov <luart@ya.ru>
-\organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
-\date: 2015-07
+:Authors: Artem Lutov <luart@ya.ru>
+:Organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>,
+	Lumais <http://www.lumais.com/>
+:Date: 2015-07
 """
 from __future__ import print_function, division  # Required for stderr output, must be the first import
 import sys
 import os  # Pathes processing
 import argparse
 from igraph import Graph
-from utils.parser_nsl import asymnet, loadNsl
+from .utils.parser_nsl import asymnet, loadNsl
 
 
 def louvain(args):
@@ -32,9 +33,10 @@ def louvain(args):
 	# Load Data from simple real-world networks
 	graph = None
 	if args.inpfmt == 'ncol':  # Note: it's not clear whether .nce/.snap can be correctly readed as .ncol
-		graph = Graph.Read_Ncol(args.network, directed=False)  # Weight are considered if present; .ncol format is always undirected
+		# Weight are considered if present; .ncol format is always undirected
+		graph = Graph.Read_Ncol(args.network, directed=False)
 	elif args.inpfmt == 'pjk':
-		graph = Graph.Read_Pajek(args.network)
+		graph = Graph.Read_Pajek(args.network)  #pylint: disable=E1101
 	elif args.inpfmt in ('nse', 'nsa'):
 		graph = loadNsl(args.network, asymnet(os.path.splitext(args.network)[1].lower(), args.inpfmt == 'nsa'))
 	else:
@@ -95,7 +97,7 @@ def louvain(args):
 	if not args.perlev:
 		if props:
 			print('The number of propagated (duplicated) communities in the hieratchy: '
-				+ str(props), file=sys.stderr)
+			 + str(props), file=sys.stderr)
 		with open(args.outpfile + args.outpext, 'w') as fout:
 			for cl in communs:
 				if named:
@@ -118,22 +120,22 @@ def parseArgs(params=None):
 
 	ipars = parser.add_argument_group('Input Network (Graph)')
 	ipars.add_argument('network', help='input network (graph) filename.'
-		' The following formats are supported: {{{inpfmts}}}.'
-		' If the file has another extension then the format should be specified'
-		' explicitly.'.format(inpfmts=' '.join(inpfmts)))
+	 ' The following formats are supported: {{{inpfmts}}}.'
+	 ' If the file has another extension then the format should be specified'
+	 ' explicitly.'.format(inpfmts=' '.join(inpfmts)))
 	ipars.add_argument('-i', '--inpfmt', dest='inpfmt', choices=inpfmts
-		, help='input network (graph) format, required only for the non-standard extension')
+	 , help='input network (graph) format, required only for the non-standard extension')
 
 	outpext = '.cnl'  # Default extension of the output file
 	opars = parser.add_argument_group('Output Network (Graph)')
 	opars.add_argument('-o', '--outpfile', dest='outpfile'
-		, help='output all distinct resulting communities to the <outpfile>'
-		', default value is <network_name>{}'.format(outpext))
+	 , help='output all distinct resulting communities to the <outpfile>'
+	 ', default value is <network_name>{}'.format(outpext))
 	opars.add_argument('-l', '--perlev', dest='perlev', action='store_true'
-		, help='output communities of each hierarchy level to the separate file'
-		' <outpfile_name>/<outpfile_name>_<lev_num>{}'.format(outpext))
+	 , help='output communities of each hierarchy level to the separate file'
+	 ' <outpfile_name>/<outpfile_name>_<lev_num>{}'.format(outpext))
 
-	args = parser.parse_args()
+	args = parser.parse_args(params)
 
 	# Consider implicit default values
 	netname, netext = os.path.splitext(args.network)

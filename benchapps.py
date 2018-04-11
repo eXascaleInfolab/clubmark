@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-\descr: List of the clustering algorithms to be executed by the benchmark and accessory routines.
+:Description: List of the clustering algorithms to be executed by the benchmark and accessory routines.
 
 	Execution function for each algorithm must be named "exec<Algname>" and have the following signature:
 
@@ -19,9 +19,10 @@
 
 		return  - number of executions (jobs) made
 
-\author: (c) Artem Lutov <artem@exascale.info>
-\organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>
-\date: 2015-07
+:Authors: (c) Artem Lutov <artem@exascale.info>
+:Organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>,
+	ScienceWise <http://sciencewise.info/>
+:Date: 2015-07
 """
 
 from __future__ import print_function, division  # Required for stderr output, must be the first import
@@ -45,11 +46,11 @@ import subprocess
 
 from numbers import Number  # To verify that a variable is a number (int or float)
 from sys import executable as PYEXEC  # Full path to the current Python interpreter
-from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, \
-	tobackup, escapePathWildcards, _SEPPARS, _UTILDIR, _TIMESTAMP_START_HEADER
-from benchevals import _SEPNAMEPART, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
-from utils.mpepool import Job
-from algorithms.utils.parser_nsl import parseHeaderNslFile, asymnet
+from .benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, \
+ tobackup, escapePathWildcards, _SEPPARS, _UTILDIR, _TIMESTAMP_START_HEADER
+from .benchevals import _SEPNAMEPART, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
+from .utils.mpepool import Job
+from .algorithms.utils.parser_nsl import parseHeaderNslFile, asymnet
 
 
 _ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
@@ -80,7 +81,8 @@ def aggexec(algs):
 	#True
 	"""
 	#exectime = {}  # netname: [alg1_stat, alg2_stat, ...]
-	mnames = ('exectime', 'cputime', 'rssmem')  # Measures names; ATTENTION: for the correct output memory must be the last one
+	# ATTENTION: for the correct output memory must be the last one
+	mnames = ('exectime', 'cputime', 'rssmem')  # Measures names
 	measures = [{}, {}, {}]  # exectiem, cputime, rssmem
 	malgs = []  # Measured algs
 	ialg = 0  # Algorithm index
@@ -111,7 +113,8 @@ def aggexec(algs):
 					for imsr, val in enumerate((etime, ctime, rmem)):
 						netstats = measures[imsr].setdefault(net, [])
 						if len(netstats) <= ialg:
-							assert len(netstats) == ialg, 'Network statistics are not synced with algorithms: ialg={}, net: {}, netstats: {}'.format(ialg, net, netstats)
+							assert len(netstats) == ialg, ('Network statistics are not synced with algorithms:'
+								' ialg={}, net: {}, netstats: {}'.format(ialg, net, netstats))
 							netstats.append(ItemsStatistic('_'.join((alg, net)), val, val))
 						netstats[-1].add(val)
 		except IOError:
@@ -130,7 +133,8 @@ def aggexec(algs):
 			with open(resfile, 'a') as outres, open(resxfile, 'a') as outresx:
 				# The header is unified for multiple outputs only for the outresx
 				if not os.fstat(outresx.fileno()).st_size:
-					outresx.write('# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n')  # ExecTime(sec), ExecTime_avg(sec), ExecTime_min\tExecTime_max
+					# ExecTime(sec), ExecTime_avg(sec), ExecTime_min	ExecTime_max
+					outresx.write('# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n')
 				# Output timestamp
 				# Note: print() unlike .write() outputs also ending '\n'
 				print(_TIMESTAMP_START_HEADER, file=outres)
@@ -159,7 +163,7 @@ def aggexec(algs):
 				.format(measure, err, traceback.format_exc(5)), file=sys.stderr)
 
 
-def	preparePath(taskpath):  # , netshf=False
+def preparePath(taskpath):  # , netshf=False
 	"""Create the path if required, otherwise move existent data to backup.
 	All itnstances and shuffles of each network are handled all together and only once,
 	even on calling this function for each shuffle.

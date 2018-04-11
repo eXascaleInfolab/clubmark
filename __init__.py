@@ -1,2 +1,4 @@
-__all__ = ['algorithms', 'utils',
-	'benchapps.py', 'benchevals.py', 'benchmark.py', 'benchutils.py']
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+__all__ = ['algorithms', 'utils',  # dirs
+	'benchapps', 'benchevals', 'benchmark', 'benchutils']  # modules

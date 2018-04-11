@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-\descr: Reduces produced communities to top N with optional synchronization in terms of cooccurances
+:Description: Reduces produced communities to top N with optional synchronization in terms of cooccurances
 
-\author: Artem Lutov <luart@ya.ru>
-\organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
-\date: 2015-07
+:Authors: Artem Lutov <luart@ya.ru>
+:Organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>,
+	Lumais <http://www.lumais.com/>
+:Date: 2015-07
 """
 import sys
 import os  # Pathes processing
@@ -13,7 +14,7 @@ import os  # Pathes processing
 
 def parseParams(args):
 	"""Parse user-specified parameters
-	
+
 	return
 		comsnum  - number of the largest communities to retain
 		resname  - file name of the output
@@ -22,13 +23,13 @@ def parseParams(args):
 	comsnum = 0
 	resname = None
 	unique = False
-	
+
 	for arg in args:
 		# Validate input format
 		preflen = 3
 		if arg[0] != '-' or (len(arg) <= preflen and arg != '-u'):
 			raise ValueError('Unexpected argument: ' + arg)
-		
+
 		if arg[1] == 'n':
 			comsnum = int(arg[preflen:])
 		elif arg[1] == 'o':
@@ -39,7 +40,7 @@ def parseParams(args):
 			unique = True
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
-			
+
 	if not comsnum:
 		raise ValueError('The number of resulting communities is not specified')
 	return comsnum, resname, unique
@@ -58,7 +59,7 @@ def topcommuns(communs, *args):
 		'\n\tcomsnum: {}'
 		'\n\tresname: {}'
 		).format(communs, comsnum, resname)
-	
+
 	allcms = []
 	with open(communs, 'r') as fcs:
 		for line in fcs:

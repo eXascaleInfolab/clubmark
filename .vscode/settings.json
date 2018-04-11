@@ -1,0 +1,16 @@
+{
+    "python.pythonPath": "/usr/bin/python3",
+    "python.linting.ignorePatterns": [
+        ".vscode/*.py",
+        "**/site-packages/**/*.py",
+        "_oldDirs/**"
+    ],
+    "python.linting.pylintArgs": [
+        "--ignored-classes=igraph.Graph",
+        "--disable=W0312,C0330,C0103,W0212,C0301",
+        "--indent-string='\t'",
+        "--max-line-length=120"
+        //"--function-rgx='(?:(?P<snake>[a-z_]+)|(?P<camel>_?[A-Z]+))$'"
+        //"--ignore=hicbem.py"
+    ]
+}

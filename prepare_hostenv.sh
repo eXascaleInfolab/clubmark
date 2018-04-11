@@ -12,7 +12,7 @@
 MAX_FILES=1048576
 # Max number of the opened files by the process
 UL_FILES=32768
-# Max swappiness, should be 1..10
+# Max swappiness, should be 1..10 (low swappiness to hold most of data in RAM)
 MAX_SWAP=5
 
 

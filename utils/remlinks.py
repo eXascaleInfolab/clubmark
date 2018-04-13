@@ -71,6 +71,11 @@ def parseArgs(args):
 
 
 def remlinks(*args):
+	"""Remove specified number of the network links
+
+	Raises:
+		ValueError  - invalid number of links to be removed is requested
+	"""
 	linksNum, inpnet, outnet = parseArgs(args)
 	with open(inpnet, 'r') as finp:
 		print(''.join(('Reading input network: ', inpnet, '...')))
@@ -121,15 +126,15 @@ def remlinks(*args):
 		omitls = np.unique(omitls)  # Leaves unique links + sorts
 		linksNum -= len(omitls)
 		# Extend omitls up to specified number of links
-		remlinks = linksNum
+		rmls = linksNum
 		linksNum = len(omitls)
-		while remlinks:
-			reminder = np.array([random.randint(0, linksCount-1) for i in range(remlinks)], dtype=np.uint32)
-			remlinks = 0
+		while rmls:
+			reminder = np.array([random.randint(0, linksCount-1) for i in range(rmls)], dtype=np.uint32)
+			rmls = 0
 			insinds = np.searchsorted(omitls, reminder)
 			for i, ins in enumerate(insinds):
 				if ins < linksNum and reminder[i] == omitls[ins]:
-					remlinks += 1  # This index is already selected
+					rmls += 1  # This index is already selected
 					continue
 				np.insert(omitls, ins, reminder[i])
 		# Get keys by indexes to consider also directed network if requried

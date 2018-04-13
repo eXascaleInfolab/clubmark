@@ -369,7 +369,7 @@ def parseBlockMetis(inpfmt, finp, unweight, blsnum=DEFAULT_BLOCK_LINKS):
 					did = int(v)
 				dest = [v, None]
 			elif not unweight:
-				dest[1] = v
+				dest[1] = v  #pylint: disable=E1137
 
 			if iparsed.weighted:
 				didval = not didval
@@ -412,28 +412,28 @@ def parseBlockPajek(inpfmt, finp, unweight, blsnum=DEFAULT_BLOCK_LINKS):
 			if not ln or ln[0] == inpfmt.symcmt:
 				continue
 			if ln[0] != hdrsym:
-				raise ValueError('The section header is missed: ' + line)
+				raise ValueError('The section header is missed: ' + ln)
 			# Parse initialization header (*Vertices setion)
-			ln = ln.split(None, 2)
-			ln[0] = ln[0].lower()
+			parts = ln.split(None, 2)
+			parts[0] = parts[0].lower()
 			if iparsed.newsection is None:
 				# *Vertices <vnum>,
 				assert not iparsed.links, 'There should not be any parsed links on start'
 				iparsed.startid = 1  # ATTENTION: vertices id in Pajek start from 1
 				# The number of Vertices if specified
-				if ln[0] == '*vertices':
-					iparsed.ndsnum = int(ln[1])
+				if parts[0] == '*vertices':
+					iparsed.ndsnum = int(parts[1])
 					# Skip this section
-					for ln in finp:
+					for ln in finp:  #pylint: disable=W0621
 						#ln = ln.lstrip()
 						if not ln or ln[0] != hdrsym:
 							continue
 						break
 					if not ln:
 						return False  # End of the file
-					ln = ln.rsplit(None, 1)
-					ln[0] = ln[0].lower()
-			iparsed._nexthdr = ln[0]
+					parts = ln.rsplit(None, 1)
+					parts[0] = parts[0].lower()
+			iparsed._nexthdr = parts[0]
 			break
 
 	# Parse the following section if required
@@ -445,7 +445,7 @@ def parseBlockPajek(inpfmt, finp, unweight, blsnum=DEFAULT_BLOCK_LINKS):
 		elif iparsed._nexthdr.startswith('*edges'):
 			iparsed.directed = False
 		else:
-			raise ValueError('Invalid section header: ' + ln[0])
+			raise ValueError('Invalid section header: ' + parts[0])
 		# Identify whether the section has a list-type
 		if iparsed._nexthdr.endswith('list'):
 			iparsed.weighted = False
@@ -639,6 +639,12 @@ def printBlockRcg(outfmt, fout, parsed, remdub, frcedg, commented, unweight, fin
 		makeback  - add backlink (when edges are conveted to the arcs)
 		"""
 		def linkToStream(fout, link):
+			"""Output link to the stream
+
+			Args:
+				fout (File)  - Output file/stream
+				link (list)  - Processing link: [id:str, weight:str]
+			"""
 			fout.write(' ')
 			if link[1] and link[1] != '1':  # float(link[1]) != 1
 				fout.write(':'.join((link[0], link[1])))
@@ -755,7 +761,16 @@ def printBlockNsl(directed):
 			makeback  - add backlink (when edges are conveted to the arcs)
 			"""
 			def linkToStr(src, link):
-				if(outfmt.printed.weighted):
+				"""Convert link to string representation
+
+				Args:
+					src (str)  - source id
+					link ([str])  - link: [dstId:str, weight:str]
+
+				Returns:
+					str  - stringified link
+				"""
+				if outfmt.printed.weighted:
 					line = ' '.join((src, link[0], link[1] or '1'))
 				else:
 					line = ' '.join((src, link[0]))
@@ -805,7 +820,7 @@ def convertStream(fout, outfmt, finp, inpfmt, unweight, remdub, frcedg, commente
 	assert inpfmt.parsed.directed is None and outfmt.printed.directed is None, 'Inicialization validation failed'
 
 	# Parse the remained part(s) of the input file and build the output
-	while(inpfmt.parseBlock(finp, unweight)):  # DEFAULT_BLOCK_LINKS
+	while inpfmt.parseBlock(finp, unweight):  # DEFAULT_BLOCK_LINKS
 		outfmt.printBlock(fout, inpfmt.parsed, remdub, frcedg, commented, unweight)
 	# Finalize the outut
 	outfmt.printBlock(fout, inpfmt.parsed, remdub, frcedg, commented, unweight, True)
@@ -859,7 +874,7 @@ class FormatSpec(object):
 			inpoutp += 'OUTP'
 		intro = '{} ({inpoutp})  - {descr}. File extensions: {exts}'.format(self.id
 			, inpoutp=inpoutp, descr=self.descr, exts=', '.join(self.exts))
-		if self.fmt :
+		if self.fmt:
 			intro += '. Specification:' + self.fmt
 			if self.fmtdescr:
 				intro = '{base}\n  Notations:\n{fmtdescr}'.format(base=intro, fmtdescr=self.fmtdescr)
@@ -870,12 +885,14 @@ class FormatSpec(object):
 		return self.id
 
 	def parseBlock(self, *args):
+		"""Parse block"""
 		if self.__parser:
 			return self.__parser(self, *args)
 		else:
 			raise AttributeError('The parser was not set')
 
 	def printBlock(self, *args):
+		"""Print block"""
 		if self.__printer:
 			return self.__printer(self, *args)
 		else:
@@ -1023,7 +1040,7 @@ def convert(args):
 				convertStream(fout, args.outfmt, finp, args.inpfmt, args.unweight, args.remdub
 					, args.frcedg, args.commented)
 				print('{} -> {} conversion is completed'.format(args.network, foutName))
-		except StandardError:
+		except IOError:
 			# Remove incomplete output file
 			if os.path.exists(foutName):
 				os.remove(foutName)
@@ -1088,7 +1105,7 @@ def parseArgs(params=None):
 		' r  - rename the existing output file and create the new one,'
 		' s  - skip processing if such output file already exists')
 
-	args = parser.parse_args()
+	args = parser.parse_args(params)
 	#print('Args: ' + ' '.join(dir(args)))
 
 	# Show detailed format specifiction and exit if required
@@ -1126,4 +1143,4 @@ if __name__ == '__main__':
 	convert(parseArgs())
 
 
-__all__ = [convert, FormatSpec]
+__all__ = ["convert", "FormatSpec"]

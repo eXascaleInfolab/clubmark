@@ -70,4 +70,4 @@ syntnets*/
 test/
 results_bench16
 *.komodoproject
-.vscode/tags
+.vscode/

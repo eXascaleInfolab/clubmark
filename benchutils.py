@@ -22,8 +22,8 @@ from multiprocessing import RLock
 from math import sqrt, copysign
 
 _BCKDIR = 'backup/'  # Backup directory
-_REFLOAT = re.compile('[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')  # Regular expression to parse float
-_REINT = re.compile('[-+]?\d+(?=\W)')  # Regular expression to parse int
+_REFLOAT = re.compile(r'[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')  # Regular expression to parse float
+_REINT = re.compile(r'[-+]?\d+(?=\W)')  # Regular expression to parse int
 _SEPPARS = '!'  # Network parameters separator, must be a char
 _SEPINST = '^'  # Network instances separator, must be a char
 _SEPSHF = '%'  # Network shuffles separator, must be a char; ~
@@ -32,6 +32,28 @@ _UTILDIR = 'utils/'  # Utilities directory with external applicaions for quality
 _TIMESTAMP_START = time.gmtime()  # struct_time
 _TIMESTAMP_START_STR = time.strftime('%Y-%m-%d %H:%M:%S', _TIMESTAMP_START)
 _TIMESTAMP_START_HEADER = ' '.join(('# ---', _TIMESTAMP_START_STR, '-'*32))
+
+# Consider Python2
+if not hasattr(glob, 'escape'):
+	# r'(?<!/)[?*[]'
+	_RE_GLOBESC = re.compile(r'[?*[]')  # Escape all special characters ('?', '*' and '[') not in UNC (path)
+
+	def globesc(mobj):
+		"""Escape the special symbols ('?', '*' and '[') not in UNC (path)
+
+		Args:
+			mobj (re.MatchObject): matched RE object (not None)
+
+		Returns: replacement string
+
+		>>> globesc(re.match('\?', '?'))
+		'[?]'
+		>>> globesc(re.match('a', 'b'))
+		''
+		"""
+		if mobj is None:
+			return ''
+		return mobj.group().join(('[', ']')) if mobj.group() else ''
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
@@ -57,11 +79,12 @@ def viewMethod(obj, method):
 # Define viewXXX functions to efficiently traverse items of dictionaries in both Python 2 and 3
 # Note: depends on viewMethod()
 try:
-	from future.utils import viewitems, viewkeys, viewvalues  # External package: pip install future
+	# External package: pip install future
+	from future.utils import viewitems, viewkeys, viewvalues  #pylint: disable=W0611
 except ImportError:
-	viewitems = lambda dct: viewMethod(dct, 'items')()
-	viewkeys = lambda dct: viewMethod(dct, 'keys')()
-	viewvalues = lambda dct: viewMethod(dct, 'values')()
+	viewitems = lambda dct: viewMethod(dct, 'items')()  #pylint: disable=W0611
+	viewkeys = lambda dct: viewMethod(dct, 'keys')()  #pylint: disable=W0611
+	viewvalues = lambda dct: viewMethod(dct, 'values')()  #pylint: disable=W0611
 
 
 def timeSeed():
@@ -327,7 +350,7 @@ class ItemsStatistic(object):
 
 	def fix(self):
 		"""Fix (finalize) statistics accumulation and produce the summary of the results"""
-		assert self.count >=0, 'Count must be non-negative'
+		assert self.count >= 0, 'Count must be non-negative'
 		self.fixed = True
 		self.avg = self.sum
 		if self.count:
@@ -401,10 +424,16 @@ def parseInt(text):
 
 
 def escapePathWildcards(path):
-	"""Escape wildcards in the path"""
-	# TODO: Implement this manually if not supported by the current vresion of Python.
-	# Though, it is not very important, because occurs extremely seldom
-	return glob.escape(path) if hasattr(glob, 'escape') else path  #pylint: disable=E1101
+	"""Escape all special characters ('?', '*' and '[') not in the UNC path
+
+	path  - the path tobescaped
+
+	return  escaped path
+
+	>>> escapePathWildcards('//?Quo va?dis?.txt')
+	'//[?]Quo va[?]dis[?].txt'
+	"""
+	return glob.escape(path) if hasattr(glob, 'escape') else re.sub(_RE_GLOBESC, globesc, path)
 
 
 def dirempty(dirpath):
@@ -579,7 +608,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 				print('WARNING, backup file "{}" is being rewritten'.format(bckname), file=sys.stderr)
 			try:
 				os.rename(archname, bckname)
-			except Exception as err:
+			except OSError as err:
 				print('WARNING, removing old backup file "{}", as its renaming failed: {}'
 				 .format(archname, err), file=sys.stderr)
 				os.remove(archname)
@@ -603,7 +632,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 				shutil.rmtree(bckname)
 			try:
 				os.rename(basename, bckname)
-			except Exception as err:
+			except OSError as err:
 				print('WARNING, removing old backup dir "{}", as its renaming failed: {}'
 				 .format(basename, err), file=sys.stderr)
 				shutil.rmtree(basename)
@@ -616,7 +645,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 
 
 if __name__ == '__main__':
-	"""Doc tests execution"""
+	# Doc tests execution
 	import doctest
 	#doctest.testmod()  # Detailed tests output
 	flags = doctest.REPORT_NDIFF | doctest.REPORT_ONLY_FIRST_FAILURE

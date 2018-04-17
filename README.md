@@ -1,8 +1,8 @@
-# PyCABeM - Benchmarking Framework for the Clustering Algorithms Evaluation implemented on Python
-\brief Benchmarking of the clustering (community detection) algorithms using extrinsic (various Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information)(NMI) and Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) measures) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks))(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures, considering overlaps (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of some cluster and parent clusters of that cluster).  
-\author: (c) Artem Lutov <artem@exascale.info>  
-\organizations: [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
-\keywords: overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
+# PyCABeM - Benchmarking Framework for the Clustering Algorithms Evaluation
+`\brief` Benchmarking of the clustering (community detection) algorithms using extrinsic (various Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information)(NMI) and Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) measures) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks))(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures, considering overlaps (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of some cluster and parent clusters of that cluster).  
+`\authors` (c) Artem Lutov <artem@exascale.info>  
+`\organizations` [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
+`\keywords` overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
 
 
 ## Content
@@ -14,7 +14,6 @@
     - [Clustering Specific Benchmarking](#clustering-specific-benchmarking)
 - [Prerequisites](#prerequisites)
 - [Requirements](#requirements)
-  - [Overview](#overview)
   - [Docker Container](#docker-container)
   - [Direct Execution](#direct-execution)
 - [Usage](#usage)  
@@ -24,12 +23,15 @@
 
 
 ## Overview
-### Points of Differentiation
-PyCABeM is a general-purpose modular benchmarking framework, which is specialized for the clustering (community detection) algorithms evaluation.  
-PyCABeM has the (optional) major properties listed as follows. General properties:
+
+<!-- ### Points of Differentiation -->
+The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks), measures execution statistics and evaluates accuracy of the results using specified measures. PyCABeM is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation.  
+
+General purpose properties:
 - Data preprocessing (synthetic networks generation, shuffling, etc.);
-- Fine-grained resource consumption limits: per the evaluating app (clustering algorithm) and global constraints of the maximal execution time and memory consumption limits until the app/benchmarking termination;
-- Binding of the evaluating apps to the specified set of CPUs (affinity masking). It allows to use all advantages of NUMA hardware executing as many apps in parallel as possible not affecting each other and having hot and dedicated L1/2/3 CPU cache;
+- Execution tuning and tracing:
+  * Fine-grained resource consumption limits in run-time: per app (clustering algorithm) and global execution constraints of the maximal execution time and memory consumption limits until the app/benchmarking termination;
+  * Binding of the evaluating apps to the specified set of CPUs (affinity masking). It allows to use all advantages of NUMA hardware executing as many apps in parallel as possible not affecting each other and having hot and dedicated L1/2/3 CPU cache;
 - Load balancing of the evaluating apps. It allows to avoid postponing lots of lightweight apps because of a few memory-hungry or long-running apps.
 
 Clustering algorithms specific benchmarking properties:
@@ -78,38 +80,38 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 - produces synthetic networks with specified number of instances for each set of parameters, generating them by the extended [LFR Framework](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) ("Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti and Santo Fortunato)
 - shuffles specified networks (reorders nodes) specified number of times, which is required to evaluate stability / determinism of the clustering algorithms
 - executes
-	* DAOC (former and fully redesigned [HiReCS](http://www.lumais.com/hirecs))
-	* [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations)
-	* [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*; *deterministic algorithm LabelRankT* is a modification of GANXiS, but LabelRankT is not publicly available)  
-	  > GANXiS requires preliminary created output directory if it is specified in the options, but GANXiS always creates also default "./output/" directory, which is empty if the custom one is used.
-	* [Oslom2](http://www.oslom.org/software.htm)
-	* [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) ([Sequential algorithm for fast clique percolation](http://www.lce.hut.fi/research/mm/complex/software/))
-	* [Randcommuns](/algorithms/randcommuns.py)  - generation of random communities (clusters) with structure of clusters similar to the ground-truth: the same number of random connected nodes in the number of clusters taken from the ground-truth
+  * DAOC (former and fully redesigned [HiReCS](http://www.lumais.com/hirecs))
+  * [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations)
+  * [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*; *deterministic algorithm LabelRankT* is a modification of GANXiS, but LabelRankT is not publicly available)  
+    > GANXiS requires preliminary created output directory if it is specified in the options, but GANXiS always creates also default "./output/" directory, which is empty if the custom one is used.
+  * [Oslom2](http://www.oslom.org/software.htm)
+  * [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) ([Sequential algorithm for fast clique percolation](http://www.lce.hut.fi/research/mm/complex/software/))
+  * [Randcommuns](/algorithms/randcommuns.py)  - generation of random communities (clusters) with structure of clusters similar to the ground-truth: the same number of random connected nodes in the number of clusters taken from the ground-truth
 
-	clustering algorithms on the generated synthetic networks (or on any specified directories and files). Outputs results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
+  clustering algorithms on the generated synthetic networks (or on any specified directories and files). Outputs results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
 
-Features \ Algs		| *DAOC* | SCP	| Louvain	| Oslom2 | GANXiS	| pSCAN | CGGCi_RG
-| ---			 	| :-: 	 | :-: 	| :-: 		| :-: 	 | :-: 		| :-: 	| :-:
-Hierarchical    	| + 	 | 		| + 		| + 	 | 			| 		|
-Multi-scale     	| + 	 | + 	| + 		| + 	 | + 		| 		|
-Deterministic   	| + 	 | + 	| 			| 		 | 			| ? 	|
-With Overlaps   	| + 	 | + 	| 			| + 	 | + 		| + 	| *
-Parameter-Free  	| + 	 | 		| + 		| * 	 | * 		|  		| *
-Consensus/Ensemble	| + 	 | 		| 			| + 	 | 			| 		| +
+Features \ Algs		  | *DAOC* | SCP	| Louvain	| Oslom2 | GANXiS	| pSCAN | CGGCi_RG
+| ---			 	        | :-: 	 | :-: 	| :-: 		| :-: 	 | :-: 		| :-: 	| :-:
+Hierarchical    	  | + 	   |  		| + 		  | +  	   | 			  | 		  |
+Multi-scale     	  | + 	   | + 	  | + 		  | + 	   | + 		  | 		  |
+Deterministic   	  | + 	   | + 	  | 			  | 		   | 			  | ? 	  |
+With Overlaps   	  | + 	   | + 	  | 			  | + 	   | + 		  | + 	  | *
+Parameter-Free  	  | + 	   | 		  | + 		  | * 	   | * 		  |  		  | *
+Consensus/Ensemble	| + 	   | 		  | 			  | + 	   | 			  | 		  | +
 
 > *With Overlaps* marked with `*` means non-overlapping clusters as a result, but the algorithm can be modified to output overlapping clusters.  
 *Parameter-Free* marked with `*` means availability of default values for all parameters.
 
 - evaluates results using:
-	- extrinsic measures :
-		* F1_gwah for overlapping communities on multiple resolutions and standard NMI for hard partitioning only (non-overlapping singe resolution clustering)  - `xmeasures` (https://github.com/eXascaleInfolab/xmeasures)
-		* NMI (NMI_max compatile with the standard NMI)  - `gecmi` (https://bitbucket.org/dsign/gecmi/wiki/Home, "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall)
-		* NMIs (NMI_max, NMI_lfr, NMI_avg)  - `onmi` (https://github.com/aaronmcdaid/Overlapping-NMI, "Normalized Mutual Information to evaluate overlapping community finding algorithms" by Aaron F. McDaid, Derek Greene, Neil Hurley)
-	- intrinsic measures evaluated by `DAOC`:
-		* Q (standard modularity value, but applicable for overlapping communities)
-		* f (conductance applicable for overlapping communities)
-- resulting clusterings on multiple resolutions are merged using `resmerge` (https://github.com/eXascaleInfolab/resmerge) with node base synchronization to the ground truth communities on Large real-world networks from [SNAP](https://snap.stanford.edu/data/#communities), which have less nodes in the ground-truth communities than in the input networks and clusters on multiple resolutions in the single ground-truth collection
-- resources consumption is evaluated using `exectime` profiler (https://bitbucket.org/lumais/exectime/)
+  - extrinsic measures :
+    * F1 Scores for overlapping communities on multiple resolutions and standard NMI for hard partitioning only (non-overlapping singe resolution clustering) by [xmeasures](https://github.com/eXascaleInfolab/xmeasures)
+    * NMI (NMI_max compatile with the standard NMI) by [GenConvMI](https://github.com/eXascaleInfolab/GenConvMI) (extended [gecmi](https://bitbucket.org/dsign/gecmi/wiki/Home)), paper: "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall
+    * NMIs (NMI_max, NMI_lfr, NMI_avg)  - [onmi](https://github.com/aaronmcdaid/Overlapping-NMI), "Normalized Mutual Information to evaluate overlapping community finding algorithms" by Aaron F. McDaid, Derek Greene, Neil Hurley)
+  - intrinsic measures evaluated by `DAOC`:
+    * Q (standard modularity value, but applicable for overlapping communities)
+    * f (conductance applicable for overlapping communities)
+- resulting clusterings on multiple resolutions are merged using [resmerge](https://github.com/eXascaleInfolab/resmerge) with node base synchronization to the ground truth communities on Large real-world networks from [SNAP](https://snap.stanford.edu/data/#communities), which have less nodes in the ground-truth communities than in the input networks and clusters on multiple resolutions in the single ground-truth collection
+- resources consumption is evaluated using [exectime](https://bitbucket.org/lumais/exectime/) profiler
 
 All results and traces are stored into the corresponding files even in case of internal (crash) / external termination of the benchmarking applications or the whole framework.
 
@@ -130,12 +132,12 @@ $ sudo apt-get install libstdc++6
 ```
 
 - [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`. It depends on:
-	* `libxml2` (and `libz` on Ubuntu 14), which are installed in Linux Ubuntu executing:  
-	`$ sudo apt-get install libxml2-dev`  (`lib32z1-dev` might be also required)
+  * `libxml2` (and `libz` on Ubuntu 14), which are installed in Linux Ubuntu executing:  
+  `$ sudo apt-get install libxml2-dev`  (`lib32z1-dev` might be also required)
 
 - [`gecmi`](https://bitbucket.org/dsign/gecmi/wiki/Home) for the NMI_ovp evaluation depends on:
-	* `libboost_program_options`, to install execute: `$ sudo apt-get install libboost-program-options`. The older version of gecmi compiled under Ubuntu 14 depends on `libboost_program_options.so.1.54.0`, the newer one compiled under Ubuntu 16 depends on `libboost_program_options.so.1.58.0`.
-	* `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
+  * `libboost_program_options`, to install execute: `$ sudo apt-get install libboost-program-options`. The older version of gecmi compiled under Ubuntu 14 depends on `libboost_program_options.so.1.54.0`, the newer one compiled under Ubuntu 16 depends on `libboost_program_options.so.1.58.0`.
+  * `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
 
   > Note: gecmi dependencies are uploaded to `./algorithms/gecmi_deps/`.
 
@@ -145,8 +147,8 @@ $ sudo apt-get install libstdc++6
 
 
 #### Accessory Utilities
-- [Extended LFR Benchmark](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) for the undirected weighted networks with overlaps (origins are here: https://sites.google.com/site/santofortunato/inthepress2, https://sites.google.com/site/andrealancichinetti/files)
-- [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption: https://bitbucket.org/lumais/exectime/
+- [Extended LFR Benchmark](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) for the undirected weighted networks with overlaps (the [original](https://sites.google.com/site/andrealancichinetti/files) version is [here](https://sites.google.com/site/santofortunato/inthepress2),
+- [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption
 - Clustering algorithms, used in the benchmarking: DAOC (former [HiReCS](http://www.lumais.com/hirecs)), [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm), [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/), pScan (binaries provided by the [author](http://www.cse.unsw.edu.au/~ljchang/)) and [CGGCi_RG](https://github.com/eXascaleInfolab/CGGC).
 
 
@@ -180,24 +182,27 @@ fs.file-max = 1048576
 ```
 and then reload it by `# sysctl -p`.  
 To setup the `ulimit` permanently add the following lines to the `/etc/security/limits.conf`:
-```
+```sh
 *               hard    nofile          524288
 *               soft    nofile          32768  
 ```
 And then execute `ulimit -n 32768` to set this value for the current shell.
 
-> Ulimit can't be set higher than the hard limit `ulimit -Hn`, so if the latter < `32768` then call `ulimit -n `ulimit -Hn``
+> Ulimit can't be set higher than the hard limit `ulimit -Hn`, so if the latter < `32768` then execute:
+```sh
+$ ulimit -n `ulimit -Hn`
+```
 
 Reduce the system swappiness setting to 1 .. 10 by `$ sudo sysctl -w vm.swappiness=5` or set it permanently in `/etc/sysctl.conf`:
-```
+```sh
 vm.swappiness = 5
 ``` 
 
 
 ## Requirements
-### Overview
-The benchmarking can be run either directly on the *Linux Ubuntu 16.04 x64* or via the [Docker](https://docs.docker.com/get-started/) container with the preinstalled environment on any platform. Anyway, the repository is required:
-```
+
+The benchmarking can be run either directly on the *Linux Ubuntu 16.04 x64* or via the [Docker](https://docs.docker.com/get-started/) container with the preinstalled environment on any platform. Anyway, the sources are required:
+```sh
 $ git clone https://github.com/eXascaleInfolab/PyCABeM.git
 ```
 
@@ -207,7 +212,7 @@ $ git clone https://github.com/eXascaleInfolab/PyCABeM.git
 > This section is optional if your host OS is *Linux Ubuntu 16.04 x64* and the benchmarking is run directly on the host OS.
 
 The *Docker* can be installed on the Linux Ubuntu 16.04 executing:
-```
+```sh
 $ sudo apt-get update && apt-get upgrade
 $ sudo apt-get install -y docker.io
 ```
@@ -216,29 +221,29 @@ To install the Docker on any other platform refer the [official installation ins
 > It is recommended to use `overlay2` storage driver on any OS, see details in the [official documentation](https://docs.docker.com/engine/userguide/storagedriver/overlayfs-driver/#configure-docker-with-the-overlay-or-overlay2-storage-driver). `overlay2` requires Linux kernel v4.x, which can be updated from 3.x to 4.x on Red Hat / CentOS 7 / Scientific Linux as described in [this article](https://www.tecmint.com/install-upgrade-kernel-version-in-centos-7/).
 
 Add your user to the docker group to use it without `sudo`:
-```
+```sh
 $ sudo groupadd docker
 $ sudo usermod -aG docker $USER
 ```
 Log out and log back in so that your group membership is re-evaluated, or execute:
-```
+```sh
 su - $USER
 ```
 Optionally, configure Docker to start on boot:
-```
+```sh
 $ sudo systemctl enable docker
 ```
 and check other [docker post-installation](https://docs.docker.com/engine/installation/linux/linux-postinstall/) steps.
 
 Start Docker service:
-```
+```sh
 $ sudo systemctl start docker
 $ docker version
 ```
 See also the [brief tutorial on Docker installation and usage](https://www.howtoforge.com/tutorial/docker-installation-and-usage-on-ubuntu-16.04/) or the [official getting started tutorial](https://docs.docker.com/get-started/).
 
 Optionally, the `PyCaBeM` docker image containing the execution environment can be built from the source [Dockerfile](Dockerfile) by executing from the repository directory:
-```
+```sh
 $ docker build -t luaxi/pycabem:env-U16.04-v2.0 .
 ```
 Otherwise, the prebuilt image will be automatically pulled from the *Docker Hub* repository on first docker `run`.
@@ -249,7 +254,7 @@ Otherwise, the prebuilt image will be automatically pulled from the *Docker Hub*
 > This section is optional if the benchmarking is run on the docker container.
 
 The target environment is *Linux Ubuntu 16.04 x64*. To install all the requirements there, execute from repository directory:
-```
+```sh
 $ ./install_reqs.sh
 ```
 See [install_reqs.sh](install_reqs.sh) and [pyreqs.txt](pyreqs.txt) for details about the installing packages.
@@ -284,7 +289,7 @@ See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-
 > Note: Execution of the benchmark was verified only on Linux Ubuntu 14.04 x64, but it should work on any platform if corresponding external executables (algorithms, nmi evaluation apps, etc.) are provided for the required platform.
 
 To see possible input parameters run the benchmark without arguments: `$ ./benchmark.py`:  
-```
+```sh
 $ ./benchmark.py 
 Usage:
   ./benchmark.py [-g[o][a]=[<number>][%<shuffles_number>][=<outpdir>] [-i[f][a][%<shuffles_number>]=<datasets_{dir,file}_wildcard> [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[e[{n[x],o[x],f[{h,p}],d}][i[{m,c}]]] [-s=<eval_path>] [-t[{s,m,h}]=<timeout>] [-d=<seed_file>] | -h
@@ -303,7 +308,7 @@ Parameters:
     o  - overwrite existing network instances (old data is backuped) instead of skipping generation
     a  - generate networks specifined by arcs (directed) instead of edges (undirected)
 NOTE: shuffled datasets have the following naming format:
-	<base_name>[(seppars)<param1>...][^<instance_index>][%<shuffle_index>].<net_extension>
+  <base_name>[(seppars)<param1>...][^<instance_index>][%<shuffle_index>].<net_extension>
   --input, -i[X][%<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories, which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension (.ns{e,a}). Default: -ie=syntnets/networks/*/, which are subdirs of the synthetic networks dir without shuffling.
     f  - make flat derivatives on shuffling instead of generating the dedicted directory (havng the file base name) for each input network, might cause flooding of the base directory. Existed shuffles are backuped.
     NOTE: variance over the shuffles of each network instance is evaluated only for the non-flat structure.
@@ -388,19 +393,19 @@ Results aggregation is performed with automatic identification of the target clu
 - ./contrib/  - valuable patches to the external open source tools used as binaries
 - ./algorithms/  - benchmarking algorithms
 - ./resutls/  - aggregated and per-algorithm execution and evaluation results (brief `*.res` and extended `*.resx`): timings (execution and CPU), memory consumption, NMIs, Q, per-algorithm resources consumption profile (`*.rcp`)
-	- `<algname>.rcp`  - resource consumption profile for all executions of the algorithm even in case of crashes / interruptions
-	- `<measure>.res[x]`  - aggregated value of the measure: average is evaluated for each level / scale for all shuffles of the each network instance, then the weighted best average among all levels is taken for all instances as a final result
-	* <algname>/clusters/  - algorithm execution results produced hierarchies of communities for each network instance shuffle
-		- `*.cnl`  - resulting clusters unwrapped to nodes (community nodes list) for NMIs evaluation. `*.cnl` are generated either per each level of the resulting hierarchy of communities or for the whole hierarchy (parameterized inside the benchmark)
-	* <algname>/mod/  - algorithm evaluation modularity for each produced hierarchical/scale level
-		- `<net_instance>.mod`  - modularity value aggregated per network instances (results for all shuffles on the network instance are aggregated in the same file)
-	* <algname>/nmi[_s]/  - algorithm evaluation NMI[_s] for each produced hierarchical/scale level
-		- `<net_instance>.nmi[_s]`  - NMI[_s] value aggregated per network instances
-	- `*.log`  - `stdout` of the executed algorithm, logs
-	- `*.err`  - `stderr` of the executed algorithm and benchmarking routings, errors
+  - `<algname>.rcp`  - resource consumption profile for all executions of the algorithm even in case of crashes / interruptions
+  - `<measure>.res[x]`  - aggregated value of the measure: average is evaluated for each level / scale for all shuffles of the each network instance, then the weighted best average among all levels is taken for all instances as a final result
+  * `<algname>/clusters/`  - algorithm execution results produced hierarchies of communities for each network instance shuffle
+    - `*.cnl`  - resulting clusters unwrapped to nodes (community nodes list) for NMIs evaluation. `*.cnl` are generated either per each level of the resulting hierarchy of communities or for the whole hierarchy (parameterized inside the benchmark)
+  * `<algname>/mod/`  - algorithm evaluation modularity for each produced hierarchical/scale level
+    - `<net_instance>.mod`  - modularity value aggregated per network instances (results for all shuffles on the network instance are aggregated in the same file)
+  * `<algname>/nmi[_s]/`  - algorithm evaluation NMI[_s] for each produced hierarchical/scale level
+    - `<net_instance>.nmi[_s]`  - NMI[_s] value aggregated per network instances
+  - `*.log`  - `stdout` of the executed algorithm, logs
+  - `*.err`  - `stderr` of the executed algorithm and benchmarking routings, errors
 
 Example of the `<entity>.rcp` format:
-```
+```sh
 # ExecTime(sec)	CPU_time(sec)	CPU_usr(sec)	CPU_kern(sec)	RSS_RAM_peak(Mb)	TaskName
 2.575555	2.574302	2.540420	0.033882	6.082	5K5
 0.528582	0.528704	0.519277	0.009427	3.711	2K10
@@ -408,7 +413,7 @@ Example of the `<entity>.rcp` format:
 ```
 
 Example of the `.res` format:
-```
+```sh
 # --- 2015-12-31 16:15:37.693514, output:  Q_avg
 # <network>	ganxis	louvain_igraph	...
 karate	0.130950	0.414481	0.233974	0.240929
@@ -417,25 +422,25 @@ jazz_u	0.330844	0.400587	0.392081	0.292395
 ```
 
 Example of the `.resx` format:
-```
+```sh
 # --- 2015-12-31 17:05:50.582245 ---
 # <network>
 #	<alg1_outp>
 #	<alg2_outp>
 #	...
 karate
-	ganxis>	Q: 0.130950 (0.084073 .. 0.217867), s: 0.163688, count: 5, fails: 0, d(shuf): 0.133794, s(shuf): 0.0566965, count(shuf): 5, fails(shuf): 0
-	louvain_igraph>	Q: 0.414481 (0.395217 .. 0.419790), s: 0.518101, count: 5, fails: 0, d(shuf): 0.024573, s(shuf): 0.0120524, count(shuf): 5, fails(shuf): 0
-	...
+  ganxis>	Q: 0.130950 (0.084073 .. 0.217867), s: 0.163688, count: 5, fails: 0, d(shuf): 0.133794, s(shuf): 0.0566965, count(shuf): 5, fails(shuf): 0
+  louvain_igraph>	Q: 0.414481 (0.395217 .. 0.419790), s: 0.518101, count: 5, fails: 0, d(shuf): 0.024573, s(shuf): 0.0120524, count(shuf): 5, fails(shuf): 0
+  ...
 jazz_u
-	ganxis>	Q: 0.340728 (0.321374 .. 0.371617), s: 0.42591, count: 5, fails: 0, d(shuf): 0.050243, s(shuf): 0.0219596, count(shuf): 5, fails(shuf): 0
-	louvain_igraph>	Q: 0.400587 (0.399932 .. 0.400999), s: 0.534116, count: 4, fails: 0, d(shuf): 0.001067, s(shuf): 0.000595067, count(shuf): 4, fails(shuf): 0
-	...
+  ganxis>	Q: 0.340728 (0.321374 .. 0.371617), s: 0.42591, count: 5, fails: 0, d(shuf): 0.050243, s(shuf): 0.0219596, count(shuf): 5, fails(shuf): 0
+  louvain_igraph>	Q: 0.400587 (0.399932 .. 0.400999), s: 0.534116, count: 4, fails: 0, d(shuf): 0.001067, s(shuf): 0.000595067, count(shuf): 4, fails(shuf): 0
+  ...
 ...
 ```
 
 Example of the `<net_instance>.nmi[_s]` format:
-```
+```sh
 # NMI	level[/shuffle]
 0.815814	0
 0.870791	1
@@ -444,7 +449,7 @@ Example of the `<net_instance>.nmi[_s]` format:
 ```
 
 Example of the `<net_instance>.mod` format:
-```
+```sh
 # Q	level[/shuffle]
 0.333874	1
 0.32539	0
@@ -453,15 +458,15 @@ Example of the `<net_instance>.mod` format:
 ```
 
 - ./realnets/  - simple gold standard networks with available ground-truth
-	- dimacs/  - [10th DIMACS'13](http://www.cc.gatech.edu/dimacs10/) networks with the ground-truth modularity value for non-overlapping clustering (see "Modularity Maximization in Networks by Variable Neighborhood Search" by Daniel Aloise et al, 10th DIMACS'13)
-	- snap/  - Stanford SNAP large networks with available ground-truth communities (see "Defining and Evaluating Network Communities based on Ground-truth" by J. Yang and J. Leskovec., ICDM'12)
+  - dimacs/  - [10th DIMACS'13](http://www.cc.gatech.edu/dimacs10/) networks with the ground-truth modularity value for non-overlapping clustering (see "Modularity Maximization in Networks by Variable Neighborhood Search" by Daniel Aloise et al, 10th DIMACS'13)
+  - snap/  - Stanford SNAP large networks with available ground-truth communities (see "Defining and Evaluating Network Communities based on Ground-truth" by J. Yang and J. Leskovec., ICDM'12)
 - ./syntnets/  - synthetic networks produced by the extended LFR framework: undirected weighted complex networks with overlaps, both mixing parameters are set for the topology and weights, both exponential nodes degree and weights distributions are set
-	* `*.ngp`  - network generation parameters
-	* `time_seed.dat`  - used time seed on batch generation
-	* `*.ngs`  - time seed for the network (**n**etwork **g**eneration **s**eed)
-	* `*.nst`  - statistics for the generated network (**n**etwork **st**atistics)
-	* `*.nsa`  - generated network to be processed as input graph by the algorithms to build the community structure. The **n**etwork is specified by newline / space/tab **s**eparated **a**rcs as a list of lines: `<src_id> <dst_id> [<weight>]`
-	* `*.cnl`  - ground truth for the community structure (cluster/**c**ommunity **n**odes **l**ist) generated by the LFR framework. It is specified by the space/tab separated nodes for each cluster (a line in the file): `<c1_nid_1> <c1_nid_2> ...`
+  * `*.ngp`  - network generation parameters
+  * `time_seed.dat`  - used time seed on batch generation
+  * `*.ngs`  - time seed for the network (**n**etwork **g**eneration **s**eed)
+  * `*.nst`  - statistics for the generated network (**n**etwork **st**atistics)
+  * `*.nsa`  - generated network to be processed as input graph by the algorithms to build the community structure. The **n**etwork is specified by newline / space/tab **s**eparated **a**rcs as a list of lines: `<src_id> <dst_id> [<weight>]`
+  * `*.cnl`  - ground truth for the community structure (cluster/**c**ommunity **n**odes **l**ist) generated by the LFR framework. It is specified by the space/tab separated nodes for each cluster (a line in the file): `<c1_nid_1> <c1_nid_2> ...`
 - `./exectime`  - lightweight resource consumption [profiler](https://bitbucket.org/lumais/exectime/)
 - `./benchmark.py`  - the benchmark (interactive mode)
 - `./benchmark_daemon.sh`  - the shell script to execute the benchmark in background (daemon mode)
@@ -473,25 +478,24 @@ To add custom apps / algorithms to be benchmarked just add corresponding functio
 
 ```python
 def execMyalgorithm(execpool, netfile, asym, timeout, pathid='', selfexec=False)
-	"""Execute the algorithm (stub)
+  """Execute the algorithm (stub)
 
-	execpool  - execution pool to perform execution of current task
-	netfile  -  input network to be processed
-	asym  - network links weights are assymetric (in/outbound weights can be different)
-	timeout  - execution timeout for this task
-	pathid  - path id of the net to distinguish nets with the same name located in different dirs.
-		Note: pathid is prepended with the separator symbol
-	selfexec  - current execution is the external or internal self call
+  execpool  - execution pool to perform execution of current task
+  netfile  -  input network to be processed
+  asym  - network links weights are assymetric (in/outbound weights can be different)
+  timeout  - execution timeout for this task
+  pathid  - path id of the net to distinguish nets with the same name located in different dirs.
+    Note: pathid is prepended with the separator symbol
+  selfexec  - current execution is the external or internal self call
 
-	return  - number of executions (jobs) made
-	"""
+  return  - number of executions (jobs) made
+  """
 ```
 
 All the evaluations will be performed automatically, the algorithm should just follow conversion of the execution results output.
 
 
 ## Related Projects
-* DAOC - (former [HiReCS](https://github.com/eXascaleInfolab/hirecs) High Resolution Hierarchical Clustering with Stable State, which was totally redesigned: https://github.com/eXascaleInfolab/hirecs)
-
-If you are interested in this benchmark, please visit <a href="http://exascale.info/">eXascale Infolab</a> where you can find another projects and research papers related to Big Data!  
+* DAOC - (former [HiReCS](https://github.com/eXascaleInfolab/hirecs) High Resolution Hierarchical Clustering with Stable State, which was totally redesigned)
+* [eXascale Infolab](https://github.com/eXascaleInfolab) github repository and [our website](http://exascale.info/) where you can find another projects and research papers related to Big Data processing!  
 Please, [star this project](https://github.com/eXascaleInfolab/PyCABeM) if you use it.

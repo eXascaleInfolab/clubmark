@@ -1,5 +1,5 @@
 # PyCABeM - Benchmarking Framework for the Clustering Algorithms Evaluation implemented on Python
-\brief Benchmarking of the clustering (community detection) algorithms using extrinsic (various Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information) (NMI) and Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) measures) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks)(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures, considering overlaps (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of some cluster and parent clusters of that cluster).  
+\brief Benchmarking of the clustering (community detection) algorithms using extrinsic (various Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information)(NMI) and Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) measures) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks))(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures, considering overlaps (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of some cluster and parent clusters of that cluster).  
 \author: (c) Artem Lutov <artem@exascale.info>  
 \organizations: [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
 \keywords: overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
@@ -78,7 +78,7 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 - produces synthetic networks with specified number of instances for each set of parameters, generating them by the extended [LFR Framework](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) ("Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti and Santo Fortunato)
 - shuffles specified networks (reorders nodes) specified number of times, which is required to evaluate stability / determinism of the clustering algorithms
 - executes
-	* DAOC (former and fully redesigned [HiReCS](http://www.lumais.com/hirecs), www.lumais.com/hirecs)
+	* DAOC (former and fully redesigned [HiReCS](http://www.lumais.com/hirecs))
 	* [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations)
 	* [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*; *deterministic algorithm LabelRankT* is a modification of GANXiS, but LabelRankT is not publicly available)  
 	  > GANXiS requires preliminary created output directory if it is specified in the options, but GANXiS always creates also default "./output/" directory, which is empty if the custom one is used.
@@ -88,14 +88,14 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 
 	clustering algorithms on the generated synthetic networks (or on any specified directories and files). Outputs results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
 
-	Features \ Algs | *DAOC* | SCP | Louvain | Oslom2 | GANXiS | pSCAN | CGGCi_RG
-	            --- | --- | --- | --- | --- | --- | --- | ---
-	Hierarchical    | + | | + | + | | | |
-	Multi-scale     | + | + | + | + | + | | |
-	Deterministic   | + | + | | | | ? | |
-	With Overlaps   | + | + | | + | + | + | * |
-	Parameter-Free  | + | | + | * | * |  | *
-	Consensus/Ensemble | + | | | + | | | +
+Features \ Algs		| *DAOC* | SCP	| Louvain	| Oslom2 | GANXiS	| pSCAN | CGGCi_RG
+| ---			 	| :-: 	 | :-: 	| :-: 		| :-: 	 | :-: 		| :-: 	| :-:
+Hierarchical    	| + 	 | 		| + 		| + 	 | 			| 		|
+Multi-scale     	| + 	 | + 	| + 		| + 	 | + 		| 		|
+Deterministic   	| + 	 | + 	| 			| 		 | 			| ? 	|
+With Overlaps   	| + 	 | + 	| 			| + 	 | + 		| + 	| *
+Parameter-Free  	| + 	 | 		| + 		| * 	 | * 		|  		| *
+Consensus/Ensemble	| + 	 | 		| 			| + 	 | 			| 		| +
 
 > *With Overlaps* marked with `*` means non-overlapping clusters as a result, but the algorithm can be modified to output overlapping clusters.  
 *Parameter-Free* marked with `*` means availability of default values for all parameters.
@@ -106,7 +106,7 @@ The benchmark is implemented as customization of the Generic Benchmarking Framew
 		* NMI (NMI_max compatile with the standard NMI)  - `gecmi` (https://bitbucket.org/dsign/gecmi/wiki/Home, "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall)
 		* NMIs (NMI_max, NMI_lfr, NMI_avg)  - `onmi` (https://github.com/aaronmcdaid/Overlapping-NMI, "Normalized Mutual Information to evaluate overlapping community finding algorithms" by Aaron F. McDaid, Derek Greene, Neil Hurley)
 	- intrinsic measures evaluated by `DAOC`:
-	  * Q (standard modularity value, but applicable for overlapping communities)
+		* Q (standard modularity value, but applicable for overlapping communities)
 		* f (conductance applicable for overlapping communities)
 - resulting clusterings on multiple resolutions are merged using `resmerge` (https://github.com/eXascaleInfolab/resmerge) with node base synchronization to the ground truth communities on Large real-world networks from [SNAP](https://snap.stanford.edu/data/#communities), which have less nodes in the ground-truth communities than in the input networks and clusters on multiple resolutions in the single ground-truth collection
 - resources consumption is evaluated using `exectime` profiler (https://bitbucket.org/lumais/exectime/)
@@ -161,7 +161,7 @@ However, the benchmark runs clustering algorithms and evaluation utilities imple
 
 All subsequent steps are described for the *NIX* platforms including MaxOS.  
 To be sure that the operational system allows to work with lots of opened files and has adequate swapping policy, execute:
-```
+```sh
 $ . ./prepare_hostenv.sh
 ```
 
@@ -175,7 +175,7 @@ Alternatively, perform the following steps to tune the operational system enviro
 - The max number of the opened files per a process`$ ulimit -n` should be at least `4096`, the recommended value is `65536`.
 
 To setup `fs.file-max` permanently in the system add the following line to the `/etc/sysctl.conf`:
-```
+```sh
 fs.file-max = 1048576
 ```
 and then reload it by `# sysctl -p`.  
@@ -261,11 +261,11 @@ Some executing algorithms support only Python2 / pypy, others both Python3 and P
 ## Usage
 
 To run the benchmark you can execute
-```
+```sh
 $ docker run -it -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
-'''
+```
 Or to open a shell in the benchmarking directory:
-'''
+```sh
 $ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0
 ```
 
@@ -359,7 +359,7 @@ So, in case of shuffling, the original shuffles should be provided to reproduce 
 
 
 ### Synthetic networks generation, clustering algorithms execution and evaluation
-```
+```sh
 $ pypy ./benchmark.py -g=3%2=syntnets_i3_s4 -cr -a="scp oslom2" -r -q -tm=90
 ```
 Run the benchmark under PyPy.  
@@ -369,7 +369,7 @@ Run `scp` and `oslom2` clustering algorithms for each generated network and eval
 Tшmeout is 90 min for each task of each network processing, where the tasks are: networks generation, clustering and evaluation by each specified measure. The network is each shuffle of each instance of each network type.  
 
 ### Shuffling existing network instances, clustering algorithm execution and evaluation using NMI_max with 1h timeout for any task
-```
+```sh
 $ ./benchmark.py -g=.4 -i=syntnets_i3_s4 -a=oslom2 -qenx -th=1
 ```
 Run the benchmark for the networks located in ./syntnets_i3_s4/ directory.  
@@ -378,7 +378,7 @@ Run `oslom2` clusterшng algorithm for the specified networks with their shuffle
 Timeout is 1 hour for each task on each network.  
 
 ### Aggregation of the specified evaluation results
-```
+```sh
 $ pypy benchmark.py -s=results/scp/mod/*.mod
 ```
 Results aggregation is performed with automatic identification of the target clustering algorithm and evaluation measure by the specified path. It is performed automatically as the last step of the algorithm evaluation, but also can be called manually for the modified scope.

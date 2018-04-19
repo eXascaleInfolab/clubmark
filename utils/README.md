@@ -13,6 +13,23 @@
 * Standard modularity `Q`, but applicable for overlapping communities.
 * Conductance `f` applicable for overlapping communities.
 
+### Requirements
+
+- daoc (former [hirecs](http://www.lumais.com/hirecs/)) also used for modularity and conductance evaluation of overlapping community structure (with results compatible to the respective standard modularity and conductance values). It depends on:
+  * `libstdc++.so.6`: version GLIBCXX_3.4.20 (precompiled version for modularity evaluation). To install it on Ubuntu use: `sudo apt-get install libstdc++6` or
+    ```sh
+    $ sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+    $ sudo apt-get update
+    $ sudo apt-get install libstdc++6
+    ```
+- [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`. It depends on:
+  * `libxml2` (and `libz` on Ubuntu 14), which are installed in Linux Ubuntu executing:  
+  `$ sudo apt-get install libxml2-dev`  (`lib32z1-dev` might be also required)
+
+- [OvpNMI](https://github.com/eXascaleInfolab/OvpNMI) or [`gecmi`](https://bitbucket.org/dsign/gecmi/wiki/Home) for the NMI_ovp evaluation depends on:
+  * `libboost_program_options`, to install execute: `$ sudo apt-get install libboost-program-options`. The older version of gecmi compiled under Ubuntu 14 depends on `libboost_program_options.so.1.54.0`, the newer one compiled under Ubuntu 16 depends on `libboost_program_options.so.1.58.0`.
+  * `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
+
 
 ## Data Preparation and Post-processing
 

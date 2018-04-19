@@ -1,4 +1,5 @@
 # PyCABeM - Benchmarking Framework for the Clustering Algorithms Evaluation
+
 `\brief` Benchmarking of the clustering (community detection) algorithms using extrinsic (various Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information)(NMI) and Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) measures) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks))(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures, considering overlaps (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of some cluster and parent clusters of that cluster).  
 `\authors` (c) Artem Lutov <artem@exascale.info>  
 `\organizations` [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
@@ -6,25 +7,20 @@
 
 
 ## Content
-<!--  - [Points of Differentiation](#points-of-differentiation) -->
-<!--   - [Functionality](#functionality)
-    - [Generic Benchmarking](#generic-benchmarking)
-    - [Clustering Specific Benchmarking](#clustering-specific-benchmarking) -->
 - [Overview](#overview)
-  - [Motivation](#motivation)
-- [Prerequisites](#prerequisites)
+- [Motivation](#motivation)
 - [Requirements](#requirements)
-  - [Docker Container](#docker-container)
-  - [Direct Execution](#direct-execution)
-- [Usage](#usage)  
-- [Benchmark Structure](#benchmark-structure)  
-- [Benchmark Extension](#benchmark-extension)  
-- [Related Projects](#related-projects)  
+  - [Prerequisites](#prerequisites)
+  - [Deployment via Docker](#deployment-via-docker)
+  - [Direct Deployment](#direct-deployment)
+- [Usage](#usage)
+- [Benchmark Structure](#benchmark-structure)
+- [Benchmark Extension](#benchmark-extension)
+- [Related Projects](#related-projects)
 
 
 ## Overview
 
-<!-- ### Points of Differentiation -->
 The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks), measures execution statistics and evaluates accuracy of the results using specified measures. PyCABeM is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation. The general functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multiprocess execution pool and load balancer.
 <!-- PyExPool provides [external] applications scheduling for the in-RAM execution on NUMA architecture with capabilities of the affinity control, CPU cache vs parallelization maximization, memory consumption and execution time constrains specification for the whole execution pool and per each executor process (called worker, executes a job).
  -->
@@ -47,8 +43,9 @@ Properties specific for the clustering algorithms benchmarking:
 Executing [algorithms](algorithms/README.md) and [evaluation measures with the accessory processing tools](utils/README.md) are described on the respective pages.
 
 
-### Motivation
-I have not any open source cross-platform framework for the [efficient] execution and evaluation of custom applications, which have  significant variation of the time/memory complexity and custom constraints, so decided to write the own one.
+## Motivation
+
+I have not found any open source cross-platform framework for the [efficient] execution and evaluation of custom applications, which have  significant variation of the time/memory complexity and custom constraints, so decided to write the own one.
 
 Particularly, I had to evaluate various clustering (community detection) algorithms on large networks using specific measures. The main challenges are the following:
 - the executing applications (clustering algorithms) being benchmarked have very different (orders of magnitude) time and memory complexity and represented by the applications implemented on various languages (mainly C++, Java, C and Python);
@@ -64,6 +61,116 @@ Ideally, the executing applications (algorithms) should be executed in parallel 
 Before starting PyCABeM development I found several open source frameworks for the "Community Detection Algorithms" evaluation but they do not fulfill the outlined constraints. The most comprehensive one is [Circulo](http://www.lab41.org/circulo-a-community-detection-evaluation-framework/) from [Lab41](https://github.com/Lab41/Circulo/tree/master/experiments), another one is called [CommunityEvaluation](https://github.com/rabbanyk/CommunityEvaluation).  
 Circulo is an excellent framework until you don't run evaluations on the large networks, don't need to specify per-algorithm time/memory constraints and in case the default pipeline is sufficient, which was not the case for me.
 
+
+## Requirements
+
+The benchmarking can be run either directly on the *Linux Ubuntu 16.04 x64* or via the [Docker](https://docs.docker.com/get-started/) container with the preinstalled environment on any platform. Anyway, the sources are required:
+```sh
+$ git clone https://github.com/eXascaleInfolab/PyCABeM.git
+```
+
+
+### Prerequisites
+
+The benchmarking framework itself is a *cross-platform* application implemented on Python, and works at least on CPython 2/3 and Pypy interpreters.
+However, the benchmark executes clustering algorithms and evaluation utilities built for the specific platform. The build is performed for the *Linux Ubuntu 16.04 x64*, on other NIX systems some requirements might be missed and not easily solvable. [Docker](https://docs.docker.com/get-started/) image is prepared to run the benchmark from the docker container on any other platform wihoutu any issues.
+
+> [Windows 10+ x64 provides Ubuntu-compatible bash shell](https://www.howtogeek.com/249966/how-to-install-and-use-the-linux-bash-shell-on-windows-10/), which allows to install and execute terminal Ubuntu apps and execute the benchmarking like on Linux Ubuntu 16.04 x64.
+
+The subsequent steps are described for the *NIX* platforms including MaxOS.  
+To be sure that the operational system allows to work with lots of opened files and has adequate swapping policy, execute:
+```sh
+$ . ./prepare_hostenv.sh
+```
+> * The leading `.` or `source` is *required* to execute the script in the current shell environment instead of the new process.
+> * This script should be executed **on the host system event if the benchmark is executed from the docker container** because the container shares resources of the host system (kernel, memory and swap). The made changes will be reseted after the restart.
+
+Alternatively, the operational system environment can be updated permanently.
+
+- The max number of the opened files in the system `$ sysctl fs.file-max` should be large enough, the recommended value is `1048576`.
+- The max number of the opened files per a process`$ ulimit -n` should be at least `4096`, the recommended value is `65536`.
+
+To setup `fs.file-max` permanently in the system add the following line to the `/etc/sysctl.conf`:
+```sh
+fs.file-max = 1048576
+```
+and then reload it with `# sysctl -p`.  
+To setup the `ulimit` permanently add the following lines to the `/etc/security/limits.conf`:
+```sh
+*               hard    nofile          524288
+*               soft    nofile          32768  
+```
+And then execute `ulimit -n 32768` to set this value for the current shell.
+
+> `ulimit` can't be set higher than the hard limit `ulimit -Hn`, so if the latter < `32768` then execute:
+```sh
+$ ulimit -n `ulimit -Hn`
+```
+
+Reduce the system `swappiness` setting to `1..10` by `$ sudo sysctl -w vm.swappiness=5` or set it permanently in `/etc/sysctl.conf`:
+```sh
+vm.swappiness = 5
+``` 
+
+
+### Deployment via Docker
+
+> This section is optional if your host OS is *Linux Ubuntu 16.04 x64*, which makes possible to run the benchmarking directly.
+
+The *Docker* can be installed on the Linux Ubuntu 16.04 executing:
+```sh
+$ sudo apt-get update && apt-get upgrade
+$ sudo apt-get install -y docker.io
+```
+To install the Docker on any other platform refer the [official installation instructions](https://docs.docker.com/engine/installation/).
+
+> It is recommended to use `overlay2` storage driver on any OS, see details in the [official documentation](https://docs.docker.com/engine/userguide/storagedriver/overlayfs-driver/#configure-docker-with-the-overlay-or-overlay2-storage-driver). `overlay2` requires Linux kernel v4.x, which can be updated from 3.x to 4.x on Red Hat / CentOS 7 / Scientific Linux as described in [this article](https://www.tecmint.com/install-upgrade-kernel-version-in-centos-7/).
+
+Add your user to the docker group to use it without `sudo`:
+```sh
+$ sudo groupadd docker
+$ sudo usermod -aG docker $USER
+```
+Log out and log in back so that your group membership is re-evaluated, or execute:
+```sh
+$ su - $USER
+```
+> Optionally, configure Docker to start on boot:
+> ```sh
+> $ sudo systemctl enable docker
+> ```
+> and check other [docker post-installation](https://docs.docker.com/engine/installation/linux/linux-postinstall/) steps.
+
+Start Docker service:
+```sh
+$ sudo systemctl start docker
+$ docker version
+```
+See also the [brief tutorial on Docker installation and usage](https://www.howtoforge.com/tutorial/docker-installation-and-usage-on-ubuntu-16.04/) or the [official getting started tutorial](https://docs.docker.com/get-started/).
+
+> Optionally, the `PyCaBeM` docker image containing the execution environment can be built from the source [Dockerfile](Dockerfile) by executing from the repository directory:
+> ```sh
+> $ docker build -t luaxi/pycabem:env-U16.04-v2.0 .
+> ```
+The prebuilt image will be automatically pulled from the *Docker Hub* repository on first docker `run` if it has not been built locally.
+
+
+### Direct Deployment
+
+> This section should be omitted if the benchmarking is run on the docker container.
+
+The target environment is *Linux Ubuntu 16.04 x64*. To install all the requirements locally, execute from the PyCABeM repository directory:
+```sh
+$ ./install_reqs.sh
+```
+See [install_reqs.sh](install_reqs.sh) and [pyreqs.txt](pyreqs.txt) for the details about the installing packages.
+
+> The benchmarking framework can be executed under Python 2.7+/3.x and verified on CPython and [PyPy](http://pypy.org/) JIT.  
+Some executing algorithms support only Python2 / pypy, others both Python3 and Python2. The appropriate interpreter for each executable is automatically selected in the runtime. The recommended environment, which is installed by the script is both Python3 and pypy.  
+> See also dependencies of the [utilities](utils/README.md#requirements), which are installed automatically.
+
+
+## Usage
 
 <!-- ### Functionality -->
 <!-- #### Generic Benchmarking
@@ -88,7 +195,6 @@ If any application is crashed, the crash is logged and does not affect execution
 - produces synthetic networks with specified number of instances for each set of parameters, generating them by the extended [LFR Framework](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) ("Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti and Santo Fortunato)
 - shuffles specified networks (reorders nodes) specified number of times, which is required to evaluate stability / determinism of the clustering algorithms
 - executes clustering algorithms on the generated synthetic networks (or on any specified directories and files). Outputs results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
-
  -->
 
 All results and traces are stored into the corresponding files even in case of internal (crash) / external termination of the benchmarking applications or the whole framework.
@@ -96,140 +202,6 @@ All results and traces are stored into the corresponding files even in case of i
 Basically the framework executes a set of applications on the specified datasets in interactive or daemon mode, logging the resources consumption, output and exceptions, providing workflow management (termination by timeout, resistance to exceptions, etc.) and results aggregation.
 
 
-## Prerequisites
-The benchmarking framework itself is a *cross-platform* application implemented purely on Python, and works on CPython 2/3 and Pypy interpreters.  
-However, the benchmark runs clustering algorithms and evaluation utilities implemented on C++ and built for the specific platform. The build is performed for the *Linux Ubuntu 16.04 x64*, on other NIX systems requirements might be missed and not easily solvable. [Docker](https://docs.docker.com/get-started/) image is prepared to run the build from the docker container on any other platform avoiding dependency related issues.
-
-> [Windows 10+ x64 provides Ubuntu-compatible bash shell](https://www.howtogeek.com/249966/how-to-install-and-use-the-linux-bash-shell-on-windows-10/), which allows to install and execute terminal Ubuntu apps and execute the benchmarking exactly as on Linux Ubuntu 16.04 x64.
-
-All subsequent steps are described for the *NIX* platforms including MaxOS.  
-To be sure that the operational system allows to work with lots of opened files and has adequate swapping policy, execute (the leading `.` or `source` keyword is mandatory):
-```sh
-$ . ./prepare_hostenv.sh
-```
-
-> This script should be executed **on the host system event if the benchmark is executed from the docker container**, because the container shares resources of the host system (kernel, memory and swap).  
-The made changes will be reseted after the restart.  
-ATTENTION: starting `.` or `source` is *required* to execute the script in the current shell environment instead of the new process.
-
-Alternatively, perform the following steps to tune the operational system environment permanently.
-
-- The max number of the opened files in the system `$ sysctl fs.file-max` should be large enough, the recommended value is `1048576`.
-- The max number of the opened files per a process`$ ulimit -n` should be at least `4096`, the recommended value is `65536`.
-
-To setup `fs.file-max` permanently in the system add the following line to the `/etc/sysctl.conf`:
-```sh
-fs.file-max = 1048576
-```
-and then reload it by `# sysctl -p`.  
-To setup the `ulimit` permanently add the following lines to the `/etc/security/limits.conf`:
-```sh
-*               hard    nofile          524288
-*               soft    nofile          32768  
-```
-And then execute `ulimit -n 32768` to set this value for the current shell.
-
-> `ulimit` can't be set higher than the hard limit `ulimit -Hn`, so if the latter < `32768` then execute:
-```sh
-$ ulimit -n `ulimit -Hn`
-```
-
-Reduce the system `swappiness` setting to 1 .. 10 by `$ sudo sysctl -w vm.swappiness=5` or set it permanently in `/etc/sysctl.conf`:
-```sh
-vm.swappiness = 5
-``` 
-
-
-## Requirements
-
-The benchmarking can be run either directly on the *Linux Ubuntu 16.04 x64* or via the [Docker](https://docs.docker.com/get-started/) container with the preinstalled environment on any platform. Anyway, the sources are required:
-```sh
-$ git clone https://github.com/eXascaleInfolab/PyCABeM.git
-```
-
-
-### Docker Container
-
-> This section is optional if your host OS is *Linux Ubuntu 16.04 x64* and the benchmarking is run directly on the host OS.
-
-The *Docker* can be installed on the Linux Ubuntu 16.04 executing:
-```sh
-$ sudo apt-get update && apt-get upgrade
-$ sudo apt-get install -y docker.io
-```
-To install the Docker on any other platform refer the [official installation instructions](https://docs.docker.com/engine/installation/).
-
-> It is recommended to use `overlay2` storage driver on any OS, see details in the [official documentation](https://docs.docker.com/engine/userguide/storagedriver/overlayfs-driver/#configure-docker-with-the-overlay-or-overlay2-storage-driver). `overlay2` requires Linux kernel v4.x, which can be updated from 3.x to 4.x on Red Hat / CentOS 7 / Scientific Linux as described in [this article](https://www.tecmint.com/install-upgrade-kernel-version-in-centos-7/).
-
-Add your user to the docker group to use it without `sudo`:
-```sh
-$ sudo groupadd docker
-$ sudo usermod -aG docker $USER
-```
-Log out and log back in so that your group membership is re-evaluated, or execute:
-```sh
-$ su - $USER
-```
-Optionally, configure Docker to start on boot:
-```sh
-$ sudo systemctl enable docker
-```
-and check other [docker post-installation](https://docs.docker.com/engine/installation/linux/linux-postinstall/) steps.
-
-Start Docker service:
-```sh
-$ sudo systemctl start docker
-$ docker version
-```
-See also the [brief tutorial on Docker installation and usage](https://www.howtoforge.com/tutorial/docker-installation-and-usage-on-ubuntu-16.04/) or the [official getting started tutorial](https://docs.docker.com/get-started/).
-
-Optionally, the `PyCaBeM` docker image containing the execution environment can be built from the source [Dockerfile](Dockerfile) by executing from the repository directory:
-```sh
-$ docker build -t luaxi/pycabem:env-U16.04-v2.0 .
-```
-Otherwise, the prebuilt image will be automatically pulled from the *Docker Hub* repository on first docker `run`.
-
-
-### Direct Execution
-
-> This section is optional if the benchmarking is run on the docker container.
-
-The target environment is *Linux Ubuntu 16.04 x64*. To install all the requirements there, execute from repository directory:
-```sh
-$ ./install_reqs.sh
-```
-See [install_reqs.sh](install_reqs.sh) and [pyreqs.txt](pyreqs.txt) for details about the installing packages.
-
-> The benchmarking framework can be executed under Python 2.7+ including 3.x (works on both the official CPython and on [PyPy](http://pypy.org/) JIT for the faster execution).  
-Some executing algorithms support only Python2 / pypy, others both Python3 and Python2. Selection of the appropriate interpreter is made automatically in runtime. At least Python2 is required to run the benchmarking, but the recommended environment, which is installed by the script is both Python3 and pypy.
-
-
-- daoc (former [hirecs](http://www.lumais.com/hirecs/)) for modularity evaluation of overlapping community structure with results compatible to the standard modularity value. It depends on:
-  * `libstdc++.so.6`: version GLIBCXX_3.4.20 (precompiled version for modularity evaluation). To install it on Ubuntu use: `sudo apt-get install libstdc++6` or
-```sh
-$ sudo add-apt-repository ppa:ubuntu-toolchain-r/test
-$ sudo apt-get update
-$ sudo apt-get install libstdc++6
-```
-
-
-
-- [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`. It depends on:
-  * `libxml2` (and `libz` on Ubuntu 14), which are installed in Linux Ubuntu executing:  
-  `$ sudo apt-get install libxml2-dev`  (`lib32z1-dev` might be also required)
-
-- [`gecmi`](https://bitbucket.org/dsign/gecmi/wiki/Home) for the NMI_ovp evaluation depends on:
-  * `libboost_program_options`, to install execute: `$ sudo apt-get install libboost-program-options`. The older version of gecmi compiled under Ubuntu 14 depends on `libboost_program_options.so.1.54.0`, the newer one compiled under Ubuntu 16 depends on `libboost_program_options.so.1.58.0`.
-  * `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
-
-  > Note: gecmi dependencies are uploaded to `./algorithms/gecmi_deps/`.
-
-- [PyExPool](//github.com/eXascaleInfolab/PyExPool) for asynchronous jobs execution and results aggregation via tasks of jobs
-
-  > Note: it is uploaded to `./contrib/`.
-
-
-## Usage
 
 To run the benchmark you can execute
 ```sh
@@ -239,10 +211,9 @@ Or to open a shell in the benchmarking directory:
 ```sh
 $ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0
 ```
-
 > $UID might not be defined in the non-bash shell (sh, etc), then use `id -u $USER` instead
 
-Where ``pwd`` projects to `<PYCABEM_REPOSITORY_PATH>`, which is the current directory and working directory of the benchmarking
+Where `pwd` projects to `<PYCABEM_REPOSITORY_PATH>`, which is the current directory and working directory of the benchmarking
 
 See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-with-examples).
 
@@ -305,7 +276,8 @@ NOTE: output results are stored in the "results/<algname>/" directory
     i[Y]  - intrinsic measures for overlapping communities, default: all
       m  - modularity Q
       c  - conductance f
-    u  - update quality evaluations appending the new results to the existing stored evaluations (if any) and then aggregate everything to the final summarized results skipping older duplicates (if any).
+    u  - update quality evaluations appending the new results to the existing stored evaluations (if any) and then aggregate everything to the final summarized results skipping older duplicates (if any).    i[Y]  - intrinsic measures for overlapping communities, default: all
+
   ATTENTION: "-qu" requires at least one more "-qX" flag to indicate what measures should be (re)evaluated. Applicable only for the same seed as existed evaluations had. The existed quality evaluations are backed up anyway.
 NOTE: multiple quality evaluation options can be specified via the multiple -q options.
   --timeout, -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network in sec, min or hours; 0 sec - no timeout, default: 36 h 0 min 0 sec

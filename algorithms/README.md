@@ -2,15 +2,15 @@
 
 ## Overview
 
-Features \ Algs		| *DAOC* | SCP	| Louvain   | Oslom2 | GANXiS   | pSCAN | CGGCi_RG | SCD
-| ---			 	| :-: 	 | :-: 	| :-: 		| :-: 	 | :-: 		| :-: 	| :-:      | :-:
-Hierarchical    	| +      |  	| + 		| +  	 | 			| 		|          | 
-Multi-scale     	| + 	 | + 	| + 		| + 	 | + 		| 		|          | 
-Deterministic   	| + 	 | + 	| 			|        | 			| ? 	|          | ?
-With Overlaps   	| + 	 | + 	| 			| + 	 | + 		| + 	| *        | 
-With Weights        | +      | +    | +         | *      | +        |       |          |
-Parameter-Free  	| +* 	 | 		| + 		| * 	 | * 		|  		| *        | *
-Consensus/Ensemble  | + 	 | 		| 			| + 	 | 			| 		| +        | 
+Features \ Algs		  | *DAOC*  | SCP	| Louvain | Oslom2 | GANXiS | pSCAN | CGGCi_RG | SCD
+| ---			 	        | :-: 	  | :-: | :-: 		| :-: 	 | :-: 		| :-: 	| :-:      | :-:
+Hierarchical    	  | +       |  	  | + 		  | +  	   | 			  | 		  |          | 
+Multi-scale     	  | + 	    | + 	| + 		  | + 	   | + 		  | 		  |          | 
+Deterministic   	  | + 	    | + 	| 			  |        | 			  | ? 	  |          | ?
+With Overlaps   	  | + 	    | + 	| 			  | + 	   | + 		  | + 	  | *        | 
+With Weights        | +       | +   | +       | *      | +      |       |          |
+Parameter-Free  	  | +* 	    | 		| + 		  | * 	   | * 		  |  		  | *        | *
+Consensus/Ensemble  | + 	    | 		| 			  | + 	   | 			  | 		  | +        | 
 
 > - *With Overlaps*  
 > `*` means non-overlapping clusters are produced but the algorithm can be modified to output the overlapping clusters.

@@ -58,7 +58,7 @@ class Measures(object):
 	, f1p=None, f1h=None, f1s=None, mod=None, cdt=None):
 		"""Quality Measures to be saved
 
-		eval_num  - number/id of the evaluation to take average over multiple (re)evaluaitons
+		eval_num  - number/id of the evaluation to take average over multiple (re)evaluations
 			(NMI from gecmi provides stochastic results), uint8 or None
 		nmi_max  - NMI multiresolution overlapping (gecmi) normalized by max (default)
 		nmi_sqrt  - NMI multiresolution overlapping (gecmi) normalized by sqrt
@@ -553,7 +553,7 @@ class EvalsAgg(object):
 						if aev[0] == alg:
 							val = aev[1]
 							if not val.fixed:
-								val.fix()  # Process aggregated resutls
+								val.fix()  # Process aggregated results
 							fmeasev.write('\t{:.6f}'.format(val.avg))
 							if algspars:
 								napars = algspars.get(alg)
@@ -636,7 +636,7 @@ def aggEvaluations(respaths):
 
 
 def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob, resagg, pathid='', tidy=True):
-	"""Generic evaluation on the specidied file
+	"""Generic evaluation on the specified file
 	NOTE: all paths are given relative to the root benchmark directory.
 
 	execpool  - execution pool of worker processes
@@ -651,7 +651,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 	resagg  - results aggregator
 	pathid  - path id of the basefile to distinguish files with the same name located in different dirs.
 		Note: pathid includes pathid separator
-	tidy  - delete previously existent resutls. Must be False if a few apps output results into the same dir
+	tidy  - delete previously existent results. Must be False if a few apps output results into the same dir
 	"""
 	assert execpool and basefile and measure and algname, 'Parameters must be defined'
 	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
@@ -829,7 +829,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 					.format(job.name, result), file=sys.stderr)
 				return
 
-			# Transfer resutls to the embracing task if exists
+			# Transfer results to the embracing task if exists
 			taskoutp = job.params['taskoutp']
 			clslev = job.params['clslev']
 			task.params.addraw(taskoutp, clslev, mod)  # Note: task.params is shuffles aggregator
@@ -901,7 +901,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 				print('ERROR, nmi evaluation failed for the job "{}": {}'
 					.format(job.name, result), file=sys.stderr)
 			else:
-				# Transfer resutls to the embracing task if exists
+				# Transfer results to the embracing task if exists
 				taskoutp = job.params['taskoutp']
 				clslev = job.params['clslev']
 				task.params.addraw(taskoutp, clslev, nmi)  # Note: task.params is shuffles aggregator
@@ -949,7 +949,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 				print('ERROR, nmi_s evaluation failed for the job "{}": {}'
 					.format(job.name, result), file=sys.stderr)
 			else:
-				# Transfer resutls to the embracing task if exists
+				# Transfer results to the embracing task if exists
 				taskoutp = job.params['taskoutp']
 				clslev = job.params['clslev']
 				task.params.addraw(taskoutp, clslev, nmi)  # Note: task.params is shuffles aggregator

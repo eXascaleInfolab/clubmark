@@ -18,7 +18,7 @@ Consensus/Ensemble  | + 	 | 		| 			| + 	 | 			| 		| +        |
 > `*` means weighted networks are supported.
 > - *Parameter-Free*  
 > `*` means availability of default values for all parameters,  
-> `+*` means parameter-free clustering algorithm with optional > parameters for the data preprocessing or output postprocessing.
+> `+*` means parameter-free clustering algorithm with optional > parameters for the data preprocessing or output post-processing.
 
 
 ## Origins
@@ -32,4 +32,4 @@ Consensus/Ensemble  | + 	 | 		| 			| + 	 | 			| 		| +        |
 * [pSCAN](https://github.com/eXascaleInfolab/pSCAN) binaries provided by the [author](http://www.cse.unsw.edu.au/~ljchang/), paper: [pSCAN : Fast and Exact Structural Graph Clustering](http://ieeexplore.ieee.org/document/7498245/);
 * [CGGCi_RG](https://github.com/eXascaleInfolab/CGGC), paper: [An Ensemble Learning Strategy for Graph Clustering](https://www.cc.gatech.edu/dimacs10/papers/%5B18%5D-dimacs10_ovelgoennegeyerschulz.pdf);
 * [SCD](http://www.dama.upc.edu), paper: [High Quality, Scalable and Parallel Community Detection for Large Real Graphs](http://wwwconference.org/proceedings/www2014/proceedings/p225.pdf);
-* [Randcommuns](/algorithms/randcommuns.py) generates random communities (clusters) having the following properties: the number of nodes in each cluster and the number of clusters are taken from the ground-truth.
+* [randcommuns](/algorithms/randcommuns.py) generates random communities (clusters) having the following properties: the number of nodes in each cluster and the number of clusters are taken from the ground-truth.

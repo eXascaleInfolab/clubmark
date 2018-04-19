@@ -19,7 +19,7 @@
 - F1
 	- SkiKit provides only for a single pair of clusters: http://scikit-learn.org/stable/modules/generated/sklearn.metrics.f1_score.html
 	- NF1 - slow Python impl., but could be reimplemented using Cython as https://github.com/alamages/cls-metrics !
-		But instead of separate convers and redundancy evaluation  just evaluate all distinct clusters with the provision markers
+		But instead of separate converts and redundancy evaluation  just evaluate all distinct clusters with the provision markers
 		and eval F1 to the clusters from the opposite source (actual result VS ground-truth), all matchin clusters have F1=1.
 		Also check how Leckovec did it.
 		! Use Cython, see https://github.com/alamages/cls-metrics
@@ -42,7 +42,7 @@
 
 
 
-Rename and clearup Stanford datasets, but we will need to have different datasets for all communities evaluation and Top5K => 
+Rename and cleanup Stanford datasets, but we will need to have different datasets for all communities evaluation and Top5K => 
 	- twice clustering time in case of evaluation for both objectives
 	* ATTENTION: nodes reduction before the clustering affects the community structure, i.e. results of the clustering.
 ~ 1 day
@@ -51,7 +51,7 @@ VS
 	- add static linking
 ~ 2 days
 
-? Demo paper for the benchmarking system with Pandas and REal time streaming of the resutls
+? Demo paper for the benchmarking system with Pandas and REal time streaming of the results
 
 
 

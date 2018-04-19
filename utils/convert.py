@@ -816,7 +816,7 @@ def convertStream(fout, outfmt, finp, inpfmt, unweight, remdub, frcedg, commente
 	# arbitrary order, so the per-block input parcing with per-block output forming
 	# are appropriate.
 
-	# Parse header only if exists and form resutls considering for the (un)directed case
+	# Parse header only if exists and form results considering for the (un)directed case
 	assert inpfmt.parsed.directed is None and outfmt.printed.directed is None, 'Inicialization validation failed'
 
 	# Parse the remained part(s) of the input file and build the output
@@ -1040,7 +1040,7 @@ def convert(args):
 				convertStream(fout, args.outfmt, finp, args.inpfmt, args.unweight, args.remdub
 					, args.frcedg, args.commented)
 				print('{} -> {} conversion is completed'.format(args.network, foutName))
-		except IOError:
+		except (IOError, ValueError):
 			# Remove incomplete output file
 			if os.path.exists(foutName):
 				os.remove(foutName)
@@ -1062,7 +1062,7 @@ def parseArgs(params=None):
 		' from any non-negative number and might not form a solid range. RCG is a'
 		' readable and compact network format suitable for the evolving networks.'
 # Headers have weighted attribute to represented optinally weighted lists of links (edges or arvs).
-# Node weigh is specidied via selflink(s). Weights are explicitly separated from ids for the readability.', printer=printBlockRcg
+# Node weigh is specified via selflink(s). Weights are explicitly separated from ids for the readability.', printer=printBlockRcg
 		, printer=printBlockRcg, exts=('rcg', 'hig'))
 
 	# Specify and process input arguments

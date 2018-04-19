@@ -6,12 +6,12 @@
 
 
 ## Content
-- [Overview](#overview)
-  - [Points of Differentiation](#points-of-differentiation)
-  - [Motivation](#motivation)
-  - [Functionality](#functionality)
+<!--  - [Points of Differentiation](#points-of-differentiation) -->
+<!--   - [Functionality](#functionality)
     - [Generic Benchmarking](#generic-benchmarking)
-    - [Clustering Specific Benchmarking](#clustering-specific-benchmarking)
+    - [Clustering Specific Benchmarking](#clustering-specific-benchmarking) -->
+- [Overview](#overview)
+  - [Motivation](#motivation)
 - [Prerequisites](#prerequisites)
 - [Requirements](#requirements)
   - [Docker Container](#docker-container)
@@ -25,134 +25,75 @@
 ## Overview
 
 <!-- ### Points of Differentiation -->
-The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks), measures execution statistics and evaluates accuracy of the results using specified measures. PyCABeM is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation.  
+The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks), measures execution statistics and evaluates accuracy of the results using specified measures. PyCABeM is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation. The general functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multiprocess execution pool and load balancer.
+<!-- PyExPool provides [external] applications scheduling for the in-RAM execution on NUMA architecture with capabilities of the affinity control, CPU cache vs parallelization maximization, memory consumption and execution time constrains specification for the whole execution pool and per each executor process (called worker, executes a job).
+ -->
 
 General purpose properties:
 - Data preprocessing (synthetic networks generation, shuffling, etc.);
-- Execution tuning and tracing:
-  * Fine-grained resource consumption limits in run-time: per app (clustering algorithm) and global execution constraints of the maximal execution time and memory consumption limits until the app/benchmarking termination;
-  * Binding of the evaluating apps to the specified set of CPUs (affinity masking). It allows to use all advantages of NUMA hardware executing as many apps in parallel as possible not affecting each other and having hot and dedicated L1/2/3 CPU cache;
-- Load balancing of the evaluating apps. It allows to avoid postponing lots of lightweight apps because of a few memory-hungry or long-running apps.
+- Pre/post execution callbacks for each executable to perform the application specific initialization and finalization (results normalization, logs post-processing, etc.);
+- Resource consumption management and tracing:
+  * Specification of the global and per executable constraints for the maximal execution time and memory consumption;
+  * Binding of any executable to the specified set of logical CPUs (affinity masking) to employ advantages of the NUMA hardware executing apps in parallel not affecting their CPU caches (dedicating L1/2/3 caches);
+  * Tracing of the execution time, CPU timings (user and kernel) and peak RAM RSS memory consumption;
+- Load balancing of the executing apps to employ as much as possible available hardware resources respecting the specified constraints;
+- Resiliency and fault tolerance (failover execution) tracing crashes of faulty apps not affecting execution of other apps.
 
-Clustering algorithms specific benchmarking properties:
-- Evaluation of extrinsic (modularity, conductance), intrinsic (various NMIs and F1-Scores) quality measures and resource consumption (various timings, memory) for the generalized clustering algorithms (considering overlaps and multiple resolutions/scales if any);
-- Evaluation of both parameter-free and parameter-dependent algorithms, automatically selecting the best specified parameters of the algorithm(s) in average on all input networks;
-- Evaluation of both average value and deviation of the measures when multiple instances and/or shuffles (reordering of nodes and links) of the input networks are used.
+Properties specific for the clustering algorithms benchmarking:
+- Evaluation of the extrinsic (modularity, conductance) and intrinsic (various NMIs and F1-Scores) quality measures for the generalized clustering algorithms (considering overlaps and multiple resolutions/scales if any);
+- Selection of the best result for the parameterized clustering algorithms among the results produced for all specified variations of the parameters;
+- Evaluation of both the average value and deviation of the measures if multiple instances and/or shuffles (nodes and links reordering) of the input networks are used.
+
+Executing [algorithms](algorithms/README.md) and [evaluation measures with the accessory processing tools](utils/README.md) are described on the respective pages.
 
 
 ### Motivation
-I did to find any open source cross-platform framework for the \[efficient\] execution and evaluation of custom applications, which have  significant variation of the time/memory complexity and custom constraints, so decided to write the own one.  
-Particularly, I had to evaluate various clustering (community detection) algorithms on large networks using specific measures. The main challenges there are the following:
-- the computing applications (clustering algorithms) being benchmarked have very different (orders of magnitude) time and memory complexity and represented by the applications implemented on various languages (mainly C++, Java, C and Python);
-- the target datasets are very different by structure and size (orders of magnitude, from Kb to Gb);
-- evaluating applications have very different (orders of magnitude) time and memory complexity, and represented by both single-threaded and multi-threaded applications.
+I have not any open source cross-platform framework for the [efficient] execution and evaluation of custom applications, which have  significant variation of the time/memory complexity and custom constraints, so decided to write the own one.
 
-Ideally, the executing applications (algorithms) should be executed in parallel in a way to guarantee that they are :
-- not swapped (computed in RAM) to not affect the efficiency measurements;
-- executing on maximal number of available CPUs to speedup the bencmarking;
-- the CPU cache reuse is maximized (the processes are not jumped between the CPUs);
-- skipping computations on the more complex datasets if the executing application failed constraints on some dataset.
+Particularly, I had to evaluate various clustering (community detection) algorithms on large networks using specific measures. The main challenges are the following:
+- the executing applications (clustering algorithms) being benchmarked have very different (orders of magnitude) time and memory complexity and represented by the applications implemented on various languages (mainly C++, Java, C and Python);
+- the target datasets are very different by structure and size (orders of magnitude varying from KBs to GBs);
+- the accessory evaluating applications (NMI, F1 Scores, ...) have very different (orders of magnitude) time and memory complexity and architecture (single-threaded and multi-threaded applications).
 
-There were available two open source frameworks for "Community Detection Algorithms" evaluation. The most comprehensive one is [Circulo](http://www.lab41.org/circulo-a-community-detection-evaluation-framework/) from [Lab41](https://github.com/Lab41/Circulo/tree/master/experiments), another one is called [CommunityEvaluation](https://github.com/rabbanyk/CommunityEvaluation).  
+Ideally, the executing applications (algorithms) should be executed in parallel in a way to guarantee that they:
+- are not swapped from RAM to HDD (which happens on the *unconstrained* execution of multiple memory demanding apps) to not affect the efficiency measurements;
+- consume as much available hardware resources as possible to speedup the benchmarking;
+- localize the CPU cache (the processes are not jumped between the CPUs and work with the hot cache);
+- are automatically terminated from the execution on more complex datasets if do not satisfy the execution constraints on lighter datasets.
+
+Before starting PyCABeM development I found several open source frameworks for the "Community Detection Algorithms" evaluation but they do not fulfill the outlined constraints. The most comprehensive one is [Circulo](http://www.lab41.org/circulo-a-community-detection-evaluation-framework/) from [Lab41](https://github.com/Lab41/Circulo/tree/master/experiments), another one is called [CommunityEvaluation](https://github.com/rabbanyk/CommunityEvaluation).  
 Circulo is an excellent framework until you don't run evaluations on the large networks, don't need to specify per-algorithm time/memory constraints and in case the default pipeline is sufficient, which was not the case for me.
 
 
-### Functionality
-#### Generic Benchmarking
-The generic benchmarking functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool), which provides \[external\] applications scheduling for the in-RAM execution on NUMA architecture with capabilities of the affinity control, CPU cache vs parallelization  maximization, limitation of the consumed memory and maximal execution time for the whole execution pool and per each executor process (called worker, which is an executing job).
+<!-- ### Functionality -->
+<!-- #### Generic Benchmarking
+The generic benchmarking functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool), which provides [external] applications scheduling for the in-RAM execution on NUMA architecture with capabilities of the affinity control, CPU cache vs parallelization maximization, memory consumption and execution time constrains specification for the whole execution pool and per each executor process (called worker, executes a job).
 
-The benchmarking framework specifies structure and provides API for the:
-- optional *generation of datasets* using specified executable(s);
+The benchmarking framework specifies the structure and provides APIs for the:
+- optional *generation of datasets* or their preprocessing using specified executable(s);
 - optional *execution of the specified computing applications* (clustering algorithms) on the specified datasets (using wildcards), where each application may produce multiple output files (levels of the hierarchy of clusters for each input network);
-- optional *execution of the evaluating applications* on the produced results (and ground-truth if applicable) and aggregation of the results grouped by the computing application;
-- optional specification of the *execution constraints* (timings, consumed RAM, parallelization, CPU cache and affinity) for each executable and for the whole benchmarking on base of the multi-process execution pool balancer, [PyExPool](https://github.com/eXascaleInfolab/PyExPool)
-- skipping computations on the more complex datasets if the executing application failed constraints on some dataset.
-- *efficiency measurements* (timings, consumed RAM) for each executable;
-- *logging of traces (stdout) and errors (stderr)* for each executable and for the benchmarking framework itself.
-- *automatic extension / backup* of the previously existent results to .gzip with the timestamp on the benchmarking reexecution
+- optional *execution of the evaluating applications* on the produced results (and ground-truth if applicable), aggregation of the results grouped by the computing application;
+- optional specification of the *execution constraints* (time, memory, parallelization, CPU cache and affinity) for each executable and for the whole benchmarking using the [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multi-process execution pool balancer;
+- skipping computations on the more complex datasets if the executing application failed constraints on some lighter dataset;
+- *efficiency measurements* (time, memory) tracing for each executable;
+- *logging of traces (stdout) and errors (stderr)* (outputs of the executables and their runtime statistics) for each executable and for the benchmarking framework itself;
+- *automatic extension / backup* of the already existent results to the timestamped .gzip archives on the benchmarking re-execution.
 
-It is possible to have multiple input directories with similarly named files inside, which represent different instances / snapshots of the datasets. In such case, the output results are provided per each snapshot, plus aggregated weighted average over all snapshots. This is useful to avoid occasional bias to the specific instance or to analyze evolving networks.  
-If any application is crashed, the crash is logged and does not affect execution of the remaining applications. The benchmark can be terminated by timeout or manually.
+It is possible to have multiple input directories with similarly named files inside, which represent different instances / snapshots of the datasets. In such case, the results are produced per each snapshot, plus aggregated weighted average over all snapshots. This is useful to avoid occasional bias to the specific instance or to analyze evolving networks.  
+If any application is crashed, the crash is logged and does not affect execution of the remaining applications. The benchmark can be terminated by the timeout or manually.
+ -->
 
-
-#### Clustering Specific Benchmarking
-The benchmark is implemented as customization of the Generic Benchmarking Framework to evaluate various *Clustering Algorithms* (Community Detection Algorithms) including *Hierarchical Clustering Algorithms with Overlaps and Consensus*:
+<!-- #### Clustering Specific Benchmarking -->
+<!-- The benchmark is implemented as customization of the Generic Benchmarking Framework to evaluate various *Clustering Algorithms* (Community Detection Algorithms) including *Hierarchical Clustering Algorithms with Overlaps and Consensus*:
 - produces synthetic networks with specified number of instances for each set of parameters, generating them by the extended [LFR Framework](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) ("Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti and Santo Fortunato)
 - shuffles specified networks (reorders nodes) specified number of times, which is required to evaluate stability / determinism of the clustering algorithms
-- executes
-  * DAOC (former and fully redesigned [HiReCS](http://www.lumais.com/hirecs))
-  * [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations)
-  * [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/) (but *this algorithm is not uploaded into the repository, because it was provided by the author Jerry Xie for "academic use only"*; *deterministic algorithm LabelRankT* is a modification of GANXiS, but LabelRankT is not publicly available)  
-    > GANXiS requires preliminary created output directory if it is specified in the options, but GANXiS always creates also default "./output/" directory, which is empty if the custom one is used.
-  * [Oslom2](http://www.oslom.org/software.htm)
-  * [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) ([Sequential algorithm for fast clique percolation](http://www.lce.hut.fi/research/mm/complex/software/))
-  * [Randcommuns](/algorithms/randcommuns.py)  - generation of random communities (clusters) with structure of clusters similar to the ground-truth: the same number of random connected nodes in the number of clusters taken from the ground-truth
+- executes clustering algorithms on the generated synthetic networks (or on any specified directories and files). Outputs results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
 
-  clustering algorithms on the generated synthetic networks (or on any specified directories and files). Outputs results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
-
-Features \ Algs		  | *DAOC* | SCP	| Louvain	| Oslom2 | GANXiS	| pSCAN | CGGCi_RG
-| ---			 	        | :-: 	 | :-: 	| :-: 		| :-: 	 | :-: 		| :-: 	| :-:
-Hierarchical    	  | + 	   |  		| + 		  | +  	   | 			  | 		  |
-Multi-scale     	  | + 	   | + 	  | + 		  | + 	   | + 		  | 		  |
-Deterministic   	  | + 	   | + 	  | 			  | 		   | 			  | ? 	  |
-With Overlaps   	  | + 	   | + 	  | 			  | + 	   | + 		  | + 	  | *
-Parameter-Free  	  | + 	   | 		  | + 		  | * 	   | * 		  |  		  | *
-Consensus/Ensemble	| + 	   | 		  | 			  | + 	   | 			  | 		  | +
-
-> *With Overlaps* marked with `*` means non-overlapping clusters as a result, but the algorithm can be modified to output overlapping clusters.  
-*Parameter-Free* marked with `*` means availability of default values for all parameters.
-
-- evaluates results using:
-  - extrinsic measures :
-    * F1 Scores for overlapping communities on multiple resolutions and standard NMI for hard partitioning only (non-overlapping singe resolution clustering) by [xmeasures](https://github.com/eXascaleInfolab/xmeasures)
-    * NMI (NMI_max compatile with the standard NMI) by [GenConvMI](https://github.com/eXascaleInfolab/GenConvMI) (extended [gecmi](https://bitbucket.org/dsign/gecmi/wiki/Home)), paper: "Comparing network covers using mutual information" by Alcides Viamontes Esquivel, Martin Rosvall
-    * NMIs (NMI_max, NMI_lfr, NMI_avg)  - [onmi](https://github.com/aaronmcdaid/Overlapping-NMI), "Normalized Mutual Information to evaluate overlapping community finding algorithms" by Aaron F. McDaid, Derek Greene, Neil Hurley)
-  - intrinsic measures evaluated by `DAOC`:
-    * Q (standard modularity value, but applicable for overlapping communities)
-    * f (conductance applicable for overlapping communities)
-- resulting clusterings on multiple resolutions are merged using [resmerge](https://github.com/eXascaleInfolab/resmerge) with node base synchronization to the ground truth communities on Large real-world networks from [SNAP](https://snap.stanford.edu/data/#communities), which have less nodes in the ground-truth communities than in the input networks and clusters on multiple resolutions in the single ground-truth collection
-- resources consumption is evaluated using [exectime](https://bitbucket.org/lumais/exectime/) profiler
+ -->
 
 All results and traces are stored into the corresponding files even in case of internal (crash) / external termination of the benchmarking applications or the whole framework.
 
- > Note: valuable extensions of the employed external applications are uploaded into ./contrib/
-
 Basically the framework executes a set of applications on the specified datasets in interactive or daemon mode, logging the resources consumption, output and exceptions, providing workflow management (termination by timeout, resistance to exceptions, etc.) and results aggregation.
-
-
-
-
-
-- daoc (former [hirecs](http://www.lumais.com/hirecs/)) for modularity evaluation of overlapping community structure with results compatible to the standard modularity value. It depends on:
-  * `libstdc++.so.6`: version GLIBCXX_3.4.20 (precompiled version for modularity evaluation). To install it on Ubuntu use: `sudo apt-get install libstdc++6` or
-```sh
-$ sudo add-apt-repository ppa:ubuntu-toolchain-r/test
-$ sudo apt-get update
-$ sudo apt-get install libstdc++6
-```
-
-- [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`. It depends on:
-  * `libxml2` (and `libz` on Ubuntu 14), which are installed in Linux Ubuntu executing:  
-  `$ sudo apt-get install libxml2-dev`  (`lib32z1-dev` might be also required)
-
-- [`gecmi`](https://bitbucket.org/dsign/gecmi/wiki/Home) for the NMI_ovp evaluation depends on:
-  * `libboost_program_options`, to install execute: `$ sudo apt-get install libboost-program-options`. The older version of gecmi compiled under Ubuntu 14 depends on `libboost_program_options.so.1.54.0`, the newer one compiled under Ubuntu 16 depends on `libboost_program_options.so.1.58.0`.
-  * `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
-
-  > Note: gecmi dependencies are uploaded to `./algorithms/gecmi_deps/`.
-
-- [PyExPool](//github.com/eXascaleInfolab/PyExPool) for asynchronous jobs execution and results aggregation via tasks of jobs
-
-  > Note: it is uploaded to `./contrib/`.
-
-
-#### Accessory Utilities
-- [Extended LFR Benchmark](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) for the undirected weighted networks with overlaps (the [original](https://sites.google.com/site/andrealancichinetti/files) version is [here](https://sites.google.com/site/santofortunato/inthepress2),
-- [Tiny execution profiler](https://bitbucket.org/lumais/exectime/) to evaluate resources consumption
-- Clustering algorithms, used in the benchmarking: DAOC (former [HiReCS](http://www.lumais.com/hirecs)), [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) [Louvain](https://sites.google.com/site/findcommunities/) (original and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), [Oslom2](http://www.oslom.org/software.htm), [GANXiS/SLPA](https://sites.google.com/site/communitydetectionslpa/), pScan (binaries provided by the [author](http://www.cse.unsw.edu.au/~ljchang/)) and [CGGCi_RG](https://github.com/eXascaleInfolab/CGGC).
-
-
-
 
 
 ## Prerequisites
@@ -162,7 +103,7 @@ However, the benchmark runs clustering algorithms and evaluation utilities imple
 > [Windows 10+ x64 provides Ubuntu-compatible bash shell](https://www.howtogeek.com/249966/how-to-install-and-use-the-linux-bash-shell-on-windows-10/), which allows to install and execute terminal Ubuntu apps and execute the benchmarking exactly as on Linux Ubuntu 16.04 x64.
 
 All subsequent steps are described for the *NIX* platforms including MaxOS.  
-To be sure that the operational system allows to work with lots of opened files and has adequate swapping policy, execute:
+To be sure that the operational system allows to work with lots of opened files and has adequate swapping policy, execute (the leading `.` or `source` keyword is mandatory):
 ```sh
 $ . ./prepare_hostenv.sh
 ```
@@ -188,12 +129,12 @@ To setup the `ulimit` permanently add the following lines to the `/etc/security/
 ```
 And then execute `ulimit -n 32768` to set this value for the current shell.
 
-> Ulimit can't be set higher than the hard limit `ulimit -Hn`, so if the latter < `32768` then execute:
+> `ulimit` can't be set higher than the hard limit `ulimit -Hn`, so if the latter < `32768` then execute:
 ```sh
 $ ulimit -n `ulimit -Hn`
 ```
 
-Reduce the system swappiness setting to 1 .. 10 by `$ sudo sysctl -w vm.swappiness=5` or set it permanently in `/etc/sysctl.conf`:
+Reduce the system `swappiness` setting to 1 .. 10 by `$ sudo sysctl -w vm.swappiness=5` or set it permanently in `/etc/sysctl.conf`:
 ```sh
 vm.swappiness = 5
 ``` 
@@ -227,7 +168,7 @@ $ sudo usermod -aG docker $USER
 ```
 Log out and log back in so that your group membership is re-evaluated, or execute:
 ```sh
-su - $USER
+$ su - $USER
 ```
 Optionally, configure Docker to start on boot:
 ```sh
@@ -261,6 +202,31 @@ See [install_reqs.sh](install_reqs.sh) and [pyreqs.txt](pyreqs.txt) for details 
 
 > The benchmarking framework can be executed under Python 2.7+ including 3.x (works on both the official CPython and on [PyPy](http://pypy.org/) JIT for the faster execution).  
 Some executing algorithms support only Python2 / pypy, others both Python3 and Python2. Selection of the appropriate interpreter is made automatically in runtime. At least Python2 is required to run the benchmarking, but the recommended environment, which is installed by the script is both Python3 and pypy.
+
+
+- daoc (former [hirecs](http://www.lumais.com/hirecs/)) for modularity evaluation of overlapping community structure with results compatible to the standard modularity value. It depends on:
+  * `libstdc++.so.6`: version GLIBCXX_3.4.20 (precompiled version for modularity evaluation). To install it on Ubuntu use: `sudo apt-get install libstdc++6` or
+```sh
+$ sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+$ sudo apt-get update
+$ sudo apt-get install libstdc++6
+```
+
+
+
+- [python-igraph](http://igraph.org/python/) for Louvain algorithm evaluation by NMIs (because the original implementation does not provide convenient output of the communities to evaluate NMIs): `$ pip install python-igraph`. It depends on:
+  * `libxml2` (and `libz` on Ubuntu 14), which are installed in Linux Ubuntu executing:  
+  `$ sudo apt-get install libxml2-dev`  (`lib32z1-dev` might be also required)
+
+- [`gecmi`](https://bitbucket.org/dsign/gecmi/wiki/Home) for the NMI_ovp evaluation depends on:
+  * `libboost_program_options`, to install execute: `$ sudo apt-get install libboost-program-options`. The older version of gecmi compiled under Ubuntu 14 depends on `libboost_program_options.so.1.54.0`, the newer one compiled under Ubuntu 16 depends on `libboost_program_options.so.1.58.0`.
+  * `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
+
+  > Note: gecmi dependencies are uploaded to `./algorithms/gecmi_deps/`.
+
+- [PyExPool](//github.com/eXascaleInfolab/PyExPool) for asynchronous jobs execution and results aggregation via tasks of jobs
+
+  > Note: it is uploaded to `./contrib/`.
 
 
 ## Usage
@@ -306,30 +272,30 @@ Parameters:
   --help, -h  - show this usage description
   --generate, -g[o][a]=[<number>][%<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets of the required format in the <outpdir> (default: syntnets/), shuffling (randomly reordering network links and saving under another name) each dataset <shuffles_number> times (default: 0). If <number> is omitted or set to 0 then ONLY shuffling of <outpdir>/networks//* is performed. The generated networks are automatically added to the begin of the input datasets.
     o  - overwrite existing network instances (old data is backuped) instead of skipping generation
-    a  - generate networks specifined by arcs (directed) instead of edges (undirected)
+    a  - generate networks specified by arcs (directed) instead of edges (undirected)
 NOTE: shuffled datasets have the following naming format:
   <base_name>[(seppars)<param1>...][^<instance_index>][%<shuffle_index>].<net_extension>
   --input, -i[X][%<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories, which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension (.ns{e,a}). Default: -ie=syntnets/networks/*/, which are subdirs of the synthetic networks dir without shuffling.
-    f  - make flat derivatives on shuffling instead of generating the dedicted directory (havng the file base name) for each input network, might cause flooding of the base directory. Existed shuffles are backuped.
+    f  - make flat derivatives on shuffling instead of generating the dedicated directory (having the file base name) for each input network, might cause flooding of the base directory. Existed shuffles are backuped.
     NOTE: variance over the shuffles of each network instance is evaluated only for the non-flat structure.
     a  - the dataset is specified by arcs (asymmetric, directed links) instead of edges (undirected links), considered only for not .ns{a,e} extensions.
 NOTE:
   - The following symbols in the path name have specific semantic and processed respectively: ('!', '^', '%', '#')
   - Paths may contain wildcards: *, ?, +
   - Multiple directories and files wildcards can be specified via multiple -i options
-  - Shuffles backup and OVERWRITE previously excisting shuffles
+  - Shuffles backup and OVERWRITE already existent shuffles
   - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]
   - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions) is up to the clustering algorithm
   --apps, -a[=[-]"app1 app2 ..."]  - apps (clustering algorithms) to be applied, default: all.
 Leading "-" means applying of all except the specified apps. Available apps (13): CggcRg, CggciRg, Daoc, DaocA, DaocA_s_r, Daoc_s_r, Ganxis, LouvainIg, Oslom2, Pscan, Randcommuns, Scd, Scp.
 Impacts {r, q} options. Optional, all registered apps (see benchapps.py) are executed by default.
 NOTE: output results are stored in the "results/<algname>/" directory
-  --runapps, -r  - run specified apps on the specidied datasets, default: all
+  --runapps, -r  - run specified apps on the specified datasets, default: all
   --quality, -q[X]  - evaluate quality (including accuracy) of the results for the specified algorithms on the specified datasets and form the summarized results. Default: NMI_max, F1h and F1p measures on all datasets
     e[Y]  - extrinsic measures for overlapping communities, default: all
       n[Z]  - NMI measure(s) for overlapping and multi-level communities: max, avg, min, sqrt
         x  - NMI_max,
-      NOTE: unified NMI evaluaiton is stochastic and does not provide the seed parameter.
+      NOTE: unified NMI evaluation is stochastic and does not provide the seed parameter.
       o[Z]  - overlapping NMI measure(s) for overlapping communities that are not multi-level: max, sum, lfk. Note: it is much faster than generalized NMI
         x  - NMI_max
       f[Z]  - avg F1-Score(s) for overlapping and multi-level communities: avg, hmean, pprob
@@ -339,9 +305,9 @@ NOTE: output results are stored in the "results/<algname>/" directory
     i[Y]  - intrinsic measures for overlapping communities, default: all
       m  - modularity Q
       c  - conductance f
-    u  - update quality evaluations appending the new results to the existing stored evaluaitons (if any) and then aggregate everything to the final summarized results skipping older duplicates (if any).
+    u  - update quality evaluations appending the new results to the existing stored evaluations (if any) and then aggregate everything to the final summarized results skipping older duplicates (if any).
   ATTENTION: "-qu" requires at least one more "-qX" flag to indicate what measures should be (re)evaluated. Applicable only for the same seed as existed evaluations had. The existed quality evaluations are backed up anyway.
-NOTE: multiple quality evaluaiton options can be specified via the multiple -q opitons.
+NOTE: multiple quality evaluation options can be specified via the multiple -q options.
   --timeout, -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network in sec, min or hours; 0 sec - no timeout, default: 36 h 0 min 0 sec
     s  - time in seconds, default option
     m  - time in minutes
@@ -358,8 +324,8 @@ ATTENTION: <resval_path>  should include the algorithm name and target measure
 ```
 
 > _REPRODUCIBILITY NOTICE_: Use seed to reproduce the evaluations, but be aware that:
-- the seed is not applicable for the shuffling (reordering of the network nodes and links, which is truly random) and
-- not all clustering algorithms might support the seed.
+> - the seed is not applicable for the shuffling (reordering of the network nodes and links, which is truly random) and
+> - not all clustering algorithms might support the seed.
 So, in case of shuffling, the original shuffles should be provided to reproduce exactly the same results (for either deterministic algorithms or algorithms that have the input seed).
 
 
@@ -368,10 +334,10 @@ So, in case of shuffling, the original shuffles should be provided to reproduce 
 $ pypy ./benchmark.py -g=3%2=syntnets_i3_s4 -cr -a="scp oslom2" -r -q -tm=90
 ```
 Run the benchmark under PyPy.  
-Generate synthetic networks producing 3 instances of each network with 2 shuffles (random reordering of network nodes) of each instance, having 3*2=6 sythetic networks of each type (for each set of network generation parameters). Generated networks are stored in the ./syntnets_i3_s4/ directory.  
-Convert all networks into the .hig format resolving duзlicated links. This conversion is required to be able to evaluate modularity measure.  
+Generate synthetic networks producing 3 instances of each network with 2 shuffles (random reordering of network nodes) of each instance, having 3*2=6 synthetic networks of each type (for each set of network generation parameters). Generated networks are stored in the ./syntnets_i3_s4/ directory.  
+Convert all networks into the .hig format resolving duplicated links. This conversion is required to be able to evaluate modularity measure.  
 Run `scp` and `oslom2` clustering algorithms for each generated network and evaluate modularity and NMI measures for these algorithms.  
-Tшmeout is 90 min for each task of each network processing, where the tasks are: networks generation, clustering and evaluation by each specified measure. The network is each shuffle of each instance of each network type.  
+Timeout is 90 min for each task of each network processing, where the tasks are: networks generation, clustering and evaluation by each specified measure. The network is each shuffle of each instance of each network type.  
 
 ### Shuffling existing network instances, clustering algorithm execution and evaluation using NMI_max with 1h timeout for any task
 ```sh
@@ -392,7 +358,7 @@ Results aggregation is performed with automatic identification of the target clu
 ## Benchmark Structure
 - ./contrib/  - valuable patches to the external open source tools used as binaries
 - ./algorithms/  - benchmarking algorithms
-- ./resutls/  - aggregated and per-algorithm execution and evaluation results (brief `*.res` and extended `*.resx`): timings (execution and CPU), memory consumption, NMIs, Q, per-algorithm resources consumption profile (`*.rcp`)
+- ./results/  - aggregated and per-algorithm execution and evaluation results (brief `*.res` and extended `*.resx`): timings (execution and CPU), memory consumption, NMIs, Q, per-algorithm resources consumption profile (`*.rcp`)
   - `<algname>.rcp`  - resource consumption profile for all executions of the algorithm even in case of crashes / interruptions
   - `<measure>.res[x]`  - aggregated value of the measure: average is evaluated for each level / scale for all shuffles of the each network instance, then the weighted best average among all levels is taken for all instances as a final result
   * `<algname>/clusters/`  - algorithm execution results produced hierarchies of communities for each network instance shuffle
@@ -482,7 +448,7 @@ def execMyalgorithm(execpool, netfile, asym, timeout, pathid='', selfexec=False)
 
   execpool  - execution pool to perform execution of current task
   netfile  -  input network to be processed
-  asym  - network links weights are assymetric (in/outbound weights can be different)
+  asym  - network links weights are asymmetric (in/outbound weights can be different)
   timeout  - execution timeout for this task
   pathid  - path id of the net to distinguish nets with the same name located in different dirs.
     Note: pathid is prepended with the separator symbol
@@ -497,5 +463,5 @@ All the evaluations will be performed automatically, the algorithm should just f
 
 ## Related Projects
 * DAOC - (former [HiReCS](https://github.com/eXascaleInfolab/hirecs) High Resolution Hierarchical Clustering with Stable State, which was totally redesigned)
-* [eXascale Infolab](https://github.com/eXascaleInfolab) github repository and [our website](http://exascale.info/) where you can find another projects and research papers related to Big Data processing!  
+* [eXascale Infolab](https://github.com/eXascaleInfolab) GitHub repository and [our website](http://exascale.info/) where you can find another projects and research papers related to Big Data processing!  
 Please, [star this project](https://github.com/eXascaleInfolab/PyCABeM) if you use it.

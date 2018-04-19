@@ -7,10 +7,17 @@
     ],
     "python.linting.pylintArgs": [
         "--ignored-classes=igraph.Graph",
-        "--disable=W0312,C0330,C0103,W0212,C0301,C0302",
+        "--disable=W0212,W0312,W0603,C0103,C0330,C0301,C0302",
         "--indent-string='\t'",
         "--max-line-length=120"
         //"--function-rgx='(?:(?P<snake>[a-z_]+)|(?P<camel>_?[A-Z]+))$'"
         //"--ignore=hicbem.py"
+        //"--variable-naming-style=camelCase"  # any, snake_case, PascalCase, UPPER_CASE
+    ],
+    "spellright.language": "en_US",
+    "spellright.documentTypes": [
+        "markdown",
+        "latex",
+        "plaintext"
     ]
 }

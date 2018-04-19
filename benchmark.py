@@ -183,7 +183,7 @@ class Params(object):
 		netext  - network file extension, should have the leading '.'
 		timeout  - execution timeout in sec per each algorithm
 		algorithms  - algorithms to be executed (just names as in the code)
-		aggrespaths = paths for the evaluated resutls aggregation (to be done for
+		aggrespaths = paths for the evaluated results aggregation (to be done for
 			already existent evaluations)
 		seedfile  - seed file name
 		"""
@@ -196,7 +196,7 @@ class Params(object):
 		self.algorithms = []
 		self.seedfile = _SEEDFILE  # Seed value for the synthetic networks generation and stochastic algorithms, integer
 		self.convnets = 0
-		self.aggrespaths = []  # Paths for the evaluated resutls aggregation (to be done for already existent evaluations)
+		self.aggrespaths = []  # Paths for the evaluated results aggregation (to be done for already existent evaluations)
 
 
 # Input зarameters processing --------------------------------------------------
@@ -987,7 +987,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		if not algorithms:
 			# Algorithms callers
 			execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
-			# Save algorithms names to perform resutls aggregation after the execution
+			# Save algorithms names to perform results aggregation after the execution
 			algorithms = appnames(appsmodule)
 		else:
 			# Execute only specified algorithms
@@ -1534,7 +1534,7 @@ def benchmark(*args):
 		 , basedir=opts.syntpo.path, netsdir=_NETSDIR, overwrite=opts.syntpo.overwrite
 		 , seedfile=opts.seedfile, gentimeout=3*60*60)  # 3 hours
 
-	# Update opts.datasets with sythetic generated data: all subdirs of the synthetic networks dir
+	# Update opts.datasets with synthetic generated data: all subdirs of the synthetic networks dir
 	# Note: should be done only after the genertion, because new directories can be created
 	if opts.syntpo or not opts.datas:
 		# Note: even if syntpo was no specified, use it as the default path
@@ -1628,13 +1628,13 @@ if __name__ == '__main__':
 		 ' If <number> is omitted or set to 0 then ONLY shuffling of <outpdir>/{netsdir}/* is performed.'
 		 ' The generated networks are automatically added to the begin of the input datasets.',
 			'    o  - overwrite existing network instances (old data is backuped) instead of skipping generation',
-			'    a  - generate networks specifined by arcs (directed) instead of edges (undirected)',
+			'    a  - generate networks specified by arcs (directed) instead of edges (undirected)',
 			'NOTE: shuffled datasets have the following naming format:',
 			'\t<base_name>[(seppars)<param1>...][{sepinst}<instance_index>][{sepshf}<shuffle_index>].<net_extension>',
 			'  --input, -i[X][{gensepshuf}<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories'
 			', which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension'
 			' (.ns{{e,a}}). Default: -ie={syntdir}{netsdir}*/, which are subdirs of the synthetic networks dir without shuffling.',
-			'    f  - make flat derivatives on shuffling instead of generating the dedicted directory (having the file base name)'
+			'    f  - make flat derivatives on shuffling instead of generating the dedicated directory (having the file base name)'
 			' for each input network, might cause flooding of the base directory. Existed shuffles are backuped.',
 			'    NOTE: variance over the shuffles of each network instance is evaluated only for the non-flat structure.',
 			'    a  - the dataset is specified by arcs (asymmetric, directed links) instead of edges (undirected links)'
@@ -1643,7 +1643,7 @@ if __name__ == '__main__':
 			'  - The following symbols in the path name have specific semantic and processed respectively: {rsvpathsmb}',
 			'  - Paths may contain wildcards: *, ?, +',
 			'  - Multiple directories and files wildcards can be specified via multiple -i options',
-			'  - Shuffles backup and OVERWRITE previously excisting shuffles',
+			'  - Shuffles backup and OVERWRITE already existent shuffles',
 			'  - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]',
 			'  - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
 			' is up to the clustering algorithm',
@@ -1652,7 +1652,7 @@ if __name__ == '__main__':
 			'Impacts {{r, q}} options. Optional, all registered apps (see benchapps.py) are executed by default.',
 			'NOTE: output results are stored in the "{resdir}<algname>/" directory',
 			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
-			'  --runapps, -r  - run specified apps on the specidied datasets, default: all',
+			'  --runapps, -r  - run specified apps on the specified datasets, default: all',
 			'  --quality, -q[X]  - evaluate quality (including accuracy) of the results for the specified algorithms'
 			' on the specified datasets and form the summarized results. Default: NMI_max, F1h and F1p measures on all datasets',
 			#  -q[X][="<SEP><inpnet_pyregex><SEP><gtnet_pyregex>[<SEP><pyregex_glags>]"]
@@ -1661,7 +1661,7 @@ if __name__ == '__main__':
 			'    e[Y]  - extrinsic measures for overlapping communities, default: all',
 			'      n[Z]  - NMI measure(s) for overlapping and multi-level communities: max, avg, min, sqrt',
 			'        x  - NMI_max,',
-			'      NOTE: unified NMI evaluaiton is stochastic and does not provide the seed parameter.',
+			'      NOTE: unified NMI evaluation is stochastic and does not provide the seed parameter.',
 			#'        a  - NMI_avg (also known as NMI_sum),',
 			#'        n  - NMI_min,',
 			#'        r  - NMI_sqrt',
@@ -1676,11 +1676,11 @@ if __name__ == '__main__':
 			'    i[Y]  - intrinsic measures for overlapping communities, default: all',
 			'      m  - modularity Q',
 			'      c  - conductance f',
-			'    u  - update quality evaluations appending the new results to the existing stored evaluaitons (if any)'
+			'    u  - update quality evaluations appending the new results to the existing stored evaluations (if any)'
 			' and then aggregate everything to the final summarized results skipping older duplicates (if any).',
 			'  ATTENTION: "-qu" requires at least one more "-qX" flag to indicate what measures should be (re)evaluated.'
 			' Applicable only for the same seed as existed evaluations had. The existed quality evaluations are backed up anyway.',
-			'NOTE: multiple quality evaluaiton options can be specified via the multiple -q opitons.',
+			'NOTE: multiple quality evaluation options can be specified via the multiple -q options.',
 			'  --timeout, -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on'
 			' each network in sec, min or hours; 0 sec - no timeout, default: {th} h {tm} min {ts} sec',
 			'    s  - time in seconds, default option',

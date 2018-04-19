@@ -11,7 +11,7 @@
 
 		execpool  - execution pool to perform execution of current task
 		netfile  -  input network to be processed
-		asym  - network links weights are assymetric (in/outbound weights can be different)
+		asym  - network links weights are asymmetric (in/outbound weights can be different)
 		timeout  - execution timeout for this task
 		pathid  - path id of the net to distinguish nets with the same name located in different dirs.
 			Note: pathid is prepended with the separator symbol
@@ -60,7 +60,7 @@ _EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
 _PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
 
 
-# reFirstDigits = re.compile('\d+')  # First digit regex
+# reFirstDigits = re.compile(r'\d+')  # First digit regex
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
@@ -125,7 +125,7 @@ def aggexec(algs):
 	if not malgs:
 		print('WARNING, there are no any algortihms execution results to be aggregated.', file=sys.stderr)
 		return
-	# Output resutls
+	# Output results
 	for imsr, measure in enumerate(mnames):
 		resfile = ''.join((_RESDIR, measure, _EXTAGGRES))
 		resxfile = ''.join((_RESDIR, measure, _EXTAGGRESEXT))
@@ -191,7 +191,7 @@ def preparePath(taskpath):  # , netshf=False
 #
 #	execpool  - execution pool to perform execution of current task
 #	netfile  -  input network to be processed
-#	asym  - network links weights are assymetric (in/outbound weights can be different)
+#	asym  - network links weights are asymmetric (in/outbound weights can be different)
 #	timeout  - execution timeout for this task
 #	pathid  - path id of the net to distinguish nets with the same name located in different dirs.
 #		Note: pathid is prepended with the separator symbol
@@ -406,9 +406,9 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	logfile = taskpath + _EXTLOG
 
 	# def relpath(path, basedir=workdir):
-	# 	"""Relative path to the specidied basedir"""
+	# 	"""Relative path to the specified basedir"""
 	# 	return os.path.relpath(path, basedir)
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(_UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
@@ -464,7 +464,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 			avgnls = size / float(netinfo.ndsnum)  # Average number of arcs per node
 			size *= avgnls
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(_UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
@@ -545,7 +545,7 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(_UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
@@ -650,7 +650,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 	errfile = taskpath + _EXTELOG  # Errors log + lib tracing including modularity value and clustering summary
 	logfile = taskpath + _EXTLOG   # Tracing to stdout, contains timings
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(_UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
@@ -742,7 +742,7 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(_UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
@@ -792,7 +792,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(_UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
@@ -843,7 +843,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 	assert task, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Pscan'
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(_UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
@@ -912,7 +912,7 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(_UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
@@ -965,7 +965,7 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specidied basedir
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(_UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))

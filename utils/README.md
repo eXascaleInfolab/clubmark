@@ -5,16 +5,16 @@
 ### Extrinsic quality measures
 
 * F1 Scores for overlapping communities on multiple resolutions and standard NMI for hard partitioning only (non-overlapping singe resolution clustering) by are evaluated by [xmeasures](https://github.com/eXascaleInfolab/xmeasures).
-* NMI (Normalized Mutual Information) for overlapping multiresolution clustering (NMI_max compatile with the standard NMI) is evaluated by [GenConvMI](https://github.com/eXascaleInfolab/GenConvMI). GenConvMI is the extended version of [gecmi](https://bitbucket.org/dsign/gecmi/wiki/Home)), paper: [Comparing network covers using mutual information](https://arxiv.org/abs/1202.0425) by Alcides Viamontes Esquivel, Martin Rosvall.
+* NMI (Normalized Mutual Information) for overlapping multi-resolution clustering (NMI_max compatible with the standard NMI) is evaluated by [GenConvMI](https://github.com/eXascaleInfolab/GenConvMI). GenConvMI is the extended version of [gecmi](https://bitbucket.org/dsign/gecmi/wiki/Home)), paper: [Comparing network covers using mutual information](https://arxiv.org/abs/1202.0425) by Alcides Viamontes Esquivel, Martin Rosvall.
 * NMIs (NMI_max, NMI_lfr, NMI_avg) are evaluated by [OvpNMI](https://github.com/eXascaleInfolab/OvpNMI). OvpNMI is the extended version of [onmi](https://github.com/aaronmcdaid/Overlapping-NMI), paper: [Normalized Mutual Information to evaluate overlapping community finding algorithms](https://arxiv.org/abs/1110.2515) by Aaron F. McDaid, Derek Greene, Neil Hurley.
-
+ 
 ### Intrinsic quality measures (evaluated by `DAOC`)
 
 * Standard modularity `Q`, but applicable for overlapping communities.
 * Conductance `f` applicable for overlapping communities.
 
 
-## Data Preparation and Postprocessing
+## Data Preparation and Post-processing
 
 ### Synthetic Networks Generation and Shuffling
 
@@ -30,9 +30,9 @@ convert.py script is used to perform conversion of the network formats.
 
 remlinks.py script is used to randomly remove specified percent of links from the network, which is useful for robustness evaluation of the clustering algorithms.
 
-### Clusters Postprocessing
+### Clusters Post-processing
 
-Resulting clusterings on multiple resolutions can be merged using [resmerge](https://github.com/eXascaleInfolab/resmerge), which also perfors the node base synchronization with the ground truth communities on Large real-world networks from [SNAP](https://snap.stanford.edu/data/#communities). SNAP datasets provide the ground-truth communities with less nodes than in the input networks, which requires node base synchronization of the resulting clusters for the fair evaluation.
+Resulting clusterings on multiple resolutions can be merged using [resmerge](https://github.com/eXascaleInfolab/resmerge), which also performs the node base synchronization with the ground truth communities on Large real-world networks from [SNAP](https://snap.stanford.edu/data/#communities). SNAP datasets provide the ground-truth communities with less nodes than in the input networks, which requires node base synchronization of the resulting clusters for the fair evaluation.
  <!-- and clusters on multiple resolutions in the single ground-truth collection. -->
 
 

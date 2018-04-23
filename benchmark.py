@@ -152,7 +152,7 @@ class Params(object):
 		"""Sets default values for the input parameters
 
 		syntpo  - synthetic networks path options, SyntPathOpts
-		convnets  - convert existing networks into the .hig format
+		convnets  - convert existing networks into the .rcg format
 			0 - do not convert
 			0b001  - convert:
 				0b01 - convert only if this network is not exist
@@ -879,7 +879,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 		0 means unlimited time
 	"""
 	assert timeout1 + 0 >= 0, 'Non-negative network conversion timeout is expected'
-	print('Converting networks into the required formats (.hig, .lig, etc.)...')
+	print('Converting networks to the required formats (.rcg, .lig, etc.)...')
 
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
@@ -900,7 +900,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 				_execpool.execute(Job(name=os.path.splitext(os.path.split(inpnet)[1])[0], args=args, timeout=timeout
 				 , category='convert', size=os.path.getsize(inpnet)))
 			except Exception as err:  #pylint: disable=W0703
-				print('ERROR on "{}" conversion into .hig, the conversion is cancelled: {}. {}'
+				print('ERROR on "{}" conversion to .rcg, the conversion is cancelled: {}. {}'
 				 .format(inpnet, err, traceback.format_exc(5)), file=sys.stderr)
 			#netnoext = os.path.splitext(net)[0]  # Remove the extension
 			#
@@ -1407,7 +1407,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 			# 	return jobsnum
 # 			#
 # 			# # Measures is a dict with the Array values: <evalcallback_prefix>, <grounttruthnet_extension>, <measure_name>
-# 			# measures = {3: ['nmi', _EXTCLNODES, 'NMIs'], 4: ['mod', '.hig', 'Q']}
+# 			# measures = {3: ['nmi', _EXTCLNODES, 'NMIs'], 4: ['mod', '.rcg', 'Q']}
 # 			# evaggs = []  # Evaluation results aggregators
 # 			# for im, msr in viewitems(measures):  # Note: the number of measures is small
 # 			# 	# Evaluate only required measures
@@ -1436,7 +1436,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 			# print('Starting {} evaluation...'.format(msr[2]))
 # 			# jobsnum = 0
 # 			# measure = msr[0]
-# 			# fileext = msr[1]  # Initial networks in .hig formatare required for mod, clusters for NMIs
+# 			# fileext = msr[1]  # Initial networks in .rcg formatare required for mod, clusters for NMIs
 # 			# # Track processed file names to resolve cases when files with the same name present in different input dirs
 # 			# filenames = set()
 # 			# for pathid, (asym, ddir) in enumerate(datadirs):
@@ -1606,27 +1606,27 @@ if __name__ == '__main__':
 	if len(sys.argv) <= 1 or (len(sys.argv) == 2 and sys.argv[1] in ('-h', '--help')):
 		apps = appnames(benchapps)
 		print('\n'.join(('Usage:',
-		 '  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
-		 ' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
-		 ' [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]]'
-		 ' [-s=<eval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] | -h',
-		 '',
-		 'Example:',
-		 '  {0} -g=3{gensepshuf}5 -r -q -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
-		 'NOTE:',
-		 '  - The benchmark should be executed exclusively from the current directory (./)',
-		 '  - The expected format of input datasets (networks) is .ns<l> - network specified by'
-		 ' <links> (arcs / edges), a generalization of the .snap, .ncol and Edge/Arcs Graph formats.',
-		 '  - paths can contain wildcards: *, ?, +',
-		 '  - multiple paths can be specified via multiple -i, -s options (one per the item)',
-		 '',
-		 'Parameters:',
-		 '  --help, -h  - show this usage description',
-		 '  --generate, -g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets'
-		 ' of the required format in the <outpdir> (default: {syntdir}), shuffling (randomly reordering network links'
-		 ' and saving under another name) each dataset <shuffles_number> times (default: 0).'
-		 ' If <number> is omitted or set to 0 then ONLY shuffling of <outpdir>/{netsdir}/* is performed.'
-		 ' The generated networks are automatically added to the begin of the input datasets.',
+			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
+			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
+			' [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]]'
+			' [-s=<eval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] | -h',
+			'',
+			'Example:',
+			'  {0} -g=3{gensepshuf}5 -r -q -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
+			'NOTE:',
+			'  - The benchmark should be executed exclusively from the current directory (./).',
+			'  - The expected format of input datasets (networks) is .ns<l> - network specified by'
+			' <links> (arcs / edges), a generalization of the .snap, .ncol and Edge/Arcs Graph formats.',
+			'  - Paths can contain wildcards: *, ?, +.',
+			'  - Multiple paths can be specified via multiple -i, -s options (one per the item).',
+			'',
+			'Parameters:',
+			'  --help, -h  - show this usage description',
+			'  --generate, -g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets'
+			' of the required format in the <outpdir> (default: {syntdir}), shuffling (randomly reordering network links'
+			' and saving under another name) each dataset <shuffles_number> times (default: 0).'
+			' If <number> is omitted or set to 0 then ONLY shuffling of <outpdir>/{netsdir}/* is performed.'
+			' The generated networks are automatically added to the begin of the input datasets.',
 			'    o  - overwrite existing network instances (old data is backuped) instead of skipping generation',
 			'    a  - generate networks specified by arcs (directed) instead of edges (undirected)',
 			'NOTE: shuffled datasets have the following naming format:',
@@ -1688,7 +1688,7 @@ if __name__ == '__main__':
 			'    h  - time in hours',
 			'  --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and'
 			' stochastic algorithms, contains uint64_t value. Default: {seedfile}',
-			'NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seed',
+			'NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seed.',
 			'',
 			'Advanced parameters:',
 			#'  --stderr-stamp  - output a time stamp to the stderr on the benchmarking start to separate multiple reexectuions',
@@ -1697,7 +1697,7 @@ if __name__ == '__main__':
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
 			'  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
 			', which is useful to include external manual evaluations into the final summarized results',
-			'ATTENTION: <resval_path>  should include the algorithm name and target measure'
+			'ATTENTION: <resval_path> should include the algorithm name and target measure.'
 			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=_RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=_SEPINST, seppars=_SEPPARS, sepshf=_SEPSHF, rsvpathsmb=(_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID)
 				, anppsnum=len(apps), apps=', '.join(apps), th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60, seedfile=_SEEDFILE))

@@ -46,11 +46,11 @@ import subprocess
 
 from numbers import Number  # To verify that a variable is a number (int or float)
 from sys import executable as PYEXEC  # Full path to the current Python interpreter
-from .benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, \
+from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, \
  tobackup, escapePathWildcards, _SEPPARS, _UTILDIR, _TIMESTAMP_START_HEADER
-from .benchevals import _SEPNAMEPART, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
-from .utils.mpepool import Job
-from .algorithms.utils.parser_nsl import parseHeaderNslFile, asymnet
+from benchevals import _SEPNAMEPART, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
+from utils.mpepool import Job
+from algorithms.utils.parser_nsl import parseHeaderNslFile, asymnet
 
 
 _ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
@@ -485,7 +485,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 8  # Max clique size (~ min node degree to be considered)
 	steps = '10'  # Use 10 scale levels as in Ganxis
-	golden = (1 + 5 ** 0.5) * 0.5  # Golden section const
+	golden = (1 + 5 ** 0.5) * 0.5  # Golden section const: 1.618
 	# Run for range of clique sizes
 	for k in range(kmin, kmax + 1):
 		# A single argument is k-clique size

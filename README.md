@@ -21,24 +21,25 @@
 
 ## Overview
 
-The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks), measures execution statistics and evaluates accuracy of the results using specified measures. PyCABeM is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation. The general functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multiprocess execution pool and load balancer.
-<!-- PyExPool provides [external] applications scheduling for the in-RAM execution on NUMA architecture with capabilities of the affinity control, CPU cache vs parallelization maximization, memory consumption and execution time constrains specification for the whole execution pool and per each executor process (called worker, executes a job).
- -->
+The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks), measures execution statistics and evaluates accuracy of the results using specified measures. PyCABeM is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation. The generic functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multiprocess execution pool and load balancer.
 
-General purpose properties:
+Generic properties:
 - Data preprocessing (synthetic networks generation, shuffling, etc.);
 - Pre/post execution callbacks for each executable to perform the application specific initialization and finalization (results normalization, logs post-processing, etc.);
+- Execution of the specified applications on the specified input datasets;
 - Resource consumption management and tracing:
   * Specification of the global and per executable constraints for the maximal execution time and memory consumption;
   * Binding of any executable to the specified set of logical CPUs (affinity masking) to employ advantages of the NUMA hardware executing apps in parallel not affecting their CPU caches (dedicating L1/2/3 caches);
   * Tracing of the execution time, CPU timings (user and kernel) and peak RAM RSS memory consumption;
 - Load balancing of the executing apps to employ as much as possible available hardware resources respecting the specified constraints;
-- Resiliency and fault tolerance (failover execution) tracing crashes of faulty apps not affecting execution of other apps.
+- Resilience and fault tolerance (failover execution), where crashes of some running applications does not affect execution of other applications and other scheduled jobs associated with the crashed application.
 
 Properties specific for the clustering algorithms benchmarking:
+- Synthetic networks generation with the extended [LFR Framework](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) and subsequent shuffling;
+- Execution of the [clustering algorithms](algorithms/README.md) on the specified networks;
 - Evaluation of the extrinsic (modularity, conductance) and intrinsic (various NMIs and F1-Scores) quality measures for the generalized clustering algorithms (considering overlaps and multiple resolutions/scales if any);
-- Selection of the best result for the parameterized clustering algorithms among the results produced for all specified variations of the parameters;
-- Evaluation of both the average value and deviation of the measures if multiple instances and/or shuffles (nodes and links reordering) of the input networks are used.
+- Selection of the best result for the parameterized clustering algorithms among the results produced for the specified variations of the parameters;
+- Evaluation of both the average value and deviation of [the quality measures](utils/README.md#clustering-quality-measures). The deviation is evaluated if multiple instances and/or shuffles (nodes and links reordering) of the input networks are present.
 
 Executing [algorithms](algorithms/README.md) and [evaluation measures with the accessory processing tools](utils/README.md) are described on the respective pages.
 
@@ -52,8 +53,8 @@ Particularly, I had to evaluate various clustering (community detection) algorit
 - the target datasets are very different by structure and size (orders of magnitude varying from KBs to GBs);
 - the accessory evaluating applications (NMI, F1 Scores, ...) have very different (orders of magnitude) time and memory complexity and architecture (single-threaded and multi-threaded applications).
 
-Ideally, the executing applications (algorithms) should be executed in parallel in a way to guarantee that they:
-- are not swapped from RAM to HDD (which happens on the *unconstrained* execution of multiple memory demanding apps) to not affect the efficiency measurements;
+Ideally, the applications should be executed in parallel in a way to guarantee that they:
+- are not swapped out from RAM (which happens on the *unconstrained* execution of multiple memory demanding apps) to not affect the efficiency measurements;
 - consume as much available hardware resources as possible to speedup the benchmarking;
 - localize the CPU cache (the processes are not jumped between the CPUs and work with the hot cache);
 - are automatically terminated from the execution on more complex datasets if do not satisfy the execution constraints on lighter datasets.
@@ -154,6 +155,21 @@ See also the [brief tutorial on Docker installation and usage](https://www.howto
 > ```
 The prebuilt image will be automatically pulled from the *Docker Hub* repository on first docker `run` if it has not been built locally.
 
+To **run the benchmark** you can either execute:
+```sh
+$ docker run -it -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
+```
+which calls `./benchmark.py [<pycabem_args>]`, or open a shell in the benchmarking directory:
+```sh
+$ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0
+```
+and call `./benchmark.py` with the required parameters there.
+> $UID might not be defined in the non-bash shell (sh, etc), then use `id -u $USER` instead.  
+`` `pwd` `` projects to `<PYCABEM_REPOSITORY_PATH>`, which is the current directory and the working directory of the benchmarking.  
+`/opt/pycabem` or any other local directory denotes the place where the benchmarking results and traces are stored, which can be the same as `` `pwd` ``.  
+See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-with-examples).
+
+See the [Usage](#usage) section to learn more about the benchmark execution and resutls structure.
 
 ### Direct Deployment
 
@@ -172,60 +188,15 @@ Some executing algorithms support only Python2 / pypy, others both Python3 and P
 
 ## Usage
 
-<!-- ### Functionality -->
-<!-- #### Generic Benchmarking
-The generic benchmarking functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool), which provides [external] applications scheduling for the in-RAM execution on NUMA architecture with capabilities of the affinity control, CPU cache vs parallelization maximization, memory consumption and execution time constrains specification for the whole execution pool and per each executor process (called worker, executes a job).
+There are two main scripts to execute the benchmark:
+- `./benchmark.py` to run the benchmark in the terminal (interactive mode)
+- `./benchmark_daemon.sh` to run the benchmark on the background (daemon mode)
+> Note: Execution of the benchmark has been verified only on Linux Ubuntu 16.04 x64, but it should work on any platform where the dependences are satisfied.
 
-The benchmarking framework specifies the structure and provides APIs for the:
-- optional *generation of datasets* or their preprocessing using specified executable(s);
-- optional *execution of the specified computing applications* (clustering algorithms) on the specified datasets (using wildcards), where each application may produce multiple output files (levels of the hierarchy of clusters for each input network);
-- optional *execution of the evaluating applications* on the produced results (and ground-truth if applicable), aggregation of the results grouped by the computing application;
-- optional specification of the *execution constraints* (time, memory, parallelization, CPU cache and affinity) for each executable and for the whole benchmarking using the [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multi-process execution pool balancer;
-- skipping computations on the more complex datasets if the executing application failed constraints on some lighter dataset;
-- *efficiency measurements* (time, memory) tracing for each executable;
-- *logging of traces (stdout) and errors (stderr)* (outputs of the executables and their runtime statistics) for each executable and for the benchmarking framework itself;
-- *automatic extension / backup* of the already existent results to the timestamped .gzip archives on the benchmarking re-execution.
+The benchmark executes specified applications on the specified datasets in interactive or daemon mode logging the resources consumption, algorithms output and exceptions, and performing the workflow management (termination by timeout, resistance to exceptions, etc.) and results aggregation. All results and logs are stored even in case of the internal (crash) or external termination of the benchmarking applications or the whole framework iteself.
 
-It is possible to have multiple input directories with similarly named files inside, which represent different instances / snapshots of the datasets. In such case, the results are produced per each snapshot, plus aggregated weighted average over all snapshots. This is useful to avoid occasional bias to the specific instance or to analyze evolving networks.  
-If any application is crashed, the crash is logged and does not affect execution of the remaining applications. The benchmark can be terminated by the timeout or manually.
- -->
-
-<!-- #### Clustering Specific Benchmarking -->
-<!-- The benchmark is implemented as customization of the Generic Benchmarking Framework to evaluate various *Clustering Algorithms* (Community Detection Algorithms) including *Hierarchical Clustering Algorithms with Overlaps and Consensus*:
-- produces synthetic networks with specified number of instances for each set of parameters, generating them by the extended [LFR Framework](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) ("Benchmarks for testing community detection algorithms on directed and weighted graphs with overlapping communities" by Andrea Lancichinetti and Santo Fortunato)
-- shuffles specified networks (reorders nodes) specified number of times, which is required to evaluate stability / determinism of the clustering algorithms
-- executes clustering algorithms on the generated synthetic networks (or on any specified directories and files). Outputs results (clusters/communities structure, hierarchy, modularity, nmi, etc.) of the clustering algorithms are stored in the corresponding files.
- -->
-
-All results and traces are stored into the corresponding files even in case of internal (crash) / external termination of the benchmarking applications or the whole framework.
-
-Basically the framework executes a set of applications on the specified datasets in interactive or daemon mode, logging the resources consumption, output and exceptions, providing workflow management (termination by timeout, resistance to exceptions, etc.) and results aggregation.
-
-
-
-To run the benchmark you can execute
-```sh
-$ docker run -it -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
-```
-Or to open a shell in the benchmarking directory:
-```sh
-$ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0
-```
-> $UID might not be defined in the non-bash shell (sh, etc), then use `id -u $USER` instead
-
-Where `pwd` projects to `<PYCABEM_REPOSITORY_PATH>`, which is the current directory and working directory of the benchmarking
-
-See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-with-examples).
-
-
-
-- `./install_depends.sh`  - install dependencies (using apt-get)
-- `./benchmark.py`  - run the benchmark in the terminal (interactive mode)
-- `./benchmark_daemon.sh`  - run the benchmark in background (daemon mode)
-
-> Note: Execution of the benchmark was verified only on Linux Ubuntu 14.04 x64, but it should work on any platform if corresponding external executables (algorithms, nmi evaluation apps, etc.) are provided for the required platform.
-
-To see possible input parameters run the benchmark without arguments: `$ ./benchmark.py`:  
+<!-- #region BenchParams -->
+To see the possible input parameters, run the benchmark without the arguments or with `-h`: `$ ./benchmark.py`:
 ```sh
 $ ./benchmark.py 
 Usage:
@@ -234,10 +205,10 @@ Usage:
 Example:
   ./benchmark.py -g=3%5 -r -q -th=2.5 1> results/bench.log 2> results/bench.err
 NOTE:
-  - The benchmark should be executed exclusively from the current directory (./)
+  - The benchmark should be executed exclusively from the current directory (./).
   - The expected format of input datasets (networks) is .ns<l> - network specified by <links> (arcs / edges), a generalization of the .snap, .ncol and Edge/Arcs Graph formats.
-  - paths can contain wildcards: *, ?, +
-  - multiple paths can be specified via multiple -i, -s options (one per the item)
+  - Paths can contain wildcards: *, ?, +.
+  - Multiple paths can be specified via multiple -i, -s options (one per the item).
 
 Parameters:
   --help, -h  - show this usage description
@@ -245,7 +216,7 @@ Parameters:
     o  - overwrite existing network instances (old data is backuped) instead of skipping generation
     a  - generate networks specified by arcs (directed) instead of edges (undirected)
 NOTE: shuffled datasets have the following naming format:
-  <base_name>[(seppars)<param1>...][^<instance_index>][%<shuffle_index>].<net_extension>
+	<base_name>[(seppars)<param1>...][^<instance_index>][%<shuffle_index>].<net_extension>
   --input, -i[X][%<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories, which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension (.ns{e,a}). Default: -ie=syntnets/networks/*/, which are subdirs of the synthetic networks dir without shuffling.
     f  - make flat derivatives on shuffling instead of generating the dedicated directory (having the file base name) for each input network, might cause flooding of the base directory. Existed shuffles are backuped.
     NOTE: variance over the shuffles of each network instance is evaluated only for the non-flat structure.
@@ -276,8 +247,7 @@ NOTE: output results are stored in the "results/<algname>/" directory
     i[Y]  - intrinsic measures for overlapping communities, default: all
       m  - modularity Q
       c  - conductance f
-    u  - update quality evaluations appending the new results to the existing stored evaluations (if any) and then aggregate everything to the final summarized results skipping older duplicates (if any).    i[Y]  - intrinsic measures for overlapping communities, default: all
-
+    u  - update quality evaluations appending the new results to the existing stored evaluations (if any) and then aggregate everything to the final summarized results skipping older duplicates (if any).
   ATTENTION: "-qu" requires at least one more "-qX" flag to indicate what measures should be (re)evaluated. Applicable only for the same seed as existed evaluations had. The existed quality evaluations are backed up anyway.
 NOTE: multiple quality evaluation options can be specified via the multiple -q options.
   --timeout, -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network in sec, min or hours; 0 sec - no timeout, default: 36 h 0 min 0 sec
@@ -285,40 +255,45 @@ NOTE: multiple quality evaluation options can be specified via the multiple -q o
     m  - time in minutes
     h  - time in hours
   --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms, contains uint64_t value. Default: results/seed.txt
-NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seed
+NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seed.
 
 Advanced parameters:
   --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.)
     f  - force the conversion even when the data is already exist
     r  - resolve (remove) duplicated links on conversion (recommended to be used)
   --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results, which is useful to include external manual evaluations into the final summarized results
-ATTENTION: <resval_path>  should include the algorithm name and target measure
+ATTENTION: <resval_path> should include the algorithm name and target measure.
 ```
-
-> _REPRODUCIBILITY NOTICE_: Use seed to reproduce the evaluations, but be aware that:
+<!-- #endregion BenchParams -->
+> _REPRODUCIBILITY NOTICE_: Use seed to reproduce the evaluations but be aware that:
 > - the seed is not applicable for the shuffling (reordering of the network nodes and links, which is truly random) and
 > - not all clustering algorithms might support the seed.
-So, in case of shuffling, the original shuffles should be provided to reproduce exactly the same results (for either deterministic algorithms or algorithms that have the input seed).
+So, in case of shuffling, the original shuffles should be provided to reproduce exactly the same results for the deterministic algorithms.
+
+It is possible to have multiple input directories with similarly named files inside, which represent different instances / snapshots of the datasets. In such case, the results are produced per each snapshot, plus aggregated weighted average over all snapshots. This is useful to avoid occasional bias to the specific instance or to analyze evolving networks.  
+If any application is crashed, the crash is logged and does not affect execution of the remaining applications. The benchmark can be terminated by the timeout or manually.
+*automatic extension / backup* of the already existent results to the timestamped .gzip archives on the benchmarking re-execution.
+*logging of traces (stdout) and errors (stderr)* (outputs of the executables and their runtime statistics) for each executable and for the benchmarking framework itself;
 
 
 ### Synthetic networks generation, clustering algorithms execution and evaluation
+To speed up generation of the synthetic networks, run the benchmarking under the PyPy:
 ```sh
-$ pypy ./benchmark.py -g=3%2=syntnets_i3_s4 -cr -a="scp oslom2" -r -q -tm=90
+$ pypy ./benchmark.py -g=3%2=syntnets_i3_s4 -a="scp oslom2" -r -q -tm=90
 ```
-Run the benchmark under PyPy.  
-Generate synthetic networks producing 3 instances of each network with 2 shuffles (random reordering of network nodes) of each instance, having 3*2=6 synthetic networks of each type (for each set of network generation parameters). Generated networks are stored in the ./syntnets_i3_s4/ directory.  
-Convert all networks into the .hig format resolving duplicated links. This conversion is required to be able to evaluate modularity measure.  
-Run `scp` and `oslom2` clustering algorithms for each generated network and evaluate modularity and NMI measures for these algorithms.  
-Timeout is 90 min for each task of each network processing, where the tasks are: networks generation, clustering and evaluation by each specified measure. The network is each shuffle of each instance of each network type.  
+This command generates synthetic networks producing 3 instances of each network with 2 shuffles (random reordering of network nodes) of each instance yielding 3*2=6 synthetic networks of each type (for each set of the network generation parameters). The generated networks are stored in the specified `./syntnets_i3_s4/` directory.  
+`scp` and `oslom2` clustering algorithms are executed for each generated network, default quality measures are evaluated for these algorithms with subsequent aggregation of the results over all instances and shuffles of each network.  
+The timeout is set to 90 min for the following actions: networks generation and then for each network a) clustering and b) evaluation by each specified measure. The network here is each shuffle of each instance of each network type.
 
-### Shuffling existing network instances, clustering algorithm execution and evaluation using NMI_max with 1h timeout for any task
+
+### Shuffling of the existend networks, clsutering algorithm  execution and evalaution
 ```sh
-$ ./benchmark.py -g=.4 -i=syntnets_i3_s4 -a=oslom2 -qenx -th=1
+$ pypy ./benchmark.py -ie%5='realnets' -cr -a="daoc" -r -qenx -th=1
 ```
-Run the benchmark for the networks located in ./syntnets_i3_s4/ directory.  
-Produce 4 shuffles of the specified networks, previously existed shuffles are backed up.  
-Run `oslom2` clusterшng algorithm for the specified networks with their shuffles and evaluate NMI_s measure.  
-Timeout is 1 hour for each task on each network.  
+This command makes 5 shuffles for each network in the `./realnets/` directory (already existent shuffles of this network are backed up), converts networks to the .rcg format, executes `daoc` algorithm for all shuffles and evaluates `NMI_max` with timeout for each activity equal to 1 hour.
+
+> Already existent shuffles / clusterings / evalautions are backed up to the timestamped `.gzip` archive.
+
 
 ### Aggregation of the specified evaluation results
 ```sh
@@ -328,6 +303,7 @@ Results aggregation is performed with automatic identification of the target clu
 
 
 ## Benchmark Structure
+
 - ./contrib/  - valuable patches to the external open source tools used as binaries
 - ./algorithms/  - benchmarking algorithms
 - ./results/  - aggregated and per-algorithm execution and evaluation results (brief `*.res` and extended `*.resx`): timings (execution and CPU), memory consumption, NMIs, Q, per-algorithm resources consumption profile (`*.rcp`)
@@ -335,10 +311,8 @@ Results aggregation is performed with automatic identification of the target clu
   - `<measure>.res[x]`  - aggregated value of the measure: average is evaluated for each level / scale for all shuffles of the each network instance, then the weighted best average among all levels is taken for all instances as a final result
   * `<algname>/clusters/`  - algorithm execution results produced hierarchies of communities for each network instance shuffle
     - `*.cnl`  - resulting clusters unwrapped to nodes (community nodes list) for NMIs evaluation. `*.cnl` are generated either per each level of the resulting hierarchy of communities or for the whole hierarchy (parameterized inside the benchmark)
-  * `<algname>/mod/`  - algorithm evaluation modularity for each produced hierarchical/scale level
-    - `<net_instance>.mod`  - modularity value aggregated per network instances (results for all shuffles on the network instance are aggregated in the same file)
-  * `<algname>/nmi[_s]/`  - algorithm evaluation NMI[_s] for each produced hierarchical/scale level
-    - `<net_instance>.nmi[_s]`  - NMI[_s] value aggregated per network instances
+  * `<algname>/<measure>/`  - evalautions of the `<measure>` of the `<algname>` for each level (if the clustering is hierarchical or multi-level) of the network instance, were `measure = {mod, nmi, f1h, f1p, ...}`
+    - `<net_instance>.<mext>`  - `<measure>` value aggregated per all network instances and shuffles
   - `*.log`  - `stdout` of the executed algorithm, logs
   - `*.err`  - `stderr` of the executed algorithm and benchmarking routings, errors
 
@@ -410,6 +384,31 @@ Example of the `<net_instance>.mod` format:
 - `./benchmark_daemon.sh`  - the shell script to execute the benchmark in background (daemon mode)
 - `./install_depends.sh`  - the shell script to install dependencies
 
+Structure of the generating synthetic networks:
+```sh
+<syntnets>/
+  lastseed.txt
+  seeds/
+    <netname>.ngs
+  params/
+    <netname>.ngp
+  networks/
+    <netname>/
+      <netname>^<instid>.{cnl,nse, nst}
+      <netname>^<instid>/  # Optional, exists only when the shuffling is performed
+        <netname>^<instid>.nse  # Hardlink
+        <netname>^<instid>%<shufid>.nse
+```
+where `<instid>` is id of the synthetic network instance with the fixed parameters and `<shufid>` is id of the shuffle of the instance.
+
+Expected structure of the input real-world networks with generating shuffles:
+```sh
+<realnets>/
+    <netname>.{cnl, nse}
+    <netname>/  # Optional, exists only when the shuffling is performed
+        <netname>.nse  # Hardlink
+        <netname>%<shufid>.nse
+```
 
 ## Benchmark Extension
 To add custom apps / algorithms to be benchmarked just add corresponding function for "myalgorithm" app to `benchapps.py`:
@@ -434,6 +433,7 @@ All the evaluations will be performed automatically, the algorithm should just f
 
 
 ## Related Projects
-* DAOC - (former [HiReCS](https://github.com/eXascaleInfolab/hirecs) High Resolution Hierarchical Clustering with Stable State, which was totally redesigned)
+* [PyExPool](https://github.com/eXascaleInfolab/PyExPool)  - multiprocess execution pool and load balancer, which provides [external] applications scheduling for the in-RAM execution on NUMA architecture with capabilities of the affinity control, CPU cache vs parallelization maximization, memory consumption and execution time constrains specification for the whole execution pool and per each executor process (called worker, executes a job).
+* DAOC - (former [HiReCS](https://github.com/eXascaleInfolab/hirecs) High Resolution Hierarchical Clustering with Stable State, which was totally redesigned).
 * [eXascale Infolab](https://github.com/eXascaleInfolab) GitHub repository and [our website](http://exascale.info/) where you can find another projects and research papers related to Big Data processing!  
 Please, [star this project](https://github.com/eXascaleInfolab/PyCABeM) if you use it.

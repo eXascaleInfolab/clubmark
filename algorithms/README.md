@@ -18,7 +18,7 @@ Consensus/Ensemble  | + 	    | 		| 			  | + 	   | 			  | 		  | +        |
 > `*` means weighted networks are supported.
 > - *Parameter-Free*  
 > `*` means availability of default values for all parameters,  
-> `+*` means parameter-free clustering algorithm with optional > parameters for the data preprocessing or output post-processing.
+> `+*` means parameter-free clustering algorithm with optional parameters for the data preprocessing or output post-processing.
 
 
 ## Origins

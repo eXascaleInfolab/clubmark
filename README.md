@@ -74,7 +74,7 @@ $ git clone https://github.com/eXascaleInfolab/PyCABeM.git
 ### Prerequisites
 
 The benchmarking framework itself is a *cross-platform* application implemented on Python, and works at least on CPython 2/3 and Pypy interpreters.
-However, the benchmark executes clustering algorithms and evaluation utilities built for the specific platform. The build is performed for the *Linux Ubuntu 16.04 x64*, on other NIX systems some requirements might be missed and not easily solvable. [Docker](https://docs.docker.com/get-started/) image is prepared to run the benchmark from the docker container on any other platform wihoutu any issues.
+However, the benchmark executes clustering algorithms and evaluation utilities built for the specific platform. The build is performed for the *Linux Ubuntu 16.04 x64*, on other NIX systems some requirements might be missed and not easily solvable. [Docker](https://docs.docker.com/get-started/) image is prepared to run the benchmark from the docker container on any other platform without any issues.
 
 > [Windows 10+ x64 provides Ubuntu-compatible bash shell](https://www.howtogeek.com/249966/how-to-install-and-use-the-linux-bash-shell-on-windows-10/), which allows to install and execute terminal Ubuntu apps and execute the benchmarking like on Linux Ubuntu 16.04 x64.
 
@@ -169,7 +169,7 @@ and call `./benchmark.py` with the required parameters there.
 `/opt/pycabem` or any other local directory denotes the place where the benchmarking results and traces are stored, which can be the same as `` `pwd` ``.  
 See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-with-examples).
 
-See the [Usage](#usage) section to learn more about the benchmark execution and resutls structure.
+See the [Usage](#usage) section to learn more about the benchmark execution and results structure.
 
 ### Direct Deployment
 
@@ -193,7 +193,7 @@ There are two main scripts to execute the benchmark:
 - `./benchmark_daemon.sh` to run the benchmark on the background (daemon mode)
 > Note: Execution of the benchmark has been verified only on Linux Ubuntu 16.04 x64, but it should work on any platform where the dependences are satisfied.
 
-The benchmark executes specified applications on the specified datasets in interactive or daemon mode logging the resources consumption, algorithms output and exceptions, and performing the workflow management (termination by timeout, resistance to exceptions, etc.) and results aggregation. All results and logs are stored even in case of the internal (crash) or external termination of the benchmarking applications or the whole framework iteself.
+The benchmark executes specified applications on the specified datasets in interactive or daemon mode logging the resources consumption, algorithms output and exceptions, and performing the workflow management (termination by timeout, resistance to exceptions, etc.) and results aggregation. All results and logs are stored even in case of the internal (crash) or external termination of the benchmarking applications or the whole framework itself.
 
 <!-- #region BenchParams -->
 To see the possible input parameters, run the benchmark without the arguments or with `-h`: `$ ./benchmark.py`:
@@ -286,13 +286,13 @@ This command generates synthetic networks producing 3 instances of each network 
 The timeout is set to 90 min for the following actions: networks generation and then for each network a) clustering and b) evaluation by each specified measure. The network here is each shuffle of each instance of each network type.
 
 
-### Shuffling of the existend networks, clsutering algorithm  execution and evalaution
+### Shuffling of the existent networks, clustering algorithm  execution and evaluation
 ```sh
 $ pypy ./benchmark.py -ie%5='realnets' -cr -a="daoc" -r -qenx -th=1
 ```
 This command makes 5 shuffles for each network in the `./realnets/` directory (already existent shuffles of this network are backed up), converts networks to the .rcg format, executes `daoc` algorithm for all shuffles and evaluates `NMI_max` with timeout for each activity equal to 1 hour.
 
-> Already existent shuffles / clusterings / evalautions are backed up to the timestamped `.gzip` archive.
+> Already existent shuffles / clusterings / evaluations are backed up to the timestamped `.gzip` archive.
 
 
 ### Aggregation of the specified evaluation results

@@ -44,6 +44,7 @@ import traceback  # Stacktrace
 import subprocess
 # import re
 
+from multiprocessing import Lock  # For the TaskTracer
 from numbers import Number  # To verify that a variable is a number (int or float)
 from sys import executable as PYEXEC  # Full path to the current Python interpreter
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, \
@@ -200,12 +201,46 @@ def preparePath(taskpath):  # , netshf=False
 #
 #	return  - number of executions (executed jobs)
 #	"""
-#	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
+#	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
+# 		tasktracer is None or isinstance(tasktracer, TaskTracer)) , (
 #		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 #		.format(execpool, netfile, asym, timeout))
 #	# ATTENTION: for the correct execution algname must be always the same as func lower case name without the prefix "exec"
 #	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
 #	return 0
+
+
+class TaskTracer(object):
+	_lock = Lock()
+
+	def __init__(self, name, tasks):
+		"""TaskTracer constructor
+		
+		Args:
+			object (TaskTracer): TaskTracer instance
+			name (str): the tracer name
+			tasks (set(str)): remained tasks
+		"""
+		self.name = name
+		self.tasks = tasks  # Active tasks
+		self.ndone = 0  # The number of finished tasks
+
+	def completed(self, task):
+		"""Remove the task from the tracer incrementing the number of completed tasks
+		
+		Args:
+			task (str): the completed task name
+		"""
+		if _lock.acquire(timeout=3):  # 3 sec
+			try:
+				self.tasks.remove(task)
+				self.ndone += 1
+			except ValueError as err:
+				print('The completing task "{}" should be among the active tasks: {}', task, err, file=sys.stderr)
+			finally:
+				_lock.release()
+		else:
+			raise RuntimeError('Lock acqusition failed of "{}"'.format(self.name))
 
 
 def funcToAppName(funcname):
@@ -341,7 +376,7 @@ class PyBin(object):
 		return pybin
 
 
-def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):  # , selfexec=False  - whether to call self recursively
+def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):  # , selfexec=False  - whether to call self recursively
 	"""Execute Louvain using the igraph library
 	Note: Louvain produces not stable results => multiple executions are desirable.
 
@@ -352,6 +387,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 		which is actual for the shuffles with non-flat structure
 	timeout  - processing (clustering) timeout of the input file
 	pathid  - path id (including the leading separator) of the input networks file, str
+	tasktracer: TaskTracer  - optional task tracer
 	workdir  - relative working directory of the app, actual when the app contains libs
 	seed  - random seed, uint64_t
 
@@ -359,7 +395,8 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	"""
 	# Note: .. + 0 >= 0 to be sure that type is arithmetic, otherwise it's always true for the str
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
+		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
 
@@ -440,8 +477,9 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 
 
 # SCP (Sequential algorithm for fast clique percolation)
-def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
-	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
+def execScp(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
+		tasktracer is None or isinstance(tasktracer, TaskTracer)) , (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
 
@@ -518,7 +556,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	return kmax + 1 - kmin
 
 
-def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None, instances=5):  # _netshuffles + 1
+def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None, instances=5):  # _netshuffles + 1
 	"""Execute Randcommuns, Random Disjoint Clustering
 	Results are not stable => multiple execution is desirable.
 
@@ -527,7 +565,8 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	instances  - the number of clustering instances to be produced
 	"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
+		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tseed: {}'
 		.format(execpool, netfile, asym, timeout, seed))
 
@@ -624,7 +663,7 @@ class DaocOpts(object):
 
 
 # DAOC wit parameterized gamma
-def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None, opts=DaocOpts(rlevout=0.8)):
+def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None, opts=DaocOpts(rlevout=0.8)):
 	"""Execute DAOC, Deterministic (including input order independent) Agglomerative Overlapping Clustering
 	using standard modularity as optimization function
 
@@ -634,9 +673,10 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 	gamma  - resolution parameter gamma, <0 means automatic identification of the optimal dymamic value, number (float or int)
 	"""
 	assert isinstance(algname, str) and algname and execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and isinstance(opts, DaocOpts), (  # Verify that gamma is a numeric value (int or float)
+		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and isinstance(opts, DaocOpts), (  # Verify that gamma is a numeric value (int or float)
 		'Invalid input parameters:\n\talgname: {},\n\texecpool: {},\n\tnet: {}'
-		',\n\tasym: {},\n\ttimeout: {},\n\opts: {}'.format(execpool, netfile, asym, timeout, opts))
+		',\n\tasym: {},\n\ttimeout: {},\n\opts: {}'.format(algname, execpool, netfile, asym, timeout, opts))
 
 	# Evaluate relative network size considering whether the network is directed (asymmetric)
 	netsize = os.path.getsize(netfile)
@@ -679,35 +719,35 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
-def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
+def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None
 , opts=DaocOpts(rlevout=0.8, gamma=1, reduction=None, significance=None)):
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, opts)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
-def execDaocA(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
+def execDaocA(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None
 , opts=DaocOpts(rlevout=0.8, gamma=-1, reduction=None, significance=None)):
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
-def execDaoc_s_r(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
+def execDaoc_s_r(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None
 , opts=DaocOpts(gamma=1, significance='', reduction='')):  # Note: '' values mean use default
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
-def execDaocA_s_r(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
+def execDaocA_s_r(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None
 , opts=DaocOpts(gamma=-1, significance='', reduction='')):  # Note: '' values mean use default
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA_s_r'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, opts)
 
 
 # # DAOC (using standard modularity as an optimization function, non-generelized)
-# def execDaoc_rm(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
+# def execDaoc_rm(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None
 # # 1 - ACCURATE, 2 - MEAN;
 # , opts=DaocOpts(rlevout=0.8, gamma=1, reduction='m')):
 # 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
@@ -715,7 +755,7 @@ def execDaocA_s_r(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 #
 #
 # # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
-# def execDaoc_ssh_rm(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', seed=None
+# def execDaoc_ssh_rm(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None
 # #SIGNIF_OWNSHIER = 0xA
 # , opts=DaocOpts(gamma=1, significance='sh')):
 # 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
@@ -723,9 +763,10 @@ def execDaocA_s_r(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 
 
 # Ganxis (SLPA)
-def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'ganxis/', seed=None):
+def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'ganxis/', seed=None):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
+		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tseed: {}'
 		.format(execpool, netfile, asym, timeout, seed))
 
@@ -770,9 +811,10 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 
 # Oslom2
-def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
+def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
+		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tseed: {}'
 		.format(execpool, netfile, asym, timeout, seed))
 
@@ -829,8 +871,9 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 
 # pSCAN (Fast and Exact Structural Graph Clustering)
-def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
-	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
+def execPscan(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):
+	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
+		tasktracer is None or isinstance(tasktracer, TaskTracer)) , (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
 
@@ -887,7 +930,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 
 
 # rgmc algorithms family: 1: RG, 2: CGGC_RG, 3: CGGCi_RG
-def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None, alg=None):
+def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None, alg=None):
 	"""Rgmc algorithms family
 
 	algname  - name of the executing algorithm to be traced
@@ -896,7 +939,8 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 	"""
 	algs = ('RG', 'CGGC_RG', 'CGGCi_RG')
 	assert isinstance(algname, str) and algname and execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)) and alg in (1, 2, 3), (
+		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and (seed is None or isinstance(seed, int)) and alg in (1, 2, 3), (
 		'Invalid input parameters:\n\talgname: {},\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\talg: {}'
 		.format(algname, execpool, netfile, asym, timeout, algs[alg]))
 
@@ -930,26 +974,27 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 
 
 # CGGC_RG (rgmc -a 2)
-def execCggcRg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
+def execCggcRg(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggcRg'
 	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, alg=2)
 
 
 # CGGCi_RG (rgmc -a 3)
-def execCggciRg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
+def execCggciRg(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggciRg'
 	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, seed, alg=3)
 
 
 # SCD
-def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, seed=None):
+def execScd(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):
 	"""Scalable Community Detection (SCD)
 	Note: SCD os applicable only for the undirected unweighted networks, it skips the weight
 	in the weighted network.
 	"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (seed is None or isinstance(seed, int)), (
-		'Invalid input parameters:\n\talgname: {},\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
+		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and (seed is None or isinstance(seed, int)), (
+		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
 
 	# Evaluate relative network size considering whether the network is directed (asymmetric)

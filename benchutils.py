@@ -21,7 +21,9 @@ import re
 from multiprocessing import RLock
 from math import sqrt, copysign
 
-_BCKDIR = 'backup/'  # Backup directory
+_PREFINTERNDIR = '<'  # Internal directory prefix
+_BCKDIR = _PREFINTERNDIR + 'backup/'  # Backup directory
+_ORIGDIR = _PREFINTERNDIR + 'orig/'  # Backup directory
 _REFLOAT = re.compile(r'[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')  # Regular expression to parse float
 _REINT = re.compile(r'[-+]?\d+(?=\W)')  # Regular expression to parse int
 _SEPPARS = '!'  # Network parameters separator, must be a char
@@ -36,7 +38,7 @@ _TIMESTAMP_START_HEADER = ' '.join(('# ---', _TIMESTAMP_START_STR, '-'*32))
 # Consider Python2
 if not hasattr(glob, 'escape'):
 	# r'(?<!/)[?*[]'
-	_RE_GLOBESC = re.compile(r'[?*[]')  # Escape all special characters ('?', '*' and '[') not in UNC (path)
+	_RE_GLOBESC = re.compile(r'[?*[]')  # Escape all special characters ('?', '*' and '[') not in the UNC (path)
 
 	def globesc(mobj):
 		"""Escape the special symbols ('?', '*' and '[') not in UNC (path)
@@ -430,8 +432,8 @@ def escapePathWildcards(path):
 
 	return  escaped path
 
-	>>> escapePathWildcards('//?Quo va?dis?.txt')
-	'//[?]Quo va[?]dis[?].txt'
+	>>> escapePathWildcards('//?Quo va?dis[?].txt')
+	'//[?]Quo va[?]dis[[][?]].txt'
 	"""
 	return glob.escape(path) if hasattr(glob, 'escape') else re.sub(_RE_GLOBESC, globesc, path)
 
@@ -568,9 +570,8 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	"""MOVE or copy all files and dirs starting from the specified basepath into backup/
 	located in the parent dir of the basepath with optional compression.
 
-	basepath  - path, last component of which (file or dir) is a template to backup
-		all paths starting from it in the same location.
-		ATTENTION: the basepathis escaped, i.e. wildcards are NOT supported
+	basepath  - path, last component of which (file or dir) is a name for the backup
+		ATTENTION: the basepath is escaped, i.e. wildcards are NOT supported
 	expand  - expand prefix, backup all paths staring from basepath, or basepath only
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
@@ -590,15 +591,21 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	# base/linkdir/../a -> base/a, which might be undesirable
 	basepath = escapePathWildcards(basepath).rstrip('/')  # os.path.normpath(escapePathWildcards(basepath))
 	# Create backup/ if required
-	basedir = os.path.split(basepath)[0]
+	basedir, srcname = os.path.split(basepath)
 	if not basedir:
 		basedir = '.'  # Note: '/' is added later
 	basedir = '/'.join((basedir, _BCKDIR))
 	if not os.path.exists(basedir):
 		os.mkdir(basedir)
+	origdir = '/'.join((basedir, _ORIGDIR))
 	# Backup files
 	basename = basedir + nameVersion(basepath, expand, synctime, xsuffix)  # Base name of the backup
 	bckname = '-'.join((basename, str(timeSeed())))
+	# Consider orig dir if required
+	basepaths = [basepath]
+	origname = origdir + srcname
+	if os.path.exists(origname):
+		basepaths.append(origname)
 	if compress:
 		archname = basename + '.tar.gz'
 		# Rename already existent archive if required
@@ -614,16 +621,17 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 				os.remove(archname)
 		# Move data to the archive
 		with tarfile.open(archname, 'w:gz', bufsize=128*1024, compresslevel=6) as tar:
-			for path in glob.iglob(basepath + ('*' if expand else '')):
-				tar.add(path, arcname=os.path.split(path)[1])
-				# Delete the archived paths if required
-				if move:
-					#if _DEBUG_TRACE:
-					#	print('>> moving path: ', path, file=sys.stderr)
-					if os.path.isdir(path):
-						shutil.rmtree(path)
-					else:
-						os.remove(path)
+			for basesrc in basepaths:
+				for path in glob.iglob(basesrc + ('*' if expand else '')):
+					tar.add(path, arcname=os.path.split(path)[1])
+					# Delete the archived paths if required
+					if move:
+						#if _DEBUG_TRACE:
+						#	print('>> moving path: ', path, file=sys.stderr)
+						if os.path.isdir(path):
+							shutil.rmtree(path)
+						else:
+							os.remove(path)
 	else:
 		# Rename already existent backup if required
 		if os.path.exists(basename):
@@ -639,9 +647,10 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 		# Move data to the backup
 		if not os.path.exists(basename):
 			os.mkdir(basename)
-		for path in glob.iglob(basepath + ('*' if expand else '')):
-			bckop = shutil.move if move else shutil.copy2
-			bckop(path, '/'.join((basename, os.path.split(path)[1])))
+		for basesrc in basepaths:
+			for path in glob.iglob(basesrc + ('*' if expand else '')):
+				bckop = shutil.move if move else shutil.copy2
+				bckop(path, '/'.join((basename, os.path.split(path)[1])))
 
 
 if __name__ == '__main__':

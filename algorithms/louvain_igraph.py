@@ -97,7 +97,7 @@ def louvain(args):
 	if not args.perlev:
 		if props:
 			print('The number of propagated (duplicated) communities in the hieratchy: '
-			 + str(props), file=sys.stderr)
+				+ str(props), file=sys.stderr)
 		with open(args.outpfile + args.outpext, 'w') as fout:
 			for cl in communs:
 				if named:

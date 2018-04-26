@@ -140,8 +140,8 @@ class Net(object):
 
 class Node(object):
 	def __init__(self, net, index):
-		self.net=net;
-		self.index=index;
+		self.net=net
+		self.index=index
 
 	def __iter__(self):
 		if not self.index in self.net._nodes:
@@ -153,8 +153,8 @@ class Node(object):
 		return self.net[self.index, index]
 
 	def __setitem__(self, index, val):
-		 self.net[self.index, index]=val
-		 return val
+		self.net[self.index, index]=val
+		return val
 
 	def deg(self):
 		return len(self.net._nodes[self.index])
@@ -164,9 +164,9 @@ class SymmNet(Net):
 	def _legaledge(self, src, dst):
 		if src in self._nodes:
 			if dst in self._nodes[src]:
-				return dst in self._nodes \
-						and src in self._nodes[dst] \
-						and self._nodes[src][dst]==self._nodes[dst][src]
+				return (dst in self._nodes
+					and src in self._nodes[dst]
+					and self._nodes[src][dst]==self._nodes[dst][src])
 		#either no src or no edge src->dst
 		return dst not in self._nodes or src not in self._nodes[dst]
 

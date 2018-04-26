@@ -613,7 +613,7 @@ def printBlockRcg(outfmt, fout, parsed, remdub, frcedg, commented, unweight, fin
 		# however this requires arcs accumulation if dublicates check is required
 		if parsed.directed and frcedg:
 			print('WARNING, arcs -> edges conversion will be inaccurate in case arcs'
-				  ' have distinct forth and back weights', file=sys.stderr)
+					 ' have distinct forth and back weights', file=sys.stderr)
 		# Print the initial header only once
 		if outfmt.printed.directed is None:
 			# Update PtindedData parameters
@@ -709,7 +709,7 @@ def printBlockNsl(directed):
 			# Allow implicit conversion of edges <-> arcs
 			if (outfmt.printed.directed is None or parsed.newsection) and (not directed and parsed.directed):
 				print('WARNING, arcs -> edges conversion will be inaccurate in case arcs'
-					  ' have distinct forth and back weights', file=sys.stderr)
+						 ' have distinct forth and back weights', file=sys.stderr)
 			# Print the header only once for .nsl
 			if outfmt.printed.directed is None:
 				if frcedg and directed:

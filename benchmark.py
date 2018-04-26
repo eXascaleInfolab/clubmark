@@ -65,7 +65,7 @@ from math import sqrt
 from multiprocessing import cpu_count  # Returns the number of logical CPU units (hw treads) if defined
 
 import benchapps  # Required for the functions name mapping to/from the app names
-from benchapps import PYEXEC, aggexec, funcToAppName, _PREFEXEC  # , _EXTCLNODES, _ALGSDIR
+from benchapps import PYEXEC, aggexec, funcToAppName, TaskTracer, _PREFEXEC  # , _EXTCLNODES, _ALGSDIR
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, \
  _SEPSHF, _SEPPATHID, _UTILDIR, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
@@ -143,7 +143,7 @@ class SyntPathOpts(PathOpts):
 	def __str__(self):
 		"""String conversion"""
 		return ', '.join((super(SyntPathOpts, self).__str__(), 'netins: ' + str(self.netins)
-		 , 'overwrite: ' + str(self.overwrite)))
+			, 'overwrite: ' + str(self.overwrite)))
 
 
 class Params(object):
@@ -152,7 +152,7 @@ class Params(object):
 		"""Sets default values for the input parameters
 
 		syntpo  - synthetic networks path options, SyntPathOpts
-		convnets  - convert existing networks into the .rcg format
+		convnets  - convert existing networks into the .rcg format, deprecated
 			0 - do not convert
 			0b001  - convert:
 				0b01 - convert only if this network is not exist
@@ -277,7 +277,7 @@ def parseParams(args):
 						opts.syntpo.shfnum = int(nums[1])
 					if opts.syntpo.netins < 0 or opts.syntpo.shfnum < 0:
 						raise ValueError('Value is out of range:  netins: {netins} >= 1, shfnum: {shfnum} >= 0'
-						 .format(netins=opts.syntpo.netins, shfnum=opts.syntpo.shfnum))
+							.format(netins=opts.syntpo.netins, shfnum=opts.syntpo.shfnum))
 				# Parse outpdir
 				if len(val) > 1:
 					if not val[1]:  # arg ended with '=' symbol
@@ -532,7 +532,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 					with open(fnamex, 'w') as fout:
 						genopts.update({'N': N, 'k': k})
 						genopts.update({'maxk': evalmaxk(genopts), 'muw': evalmuw(genopts), 'minc': evalminc(genopts)
-						 , 'maxc': evalmaxc(genopts), 'on': evalon(genopts), 'name': name})
+							, 'maxc': evalmaxc(genopts), 'on': evalon(genopts), 'name': name})
 						for opt in viewitems(genopts):
 							fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
 				else:
@@ -560,29 +560,29 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 						print('Generating {netfile} as {name} by {netparams}'.format(netfile=netfile, name=name, netparams=netparams))
 					if insnum and overwrite or not os.path.exists(netfile.join((basedir, netext))):
 						args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, _EXTEXECTIME))  # Output .rcp in the current dir, basedir
-						 , genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
+							, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
 						if asymarg:
 							args.extend(asymarg)
 						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 						_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
-						 #, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
-						 , onstart=lambda job: shutil.copy2(randseed, netseed)  #pylint: disable=W0640;  Network generation seed
-						 #, ondone=shuffle if shfnum > 0 else None
-						 , startdelay=startdelay, category='generate_' + str(k), size=N))
+							#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
+							, onstart=lambda job: shutil.copy2(randseed, netseed)  #pylint: disable=W0640;  Network generation seed
+							#, ondone=shuffle if shfnum > 0 else None
+							, startdelay=startdelay, category='generate_' + str(k), size=N))
 					for i in range(1, insnum):
 						namext = ''.join((name, _SEPINST, str(i)))
 						netfile = netpath + namext
 						if overwrite or not os.path.exists(netfile.join((basedir, netext))):
 							args = [xtimebin, '-n=' + namext, ''.join(('-o=', bmname, _EXTEXECTIME))
-							 , genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
+								, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
 							if asymarg:
 								args.extend(asymarg)
 							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
 							_execpool.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
-							 #, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
-							 , onstart=lambda job: shutil.copy2(randseed, netseed)  #pylint: disable=W0640;  Network generation seed
-							 #, ondone=shuffle if shfnum > 0 else None
-							 , startdelay=startdelay, category='generate_' + str(k), size=N))
+								#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
+								, onstart=lambda job: shutil.copy2(randseed, netseed)  #pylint: disable=W0640;  Network generation seed
+								#, ondone=shuffle if shfnum > 0 else None
+								, startdelay=startdelay, category='generate_' + str(k), size=N))
 				else:
 					print('ERROR, network parameters file "{}" does not exist'.format(fnamex), file=sys.stderr)
 		print('Parameter files generation completed')
@@ -594,7 +594,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 			_execpool.join(min(gentimeout, insnum*2*netgenTimeout))
 		except BaseException as err:  # Consider also system iteruptions not captured by the Exception
 			print('WARNING, network generation execution pool is interrupted by: {}. {}'
-			 .format(err, traceback.format_exc(5)), file=sys.stderr)
+				.format(err, traceback.format_exc(5)), file=sys.stderr)
 			raise
 	_execpool = None
 	print('Synthetic networks files generation completed')
@@ -711,7 +711,7 @@ while True:
 			# Note: the shuffling might be scheduled even when the shuffles exist in case
 			# the origin network is traversed before it's shuffles
 			shuffle(Job(name=name, workdir=path + '/', params={'netext': netext, 'shfnum': shfnum}
-			 , timeout=timeout1*shfnum, category='shuffle', size=os.path.getsize(netfile)))
+				, timeout=timeout1*shfnum, category='shuffle', size=os.path.getsize(netfile)))
 			return shfnum  # The network is shuffled shfnum times
 
 		def prepareDir(dirname, netfile, bcksuffix=None):
@@ -898,10 +898,10 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 				if resdub:
 					args.append('-d')
 				_execpool.execute(Job(name=os.path.splitext(os.path.split(inpnet)[1])[0], args=args, timeout=timeout
-				 , category='convert', size=os.path.getsize(inpnet)))
+					, category='convert', size=os.path.getsize(inpnet)))
 			except Exception as err:  #pylint: disable=W0703
 				print('ERROR on "{}" conversion to .rcg, the conversion is cancelled: {}. {}'
-				 .format(inpnet, err, traceback.format_exc(5)), file=sys.stderr)
+					.format(inpnet, err, traceback.format_exc(5)), file=sys.stderr)
 			#netnoext = os.path.splitext(net)[0]  # Remove the extension
 			#
 			## Convert to Louvain binaty input format
@@ -993,6 +993,9 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			# Execute only specified algorithms
 			execalgs = [getattr(appsmodule, _PREFEXEC + alg, unknownApp(_PREFEXEC + alg)) for alg in algorithms]
 			#algorithms = [alg.lower() for alg in algorithms]
+		assert len(algorithms) == len(execalgs), 'execalgs are not synced with the algorithms'
+
+		taskTracers = [TaskTracer(alg) for alg in algorithms]
 
 		def runapp(net, asym, netshf, pathid=''):
 			"""Execute algorithms on the specified network counting number of ran jobs
@@ -1007,13 +1010,14 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			"""
 			jobsnum = 0
 			netext = os.path.splitext(net)[1].lower()
-			for ealg in execalgs:
+			for ialg, ealg in enumerate(execalgs):
 				try:
-					jobsnum += ealg(_execpool, net, asym=asymnet(netext, asym), odir=netshf, timeout=timeout, pathid=pathid, seed=seed)
+					jobsnum += ealg(_execpool, net, asym=asymnet(netext, asym), odir=netshf, timeout=timeout
+						, pathid=pathid, tasktracer=taskTracers[ialg], seed=seed)
 				except Exception as err:  #pylint: disable=W0703
 					errexectime = time.time() - exectime
 					print('ERROR, "{}" is interrupted by the exception {} on {:.4f} sec ({} h {} m {:.4f} s), callstack fragment:'
-					 .format(ealg.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
+						.format(ealg.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
 					traceback.print_stack(limit=5, file=sys.stderr)
 			return jobsnum
 
@@ -1036,7 +1040,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			fpathids = open(_PATHIDFILE, 'a')
 		except IOError as err:
 			print('WARNING, creation of the path ids map file is failed: {}. The mapping is outputted to stdout.'
-			 .format(err), file=sys.stderr)
+				.format(err), file=sys.stderr)
 			fpathids = sys.stdout
 		try:
 			# Write header if required
@@ -1046,9 +1050,9 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			fpathids.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
 
 			xargs = {'asym': False,  # Asymmetric network
-			  'pathidstr': '',  # Id of the dublicated path shortcut to have the unique shortcut
-			  'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
-			  'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
+				 'pathidstr': '',  # Id of the dublicated path shortcut to have the unique shortcut
+				 'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
+				 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
 			# Track processed file names to resolve cases when files with the same name present in different input dirs
 			# Note: pathids are required at least to set concise job names to see what is executed in runtime
 			netnames = {}  # Name to pathid mapping: {Name: counter}
@@ -1101,14 +1105,23 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			runtimeout = timeout * xargs['jobsnum']
 		timelim = min(timeout * xargs['jobsnum'], runtimeout)
 		print('Waiting for the apps execution on {} jobs from {} networks'
-		 ' with {} sec ({} h {} m {:.4f} s) timeout ...'
-		 .format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
+			' with {} sec ({} h {} m {:.4f} s) timeout ...'
+			.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
 		try:
 			_execpool.join(timelim)
 		except BaseException as err:  # Consider also system iteruptions not captured by the Exception
 			print('WARNING, algorithms execution pool is interrupted by: {}. {}'
-			 .format(err, traceback.format_exc(5)), file=sys.stderr)
+				.format(err, traceback.format_exc(5)), file=sys.stderr)
 			raise
+		finally:
+			# Trace executed and uncompleted tasks
+			print('Algorithms execution statistics:')
+			for tt in taskTracers:
+				print('{} completed {}/{} jobs'.format(tt.name, tt.ndone, tt.ndone + len(tt.tasks)))
+				# Trace uncompleted tasks
+				if tt.tasks:
+					for jnum, jname in enumerate(tt.tasks, 1):
+						print('\t{}\t{}'.format(jnum, jname))
 	_execpool = None
 	stime = time.time() - stime
 	print('The apps execution is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
@@ -1184,7 +1197,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 				except Exception as err:
 # 					errexectime = time.time() - exectime
 # 					print('ERROR, "{}" is interrupted by the exception {} on {:.4f} sec ({} h {} m {:.4f} s), callstack fragment:'
-# 					 .format(eapp.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
+# 						.format(eapp.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
 # 					traceback.print_stack(limit=5, file=sys.stderr)
 # 			# Note: jobs are executed asynchronously, so here none of them is completed
 # 			#_STORAGE_FILE.flush()  # Write results to the persistent storage
@@ -1211,11 +1224,11 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 			return '.cnl'
 
 # 		xargs = {'execpool': None,  # Execution pool to schedule evaluators
-# 		  'evaluators': None,  # Evaluating functions
-# 		  'asym': False,  # Asymmetric network, required for the intrinsic measures
-# 		  'pathidstr': '',  # Id of the dublicated path shortcut to have the unique shortcut
-# 		  'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
-# 		  'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
+# 			 'evaluators': None,  # Evaluating functions
+# 			 'asym': False,  # Asymmetric network, required for the intrinsic measures
+# 			 'pathidstr': '',  # Id of the dublicated path shortcut to have the unique shortcut
+# 			 'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
+# 			 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
 
 # 		# ATTENTION: NMI ovp multiresolution should be ealuated in the dedicated mode requiring multiple CPU cores,
 # 		# so it will be scheduled separately after other measures
@@ -1223,7 +1236,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 		xargs['evaluators'] = evaluators(quality & 0xFFFC)  # Skip gecmi (Multiresolution Overlapping NMI) because it requires special scheduling
 # 		if xargs['evaluators']:
 # 			print('  Scheduling quality evaluation for the evaluators: ', ', '.join(
-# 			 [funcToAppName(func.__name__) for func in xargs['evaluators']]))
+# 				[funcToAppName(func.__name__) for func in xargs['evaluators']]))
 # 			with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='qualityst') as _execpool:
 # 				xargs['execpool'] = _execpool
 # 				# Load pathid mapping (nameid: fullpath)
@@ -1270,7 +1283,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 							# Validate loaded pathids mapping
 # 							if pathids.get(nameid) != mpath:
 # 								raise ValueError('ERROR, "{}" mapping validation failed.'
-# 								 ' Can not find correspondence of the ground truth files to the evaluating clusterings.')
+# 									' Can not find correspondence of the ground truth files to the evaluating clusterings.')
 # 						pcuropt.path = path
 # 						if _DEBUG_TRACE:
 # 							print('  Scheduling quality evaluation for the path options ({})'.format(str(pcuropt)))
@@ -1281,14 +1294,14 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 					evaltimeout = timeout * xargs['jobsnum']
 # 				timelim = min(timeout * xargs['jobsnum'], evaltimeout)
 # 				print('Waiting for the quality evaluation on {} jobs from {} networks'
-# 				 ' with {} sec ({} h {} m {:.4f} s) timeout ...'
-# 				 .format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
+# 					' with {} sec ({} h {} m {:.4f} s) timeout ...'
+# 					.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
 # 				try:
 # 					_execpool.join(timelim)
 # 				except BaseException as err:  # Consider also system iteruptions not captured by the Exception
 # 					print('WARNING{}, quality evaluation execution pool is interrupted by: {}. {}'
-# 					 .format('' if not _execpool.name else ' ' + _execpool.name
-# 					 , err, traceback.format_exc(5)), file=sys.stderr)
+# 						.format('' if not _execpool.name else ' ' + _execpool.name
+# 						, err, traceback.format_exc(5)), file=sys.stderr)
 # 					raise
 
 # 		# Schedule NMI multiresolution overlapping evalautions (gecmi) either on the whole NUMA node or
@@ -1297,7 +1310,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 		xargs['evaluators'] = evaluators(quality & 0b11)  # Skip gecmi (Multiresolution Overlapping NMI) because it requires special scheduling
 # 		if xargs['evaluators']:
 # 			print('  Scheduling quality evaluation for the evaluators: ', ', '.join(
-# 			 [funcToAppName(func.__name__) for func in xargs['evaluators']]))
+# 				[funcToAppName(func.__name__) for func in xargs['evaluators']]))
 # 			if _execpool is not None:
 # 				_execpool.name = 'qualitymt'
 # 				_execpool.alive = True
@@ -1354,20 +1367,20 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 				timelim -= elapsed
 # 				if timelim > 0:
 # 					print('Waiting for the quality evaluation on {} jobs from {} networks'
-# 					 ' with {} sec ({} h {} m {:.4f} s) timeout ...'
-# 					 .format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
+# 						' with {} sec ({} h {} m {:.4f} s) timeout ...'
+# 						.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
 # 					try:
 # 						_execpool.join(timelim)
 # 					except BaseException as err:  # Consider also system iteruptions not captured by the Exception
 # 						print('WARNING{}, quality evaluation execution pool is interrupted by: {}. {}'
-# 						 .format('' if not _execpool.name else ' ' + _execpool.name
-# 						 , err, traceback.format_exc(5)), file=sys.stderr)
+# 							.format('' if not _execpool.name else ' ' + _execpool.name
+# 							, err, traceback.format_exc(5)), file=sys.stderr)
 # 						raise
 # 				else:
 # 					print('WARNING {}, the execution pool is terminated by the timeout of {} sec,'
-# 					 ', executed {} sec ({} h {} m {:.4f} s)'.format(
-# 					  '' if not _execpool.name else ' ' + _execpool.name
-# 					  , timelim + elapsed, elapsed, *secondsToHms(elapsed), file=sys.stderr))
+# 						', executed {} sec ({} h {} m {:.4f} s)'.format(
+# 						 '' if not _execpool.name else ' ' + _execpool.name
+# 						 , timelim + elapsed, elapsed, *secondsToHms(elapsed), file=sys.stderr))
 # 			# _execpool = None
 # 			# stime = time.time() - stime
 # 			# print('The apps execution is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
@@ -1531,8 +1544,8 @@ def benchmark(*args):
 	if opts.syntpo and opts.syntpo.netins >= 1:
 		# Note: on overwirte old instances are rewritten and shulles are deleted making the backup
 		generateNets(genbin=benchpath, insnum=opts.syntpo.netins, asym=opts.syntpo.asym
-		 , basedir=opts.syntpo.path, netsdir=_NETSDIR, overwrite=opts.syntpo.overwrite
-		 , seedfile=opts.seedfile, gentimeout=3*60*60)  # 3 hours
+			, basedir=opts.syntpo.path, netsdir=_NETSDIR, overwrite=opts.syntpo.overwrite
+			, seedfile=opts.seedfile, gentimeout=3*60*60)  # 3 hours
 
 	# Update opts.datasets with synthetic generated data: all subdirs of the synthetic networks dir
 	# Note: should be done only after the genertion, because new directories can be created
@@ -1554,18 +1567,18 @@ def benchmark(*args):
 	# opts.convnets: 0 - do not convert, 0b01 - only if not exists, 0b11 - forced conversion, 0b100 - resolve duplicated links
 	if opts.convnets:
 		convertNets(opts.datas, overwrite=opts.convnets & 0b11 == 0b11
-		 , resdub=opts.convnets & 0b100, timeout1=7*60, convtimeout=45*60)
+			, resdub=opts.convnets & 0b100, timeout1=7*60, convtimeout=45*60)
 
 	# Run the opts.algorithms and measure their resource consumption
 	if opts.runalgs:
 		runApps(appsmodule=benchapps, algorithms=opts.algorithms, datas=opts.datas, seed=seed
-		 , exectime=exectime, timeout=opts.timeout, runtimeout=10*24*60*60)  # 10 days
+			, exectime=exectime, timeout=opts.timeout, runtimeout=10*24*60*60)  # 10 days
 
 	# Evaluate results
 	if opts.quality:
 		evalResults(quality=opts.quality, appsmodule=benchapps, algorithms=opts.algorithms
-		 , datas=opts.datas, seed=seed, exectime=exectime, timeout=opts.timeout
-		 , evaltimeout=14*24*60*60, update=opts.updqual)  # 14 days
+			, datas=opts.datas, seed=seed, exectime=exectime, timeout=opts.timeout
+			, evaltimeout=14*24*60*60, update=opts.updqual)  # 14 days
 
 	if opts.aggrespaths:
 		aggEvaluations(opts.aggrespaths)
@@ -1592,8 +1605,8 @@ def terminationHandler(signal=None, frame=None, terminate=True):  #pylint: disab
 
 	if _execpool:
 		print('WARNING{}, execpool is terminating by the signal {} ({})'
-		 .format('' if not _execpool.name else ' ' + _execpool.name, signal
-		 , _signals.get(signal, '-')))  # Note: this is a trace log record
+			.format('' if not _execpool.name else ' ' + _execpool.name, signal
+			, _signals.get(signal, '-')))  # Note: this is a trace log record
 		del _execpool  # Destructors are caled later
 		# Define _execpool to avoid unnessary trash in the error log, which might
 		# be caused by the attempt of subsequent deletion on destruction
@@ -1692,7 +1705,7 @@ if __name__ == '__main__':
 			'',
 			'Advanced parameters:',
 			#'  --stderr-stamp  - output a time stamp to the stderr on the benchmarking start to separate multiple reexectuions',
-			'  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.)',
+			'  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.), deprecated',
 			'    f  - force the conversion even when the data is already exist',
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
 			'  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
@@ -1704,7 +1717,7 @@ if __name__ == '__main__':
 	else:
 		# Fill signals mapping {value: name}
 		_signals = {sv: sn for sn, sv in viewitems(signal.__dict__)
-		 if sn.startswith('SIG') and not sn.startswith('SIG_')}
+			if sn.startswith('SIG') and not sn.startswith('SIG_')}
 
 		# Set handlers of external signals
 		signal.signal(signal.SIGTERM, terminationHandler)

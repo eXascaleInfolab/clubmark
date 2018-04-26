@@ -41,7 +41,7 @@ if not hasattr(glob, 'escape'):
 	_RE_GLOBESC = re.compile(r'[?*[]')  # Escape all special characters ('?', '*' and '[') not in the UNC (path)
 
 	def globesc(mobj):
-		"""Escape the special symbols ('?', '*' and '[') not in UNC (path)
+		r"""Escape the special symbols ('?', '*' and '[') not in UNC (path)
 
 		Args:
 			mobj (re.MatchObject): matched RE object (not None)
@@ -164,7 +164,7 @@ def delPathSuffix(path, nameonly=False):
 					int(pname[pos + 1:pose])
 				except ValueError as err:
 					print('WARNING, invalid suffix or separator "{}" represents part of the path name "{}"'
-					 ', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
+						', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
 					continue  # Check following separator candidate
 			# Note: threat param separator as alvays valid
 			pname = pname[:pos]
@@ -232,7 +232,7 @@ def parseName(path, nameonly=False):
 					int(pname[pos + 1:pose])
 				except ValueError as err:
 					print('WARNING, invalid suffix or separator "{}" represents part of the path name "{}"'
-					 ', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
+						', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
 					continue  # Check following separator candidate
 			# Note: threat param separator as alvays valid
 			if basename is pname:
@@ -617,7 +617,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 				os.rename(archname, bckname)
 			except OSError as err:
 				print('WARNING, removing old backup file "{}", as its renaming failed: {}'
-				 .format(archname, err), file=sys.stderr)
+					.format(archname, err), file=sys.stderr)
 				os.remove(archname)
 		# Move data to the archive
 		with tarfile.open(archname, 'w:gz', bufsize=128*1024, compresslevel=6) as tar:
@@ -642,7 +642,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 				os.rename(basename, bckname)
 			except OSError as err:
 				print('WARNING, removing old backup dir "{}", as its renaming failed: {}'
-				 .format(basename, err), file=sys.stderr)
+					.format(basename, err), file=sys.stderr)
 				shutil.rmtree(basename)
 		# Move data to the backup
 		if not os.path.exists(basename):

@@ -65,7 +65,7 @@ from math import sqrt
 from multiprocessing import cpu_count  # Returns the number of logical CPU units (hw treads) if defined
 
 import benchapps  # Required for the functions name mapping to/from the app names
-from benchapps import PYEXEC, aggexec, funcToAppName, TaskTracer, _PREFEXEC  # , _EXTCLNODES, _ALGSDIR
+from benchapps import PYEXEC, aggexec, funcToAppName, JobTracer, _PREFEXEC  # , _EXTCLNODES, _ALGSDIR
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, \
  _SEPSHF, _SEPPATHID, _UTILDIR, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
@@ -995,7 +995,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			#algorithms = [alg.lower() for alg in algorithms]
 		assert len(algorithms) == len(execalgs), 'execalgs are not synced with the algorithms'
 
-		taskTracers = [TaskTracer(alg) for alg in algorithms]
+		jobTracers = [JobTracer(alg) for alg in algorithms]
 
 		def runapp(net, asym, netshf, pathid=''):
 			"""Execute algorithms on the specified network counting number of ran jobs
@@ -1013,7 +1013,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			for ialg, ealg in enumerate(execalgs):
 				try:
 					jobsnum += ealg(_execpool, net, asym=asymnet(netext, asym), odir=netshf, timeout=timeout
-						, pathid=pathid, tasktracer=taskTracers[ialg], seed=seed)
+						, pathid=pathid, jobtracer=jobTracers[ialg], seed=seed)
 				except Exception as err:  #pylint: disable=W0703
 					errexectime = time.time() - exectime
 					print('ERROR, "{}" is interrupted by the exception {} on {:.4f} sec ({} h {} m {:.4f} s), callstack fragment:'
@@ -1116,11 +1116,11 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		finally:
 			# Trace executed and uncompleted tasks
 			print('Algorithms execution statistics:')
-			for tt in taskTracers:
-				print('{} completed {}/{} jobs'.format(tt.name, tt.ndone, tt.ndone + len(tt.tasks)))
+			for tt in jobTracers:
+				print('{} completed {}/{} jobs'.format(tt.name, tt.ndone, tt.ndone + len(tt.jobs)))
 				# Trace uncompleted tasks
-				if tt.tasks:
-					for jnum, jname in enumerate(tt.tasks, 1):
+				if tt.jobs:
+					for jnum, jname in enumerate(tt.jobs, 1):
 						print('\t{}\t{}'.format(jnum, jname))
 	_execpool = None
 	stime = time.time() - stime

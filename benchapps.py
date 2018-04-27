@@ -44,7 +44,7 @@ import traceback  # Stacktrace
 import subprocess
 # import re
 
-from multiprocessing import Lock  # For the TaskTracer
+from multiprocessing import Lock  # For the JobTracer
 from numbers import Number  # To verify that a variable is a number (int or float)
 from sys import executable as PYEXEC  #pylint: disable=C0412;  # Full path to the current Python interpreter
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, \
@@ -55,6 +55,8 @@ from algorithms.utils.parser_nsl import parseHeaderNslFile  #, asymnet
 
 
 _ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
+# Maximal number of the levels considered for the evaluation in the multi-scale or hierarchihal clustering
+_LEVSMAX = 10  # Use 10 scale levels as in Ganxis
 _EXTLOG = '.log'  # Extension for the logs
 _EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
 _EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
@@ -202,7 +204,7 @@ def preparePath(taskpath):  # , netshf=False
 #	return  - number of executions (executed jobs)
 #	"""
 #	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
-# 		tasktracer is None or isinstance(tasktracer, TaskTracer)) , (
+# 		jobtracer is None or isinstance(jobtracer, JobTracer)) , (
 #		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 #		.format(execpool, netfile, asym, timeout))
 #	# ATTENTION: for the correct execution algname must be always the same as func lower case name without the prefix "exec"
@@ -210,59 +212,59 @@ def preparePath(taskpath):  # , netshf=False
 #	return 0
 
 
-class TaskTracer(object):
-	"""Traces the number of completed tasks and the names of uncompleted"""
+class JobTracer(object):
+	"""Traces the number of completed jobs/tasks and the names of the uncompleted"""
 
-	_lock = Lock()  # Lock for the embrasing tasks
+	_lock = Lock()  # Lock for the embrasing jobs
 	_timeout = 2  # 2 sec lock timeout
 
-	def __init__(self, name, tasks=set()):  #pylint: disable=W0102
-		"""TaskTracer constructor
+	def __init__(self, name, jobs=set()):  #pylint: disable=W0102
+		"""JobTracer constructor
 
 		Args:
-			object (TaskTracer): TaskTracer instance
+			object (JobTracer): JobTracer instance
 			name (str): the tracer name
-			tasks (set(str)): remained tasks
+			jobs (set(str)): remained jobs
 		"""
-		assert name and isinstance(name, str), 'Invalid task name'
+		assert name and isinstance(name, str), 'Invalid job name'
 		self.name = name
-		self.tasks = tasks  # Active tasks
-		self.ndone = 0  # The number of finished tasks
+		self.jobs = jobs  # Active jobs
+		self.ndone = 0  # The number of finished jobs
 
-	def add(self, task):
-		"""Add task to the tracing
+	def add(self, job):
+		"""Add job to the tracing
 
 		Args:
-			task (str): the task name to be traced
+			job (str): the job name to be traced
 		"""
-		if task not in self.tasks and TaskTracer._lock.acquire(timeout=TaskTracer._timeout):
-			self.tasks.add(task)  # Would do nothing if the task is already in the tasks
-			TaskTracer._lock.release()
+		if job not in self.jobs and JobTracer._lock.acquire(timeout=JobTracer._timeout):
+			self.jobs.add(job)  # Would do nothing if the job is already in the jobs
+			JobTracer._lock.release()
 		else:
 			raise RuntimeError('Lock acqusition failed on add() of "{}"'.format(self.name))
 
 
-	def completed(self, task):
-		"""Remove the task from the tracer incrementing the number of completed tasks
+	def completed(self, jobs):
+		"""Remove the job from the tracer incrementing the number of completed jobs
 
 		Args:
-			task (str): the completed task name
+			job (str): the completed job name
 		"""
-		if TaskTracer._lock.acquire(timeout=TaskTracer._timeout):
+		if JobTracer._lock.acquire(timeout=JobTracer._timeout):
 			try:
-				self.tasks.remove(task)
+				self.jobs.remove(jobs)
 				self.ndone += 1
 			except KeyError as err:
-				print('The completing task "{}" should be among the active tasks: {}', task, err, file=sys.stderr)
+				print('The completing job "{}" should be among the active jobs: {}', jobs, err, file=sys.stderr)
 			finally:
-				TaskTracer._lock.release()
+				JobTracer._lock.release()
 		else:
 			raise RuntimeError('Lock acqusition failed on completed() of "{}"'.format(self.name))
 
 
 def traceJob(job):
 	"""Trace jobs completion"""
-	assert isinstance(job.params, TaskTracer), "Unexpected type of the job params"
+	assert isinstance(job.params, JobTracer), "Unexpected type of the job params"
 	job.params.completed(job.name)
 
 
@@ -400,7 +402,7 @@ class PyBin(object):
 		return pybin
 
 
-def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):  # , selfexec=False  - whether to call self recursively
+def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR, seed=None):  # , selfexec=False  - whether to call self recursively
 	"""Execute Louvain using the igraph library
 	Note: Louvain produces not stable results => multiple executions are desirable.
 
@@ -411,7 +413,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=
 		which is actual for the shuffles with non-flat structure
 	timeout  - processing (clustering) timeout of the input file
 	pathid  - path id (including the leading separator) of the input networks file, str
-	tasktracer: TaskTracer  - optional task tracer
+	jobtracer: JobTracer  - optional task tracer
 	workdir  - relative working directory of the app, actual when the app contains libs
 	seed  - random seed, uint64_t
 
@@ -419,7 +421,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=
 	"""
 	# Note: .. + 0 >= 0 to be sure that type is arithmetic, otherwise it's always true for the str
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and timeout + 0 >= 0 and (jobtracer is None or isinstance(jobtracer, JobTracer)
 		) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -460,6 +462,14 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=
 	#		# TODO: Evaluate the average
 	#		subprocess.call(('tail', '-n 1', taskpath + _EXTLOG), stdout=accres)
 
+	def postexec(job):
+		"""Unify output to fit _LEVSMAX and trace the completed job"""
+		# Check the number of output levels and restructure the output if required saving the original one
+
+		# Trace the job completion
+		if isinstance(job.params, JobTracer):
+			traceJob(job)		
+
 	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 	pybin = PyBin.bestof(pypy=False, v3=True)
 	# Note: Louvain_igraph creates the output dir if it has not been existed, but not the exectime app
@@ -482,11 +492,11 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=
 		, '-lo', ''.join((taskpath, '/', task, _EXTCLNODES)), netfile)
 	jobName = _SEPNAMEPART.join((algname, task))
 	# Initialize job tracing
-	if tasktracer is not None:
-		tasktracer.add(jobName)
+	if jobtracer is not None:
+		jobtracer.add(jobName)
 	execpool.execute(Job(name=jobName, workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, ondone=traceJob if tasktracer is not None else None, params=tasktracer
+		, ondone=traceJob if jobtracer is not None else None, params=jobtracer
 		, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 
 	execnum = 1
@@ -506,10 +516,10 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=
 
 
 # SCP (Sequential algorithm for fast clique percolation)
-def execScp(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):  #pylint: disable=W0613
+def execScp(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR, seed=None):  #pylint: disable=W0613
 	"""SCP algorithm"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
-		tasktracer is None or isinstance(tasktracer, TaskTracer)), (
+		jobtracer is None or isinstance(jobtracer, JobTracer)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
 
@@ -552,7 +562,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, 
 
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 8  # Max clique size (~ min node degree to be considered)
-	steps = '10'  # Use 10 scale levels as in Ganxis
+	steps = str(_LEVSMAX)  # Use 10 scale levels as in Ganxis
 	golden = (1 + 5 ** 0.5) * 0.5  # Golden section const: 1.618
 	# Run for range of clique sizes
 	for k in range(kmin, kmax + 1):
@@ -576,8 +586,8 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, 
 
 		jobName = _SEPNAMEPART.join((algname, ktask))
 		# Initialize job tracing
-		if tasktracer is not None:
-			tasktracer.add(jobName)
+		if jobtracer is not None:
+			jobtracer.add(jobName)
 		#print('> Starting job {} with args: {}'.format('_'.join((ktask, algname, kstrex)), args + [kstr]))
 		execpool.execute(Job(name=jobName, workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
@@ -585,13 +595,13 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, 
 			# so it's better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
 			, category=algname if avgnls is not None else '_'.join((algname, kstrex))
 			, size=size * (k ** golden if avgnls is None or k >= avgnls else (avgnls - k) ** (-1/golden))
-			, ondone=traceJob if tasktracer is not None else None, params=tasktracer
+			, ondone=traceJob if jobtracer is not None else None, params=jobtracer
 			, stdout=logfile, stderr=errfile))
 
 	return kmax + 1 - kmin
 
 
-def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None, instances=5):  # _netshuffles + 1
+def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR, seed=None, instances=5):  # _netshuffles + 1
 	"""Execute Randcommuns, Random Disjoint Clustering
 	Results are not stable => multiple execution is desirable.
 
@@ -600,7 +610,7 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', tasktrace
 	instances  - the number of clustering instances to be produced
 	"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and timeout + 0 >= 0 and (jobtracer is None or isinstance(jobtracer, JobTracer)
 		) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tseed: {}'
 		.format(execpool, netfile, asym, timeout, seed))
@@ -647,11 +657,11 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', tasktrace
 		args.append('-r=' + str(seed))
 	jobName = _SEPNAMEPART.join((algname, task))
 	# Initialize job tracing
-	if tasktracer is not None:
-		tasktracer.add(jobName)
+	if jobtracer is not None:
+		jobtracer.add(jobName)
 	execpool.execute(Job(name=jobName, workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, ondone=traceJob if tasktracer is not None else None, params=tasktracer
+		, ondone=traceJob if jobtracer is not None else None, params=jobtracer
 		, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 
 	return 1
@@ -703,7 +713,7 @@ class DaocOpts(object):
 
 
 # DAOC wit parameterized gamma
-def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None, opts=DaocOpts(rlevout=0.8)):  #pylint: disable=W0613
+def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR+'daoc/', seed=None, opts=DaocOpts(rlevout=0.8)):  #pylint: disable=W0613
 	"""Execute DAOC, Deterministic (including input order independent) Agglomerative Overlapping Clustering
 	using standard modularity as optimization function
 
@@ -713,7 +723,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', tasktr
 	gamma  - resolution parameter gamma, <0 means automatic identification of the optimal dymamic value, number (float or int)
 	"""
 	assert isinstance(algname, str) and algname and execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and timeout + 0 >= 0 and (jobtracer is None or isinstance(jobtracer, JobTracer)
 		) and isinstance(opts, DaocOpts), (  # Verify that gamma is a numeric value (int or float)
 		'Invalid input parameters:\n\talgname: {},\n\texecpool: {},\n\tnet: {}'
 		',\n\tasym: {},\n\ttimeout: {},\n\topts: {}'.format(algname, execpool, netfile, asym, timeout, opts))
@@ -754,45 +764,45 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', tasktr
 	#print(''.join((algname, ' called with args: ', str(args))), file=sys.stderr)
 	jobName = _SEPNAMEPART.join((algname, task))
 	# Initialize job tracing
-	if tasktracer is not None:
-		tasktracer.add(jobName)
+	if jobtracer is not None:
+		jobtracer.add(jobName)
 	execpool.execute(Job(name=jobName, workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, ondone=traceJob if tasktracer is not None else None, params=tasktracer
+		, ondone=traceJob if jobtracer is not None else None, params=jobtracer
 		, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 	return 1
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
-def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None
+def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR+'daoc/', seed=None
 , opts=DaocOpts(rlevout=0.8, gamma=1, reduction=None, significance=None)):
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, tasktracer, workdir, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, jobtracer, workdir, seed, opts)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
-def execDaocA(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None
+def execDaocA(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR+'daoc/', seed=None
 , opts=DaocOpts(rlevout=0.8, gamma=-1, reduction=None, significance=None)):
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, tasktracer, workdir, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, jobtracer, workdir, seed, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
-def execDaoc_s_r(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None
+def execDaoc_s_r(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR+'daoc/', seed=None
 , opts=DaocOpts(gamma=1, significance='', reduction='')):  # Note: '' values mean use default
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, tasktracer, workdir, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, jobtracer, workdir, seed, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
-def execDaocA_s_r(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None
+def execDaocA_s_r(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR+'daoc/', seed=None
 , opts=DaocOpts(gamma=-1, significance='', reduction='')):  # Note: '' values mean use default
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA_s_r'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, tasktracer, workdir, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, jobtracer, workdir, seed, opts)
 
 
 # # DAOC (using standard modularity as an optimization function, non-generelized)
-# def execDaoc_rm(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None
+# def execDaoc_rm(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR+'daoc/', seed=None
 # # 1 - ACCURATE, 2 - MEAN;
 # , opts=DaocOpts(rlevout=0.8, gamma=1, reduction='m')):
 # 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
@@ -800,7 +810,7 @@ def execDaocA_s_r(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=
 #
 #
 # # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
-# def execDaoc_ssh_rm(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'daoc/', seed=None
+# def execDaoc_ssh_rm(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR+'daoc/', seed=None
 # #SIGNIF_OWNSHIER = 0xA
 # , opts=DaocOpts(gamma=1, significance='sh')):
 # 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
@@ -808,10 +818,10 @@ def execDaocA_s_r(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=
 
 
 # Ganxis (SLPA)
-def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR+'ganxis/', seed=None):
+def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR+'ganxis/', seed=None):
 	"""GANXiS/SLPA algorithm"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and timeout + 0 >= 0 and (jobtracer is None or isinstance(jobtracer, JobTracer)
 		) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tseed: {}'
 		.format(execpool, netfile, asym, timeout, seed))
@@ -844,7 +854,7 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=Non
 			#os.rmdir(tmp)
 			shutil.rmtree(tmp)
 		# Trace the job completion
-		if isinstance(job.params, TaskTracer):
+		if isinstance(job.params, JobTracer):
 			traceJob(job)
 
 	# java -jar GANXiSw.jar -Sym 1 -seed 12345 -i ../../realnets/karate.txt -d ../../results/ganxis/karate
@@ -856,19 +866,19 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=Non
 		args.extend(['-seed', str(seed)])
 	jobName = _SEPNAMEPART.join((algname, task))
 	# Initialize job tracing
-	if tasktracer is not None:
-		tasktracer.add(jobName)
-	execpool.execute(Job(name=jobName, workdir=workdir, args=args, timeout=timeout, params=tasktracer
+	if jobtracer is not None:
+		jobtracer.add(jobName)
+	execpool.execute(Job(name=jobName, workdir=workdir, args=args, timeout=timeout, params=jobtracer
 		#, ondone=postexec, stdout=os.devnull
 		, category=algname, size=netsize, ondone=tidy, stdout=logfile, stderr=errfile))
 	return 1
 
 
 # Oslom2
-def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):
+def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR, seed=None):
 	"""OSLOM v2 algorithm"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and timeout + 0 >= 0 and (jobtracer is None or isinstance(jobtracer, JobTracer)
 		) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tseed: {}'
 		.format(execpool, netfile, asym, timeout, seed))
@@ -916,7 +926,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=Non
 			os.remove(fname)
 
 		# Trace the job completion
-		if isinstance(job.params, TaskTracer):
+		if isinstance(job.params, JobTracer):
 			traceJob(job)
 
 	# ./oslom_[un]dir -f ../../realnets/karate.txt -w -seed 12345
@@ -926,19 +936,19 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=Non
 		args.extend(['-seed', str(seed)])
 	jobName = _SEPNAMEPART.join((algname, task))
 	# Initialize job tracing
-	if tasktracer is not None:
-		tasktracer.add(jobName)
-	execpool.execute(Job(name=jobName, workdir=workdir, args=args, timeout=timeout, params=tasktracer
+	if jobtracer is not None:
+		jobtracer.add(jobName)
+	execpool.execute(Job(name=jobName, workdir=workdir, args=args, timeout=timeout, params=jobtracer
 		#, ondone=postexec, stdout=os.devnull
 		, category=algname, size=netsize, ondone=postexec, stdout=logfile, stderr=errfile))
 	return 1
 
 
 # pSCAN (Fast and Exact Structural Graph Clustering)
-def execPscan(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):  #pylint: disable=W0613
+def execPscan(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR, seed=None):  #pylint: disable=W0613
 	"""pScan algorithm"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
-		tasktracer is None or isinstance(tasktracer, TaskTracer)), (
+		jobtracer is None or isinstance(jobtracer, JobTracer)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
 
@@ -959,9 +969,10 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None
 
 	eps = 0.05  # Min epsilon (similarity threshold)
 	epsMax = 0.9  # Max epsilon (similarity threshold)
-	steps = 10  # The number of steps (similarity thresholds). Use 10 scale levels as in Ganxis.
+	steps = _LEVSMAX  # The number of steps (similarity thresholds). Use 10 scale levels as in Ganxis.
 	# Run for range of eps
-	deps = (epsMax - eps) / (steps - 1)  # Epsilon delta for each step; -1 is used because of the inclusive range
+	# Epsilon delta for each step; -1 is used because of the inclusive range
+	deps = (epsMax - eps) / (steps - 1) if _LEVSMAX >= 2 else (eps + epsMax) / 2.
 	while eps <= epsMax:
 		#prm = '{:3g}'.format(eps)  # Alg params (eps) as string
 		prm = '{:.2f}'.format(eps)  # Alg params (eps) as string
@@ -986,13 +997,13 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None
 		#print('> Starting job {} with args: {}'.format('_'.join((ctask, algname, prmex)), args + [prm]))
 		jobName = _SEPNAMEPART.join((algname, ctask))
 		# Initialize job tracing
-		if tasktracer is not None:
-			tasktracer.add(jobName)
+		if jobtracer is not None:
+			jobtracer.add(jobName)
 		execpool.execute(Job(name=jobName, workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
 			#, stdout=logfile  # Skip standard log, because there are too many files, which does not contain useful information
 			# Note: eps has not monotonous impact mainly on the exectution time, not large impact and the clustring is fast anyway
-			, ondone=traceJob if tasktracer is not None else None, params=tasktracer
+			, ondone=traceJob if jobtracer is not None else None, params=jobtracer
 			, category='_'.join((algname, prmex)), size=netsize, stdout=os.devnull, stderr=errfile))
 		eps += deps
 
@@ -1000,7 +1011,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None
 
 
 # rgmc algorithms family: 1: RG, 2: CGGC_RG, 3: CGGCi_RG
-def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None, alg=None):
+def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR, seed=None, alg=None):
 	"""Rgmc algorithms family
 
 	algname  - name of the executing algorithm to be traced
@@ -1009,7 +1020,7 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', tasktrac
 	"""
 	algs = ('RG', 'CGGC_RG', 'CGGCi_RG')
 	assert isinstance(algname, str) and algname and execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and timeout + 0 >= 0 and (jobtracer is None or isinstance(jobtracer, JobTracer)
 		) and (seed is None or isinstance(seed, int)) and alg in (1, 2, 3), (
 		'Invalid input parameters:\n\talgname: {},\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\talg: {}'
 		.format(algname, execpool, netfile, asym, timeout, algs[alg]))
@@ -1039,35 +1050,35 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', tasktrac
 		, '-i', 'a' if asym else 'e', netfile)
 	jobName = _SEPNAMEPART.join((algname, task))
 	# Initialize job tracing
-	if tasktracer is not None:
-		tasktracer.add(jobName)
+	if jobtracer is not None:
+		jobtracer.add(jobName)
 	execpool.execute(Job(name=jobName, workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, ondone=traceJob if tasktracer is not None else None, params=tasktracer
+		, ondone=traceJob if jobtracer is not None else None, params=jobtracer
 		, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 	return 1
 
 
 # CGGC_RG (rgmc -a 2)
-def execCggcRg(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):  #pylint: disable=C0111
+def execCggcRg(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR, seed=None):  #pylint: disable=C0111
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggcRg'
-	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid, tasktracer, workdir, seed, alg=2)
+	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid, jobtracer, workdir, seed, alg=2)
 
 
 # CGGCi_RG (rgmc -a 3)
-def execCggciRg(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):  #pylint: disable=C0111
+def execCggciRg(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR, seed=None):  #pylint: disable=C0111
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggciRg'
-	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid, tasktracer, workdir, seed, alg=3)
+	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid, jobtracer, workdir, seed, alg=3)
 
 
 # SCD
-def execScd(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, workdir=_ALGSDIR, seed=None):
+def execScd(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=None, workdir=_ALGSDIR, seed=None):
 	"""Scalable Community Detection (SCD)
 	Note: SCD os applicable only for the undirected unweighted networks, it skips the weight
 	in the weighted network.
 	"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)
-		) and timeout + 0 >= 0 and (tasktracer is None or isinstance(tasktracer, TaskTracer)
+		) and timeout + 0 >= 0 and (jobtracer is None or isinstance(jobtracer, JobTracer)
 		) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -1098,11 +1109,11 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', tasktracer=None, 
 		, '-o', ''.join((taskpath, '/', task, _EXTCLNODES)), '-f', netfile)
 	jobName = _SEPNAMEPART.join((algname, task))
 	# Initialize job tracing
-	if tasktracer is not None:
-		tasktracer.add(jobName)
+	if jobtracer is not None:
+		jobtracer.add(jobName)
 	execpool.execute(Job(name=jobName, workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
-		, ondone=traceJob if tasktracer is not None else None, params=tasktracer
+		, ondone=traceJob if jobtracer is not None else None, params=jobtracer
 		, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 	return 1
 

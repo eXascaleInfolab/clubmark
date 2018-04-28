@@ -55,6 +55,9 @@ except ImportError:
 import atexit  # At exit termination handleing
 import sys
 import time
+# Consider compatibility with Python before v3.3
+if not hasattr(time, 'perf_counter'):
+	time.perf_counter = time.time
 import os
 import shutil
 import signal  # Intercept kill signals
@@ -977,7 +980,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		stub.__name__ = name  # Set original name to the stub func
 		return stub
 
-	stime = time.time()  # Procedure start time; ATTENTION: .clock() should not be used, because it does not consider "sleep" time
+	stime = time.perf_counter()  # Procedure start time; ATTENTION: .perf_counter() should not be used, because it does not consider "sleep" time
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: set affinity in a way to maximize the CPU cache L1/2 for each process
@@ -1015,7 +1018,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 					jobsnum += ealg(_execpool, net, asym=asymnet(netext, asym), odir=netshf, timeout=timeout
 						, pathid=pathid, jobtracer=jobTracers[ialg], seed=seed)
 				except Exception as err:  #pylint: disable=W0703
-					errexectime = time.time() - exectime
+					errexectime = time.perf_counter() - exectime
 					print('ERROR, "{}" is interrupted by the exception {} on {:.4f} sec ({} h {} m {:.4f} s), callstack fragment:'
 						.format(ealg.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
 					traceback.print_stack(limit=5, file=sys.stderr)
@@ -1123,7 +1126,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 					for jnum, jname in enumerate(tt.jobs, 1):
 						print('\t{}\t{}'.format(jnum, jname))
 	_execpool = None
-	stime = time.time() - stime
+	stime = time.perf_counter() - stime
 	print('The apps execution is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
 	 .format(stime, *secondsToHms(stime)))
 	print('Aggregating execution statistics...')
@@ -1168,7 +1171,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 	 and timeout + 0 >= 0), 'Invalid input arguments'
 	assert isinstance(seed, int) and seed >= 0, 'Seed value is invalid'
 
-# 	stime = time.time()  # Procedure start time
+# 	stime = time.perf_counter()  # Procedure start time
 # 	print('Starting quality evaluations...')
 # 	# Run evaluations for all algs if not specified the concrete algorithms to be run
 # 	if not algorithms:
@@ -1195,7 +1198,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 				try:
 # 					jobsnum += eapp(execpool, qualsaver, net, asym=asymnet(netext, asym), odir=netshf, timeout=timeout, pathids=pathids, seed=seed)
 # 				except Exception as err:
-# 					errexectime = time.time() - exectime
+# 					errexectime = time.perf_counter() - exectime
 # 					print('ERROR, "{}" is interrupted by the exception {} on {:.4f} sec ({} h {} m {:.4f} s), callstack fragment:'
 # 						.format(eapp.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
 # 					traceback.print_stack(limit=5, file=sys.stderr)
@@ -1363,7 +1366,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 				if runtimeout <= 0:
 # 					runtimeout = timeout * xargs['jobsnum']
 # 				timelim = min(timeout * xargs['jobsnum'], runtimeout)
-# 				elapsed = time.time() - stime  # Elapsed time
+# 				elapsed = time.perf_counter() - stime  # Elapsed time
 # 				timelim -= elapsed
 # 				if timelim > 0:
 # 					print('Waiting for the quality evaluation on {} jobs from {} networks'
@@ -1382,7 +1385,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 						 '' if not _execpool.name else ' ' + _execpool.name
 # 						 , timelim + elapsed, elapsed, *secondsToHms(elapsed), file=sys.stderr))
 # 			# _execpool = None
-# 			# stime = time.time() - stime
+# 			# stime = time.perf_counter() - stime
 # 			# print('The apps execution is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
 # 			# 	.format(stime, *secondsToHms(stime)))
 # 			# print('Aggregating execution statistics...')
@@ -1494,15 +1497,15 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 	# TODO: aggregate and visualize quality evaluaitn results
 # 	qualsaver.storage.close()
 # 	_execpool = None  # Reset global execpool
-# 	stime = time.time() - stime
+# 	stime = time.perf_counter() - stime
 # 	print('Results evaluation is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
 # 	 .format(stime, *secondsToHms(stime)))
 # 	# Aggregate results and output
-# 	stime = time.time()
+# 	stime = time.perf_counter()
 # 	print('Starting processing of aggregated results ...')
 # 	#for evagg in evaggs:
 # 	#	evagg.aggregate()
-# 	stime = time.time() - stime
+# 	stime = time.perf_counter() - stime
 # 	print('Processing of aggregated results completed in {:.4f} sec ({} h {} m {:.4f} s)'
 # 	 .format(stime, *secondsToHms(stime)))
 
@@ -1512,7 +1515,7 @@ def benchmark(*args):
 
 	Run the algorithms on the specified datasets respecting the parameters.
 	"""
-	exectime = time.time()  # Benchmarking start time
+	exectime = time.perf_counter()  # Benchmarking start time
 
 	opts = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tsyntpo: "{}"\n\tconvnets: 0b{:b}'
@@ -1583,7 +1586,7 @@ def benchmark(*args):
 	if opts.aggrespaths:
 		aggEvaluations(opts.aggrespaths)
 
-	exectime = time.time() - exectime
+	exectime = time.perf_counter() - exectime
 	print('The benchmark completed in {:.4f} sec ({} h {} m {:.4f} s)'
 	 .format(exectime, *secondsToHms(exectime)))
 

@@ -42,6 +42,7 @@ import sys
 import inspect  # To automatically fetch algorithm name
 import traceback  # Stacktrace
 import subprocess
+import types  # Member methods definition
 # import re
 
 from multiprocessing import Lock  # For the JobTracer
@@ -283,12 +284,12 @@ class TracedJob(Job):
 						self.tracer.completed(self.name)
 						return res
 					return wrapper
-				self.ondone = tracerDecor(ondone)
+				self.ondone = types.MethodType(tracerDecor(ondone), self)  # Bind the callback to the object
 			else:
 				def traceCompletion(job):
 					"""Job completion tracing"""
 					job.tracer.completed(job.name)
-				self.ondone = traceCompletion
+				self.ondone = types.MethodType(traceCompletion, self)  # Bind the callback to the object
 
 
 def funcToAppName(funcname):
@@ -522,7 +523,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', jobtracer=N
 	#	if not netdir:
 	#		netdir = .
 	#	netdir += '/'
-	#	#print('Netdir: ', netdir)
+	#	#print('Netdir: ', netdir)sdf
 	#	for netfile in glob.iglob(''.join((escapePathWildcards(netdir), escapePathWildcards(task), '/*', netext))):
 	#		execLouvain_ig(execpool, netfile, asym, odir, timeout, selfexec)
 	#		execnum += 1

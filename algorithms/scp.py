@@ -90,7 +90,7 @@ class Net(object):
 		if isinstance(args, tuple):
 			if len(args) != 2:
 				raise KeyError("One or two indices are expected")
-			assert self._legaledge(args[0],args[1])
+			assert self._legaledge(args[0], args[1])
 			try:
 				retval=self._nodes[args[0]][args[1]]
 			except KeyError:
@@ -127,7 +127,7 @@ class Net(object):
 		else:
 			for dest in self[args]:
 				# self[args] returns a node, for which .iter()
-				self[args,dest]=0
+				self[args, dest]=0
 
 	def __iter__(self):
 		return iter(viewkeys(self._nodes))
@@ -153,8 +153,8 @@ class Node(object):
 		return self.net[self.index, index]
 
 	def __setitem__(self, index, val):
-		self.net[self.index, index]=val
-		return val
+		 self.net[self.index, index]=val
+		 return val
 
 	def deg(self):
 		return len(self.net._nodes[self.index])
@@ -164,9 +164,9 @@ class SymmNet(Net):
 	def _legaledge(self, src, dst):
 		if src in self._nodes:
 			if dst in self._nodes[src]:
-				return (dst in self._nodes
-					and src in self._nodes[dst]
-					and self._nodes[src][dst]==self._nodes[dst][src])
+				return dst in self._nodes \
+						and src in self._nodes[dst] \
+						and self._nodes[src][dst]==self._nodes[dst][src]
 		#either no src or no edge src->dst
 		return dst not in self._nodes or src not in self._nodes[dst]
 
@@ -184,14 +184,14 @@ class SymmNet(Net):
 
 # ----- Extra functions for general networking framework -----
 class Net_edges:
-	def __init__(self,net):
+	def __init__(self, net):
 		self.net=net
 	def __iter__(self):
 		for node1Index in self.net:
 			node1=self.net[node1Index]
 			for node2Index in node1:
 				if (not self.net.isSymmetric()) or node1Index.__hash__()<node2Index.__hash__():
-					yield [node1Index,node2Index,self.net[node1Index,node2Index]]
+					yield [node1Index, node2Index, self.net[node1Index, node2Index]]
 	def __len__(self):
 		length=0
 		for nodeIndex in self.net:
@@ -202,11 +202,11 @@ class Net_edges:
 			return length
 	def __str__(self):
 		return str(list(self))
-Net.edges=property(Net_edges)
+Net.edges = property(Net_edges)
 
 
 
-def getSubnet(net,nodes):
+def getSubnet(net, nodes):
 	newNet=Net()
 	degsum=0
 	for node in nodes:
@@ -217,17 +217,17 @@ def getSubnet(net,nodes):
 			if net.isSymmetric():
 				othernodes.remove(node)
 			for othernode in othernodes:
-				if net[node,othernode]!=0:
-					newNet[node,othernode]=net[node,othernode]
+				if net[node, othernode] != 0:
+					newNet[node, othernode] = net[node, othernode]
 	else:
 		for node in nodes:
 			for neigh in net[node]:
 				if neigh in nodes:
-					newNet[node,neigh]=net[node,neigh]
+					newNet[node, neigh] = net[node, neigh]
 	return newNet
 
 
-def loadNet_edg(input, mutualEdges = False, splitterChar = None, symmetricNet=True):
+def loadNet_edg(input, mutualEdges=False, splitterChar=None, symmetricNet=True):
 	"""
 	Reads a network data from input in edg format.
 
@@ -267,7 +267,7 @@ def loadNet_edg(input, mutualEdges = False, splitterChar = None, symmetricNet=Tr
 				if numerical:
 					fields[0]=int(fields[0])
 					fields[1]=int(fields[1])
-				if fields[0]!=fields[1]:
+				if fields[0] != fields[1]:
 					linksnum += 1
 					if len(fields) == 2:
 						fields.append(1)
@@ -339,7 +339,7 @@ class NodeFamily:
 		self.comm=[]
 		for community in cmap:
 			self._addCommunity(cmap[community])
-		if inputFile!=None:
+		if inputFile != None:
 			self._parseStrings(inputFile)
 		self._sortBySize()
 
@@ -399,14 +399,14 @@ class NodeFamily:
 		Returns the size of the largest component
 		"""
 		giant=self.getGiant()
-		if giant!=None:
+		if giant != None:
 			return len(giant)
 		else:
 			return 0
 	def getSusceptibility(self,size=None):
 		"""
 		Returns the susceptibility defined as:
-		(Sum_{s!=size(gc)} n_s * s * s) / (Sum_{s!=size(gc)} n_s * s)
+		(Sum_{s != size(gc)} n_s * s * s) / (Sum_{s != size(gc)} n_s * s)
 		Size is the number of nodes in the network. If it is given, it is assumed
 		that communities of size 1 are not included in this community structure.
 		If there is only 0 or 1 community, zero is returned.
@@ -505,7 +505,7 @@ class KtreeInteger:
 	def __init__(self,size=0):
 		self.ktree=[]
 		self.mappingOn=False
-		if size!=0:
+		if size != 0:
 			for index in range(0,size+1):
 				self.ktree.append(index);
 
@@ -532,7 +532,7 @@ class KtreeInteger:
 
 	def getParent(self,node):
 		parent=self.__getRealParent(node)
-		if node!=parent:
+		if node != parent:
 			self.__setRealParent(node,self.getParent(parent))
 		return self.__getRealParent(node)
 
@@ -551,7 +551,7 @@ class KtreeInteger:
 
 		for node in nodes:
 			communityKey=self.getParent(node)
-			if separateElements or communityKey!=node:
+			if separateElements or communityKey != node:
 				if communityKey not in communityMap:
 					communityMap[communityKey]=[node]
 				else:
@@ -647,7 +647,7 @@ class EvaluationList:
 			numberOfElements=0
 			for element in self.thelist:
 				numberOfElements+=1
-				if last!=self.weightFunction(element) and last!=None:
+				if last != self.weightFunction(element) and last != None:
 					yield EvaluationEvent(last,numberOfElements-1)
 				last=self.weightFunction(element)
 				yield element
@@ -707,7 +707,7 @@ class KClique(object):
 	def getEdges(self):
 		for node in self.nodes:
 			for othernode in self.nodes:
-				if node!=othernode:
+				if node != othernode:
 					yield (node,othernode)
 	def getK(self):
 		return len(self.nodes)
@@ -762,7 +762,7 @@ def kcliquesByEdges(edges,k):
 			# First we find all new triangles that are born when the new edge is added
 			triangleEnds=set() # We keep track of the tip nodes of the new triangles
 			for adjacendNode in newNet[edge[0]]: # Neighbor of one node of the edge ...
-				if newNet[adjacendNode,edge[1]]!=0: #...is a neighbor of the other node of the edge...
+				if newNet[adjacendNode,edge[1]] != 0: #...is a neighbor of the other node of the edge...
 					triangleEnds.add(adjacendNode) #...then the neighbor is a tip of a new triangle
 
 			# New k-cliques are now (k-2)-cliques at the triangle end points plus

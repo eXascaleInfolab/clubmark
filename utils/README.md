@@ -30,6 +30,26 @@
   * `libboost_program_options`, to install execute: `$ sudo apt-get install libboost-program-options`. The older version of gecmi compiled under Ubuntu 14 depends on `libboost_program_options.so.1.54.0`, the newer one compiled under Ubuntu 16 depends on `libboost_program_options.so.1.58.0`.
   * `libtbb.so.2`, to install execute: `sudo aptitude download libtbb2; sudo aptitude install libtbb2`
 
+Optional requirements of the [mpepool.py](https://github.com/eXascaleInfolab/PyExPool) load balancer:
+- [psutil](https://pypi.python.org/pypi/psutil) is required for the dynamic jobs balancing to perform the in-RAM computations (`_LIMIT_WORKERS_RAM = True`) and limit memory consumption of the workers.
+  ```sh
+  $ sudo pip install psutil
+  ```
+  > To perform in-memory computations dedicating almost all available RAM (specifying *memlimit ~= physical memory*), it is recommended to set swappiness to 1 .. 10: `$ sudo sysctl -w vm.swappiness=5` or set it permanently in `/etc/sysctl.conf`: `vm.swappiness = 5`.
+- [hwloc](http://www.admin-magazine.com/HPC/Articles/hwloc-Which-Processor-Is-Running-Your-Service) (includes `lstopo`) is required to identify enumeration type of logical CPUs to perform correct CPU affinity masking. Required only for the automatic affinity masking with cache usage optimization and only if the CPU enumeration type is not specified manually.
+  ```sh
+  $ sudo apt-get install -y hwloc
+  ```
+- [bootle](http://bottlepy.org) is required for the minimalistic optional WebUI to monitor executing jobs.
+  ```sh
+  $ sudo pip install bootle
+  ```
+
+> All Python requirements are optional and can be installed from the `pyreqs.txt` file:
+> ```sh
+> $ sudo pip install -r pyreqs.txt
+> ```
+
 
 ## Data Preparation and Post-processing
 

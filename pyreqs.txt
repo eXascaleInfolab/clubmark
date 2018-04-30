@@ -1,7 +1,7 @@
 # Requirements for the not too heavy apps or that link libs and run under CPython
 
 # Benchmarking requirements:
-# psutil is required for the mpepool only
+# psutil is required for the jobs autobalancing on execution (mpepool only)
 psutil>=5.2
 # Future utils for Python2/3 compatibility (benchmarking & utils)
 future>=0.16.0
@@ -9,6 +9,8 @@ future>=0.16.0
 numpy>=1.11
 # h5py for the quality evaluations serialization to HDF5 file
 h5py>=2.7.0
+# Optional Web UI (mpepool only)
+bottle>=0.12.13
 # TODO: matplotlib or +pandas or +(scipy and seaborn) for results visualization
 
 # Algorithms requirements:
@@ -19,3 +21,5 @@ python-igraph>=0.7
 # Note: numpy interactions are slow on pypy
 #numpy>=1.11  # Already listed
 #future>=0.16  # Already listed
+# Unit tests (only if Python2 is used)
+#mock>=2.0.0

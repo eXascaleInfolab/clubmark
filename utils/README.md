@@ -40,15 +40,16 @@ Optional requirements of the [mpepool.py](https://github.com/eXascaleInfolab/PyE
   ```sh
   $ sudo apt-get install -y hwloc
   ```
-- [bootle](http://bottlepy.org) is required for the minimalistic optional WebUI to monitor executing jobs.
+- [bottle](http://bottlepy.org) is required for the minimalistic optional WebUI to monitor executing jobs.
   ```sh
-  $ sudo pip install bootle
+  $ sudo pip install bottle
   ```
 
-> All Python requirements are optional and can be installed from the `pyreqs.txt` file:
-> ```sh
-> $ sudo pip install -r pyreqs.txt
-> ```
+All Python requirements are optional and can be installed from the `pyreqs.txt` file:
+```sh
+$ sudo pip install -r pyreqs.txt
+```
+> `hwloc` is a system requirement and can't be installed from the `pyreqs.txt`
 
 
 ## Data Preparation and Post-processing

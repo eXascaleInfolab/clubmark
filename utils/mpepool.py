@@ -53,7 +53,7 @@ if not hasattr(time, 'perf_counter'):
 	time.perf_counter = time.time
 import collections
 import os
-import ctypes  # Required for the multiprocessing Value definition
+# import ctypes  # Required for the multiprocessing Value definition
 import types  # Required for instance methods definition
 import traceback  # Stacktrace
 # To print a stacktrace fragment:
@@ -65,12 +65,12 @@ import errno
 # import threading  # Used only for the asyncronous Tasks termination by timeout
 # import signal  # Required for the correct handling of KeyboardInterrupt: https://docs.python.org/2/library/thread.html
 
-from multiprocessing import cpu_count, Value, Lock  #, active_children
+from multiprocessing import cpu_count, Lock, Queue  #, active_children, Value, Process
 
 # Required to efficiently traverse items of dictionaries in both Python 2 and 3
 try:
-	from future.utils import viewvalues  #viewitems, viewkeys, viewvalues  # External package: pip install future
-	from future.builtins import range
+	from future.utils import viewvalues  #, viewitems  #, viewkeys, viewvalues  # External package: pip install future
+	from future.builtins import range  #, list
 except ImportError:
 	def viewMethod(obj, method):
 		"""Fetch view method of the object
@@ -113,6 +113,14 @@ def timeheader(timestamp=time.gmtime()):
 	return time.strftime('# ----- %Y-%m-%d %H:%M:%S ' + '-'*30, timestamp)
 
 
+# Optional Web User Interface
+_WEBUI = True
+if _WEBUI:
+	try:
+		from mpewui import WebUiApp, UiCmdId, UiResCol  # UiCmd, websrvrun
+	except ImportError as wuerr:
+		_WEBUI = False
+
 # Limit the amount of memory consumption by worker processes.
 # NOTE:
 #  - requires import of psutils
@@ -121,18 +129,24 @@ _LIMIT_WORKERS_RAM = True
 if _LIMIT_WORKERS_RAM:
 	try:
 		import psutil
-	except ImportError as err:
+	except ImportError as lwerr:
 		_LIMIT_WORKERS_RAM = False
-		# Note: import occurs before the execution of the main application, so show
-		# the timestamp to outline when the error occurred and separate reexecutions
-		print(timeheader(), file=sys.stderr)
-		print('WARNING, RAM constraints are disabled because the psutil module import failed: ', err, file=sys.stderr)
+
+# Note: import occurs before the execution of the main application, so show
+# the timestamp to outline when the error occurred and separate reexecutions
+if not (_WEBUI and _LIMIT_WORKERS_RAM):
+	print(timeheader(), file=sys.stderr)
+	if not _WEBUI:
+		print('WARNING, Web UI is disabled because the "bottle" module import failed: ', lwerr, file=sys.stderr)
+	if not _LIMIT_WORKERS_RAM:
+		print('WARNING, RAM constraints are disabled because the "psutil" module import failed: '
+			, lwerr, file=sys.stderr)
+
 
 # Use chained constraints (timeout and memory limitation) in jobs to terminate
 # also related worker processes and/or reschedule jobs, which have the same
 # category and heavier than the origin violating the constraints
 _CHAINED_CONSTRAINTS = True
-
 
 _RAM_SIZE = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / 1024.**3  # RAM (physical memory) size in Gb
 # Dedicate at least 256 Mb for the OS consuming not more than 98% of RAM
@@ -198,7 +212,8 @@ class Task(object):
 
 	"""Task is a managing container for Jobs"""
 	# , timeout=0  - execution timeout in seconds. Default: 0, means infinity
-	def __init__(self, name, onstart=None, ondone=None, onfinish=None, params=None, task=None, latency=2, stdout=sys.stdout, stderr=sys.stderr):
+	def __init__(self, name, onstart=None, ondone=None, onfinish=None, params=None
+		, task=None, latency=2, stdout=sys.stdout, stderr=sys.stderr):
 		"""Initialize task, which is a group of jobs to be executed
 
 		name  - task name
@@ -219,7 +234,7 @@ class Task(object):
 		stderr  - None or file name or PIPE or STDOUT for the unbuffered error output to be APPENDED
 			ATTENTION: PIPE is a buffer in RAM, so do not use it if the output data is huge or unlimited
 		
-		# Automatically initialized and updated properties
+		Automatically initialized and updated properties:
 		tstart  - start time is filled automatically on the execution start (before onstart). Default: None
 		tstop  - termination / completion time after ondone.
 		numadded: uint  - the number of direct added subtasks
@@ -302,8 +317,8 @@ class Task(object):
 				self._items[subtask] += 1
 				self.numterm += 1
 		except KeyError as err:
-			print('ERROR in "{}" succeed: {}, the finishing subtask "{}" should be among the active subtasks: {}'
-				.format(self.name, succeed, subtask, err, file=sys.stderr))
+			print('ERROR in "{}" succeed: {}, the finishing subtask "{}" should be among the active subtasks: {}. {}'
+				.format(self.name, succeed, subtask, err, traceback.format_exc(5), file=sys.stderr))
 		finally:
 			self._lock.release()
 		# Consider onfinish callback
@@ -324,45 +339,74 @@ class Task(object):
 				.format(self.numterm, self.numdone, self.numadded))
 
 
-	def uncompleted(self, recursive=False):
+	def uncompleted(self, recursive=False, header=False, pid=False, duration=False, memory=False):
 		"""Fetch names of the uncompleted tasks
 		
 		Args:
-			recursive (bool, optional): Defaults to False. Fetch uncompleted subtasks recursively
+			recursive (bool, optional): Defaults to False. Fetch uncompleted subtasks recursively.
+			header (bool, optional): Defaults to False. Include header for the displaying attributes.
+			pid (bool, optional): Defaults to False. Show process id of for the job, None for the task.
+			duration (bool, optional): Defaults to False. Show duration of the execution.
+			memory (bool, optional): Defaults to False. Show memory consumption the job, None for the task.
+				Note: the value as specified by the Job.mem, which is not the peak RSS.
 		
 		Returns:
-			hierarchical dictionary of the uncompleted task names, each name is str
+			hierarchical dictionary of the uncompleted task names and other attributes, each items is tuple or str
+
+		Raises:
+			RuntimeError: lock acquasition failed
 		"""
+		extinfo = pid or duration or memory
+		if duration:
+			ctime = time.perf_counter()  # Current time
+
+		def subtaskInfo(subtask):
+			"""Subtask tracing
+			
+			Args:
+				subtask (Task | Job): subtask to be traced
+			
+			Returns:
+				str | list: subtask information
+			"""
+			isjob = isinstance(subtask, Job)
+			assert isjob or isinstance(subtask, Task), 'Unexpected type of the subtask: ' + type(subtask).__name__
+			if extinfo:
+				res = [subtask.name]
+				if pid:
+					res.append(None if not isjob or subtask.proc is None else subtask.proc.pid)
+				if duration:
+					res.append(None if subtask.tstart is None else ctime - subtask.tstart)
+				if memory:
+					res.append(None if not isjob else subtask.mem)
+				return res
+			return subtask.name
+
+		# Form the Header if required
+		res = []
+		if header:
+			if extinfo:
+				hdritems = ['Name']
+				if pid:
+					hdritems.append('PID')
+				if duration:
+					hdritems.append('Duration')
+				if memory:
+					hdritems.append('Memory')
+				res.append(hdritems)
+			else:
+				res.append('Name')
 		if not self._lock.acquire(timeout=self.latency):
 			raise RuntimeError('Lock acquasition failed on uncompleted() in "{}"'.format(self.name))
 		try:
-			return [subtask.name if not recursive or isinstance(subtask, Job) else subtask.uncompleted(recursive) for subtask in self._items]
+			# List should be generated on place while all the tasks are present
+			# Note: list extension should prevent lazy evaluation of the list generator
+			# otherwise the explicit conversion to the list should be performed here (within the lock)
+			res += [subtaskInfo(subtask) if not recursive or isinstance(subtask, Job)
+				else subtask.uncompleted(recursive) for subtask in self._items]
 		finally:
 			self._lock.release()
-		
-
-
-	# def remove(self, graceful):
-	# 	"""Delete one job from the task
-
-	# 	NOTE: called also for the terminated jobs
-
-	# 	graceful  - whether the job is successfully completed or it was terminated
-	# 	return  - None
-	# 	"""
-	# 	final = False
-	# 	with self._jobsnum.get_lock():
-	# 		self._jobsnum.value -= 1
-	# 		if self._jobsnum.value == 0:
-	# 			final = True
-	# 	# Finalize if required
-	# 	if not graceful:
-	# 		self._graceful.value = False
-	# 	if final:
-	# 		# Prevent reexecution of the managed failed jobs othrerwise ondone would be always called
-	# 		if self.ondone and self._graceful.value:
-	# 			self.ondone()
-	# 		self.tstop = time.perf_counter()
+		return res
 
 
 class Job(object):
@@ -380,7 +424,7 @@ class Job(object):
 	, omitafn=False, memkind=1, stdout=sys.stdout, stderr=sys.stderr):
 		"""Initialize job to be executed
 
-		# Main parameters
+		Main parameters:
 		name  - job name
 		workdir  - working directory for the corresponding process, None means the dir of the benchmarking
 		args  - execution arguments including the executable itself for the process
@@ -408,7 +452,7 @@ class Job(object):
 			ATTENTION: PIPE is a buffer in RAM, so do not use it if the output data is huge or unlimited.
 			The path is interpreted in the CONTEXT of the CALLER
 
-		# Scheduling parameters
+		Scheduling parameters:
 		omitafn  - omit affinity policy of the scheduler, which is actual when the affinity is enabled
 			and the process has multiple treads
 		category  - classification category, typically semantic context or part of the name;
@@ -426,7 +470,7 @@ class Job(object):
 				(including the origin itself)
 			2  - mem for the whole spawned process tree including the origin process
 
-		# Execution parameters, initialized automatically on execution
+		Execution parameters, initialized automatically on execution:
 		tstart  - start time is filled automatically on the execution start (before onstart). Default: None
 		tstop  - termination / completion time after ondone
 			NOTE: onstart() and ondone() callbacks execution is included in the job execution time
@@ -524,7 +568,8 @@ class Job(object):
 				curmem = amem if self.memkind == 2 else xmem
 		except psutil.Error as err:
 			# The process is finished and such pid does not exist
-			print('WARNING, _updateMem() failed, current proc mem set to 0: ', err, file=sys.stderr)
+			print('WARNING, _updateMem() failed, current proc mem set to 0: {}. {}'.format(
+				err, traceback.format_exc(5)), file=sys.stderr)
 		# Note: even if curmem = 0 updte mem smoothly to avoid issues on internal
 		# fails of psutil even thought they should not happen
 		curmem = inGigabytes(curmem)
@@ -912,7 +957,8 @@ class ExecPool(object):
 	_JMEMTRR = 1.5
 	assert _JMEMTRR >= 1, 'Memory threshold retio should be >= 1'
 
-	def __init__(self, wksnum=max(_CPUS-1, 1), afnmask=None, memlimit=0., latency=0., name=None):  # afnstep=None
+	def __init__(self, wksnum=max(_CPUS-1, 1), afnmask=None, memlimit=0., latency=0., name=None, webuiapp=None):
+		# afnstep=None, uidir=None
 		"""Execution Pool constructor
 
 		wksnum  - number of resident worker processes, >=1. The reasonable value is
@@ -942,6 +988,7 @@ class ExecPool(object):
 			0 means automatically defined value (recommended, typically 2-3 sec)
 		name  - name of the execution pool to distinguish traces from subsequently
 			created execution pools (only on creation or termination)
+		webuiapp: WebUiApp  - WebUI app to inspect load balancer remotely
 
 		Internal attributes:
 		alive  - whether the execution pool is alive or terminating, bool.
@@ -994,6 +1041,65 @@ class ExecPool(object):
 			print('WARNING{}, total memory limit is reduced to guarantee the in-RAM'
 				' computations: {:.6f} -> {:.6f} Gb'.format('' if not self.name else ' ' + self.name
 				, memlimit, self.memlimit), file=sys.stderr)
+
+		# Initialize WebUI if it has been supplied
+		self._uicmd = None
+		global _WEBUI
+		if _WEBUI and webuiapp is not None:
+			assert isinstance(webuiapp, WebUiApp), 'Unexpected type of webuiapp: ' + type(webuiapp).__name__
+			#uiapp = WebUiApp(host='localhost', port=8080, name='MpepoolWebUI', daemon=True)
+			self._uicmd = webuiapp.cmd
+			if not webuiapp.is_alive():
+				try:
+					webuiapp.start()
+				except RuntimeError as err:
+					print('WARNING, webuiapp can not be started. Disabled: {}. {}'.format(
+						err, traceback.format_exc(5)), file=sys.stderr)
+					_WEBUI = False
+
+
+	def __reviseUi(self):
+		"""Check and handle UI commands"""
+		# Process on the next iteration if the client request is not ready
+		assert self._uicmd is not None, 'self._uicmd is expected to be defined'
+		if self._uicmd.id is None or not self._uicmd.cond.acquire(blocking=False):
+			return
+		data = self._uicmd.data
+		if data:
+			del data[:]
+		if not (self._workers and self._jobs):
+			return
+		if self._uicmd.id == UiCmdId.LIST_ALL:
+			# Fill headers
+			data.append(['name'])
+			params = self._uicmd.params
+			if not params:
+				params.update(UiResCol.__members__)
+			data[0].extend(params)
+			# Fill data falues
+			if UiResCol.duration._name_ in params:
+				ctime = time.perf_counter()
+			for jobs in (self._workers, self._jobs):
+				for job in jobs:
+					data.append[[job.name]]
+					drow = data[-1]
+					if UiResCol.pid._name_ in params:
+						drow.append('' if not job.proc else str(job.proc.pid))
+					if UiResCol.state._name_ in params:
+						drow.append('w')
+					if UiResCol.duration._name_ in params:
+						drow.append('' if not job.tstart else str(ctime - job.tstart))
+					if (_LIMIT_WORKERS_RAM or _CHAINED_CONSTRAINTS) and UiResCol.memory._name_ in params:
+						drow.append('' if not job.mem else str(job.mem))
+					if UiResCol.task._name_ in params:
+						drow.append(job.task)
+					if _CHAINED_CONSTRAINTS and UiResCol.category._name_ in params:
+						drow.append(job.category)
+			self._uicmd.id = None  # Reset command id for the completed command
+			self._uicmd.cond.notify()
+		else:
+			print('WARNING, Unknown command requested: {}. {}'.format(self._uicmd.id, traceback.format_exc(5)), file=sys.stderr)
+		self._uicmd.cond.release()
 
 
 	def __enter__(self):
@@ -1708,7 +1814,6 @@ class ExecPool(object):
 		return errcode
 
 
-
 	def join(self, timeout=0.):
 		"""Execution cycle
 
@@ -1732,6 +1837,9 @@ class ExecPool(object):
 				return False
 			time.sleep(self.latency)
 			self.__reviseWorkers()
+			# Revise UI command(s) if the WebUI app has been connected
+			if self._uicmd is not None:
+				self.__reviseUi()
 		self._tstart = None  # Be ready for the following execution
 
 		assert not self._jobs and not self._workers, 'All jobs should be finalized'

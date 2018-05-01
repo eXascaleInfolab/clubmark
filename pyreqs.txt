@@ -11,6 +11,8 @@ numpy>=1.11
 h5py>=2.7.0
 # Optional Web UI (mpepool only)
 bottle>=0.12.13
+# Enum class for Python2 to be compatible with Python3 (mpepool only)
+enum34>=1.1.6
 # TODO: matplotlib or +pandas or +(scipy and seaborn) for results visualization
 
 # Algorithms requirements:

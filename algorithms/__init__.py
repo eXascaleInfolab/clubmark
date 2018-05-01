@@ -1,2 +1,2 @@
-__all__ = ['utils',
-	'louvain_igraph.py', 'randcommuns.py', 'scp.py']
+__all__ = ['utils',  # dirs
+	'louvain_igraph', 'randcommuns', 'scp']  # modules

@@ -38,8 +38,11 @@ Note: works on both Python3 and Python2 / pypy
 	Lumais <http://www.lumais.com/>
 :Date: 2016-10
 """
-
 from __future__ import print_function, division  # Required for stderr output, must be the first import
+# Exporting Functions
+__all__ = ["convert", "FormatSpec"]
+
+
 # Required to efficiently traverse items of dictionaries in both Python 2 and 3
 try:
 	from future.utils import viewitems, viewkeys, viewvalues  # External package: pip install future
@@ -1141,6 +1144,3 @@ def parseArgs(params=None):
 
 if __name__ == '__main__':
 	convert(parseArgs())
-
-
-__all__ = ["convert", "FormatSpec"]

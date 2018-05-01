@@ -1,1 +1,1 @@
-__all__ = ['convert.py', 'mpepool.py']
+__all__ = ['convert', 'mpepool', 'mpewui']  # modules

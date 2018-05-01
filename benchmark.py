@@ -41,8 +41,11 @@
 	ScienceWise <http://sciencewise.info/>
 :Date: 2015-04
 """
-
 from __future__ import print_function, division  # Required for stderr output, must be the first import
+# Extrenal API (exporting functions)
+__all__ = ['generateNets', 'shuffleNets', 'convertNets', 'runApps', 'evalResults', 'benchmark']
+
+
 # Required to efficiently traverse items of dictionaries in both Python 2 and 3
 try:
 	from future.builtins import range
@@ -54,16 +57,17 @@ except ImportError:
 		pass  # xrange is not defined in Python3, which is fine
 import atexit  # At exit termination handleing
 import sys
-import time
-# Consider compatibility with Python before v3.3
-if not hasattr(time, 'perf_counter'):
-	time.perf_counter = time.time
 import os
 import shutil
 import signal  # Intercept kill signals
 import glob
 import traceback  # Stacktrace
 import copy
+import time
+# Consider time interface compatibility for Python before v3.3
+if not hasattr(time, 'perf_counter'):  #pylint: disable=C0413
+	time.perf_counter = time.time
+
 from math import sqrt
 from multiprocessing import cpu_count  # Returns the number of logical CPU units (hw treads) if defined
 
@@ -1733,7 +1737,3 @@ if __name__ == '__main__':
 		atexit.register(terminationHandler, terminate=False)
 
 		benchmark(*sys.argv[1:])
-
-
-# Extrenal API (exporting functions)
-__all__ = ["generateNets", "shuffleNets", "convertNets", "runApps", "evalResults", "benchmark"]

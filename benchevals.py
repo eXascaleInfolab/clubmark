@@ -196,8 +196,7 @@ class QualitySaver(object):
 				else:
 					update = False
 					print('WARNING, update can not be performed because the userblock is already full.'
-						' New storage will be created.'
-						.format(seed, ubparts[0]), file=sys.stderr)
+						' New storage will be created.'.format(seed, ubparts[0]), file=sys.stderr)
 			if len(ubparts) < 2:
 				raise ValueError('Userblock should contain at least 2 items (seed and 1+ timestamp): ' + ublock)
 			bcksuffix = SyncValue(time.strptime(ubparts[-1], timefmt))  # Use last benchmarking start time

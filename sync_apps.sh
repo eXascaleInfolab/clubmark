@@ -19,6 +19,7 @@ rsync -aLhv ../../system/ExecTime/bin/Release/exectime\
 	../daoc/common/batch_run_brief.sh\
 	\
 	../../system/PyExPool/mpepool.py\
+	../../system/PyExPool/mpewui.py\
 	\
 	../xmeasures/bin/Release/xmeasures\
 	../gecmi_c++/bin/Release/gecmi\

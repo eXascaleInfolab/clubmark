@@ -77,8 +77,8 @@ from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, _SEPP
  _SEPSHF, _SEPPATHID, _UTILDIR, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
 from benchevals import aggEvaluations, _RESDIR, _EXTEXECTIME  # QualitySaver, evaluators,
-from utils.mpepool import AffinityMask, ExecPool, Job, secondsToHms
-from utils.mpewui import WebUiApp, bottle
+from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
+from utils.mpewui import WebUiApp  #, bottle
 from algorithms.utils.parser_nsl import asymnet, dflnetext
 
 # if not bottle.TEMPLATE_PATH:
@@ -110,6 +110,8 @@ _execpool = None
 # Data structures --------------------------------------------------------------
 class PathOpts(object):
 	"""Paths parameters"""
+	__slots__ = ('path', 'flat', 'asym', 'shfnum')
+
 	def __init__(self, path, flat=False, asym=False, shfnum=0):
 		"""Sets default values for the input parameters
 
@@ -122,6 +124,7 @@ class PathOpts(object):
 			which is considered only for the non-standard file extensions (not .nsL)
 		shfnum  - the number of shuffles of each network instance to be produced, >= 0
 		"""
+		# assert isinstance(path, str)
 		self.path = path
 		self.flat = flat
 		self.asym = asym
@@ -129,11 +132,14 @@ class PathOpts(object):
 
 	def __str__(self):
 		"""String conversion"""
-		return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
+		# return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
+		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
 
 
 class SyntPathOpts(PathOpts):
 	"""Paths parameters for the synthetic networks"""
+	__slots__ = ('netins', 'overwrite')
+
 	def __init__(self, path, netins=3, overwrite=False, flat=False, asym=False, shfnum=0):
 		"""Sets default values for the input parameters
 
@@ -835,19 +841,44 @@ while True:
 		print('Networks ({}) shuffling completed. NOTE: random seed is not supported for the shuffling'.format(shufnets))
 
 
-def processPath(popt, handler, xargs=None, dflextfn=dflnetext):
+def basenetTasks(netname, pathidstr, basenets, rtasks):
+	"""Fetch or make tasks for the specific base network name (with pathidstr and whitout instance and shuffle id)
+
+	netname: str  - network name, possibly includes instance but NOT shuffle id
+	pathidstr: str  - network path id in the string representation
+	basenets: dict(basenet: str, nettasks: list(Task))  - tasks for the basenet
+	rtasks: list(Task)  - root tasks for the running appson all networks
+
+	return  nettasks: list(Task)  - tasks for the basenet of the specified netname
+	"""
+	iename = netname.find(_SEPINST)
+	basenet = netname if iename == -1 else netname[:iename]
+	if pathidstr:
+		basenet = _SEPPATHID.join((basenet, pathidstr))
+	nettasks = basenets.get(basenet)
+	if not nettasks:
+		nettasks = [Task('.'.join((t.name, basenet)), task=t) for t in rtasks]
+		basenets[basenet] = nettasks
+	return nettasks
+
+
+def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 	"""Process the specified path with the specified handler
 
 	popt  - processing path options (the path is directory of file, not a wildcard), PathOpts
-	handler  - handler to be called as handler(netfile, netshf, xargs),
+	handler  - handler to be called as handler(netfile, netshf, xargs, tasks),
 		netshf means that the processing networks is a shuffle in the non-flat dir structure
 	xargs  - extra arguments of the handler following after the processing network file
 	dflextfn  - function(asymflag) for the default extension of the input files in the path
+	tasks: list(tasks)  - root tasks per each algorithm
 	"""
+	# appnames  - names of the running apps to create be associated with the tasks
 	assert os.path.exists(popt.path), 'Target path should exist'
-
 	path = popt.path  # Assign path to a local variable to not corrupt the input data
 	dflext = dflextfn(popt.asym)  # dflnetext(popt.asym)  # Default network extension for files in dirs
+	# Base networks with their tasks (netname with the pathid
+	# and without the instance and shuffle suffixes)
+	bnets = {}
 	if os.path.isdir(path):
 		# Traverse over the instances in the specified directory
 		# Use the same path separator on all OSs
@@ -864,21 +895,48 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext):
 				netname = os.path.split(net)[1]
 				if netname.find(_SEPSHF) != -1:
 					continue
-				#if popt.shfnum:  # ATTENTNION: shfnum is not available for non-synthetic networks
+				# Fetch base network name (whitout instance and shuffle id)
+				nettasks = basenetTasks(netname, None if not xargs else xargs['pathidstr'], bnets, tasks)
+				# iename = netname.find(_SEPINST)
+				# basenet = netname if iename == -1 else netname[:iename]
+				# if xargs and xargs['pathidstr']:
+				# 	basenet = _SEPPATHID.join((basenet, xargs['pathidstr']))
+				# nettasks = bnets.get(basenet)
+				# if not nettasks:
+				# 	nettasks = [Task('.'.join((t.name, basenet)), task=t) for t in tasks]
+				# 	bnets[basenet] = nettasks
+				# #if popt.shfnum:  # ATTENTNION: shfnum is not available for non-synthetic networks
 				# Process dedicated dir of shuffles for the specified network,
 				# the origin network itself is linked to the shuffles dir (inside it)
 				dirname, ext = os.path.splitext(net)
 				if os.path.isdir(dirname):
 					# Shuffles exist for this network and located in the subdir together with the copy of origin
 					for desnet in glob.iglob('/*'.join((dirname, ext))):
-						handler(desnet, True, xargs)  # True - shuffle is processed in the non-flat dir structure
+						handler(desnet, True, xargs, nettasks)  # True - shuffle is processed in the non-flat dir structure
 				else:
-					handler(net, False, xargs)
+					handler(net, False, xargs, tasks)  # Neither multiple instances nor shufles exist for this net
 		else:
 			# Both shuffles (if exist any) and network instances are located
 			# in the same dir, convert them
 			for net in glob.iglob('*'.join((path, dflext))):
-				handler(net, False, xargs)
+				# Note: typically, shuffles and instances do not exist in the flat structure
+				# or their number is small
+				#
+				# # Fetch base network name (whitout instance and shuffle id)
+				# basenet = os.path.split(net)[1]
+				# iename = basenet.find(_SEPINST)
+				# if iename != -1:
+				# 	basenet = basenet[:iename]
+				# iename = basenet.find(_SEPSHF)
+				# if iename != -1:
+				# 	basenet = basenet[:iename]
+				# if xargs and xargs['pathidstr']:
+				# 	basenet = _SEPPATHID.join((basenet, xargs['pathidstr']))
+				# nettasks = bnets.get(basenet)
+				# if not nettasks:
+				# 	nettasks = [Task('.'.join((t.name, basenet)), task=t) for t in tasks]
+				# 	bnets[basenet] = nettasks
+				handler(net, False, xargs, tasks)
 	else:
 		if not popt.flat:
 			# Skip the shuffles if any to process only specified networks
@@ -886,17 +944,19 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext):
 			netname = os.path.split(path)[1]
 			if netname.find(_SEPSHF) != -1:
 				return
+			# Fetch base network name (whitout instance and shuffle id)
+			nettasks = basenetTasks(netname, None if not xargs else xargs['pathidstr'], bnets, tasks)
 			#if popt.shfnum:  # ATTENTNION: shfnum is not available for non-synthetic networks
 			# Process dedicated dir of shuffles for the specified network,
 			# the origin network itself is linked to the shuffles dir (inside it)
 			dirname, ext = os.path.splitext(path)
 			if os.path.isdir(dirname):
 				for desnet in glob.iglob('/*'.join((dirname, ext))):
-					handler(desnet, True, xargs)  # True - shuffle is processed in the non-flat dir structure
+					handler(desnet, True, xargs, nettasks)  # True - shuffle is processed in the non-flat dir structure
 			else:
-				handler(path, False, xargs)
+				handler(path, False, xargs, tasks)
 		else:
-			handler(path, False, xargs)
+			handler(path, False, xargs, tasks)
 
 
 def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout=30*60):  # 7, 30 min
@@ -1087,6 +1147,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			# Track processed file names to resolve cases when files with the same name present in different input dirs
 			# Note: pathids are required at least to set concise job names to see what is executed in runtime
 			netnames = {}  # Name to pathid mapping: {Name: counter}
+			tasks = [Task(appname) for appname in algorithms]
 			for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
 				xargs['asym'] = popt.asym
 				# Resolve wildcards
@@ -1115,7 +1176,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 					pcuropt.path = path
 					if _DEBUG_TRACE:
 						print('  Scheduling apps execution for the path options ({})'.format(str(pcuropt)))
-					processPath(pcuropt, runner, xargs=xargs)
+					processPath(pcuropt, runner, xargs=xargs, tasks=tasks)
 			netnames = None  # Free memory from filenames
 
 			# Extend algorithms execution tracing files (.rcp) with time tracing, once per an executing algorithm

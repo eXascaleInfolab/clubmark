@@ -3,7 +3,8 @@
 # This is internal script to sync benchmarking components to the latest version
 
 # Make target dirs if have not been existed yet
-mkdir -pv algorithms/utils/louvain/ algorithms/daoc/ algorithms/ganxis/ formats/
+# Note: views dir contains html templates for web ui
+mkdir -pv algorithms/utils/louvain/ algorithms/daoc/ algorithms/ganxis/ formats/ views/
 
 # File Formats Specificaitons --------------------------------------------------
 rsync -aLhv ../daoc/common/format.cnl\
@@ -29,6 +30,9 @@ rsync -aLhv ../../system/ExecTime/bin/Release/exectime\
 	../lfrbench_undir_weight_ovp/lfrbench_udwov\
 	\
 	utils/
+	
+# Note: -a (archive) includes -r (recursively)
+rsync -aLhv ../../system/PyExPool/views/ views/
 
 # Algorithms accessory utils
 rsync -aLhv ../daoc/common/parser_nsl.py algorithms/utils/

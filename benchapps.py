@@ -673,6 +673,8 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 # DAOC Options
 class DaocOpts(object):
 	"""DAOC execution options"""
+	__slots__ = ('rlevout', 'gamma', 'reduction', 'significance')
+
 	def __init__(self, rlevout=None, gamma=1, reduction=None, significance=None):
 		"""DAOC execution options initialization
 
@@ -712,7 +714,8 @@ class DaocOpts(object):
 
 	def __str__(self):
 		"""String conversion"""
-		return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
+		# return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
+		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
 
 
 # DAOC wit parameterized gamma

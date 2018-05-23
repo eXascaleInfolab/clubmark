@@ -73,8 +73,8 @@ from multiprocessing import cpu_count  # Returns the number of logical CPU units
 
 import benchapps  # Required for the functions name mapping to/from the app names
 from benchapps import PYEXEC, aggexec, funcToAppName, _PREFEXEC  # , _EXTCLNODES, _ALGSDIR
-from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, \
- _SEPSHF, _SEPPATHID, _UTILDIR, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
+from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsSec, secDhms \
+ 	, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
 from benchevals import aggEvaluations, _RESDIR, _EXTEXECTIME  # QualitySaver, evaluators,
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
@@ -97,6 +97,8 @@ _WPROCSMAX = max(cpu_count()-1, 1)  # Maximal number of the worker processes, sh
 assert _WPROCSMAX >= 1, 'Natural number is expected not exceeding the number of system cores'
 _VMLIMIT = 4096  # Set 4 TB or RAM to be automatically limited to the physical memory of the computer
 _PORT = 80  # Default port for WebUI
+_RUNTIMEOUT = 10*24*60*60  # Clustering execution timeout, 10 days
+_EVALTIMEOUT = 2*24*60*60  # Results evaluation timeout, 2 days
 
 #_TRACE = 1  # Tracing level: 0 - none, 1 - lightweight, 2 - debug, 3 - detailed
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
@@ -219,6 +221,8 @@ class Params(object):
 		# WebUI host and port
 		self.host = None
 		self.port = _PORT
+		self.runtimeout = _RUNTIMEOUT
+		self.evaltimeout= _EVALTIMEOUT
 
 
 # Input зarameters processing --------------------------------------------------
@@ -266,7 +270,18 @@ def parseParams(args):
 			elif arg.startswith('--summary'):
 				arg = '-s' + arg[len('--summary'):]
 			elif arg.startswith('--webaddr'):
-				arg = '-w' + arg[len('--summary'):]
+				arg = '-w' + arg[len('--webaddr'):]
+			# Exclusive long options
+			elif arg.startswith('--runtimeout'):
+				nend = len('--runtimeout')
+				if len(arg) <= nend + 1 or arg[nend] != '=':
+					raise ValueError('Unexpected argument: ' + arg)
+				opts.runtimeout = dhmsSec(arg[nend+1:])
+			elif arg.startswith('--evaltimeout'):
+				nend = len('--evaltimeout')
+				if len(arg) <= nend + 1 or arg[nend] != '=':
+					raise ValueError('Unexpected argument: ' + arg)
+				opts.evaltimeout = dhmsSec(arg[nend+1:])
 			else:
 				raise ValueError('Unexpected argument: ' + arg)
 
@@ -448,7 +463,7 @@ def parseParams(args):
 			# Parse host and port
 			host = arg[3:]
 			if host:
-				isep = host.frind(':')
+				isep = host.rfind(':')
 				if isep != -1:
 					try:
 						opts.port = int(host[isep+1:])
@@ -1658,18 +1673,18 @@ def benchmark(*args):
 	# opts.convnets: 0 - do not convert, 0b01 - only if not exists, 0b11 - forced conversion, 0b100 - resolve duplicated links
 	if opts.convnets:
 		convertNets(opts.datas, overwrite=opts.convnets & 0b11 == 0b11
-			, resdub=opts.convnets & 0b100, timeout1=7*60, convtimeout=45*60)
+			, resdub=opts.convnets & 0b100, timeout1=7*60, convtimeout=45*60)  # 45 min
 
 	# Run the opts.algorithms and measure their resource consumption
 	if opts.runalgs:
 		runApps(appsmodule=benchapps, algorithms=opts.algorithms, datas=opts.datas, seed=seed
-			, exectime=exectime, timeout=opts.timeout, runtimeout=10*24*60*60)  # 10 days
+			, exectime=exectime, timeout=opts.timeout, runtimeout=opts.runtimeout)
 
 	# Evaluate results
 	if opts.quality:
 		evalResults(quality=opts.quality, appsmodule=benchapps, algorithms=opts.algorithms
 			, datas=opts.datas, seed=seed, exectime=exectime, timeout=opts.timeout
-			, evaltimeout=14*24*60*60, update=opts.updqual)  # 14 days
+			, evaltimeout=opts.evaltimeout, update=opts.updqual)
 
 	if opts.aggrespaths:
 		aggEvaluations(opts.aggrespaths)
@@ -1802,11 +1817,13 @@ if __name__ == '__main__':
 			'  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
 			', which is useful to include external manual evaluations into the final summarized results',
 			'ATTENTION: <resval_path> should include the algorithm name and target measure.',
-			'  --webaddr, -w  - run WebUI on the specified <webui_addr> in the format <host>[:<port>], default port={port}.'
+			'  --webaddr, -w  - run WebUI on the specified <webui_addr> in the format <host>[:<port>], default port={port}.',
+			'  --runtimeout  - global clustrering algorithms execution timeout in seconds, default: {runtimeout}.',
+			'  --evaltimeout  - global clustrering algorithms execution timeout in seconds, default: {evaltimeout}.',
 			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=_RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=_SEPINST, seppars=_SEPPARS, sepshf=_SEPSHF, rsvpathsmb=(_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID)
 				, anppsnum=len(apps), apps=', '.join(apps), th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60
-				, seedfile=_SEEDFILE, port=_PORT))
+				, seedfile=_SEEDFILE, port=_PORT, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
 	else:
 		# Fill signals mapping {value: name}
 		_signals = {sv: sn for sn, sv in viewitems(signal.__dict__)

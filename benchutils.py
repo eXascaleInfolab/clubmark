@@ -89,6 +89,92 @@ except ImportError:
 	viewvalues = lambda dct: viewMethod(dct, 'values')()  #pylint: disable=W0611
 
 
+def secDhms(seconds):
+	"""Convert seconds to duration of days/hours/minuts/secs in the string format
+
+	seconds: ufloat  - seconds to be converted
+
+	return  duration: str  - resulting duration in the format: [<days>d][<hours>h][<minutes>m<seconds>]
+
+	>>> secDhms(10)
+	'10'
+	>>> secDhms(60)
+	'1m'
+	>>> secDhms(65.7818934)
+	'1m5.782'
+	>>> secDhms(3725)
+	'1h2m5'
+	>>> secDhms(50*3600)
+	'2d2h'
+	>>> secDhms(24*3600+2)
+	'1d0h0m2'
+	"""
+	days = int(seconds // (24 * 3600))
+	seconds -= days * 24 * 3600
+	hours = int(seconds // 3600)
+	seconds -= hours * 3600
+	mins = int(seconds // 60)
+	secs = seconds - mins * 60
+
+	res = '' if not days else str(days) + 'd'
+	if not (hours or mins or secs):
+		return res
+	if res or hours:
+		res += str(hours) + 'h'
+	if not (mins or secs):
+		return res
+	if res or mins:
+		res += str(mins) + 'm'
+	return res if not secs else '{}{:.4g}'.format(res, secs)
+
+
+def dhmsSec(dhms):
+	"""Convert dhms string duration to seconds
+
+	dhms  - duration given as string in the format: [<days>d][<hours>h][<minutes>m<seconds>]
+
+	return  secs: uint  - seconds, unsigned int
+
+	>>> dhmsSec('10')
+	10
+	>>> dhmsSec('1m')
+	60
+	>>> dhmsSec('1m5.782')
+	65.782
+	>>> dhmsSec('1h2m5')
+	3725
+	>>> dhmsSec('2d2h')
+	180000
+	>>> dhmsSec('1d0h0m2')
+	86402
+	"""
+	sec = 0
+	# Parse days
+	isep = dhms.find('d')
+	ibeg = 0
+	if isep != -1:
+		sec += int(dhms[:isep]) * 24 * 3600
+		ibeg = isep + 1
+	# Parse hours
+	isep = dhms.find('h', ibeg)
+	if isep != -1:
+		sec += int(dhms[ibeg:isep]) * 3600
+		ibeg = isep + 1
+	# Parse mins
+	isep = dhms.find('m', ibeg)
+	if isep != -1:
+		sec += int(dhms[ibeg:isep]) * 60
+		ibeg = isep + 1
+	# Parse secs
+	dhms = dhms[ibeg:]
+	if dhms:
+		if dhms.find('.') == -1:
+			sec += int(dhms)
+		else:
+			sec += float(dhms)
+	return sec
+
+
 def timeSeed():
 	"""Generate time seed as uint64_t
 
@@ -143,22 +229,22 @@ def delPathSuffix(path, nameonly=False):
 		# Note: +1 compensates start from the symbol at index 1. Also a separator can't be the first symbol
 		poses = [pname[1:].rfind(c) + 1 for c in (_SEPINST, _SEPPATHID, _SEPSHF)]  # Note: reverse direction to skip possible separator symbols in the name itself
 		## Consider possible extension of the filename
-		## Note: this handling is fine, but not reliable (part of the name of file extensoin can be handled as a shuffle index
+		## Note: this handling is fine, but not reliable (part of the name of file extension can be handled as a shuffle index
 		#pos = pname[1:].rfind('.') + 1
 		#if pos and pos > max(poses):
 		#	poses.append(pos)
 		#	pos = pname[1:pos].rfind('.') + 1
 		#	if pos:
 		#		poses.append(pos)
-		poses.append(pname[1:].find(_SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is requried
+		poses.append(pname[1:].find(_SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is required
 		# Filter out non-existent results: -1 -> 0
 		poses = sorted(filter(lambda x: x >= 1, poses))
 		#print('Initial poses: ', poses)
 		while poses:
 			pos = poses.pop(0)
-			pose = poses[0] if poses else len(pname)  # Intex of the next separator or end of the name
+			pose = poses[0] if poses else len(pname)  # Index of the next separator or end of the name
 			# Note: parameters can be any, but another suffixes are strictly specified
-			# Valudate the suffix in case it is an instance or shuffle suffix
+			# Validate the suffix in case it is an instance or shuffle suffix
 			if pname[pos] in (_SEPINST, _SEPPATHID, _SEPSHF):
 				try:
 					int(pname[pos + 1:pose])
@@ -166,7 +252,7 @@ def delPathSuffix(path, nameonly=False):
 					print('WARNING, invalid suffix or separator "{}" represents part of the path name "{}"'
 						', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
 					continue  # Check following separator candidate
-			# Note: threat param separator as alvays valid
+			# Note: threat param separator as always valid
 			pname = pname[:pos]
 			#print('path: {}, pname: {}, pos: {}, poses: {}'.format(path, pname, pos, poses), file=sys.stderr)
 			break  # Required pos is found
@@ -218,15 +304,15 @@ def parseName(path, nameonly=False):
 	if len(pname) >= 2:
 		# Note: +1 compensates start from the symbol at index 1. Also a separator can't be the first symbol
 		poses = [pname[1:].rfind(c) + 1 for c in (_SEPINST, _SEPSHF, _SEPPATHID)]  # Note: reverse direction to skip possible separator symbols in the name itself
-		poses.append(pname[1:].find(_SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is requried
+		poses.append(pname[1:].find(_SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is required
 		# Filter out non-existent results: -1 -> 0
 		poses = sorted(filter(lambda x: x >= 1, poses))
 		#print('Initial poses: ', poses)
 		while poses:
 			pos = poses.pop(0)
-			pose = poses[0] if poses else len(pname)  # Intex of the next separator or end of the name
+			pose = poses[0] if poses else len(pname)  # Index of the next separator or end of the name
 			# Note: parameters can be any, but another suffixes are strictly specified
-			# Valudate the suffix in case it is an instance or shuffle suffix
+			# Validate the suffix in case it is an instance or shuffle suffix
 			if pname[pos] in (_SEPINST, _SEPSHF, _SEPPATHID):
 				try:
 					int(pname[pos + 1:pose])
@@ -234,7 +320,7 @@ def parseName(path, nameonly=False):
 					print('WARNING, invalid suffix or separator "{}" represents part of the path name "{}"'
 						', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
 					continue  # Check following separator candidate
-			# Note: threat param separator as alvays valid
+			# Note: threat param separator as always valid
 			if basename is pname:
 				basename = pname[:pos]
 			val = pname[pos:pose]
@@ -374,7 +460,7 @@ def envVarDefined(value, name=None, evar=None):
 	assert isinstance(value, str) and (name is None or isinstance(name, str)) and (
 	 evar is None or isinstance(evar, str)), 'Environmental vars are strings'
 	if evar is None:
-		assert name, 'Evnironmental variable name must be specified if the value is not provided'
+		assert name, 'Environmental variable name must be specified if the value is not provided'
 		evar = os.environ.get(name, '')
 	return evar and re.search('^(.+:)?{}(:.*)?$'.format(re.escape(value)), evar) is not None
 
@@ -449,7 +535,7 @@ def dirempty(dirpath):
 	try:
 		next(glob.iglob(dirpath + '*'))
 	except StopIteration:
-		# Diretory is empty
+		# Directory is empty
 		return True
 	return False
 
@@ -481,7 +567,7 @@ class SyncValue(object):
 
 		val  - initial value
 		"""
-		# Note: recursive lock occurs if normal attrib names are used because of __setattr__ definition
+		# Note: recursive lock occurs if normal attribute names are used because of __setattr__ definition
 		object.__setattr__(self, 'value', val)
 		# Private attributes
 		object.__setattr__(self, '_lock', RLock())  # Use reentrant lock (can be acquired multiple times by the same thread)
@@ -489,14 +575,14 @@ class SyncValue(object):
 
 	def __setattr__(self, name, val):
 		if name != 'value':
-			raise AttributeError('Attribute "{}" is not accessable'.format(name))
+			raise AttributeError('Attribute "{}" is not accessible'.format(name))
 		with object.__getattribute__(self, '_lock'):
 			object.__setattr__(self, name, val)
 
 
 	def __getattribute__(self, name):
 		if name != 'value':
-			raise AttributeError('Attribute "{}" is not accessable'.format(name))
+			raise AttributeError('Attribute "{}" is not accessible'.format(name))
 		with object.__getattribute__(self, '_lock'):
 			return object.__getattribute__(self, name)
 
@@ -561,7 +647,7 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 			mtime = synctime.value
 	else:
 		mtime = time.gmtime(os.path.getmtime(path))
-	assert isinstance(mtime, time.struct_time), 'Unexected type of mtime'
+	assert isinstance(mtime, time.struct_time), 'Unexpected type of mtime'
 	mtstr = time.strftime('_%y%m%d_%H%M%S', mtime)  # Modification time
 	return ''.join((name, suffix, mtstr))
 

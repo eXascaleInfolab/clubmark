@@ -64,10 +64,10 @@ _oldDirs/
 backup/
 clscriteria
 distrib/
-realnets/
-results/
+realnets*/
+results*/
 syntnets*/
-test/
+test*/
 results_bench16
 *.komodoproject
 .vscode/

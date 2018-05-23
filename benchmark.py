@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-:Description: A modular benchmark, wich optionally generates and preprocesses
+:Description: A modular benchmark, which optionally generates and preprocesses
 	(shuffles, i.e. reorder nodes in the networks) datasets using specified
 	executable, optionally executes specified applications (clustering algorithms)
 	with specified parameters on the specified datasets, and optionally evaluates
@@ -21,8 +21,8 @@
 		each set of parameters (there can be varying network instances for the
 		same set of generating parameters);
 	- networks are shuffled (nodes are reordered) to evaluate stability /
-		determinism of the clsutering algorithm;
-	- executes HiReCS (www.lumais.com/hirecs), Louvain (original
+		determinism of the clustering algorithm;
+	- executes HiReCS (http://www.lumais.com/hirecs), Louvain (original
 		https://sites.google.com/site/findcommunities/ and igraph implementations),
 		Oslom2 (http://www.oslom.org/software.htm),
 		Ganxis/SLPA (https://sites.google.com/site/communitydetectionslpa/) and
@@ -72,14 +72,18 @@ from math import sqrt
 from multiprocessing import cpu_count  # Returns the number of logical CPU units (hw treads) if defined
 
 import benchapps  # Required for the functions name mapping to/from the app names
-from benchapps import PYEXEC, aggexec, funcToAppName, JobTracer, _PREFEXEC  # , _EXTCLNODES, _ALGSDIR
+from benchapps import PYEXEC, aggexec, funcToAppName, _PREFEXEC  # , _EXTCLNODES, _ALGSDIR
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, _SEPPARS, _SEPINST, \
  _SEPSHF, _SEPPATHID, _UTILDIR, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
 from benchevals import aggEvaluations, _RESDIR, _EXTEXECTIME  # QualitySaver, evaluators,
 from utils.mpepool import AffinityMask, ExecPool, Job, secondsToHms
+from utils.mpewui import WebUiApp, bottle
 from algorithms.utils.parser_nsl import asymnet, dflnetext
 
+# if not bottle.TEMPLATE_PATH:
+# 	bottle.TEMPLATE_PATH = []
+# bottle.TEMPLATE_PATH.append('utils/views')
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 _SYNTDIR = 'syntnets/'  # Default base directory for the synthetic datasets (both networks, params and seeds)
@@ -92,10 +96,12 @@ _GENSEPSHF = '%'  # Shuffle number separator in the synthetic networks generatio
 _WPROCSMAX = max(cpu_count()-1, 1)  # Maximal number of the worker processes, should be >= 1
 assert _WPROCSMAX >= 1, 'Natural number is expected not exceeding the number of system cores'
 _VMLIMIT = 4096  # Set 4 TB or RAM to be automatically limited to the physical memory of the computer
+_PORT = 80  # Default port for WebUI
 
 #_TRACE = 1  # Tracing level: 0 - none, 1 - lightweight, 2 - debug, 3 - detailed
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
+_webuiapp = None  # Global WebUI application
 # Pool of executors to process jobs, the global variable is required to terminate
 # the worker processes on external signal (TERM, KILL, etc.)
 _execpool = None
@@ -204,6 +210,9 @@ class Params(object):
 		self.seedfile = _SEEDFILE  # Seed value for the synthetic networks generation and stochastic algorithms, integer
 		self.convnets = 0
 		self.aggrespaths = []  # Paths for the evaluated results aggregation (to be done for already existent evaluations)
+		# WebUI host and port
+		self.host = None
+		self.port = _PORT
 
 
 # Input зarameters processing --------------------------------------------------
@@ -250,6 +259,8 @@ def parseParams(args):
 				arg = '-c' + arg[len('--convret'):]
 			elif arg.startswith('--summary'):
 				arg = '-s' + arg[len('--summary'):]
+			elif arg.startswith('--webaddr'):
+				arg = '-w' + arg[len('--summary'):]
 			else:
 				raise ValueError('Unexpected argument: ' + arg)
 
@@ -425,6 +436,20 @@ def parseParams(args):
 			if len(arg) <= 3 or arg[2] != '=':
 				raise ValueError('Unexpected argument: ' + arg)
 			opts.seedfile = arg[3:]
+		elif arg[1] == 'w':
+			if len(arg) <= 3 or arg[2] != '=':
+				raise ValueError('Unexpected argument: ' + arg)
+			# Parse host and port
+			host = arg[3:]
+			if host:
+				isep = host.frind(':')
+				if isep != -1:
+					try:
+						opts.port = int(host[isep+1:])
+						opts.host = host[:isep]
+					except ValueError:
+						opts.port = _PORT
+						opts.host = host
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
 
@@ -438,8 +463,8 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 	Previously existed paths with the same name are backuped before being updated.
 
 	genbin  - the binary used to generate the data (full path or relative to the base benchmark dir)
-	insnum  - the number of insances of each network to be generated, >= 1
-	asym  - generate asymmetric (specified by arcs, directed) instead of undifected networks
+	insnum  - the number of instances of each network to be generated, >= 1
+	asym  - generate asymmetric (specified by arcs, directed) instead of undirected networks
 	basedir  - base directory where data will be generated
 	netsdir  - relative directory for the synthetic networks, contains subdirs,
 		each contains all instances of each network and all shuffles of each instance
@@ -517,7 +542,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: set affinity in a way to maximize the CPU cache L1/2 for each process
 	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(AffinityMask.CORE_THREADS)
-	, memlimit=_VMLIMIT, name='gennets') as _execpool:
+	, memlimit=_VMLIMIT, name='gennets', webuiapp=_webuiapp) as _execpool:
 		bmname = os.path.split(genbin)[1]  # Benchmark name
 		genbin = os.path.relpath(genbin, basedir)  # Update path to the executable relative to the job workdir
 		# Copy benchmark seed to the syntnets seed
@@ -570,8 +595,8 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 							, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
 						if asymarg:
 							args.extend(asymarg)
-						#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
-						_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
+						#Job(name, workdir, args, timeout=0, rsrtonto=False, onstart=None, ondone=None, tstart=None)
+						_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, rsrtonto=True
 							#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 							, onstart=lambda job: shutil.copy2(randseed, netseed)  #pylint: disable=W0640;  Network generation seed
 							#, ondone=shuffle if shfnum > 0 else None
@@ -584,8 +609,8 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 								, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
 							if asymarg:
 								args.extend(asymarg)
-							#Job(name, workdir, args, timeout=0, ontimeout=False, onstart=None, ondone=None, tstart=None)
-							_execpool.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, ontimeout=True
+							#Job(name, workdir, args, timeout=0, rsrtonto=False, onstart=None, ondone=None, tstart=None)
+							_execpool.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, rsrtonto=True
 								#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 								, onstart=lambda job: shutil.copy2(randseed, netseed)  #pylint: disable=W0640;  Network generation seed
 								#, ondone=shuffle if shfnum > 0 else None
@@ -638,7 +663,7 @@ def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
 	shufnets = 0  # The number of shuffled networks
 	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='shufnets') as _execpool:
 		def shuffle(job):
-			"""Shufle network instance specified by the job"""
+			"""Shuffle network instance specified by the job"""
 			#assert job.params, 'Job params should be defined'
 			if job.params['shfnum'] < 1:
 				return
@@ -692,17 +717,17 @@ while True:
 		break
 """.format(jobname=job.name, sepshf=_SEPSHF, netext=job.params['netext'], shfnum=job.params['shfnum']
 			, overwrite=False))  # Skip the shuffling if the respective file already exists
-			job.name += '_shf'  # Update jobname to cleary associate it with the shuffling process
+			job.name += '_shf'  # Update jobname to clearly associate it with the shuffling process
 			_execpool.execute(job)
 
 		def shuffleNet(netfile, shfnum):
-			"""Shuffle specified network produsing cpecified number of shuffles in the same directory
+			"""Shuffle specified network producing specified number of shuffles in the same directory
 
 			netfile  - the network instance to be shuffled
 			shfnum  - the number of shuffles to be done
 
 			return
-				shfnum - number of shufflings to be done or zero if the instance is a shuffle by itself
+				shfnum - number of shuffles to be produced or zero if the instance is a shuffle by itself
 			"""
 			# Remove existing shuffles if required
 			path, name = os.path.split(netfile)
@@ -723,7 +748,7 @@ while True:
 
 		def prepareDir(dirname, netfile, bcksuffix=None):
 			"""Make the dir if not exists, otherwise move to the backup if the dir is not empty.
-			Link the origal network inside the dir.
+			Link the original network inside the dir.
 
 			dirname  - directory to be initialized or moved to the backup
 			netfile  - network file to be linked into the <dirname> dir
@@ -780,9 +805,9 @@ while True:
 							shfnum += shuffleNet(shuf0, popt.shfnum)
 					else:
 						# Backup the whole dir of network instances with possible shuffles,
-						# which are going ot be shuffled
+						# which are going to be shuffled
 						tobackup(path, False, bcksuffix, move=False)  # Copy to the backup
-						# Note: the folder containing the network instance origining the shuffling should not be deleted
+						# Note: the folder containing the network instance originating the shuffling should not be deleted
 						for net in glob.iglob('*'.join((path, dflext))):
 							shfnum += shuffleNet(net, popt.shfnum)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
 				else:
@@ -840,8 +865,8 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext):
 				if netname.find(_SEPSHF) != -1:
 					continue
 				#if popt.shfnum:  # ATTENTNION: shfnum is not available for non-synthetic networks
-				# Process dedicated dir of shufles for the specified network,
-				# the origin network itself is linked to the shufles dir (inside it)
+				# Process dedicated dir of shuffles for the specified network,
+				# the origin network itself is linked to the shuffles dir (inside it)
 				dirname, ext = os.path.splitext(net)
 				if os.path.isdir(dirname):
 					# Shuffles exist for this network and located in the subdir together with the copy of origin
@@ -862,8 +887,8 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext):
 			if netname.find(_SEPSHF) != -1:
 				return
 			#if popt.shfnum:  # ATTENTNION: shfnum is not available for non-synthetic networks
-			# Process dedicated dir of shufles for the specified network,
-			# the origin network itself is linked to the shufles dir (inside it)
+			# Process dedicated dir of shuffles for the specified network,
+			# the origin network itself is linked to the shuffles dir (inside it)
 			dirname, ext = os.path.splitext(path)
 			if os.path.isdir(dirname):
 				for desnet in glob.iglob('/*'.join((dirname, ext))):
@@ -890,7 +915,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
-	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
+	# Note: afnstep = 1 because the processes are not cache-intensive, not None, because the workers are single-threaded
 	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='convnets') as _execpool:
 		def convertNet(inpnet, overwrite=False, resdub=False, timeout=7*60):  # 7 min
 			"""Convert input networks to another formats
@@ -907,11 +932,11 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 				_execpool.execute(Job(name=os.path.splitext(os.path.split(inpnet)[1])[0], args=args, timeout=timeout
 					, category='convert', size=os.path.getsize(inpnet)))
 			except Exception as err:  #pylint: disable=W0703
-				print('ERROR on "{}" conversion to .rcg, the conversion is cancelled: {}. {}'
+				print('ERROR on "{}" conversion to .rcg, the conversion is canceled: {}. {}'
 					.format(inpnet, err, traceback.format_exc(5)), file=sys.stderr)
 			#netnoext = os.path.splitext(net)[0]  # Remove the extension
 			#
-			## Convert to Louvain binaty input format
+			## Convert to Louvain binary input format
 			#try:
 			#	# ./convert [-r] -i graph.txt -o graph.bin -w graph.weights
 			#	# r  - renumber nodes
@@ -976,7 +1001,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	def unknownApp(name):
 		"""A stub for the unknown / not implemented apps (algorithms) to be benchmaked
 
-		name  - name of the funciton to be called (traced and skipped)
+		name  - name of the function to be called (traced and skipped)
 		"""
 		def stub(*args, **kwargs):  #pylint: disable=W0613
 			"""The algorithm stab to be called"""
@@ -989,38 +1014,36 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Note: set affinity in a way to maximize the CPU cache L1/2 for each process
 	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(AffinityMask.CORE_THREADS)
-	, memlimit=_VMLIMIT, name='runapps') as _execpool:
+	, memlimit=_VMLIMIT, name='runapps', webuiapp=_webuiapp) as _execpool:
 		# Run all algs if not specified the concrete algorithms to be run
+		# # Algorithms callers
+		# execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
 		if not algorithms:
-			# Algorithms callers
-			execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
 			# Save algorithms names to perform results aggregation after the execution
 			algorithms = appnames(appsmodule)
-		else:
-			# Execute only specified algorithms
-			execalgs = [getattr(appsmodule, _PREFEXEC + alg, unknownApp(_PREFEXEC + alg)) for alg in algorithms]
 			#algorithms = [alg.lower() for alg in algorithms]
+		# Execute the specified algorithms
+		execalgs = [getattr(appsmodule, _PREFEXEC + alg, unknownApp(_PREFEXEC + alg)) for alg in algorithms]
 		assert len(algorithms) == len(execalgs), 'execalgs are not synced with the algorithms'
 
-		jobTracers = [JobTracer(alg) for alg in algorithms]
-
-		def runapp(net, asym, netshf, pathid=''):
+		def runapp(net, asym, netshf, pathid='', tasks=None):
 			"""Execute algorithms on the specified network counting number of ran jobs
 
 			net  - network to be processed
 			asym  - whether the network is asymmetric (directed), considered only for the non-standard network file extensions
 			netshf  - whether this network is a shuffle in the non-flat dir structure
 			pathid  - path id of the net to distinguish nets with the same name located in different dirs
+			tasks: list(Task)  - tasks associated with the running algorithms on the specified network
 
 			return
 				jobsnum  - the number of scheduled jobs, typically 1
 			"""
 			jobsnum = 0
 			netext = os.path.splitext(net)[1].lower()
-			for ialg, ealg in enumerate(execalgs):
+			for ia, ealg in enumerate(execalgs):
 				try:
-					jobsnum += ealg(_execpool, net, asym=asymnet(netext, asym), odir=netshf, timeout=timeout
-						, pathid=pathid, jobtracer=jobTracers[ialg], seed=seed)
+					jobsnum += ealg(_execpool, net, asym=asymnet(netext, asym), odir=netshf
+						, timeout=timeout, pathid=pathid, task=None if not tasks else tasks[ia], seed=seed)
 				except Exception as err:  #pylint: disable=W0703
 					errexectime = time.perf_counter() - exectime
 					print('ERROR, "{}" is interrupted by the exception {} on {:.4f} sec ({} h {} m {:.4f} s), callstack fragment:'
@@ -1028,19 +1051,20 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 					traceback.print_stack(limit=5, file=sys.stderr)
 			return jobsnum
 
-		def runner(net, netshf, xargs):
+		def runner(net, netshf, xargs, tasks=None):
 			"""Network runner helper
 
 			net  - network file name
 			netshf  - whether this network is a shuffle in the non-flat dir structure
 			xargs  - extra custom parameters
+			tasks: list(Task)  - tasks associated with the running algorithms on the specified network
 			"""
-			tnum = runapp(net, xargs['asym'], netshf, xargs['pathidstr'])
+			tnum = runapp(net, xargs['asym'], netshf, xargs['pathidstr'], tasks)
 			xargs['jobsnum'] += tnum
 			xargs['netcount'] += tnum != 0
 
 		# Prepare resulting paths mapping file
-		fpathids = None  # File of pathes ids
+		fpathids = None  # File of paths ids
 		if not os.path.exists(_RESDIR):
 			os.mkdir(_RESDIR)
 		try:
@@ -1053,11 +1077,11 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			# Write header if required
 			#timestamp = datetime.utcnow()
 			if not os.fstat(fpathids.fileno()).st_size:
-				fpathids.write('# Name{}ID\tPath\n'.format(_SEPPATHID))  # Note: buffer flushing is not nesessary here, beause the execution is not concurrent
+				fpathids.write('# Name{}ID\tPath\n'.format(_SEPPATHID))  # Note: buffer flushing is not necessary here, because the execution is not concurrent
 			fpathids.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
 
 			xargs = {'asym': False,  # Asymmetric network
-				 'pathidstr': '',  # Id of the dublicated path shortcut to have the unique shortcut
+				 'pathidstr': '',  # Id of the duplicated path shortcut to have the unique shortcut
 				 'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
 				 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
 			# Track processed file names to resolve cases when files with the same name present in different input dirs
@@ -1114,21 +1138,14 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		print('Waiting for the apps execution on {} jobs from {} networks'
 			' with {} sec ({} h {} m {:.4f} s) timeout ...'
 			.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
+		# Note: all failed jobs of the ExecPool are hierarchically traced by the assigned tasks
+		# (on both completion and termination)
 		try:
 			_execpool.join(timelim)
-		except BaseException as err:  # Consider also system iteruptions not captured by the Exception
+		except BaseException as err:  # Consider also system interruptions not captured by the Exception
 			print('WARNING, algorithms execution pool is interrupted by: {}. {}'
 				.format(err, traceback.format_exc(5)), file=sys.stderr)
 			raise
-		finally:
-			# Trace executed and uncompleted tasks
-			print('Algorithms execution statistics:')
-			for tt in jobTracers:
-				print('{} completed {}/{} jobs'.format(tt.name, tt.ndone, tt.ndone + len(tt.jobs)))
-				# Trace uncompleted tasks
-				if tt.jobs:
-					for jnum, jname in enumerate(tt.jobs, 1):
-						print('\t{}\t{}'.format(jnum, jname))
 	_execpool = None
 	stime = time.perf_counter() - stime
 	print('The apps execution is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
@@ -1168,7 +1185,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 	timeout  - timeout per each evaluation run, a single measure applied to the results
 		of a single algorithm on a single network (all instances and shuffles), >= 0
 	evaltimeout  - timeout for all evaluations, >= 0, 0 means unlimited time
-	update  - update evalautions file or create a new one, anyway existed evaluations
+	update  - update evaluations file or create a new one, anyway existed evaluations
 		are backed up.
 	"""
 	assert (quality and appsmodule and datas and exectime + 0 >= 0
@@ -1233,18 +1250,18 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 		xargs = {'execpool': None,  # Execution pool to schedule evaluators
 # 			 'evaluators': None,  # Evaluating functions
 # 			 'asym': False,  # Asymmetric network, required for the intrinsic measures
-# 			 'pathidstr': '',  # Id of the dublicated path shortcut to have the unique shortcut
+# 			 'pathidstr': '',  # Id of the duplicated path shortcut to have the unique shortcut
 # 			 'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
 # 			 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
 
-# 		# ATTENTION: NMI ovp multiresolution should be ealuated in the dedicated mode requiring multiple CPU cores,
+# 		# ATTENTION: NMI ovp multiresolution should be evaluated in the dedicated mode requiring multiple CPU cores,
 # 		# so it will be scheduled separately after other measures
 # 		# Note: afnstep = 1 to maximize parallelization the same time binding single-treaded apps to the logical CPUs (hardware threads)
 # 		xargs['evaluators'] = evaluators(quality & 0xFFFC)  # Skip gecmi (Multiresolution Overlapping NMI) because it requires special scheduling
 # 		if xargs['evaluators']:
 # 			print('  Scheduling quality evaluation for the evaluators: ', ', '.join(
 # 				[funcToAppName(func.__name__) for func in xargs['evaluators']]))
-# 			with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='qualityst') as _execpool:
+# 			with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='qualityst', webuiapp=_webuiapp) as _execpool:
 # 				xargs['execpool'] = _execpool
 # 				# Load pathid mapping (nameid: fullpath)
 # 				pathids = {}
@@ -1305,13 +1322,13 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 					.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
 # 				try:
 # 					_execpool.join(timelim)
-# 				except BaseException as err:  # Consider also system iteruptions not captured by the Exception
+# 				except BaseException as err:  # Consider also system interruptions not captured by the Exception
 # 					print('WARNING{}, quality evaluation execution pool is interrupted by: {}. {}'
 # 						.format('' if not _execpool.name else ' ' + _execpool.name
 # 						, err, traceback.format_exc(5)), file=sys.stderr)
 # 					raise
 
-# 		# Schedule NMI multiresolution overlapping evalautions (gecmi) either on the whole NUMA node or
+# 		# Schedule NMI multiresolution overlapping evaluations (gecmi) either on the whole NUMA node or
 # 		# on the whole server because gecmi is multi-threaded app with huge number of threads
 # 		# Reuse execpool
 # 		xargs['evaluators'] = evaluators(quality & 0b11)  # Skip gecmi (Multiresolution Overlapping NMI) because it requires special scheduling
@@ -1323,7 +1340,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 				_execpool.alive = True
 # 				_execpool.afnmask = AffinityMask(AffinityMask.NODE_CPUS)
 # 			else:
-# 				_execpool = ExecPool(_WPROCSMAX, afnmask=AffinityMask(AffinityMask.NODE_CPUS), memlimit=_VMLIMIT, name='qualitymt')
+# 				_execpool = ExecPool(_WPROCSMAX, afnmask=AffinityMask(AffinityMask.NODE_CPUS), memlimit=_VMLIMIT, name='qualitymt', webuiapp=_webuiapp)
 
 # 			with _execpool:
 # 				xargs['execpool'] = _execpool
@@ -1378,7 +1395,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 						.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
 # 					try:
 # 						_execpool.join(timelim)
-# 					except BaseException as err:  # Consider also system iteruptions not captured by the Exception
+# 					except BaseException as err:  # Consider also system interruptions not captured by the Exception
 # 						print('WARNING{}, quality evaluation execution pool is interrupted by: {}. {}'
 # 							.format('' if not _execpool.name else ' ' + _execpool.name
 # 							, err, traceback.format_exc(5)), file=sys.stderr)
@@ -1456,7 +1473,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 			# print('Starting {} evaluation...'.format(msr[2]))
 # 			# jobsnum = 0
 # 			# measure = msr[0]
-# 			# fileext = msr[1]  # Initial networks in .rcg formatare required for mod, clusters for NMIs
+# 			# fileext = msr[1]  # Initial networks in .rcg format are required for mod, clusters for NMIs
 # 			# # Track processed file names to resolve cases when files with the same name present in different input dirs
 # 			# filenames = set()
 # 			# for pathid, (asym, ddir) in enumerate(datadirs):
@@ -1464,7 +1481,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 			# 	# Read ground truth
 # 			# 	for basefile in glob.iglob('*'.join((ddir, fileext))):  # Allow wildcards in the names
 # 			# 		netname = os.path.split(basefile)[1]
-# 			# 		ambiguous = False  # Net name is unambigues even without the dir
+# 			# 		ambiguous = False  # Net name is unambiguous even without the dir
 # 			# 		if netname not in filenames:
 # 			# 			filenames.add(netname)
 # 			# 		else:
@@ -1476,7 +1493,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 			# 	# Use files with required extension
 # 			# 	basefile = os.path.splitext(basefile)[0] + fileext
 # 			# 	netname = os.path.split(basefile)[1]
-# 			# 	ambiguous = False  # Net name is unambigues even without the dir
+# 			# 	ambiguous = False  # Net name is unambiguous even without the dir
 # 			# 	if netname not in filenames:
 # 			# 		filenames.add(netname)
 # 			# 	else:
@@ -1493,12 +1510,12 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 			# 	.format(jobsnum, timelim, *secondsToHms(timelim)))
 # 			# try:
 # 			# 	_execpool.join(timelim)  # max(timelim, exectime * 2) - Twice the time of the algorithms execution
-# 			# except BaseException as err:  # Consider also system iteruptions not captured by the Exception
+# 			# except BaseException as err:  # Consider also system interruptions not captured by the Exception
 # 			# 	print('WARNING, results evaluation execution pool is interrupted by: {}. {}'
 # 			# 		.format(err, traceback.format_exc(5)), file=sys.stderr)
 # 			# 	raise
 
-# 	# TODO: aggregate and visualize quality evaluaitn results
+# 	# TODO: aggregate and visualize quality evaluation results
 # 	qualsaver.storage.close()
 # 	_execpool = None  # Reset global execpool
 # 	stime = time.perf_counter() - stime
@@ -1529,6 +1546,12 @@ def benchmark(*args):
 	  , '; '.join([str(pathopts) for pathopts in opts.datas])  # Note: ';' because internal separator is ','
 	  , ', '.join(opts.algorithms) if opts.algorithms else ''
 	  , ', '.join(opts.aggrespaths) if opts.aggrespaths else '', *secondsToHms(opts.timeout)))
+
+	# Start WebUI if required
+	global _webuiapp  #pylint: disable=W0603
+	if _webuiapp is None and opts.host:
+		_webuiapp = WebUiApp(host=opts.host, port=opts.port, name='MpeWebUI', daemon=True)
+
 	# Benchmark app can be called from the remote directory
 	bmname = 'lfrbench_udwov'  # Benchmark name for the synthetic networks generation
 	assert _UTILDIR.endswith('/'), 'A directory should have a valid terminator'
@@ -1536,7 +1559,7 @@ def benchmark(*args):
 
 	# Create the global seed file if not exists
 	if not os.path.exists(opts.seedfile):
-		# Consider inexisting base path of the common seed file
+		# Consider nonexistent base path of the common seed file
 		sfbase = os.path.split(opts.seedfile)[0]
 		if sfbase and not os.path.exists(sfbase):
 			os.makedirs(sfbase)
@@ -1547,15 +1570,15 @@ def benchmark(*args):
 		with open(opts.seedfile) as fseed:
 			seed = int(fseed.readline())
 
-	# Generate parameters for the synthetic networs and the networks instances if required
+	# Generate parameters for the synthetic networks and the networks instances if required
 	if opts.syntpo and opts.syntpo.netins >= 1:
-		# Note: on overwirte old instances are rewritten and shulles are deleted making the backup
+		# Note: on overwrite old instances are rewritten and shuffles are deleted making the backup
 		generateNets(genbin=benchpath, insnum=opts.syntpo.netins, asym=opts.syntpo.asym
 			, basedir=opts.syntpo.path, netsdir=_NETSDIR, overwrite=opts.syntpo.overwrite
 			, seedfile=opts.seedfile, gentimeout=3*60*60)  # 3 hours
 
 	# Update opts.datasets with synthetic generated data: all subdirs of the synthetic networks dir
-	# Note: should be done only after the genertion, because new directories can be created
+	# Note: should be done only after the generation, because new directories can be created
 	if opts.syntpo or not opts.datas:
 		# Note: even if syntpo was no specified, use it as the default path
 		if opts.syntpo is None:
@@ -1614,8 +1637,8 @@ def terminationHandler(signal=None, frame=None, terminate=True):  #pylint: disab
 		print('WARNING{}, execpool is terminating by the signal {} ({})'
 			.format('' if not _execpool.name else ' ' + _execpool.name, signal
 			, _signals.get(signal, '-')))  # Note: this is a trace log record
-		del _execpool  # Destructors are caled later
-		# Define _execpool to avoid unnessary trash in the error log, which might
+		del _execpool  # Destructors are called later
+		# Define _execpool to avoid unnecessary trash in the error log, which might
 		# be caused by the attempt of subsequent deletion on destruction
 		_execpool = None  # Note: otherwise _execpool becomes undefined
 	if terminate:
@@ -1629,7 +1652,7 @@ if __name__ == '__main__':
 			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
 			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
 			' [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]]'
-			' [-s=<eval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] | -h',
+			' [-s=<resval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] [-w=<webui_addr>] | -h',
 			'',
 			'Example:',
 			'  {0} -g=3{gensepshuf}5 -r -q -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
@@ -1711,16 +1734,18 @@ if __name__ == '__main__':
 			'NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seed.',
 			'',
 			'Advanced parameters:',
-			#'  --stderr-stamp  - output a time stamp to the stderr on the benchmarking start to separate multiple reexectuions',
+			#'  --stderr-stamp  - output a time stamp to the stderr on the benchmarking start to separate multiple re-exectuions',
 			'  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.), deprecated',
 			'    f  - force the conversion even when the data is already exist',
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
 			'  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
 			', which is useful to include external manual evaluations into the final summarized results',
-			'ATTENTION: <resval_path> should include the algorithm name and target measure.'
+			'ATTENTION: <resval_path> should include the algorithm name and target measure.',
+			'  --webaddr, -w  - run WebUI on the specified <webui_addr> in the format <host>[:<port>], default port={port}.'
 			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=_RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=_SEPINST, seppars=_SEPPARS, sepshf=_SEPSHF, rsvpathsmb=(_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID)
-				, anppsnum=len(apps), apps=', '.join(apps), th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60, seedfile=_SEEDFILE))
+				, anppsnum=len(apps), apps=', '.join(apps), th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60
+				, seedfile=_SEEDFILE, port=_PORT))
 	else:
 		# Fill signals mapping {value: name}
 		_signals = {sv: sn for sn, sv in viewitems(signal.__dict__)

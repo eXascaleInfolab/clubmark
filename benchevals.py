@@ -219,7 +219,7 @@ class QualitySaver(object):
 		"""Destructor"""
 		self._active = False
 		if not self._dpool.empty():
-			print('WARNING, terminating the persistency layer with {} queued data entries, callstack fragment: {}'
+			print('WARNING, terminating the persistency layer with {} queued data entries, call stack: {}'
 				.format(self._dpool.qsize(), traceback.format_exc(5)), file=sys.stderr)
 		try:
 			self._dpool.close()  # No more data can be put in the queue

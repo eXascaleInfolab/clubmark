@@ -90,7 +90,7 @@ _SYNTDIR = 'syntnets/'  # Default base directory for the synthetic datasets (bot
 _NETSDIR = 'networks/'  # Networks sub-directory of the synthetic networks (inside _SYNTDIR)
 assert _RESDIR.endswith('/'), 'A directory should have a valid terminator'
 _SEEDFILE = _RESDIR + 'seed.txt'
-_PATHIDFILE = _RESDIR + 'pathid.map'  # Path id map file for the results iterpratation (mapping back to the input networks)
+_PATHIDFILE = _RESDIR + 'pathid.map'  # Path id map file for the results interpretation (mapping back to the input networks)
 _TIMEOUT = 36 * 60*60  # Default execution timeout for each algorithm for a single network instance
 _GENSEPSHF = '%'  # Shuffle number separator in the synthetic networks generation parameters
 _WPROCSMAX = max(cpu_count()-1, 1)  # Maximal number of the worker processes, should be >= 1
@@ -887,6 +887,8 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 	dflextfn  - function(asymflag) for the default extension of the input files in the path
 	tasks: list(tasks)  - root tasks per each algorithm
 	"""
+	# assert tasks is None or isinstance(tasks[0], Task), ('Unexpected task format: '
+	# 	+ str(None) if not tasks else type(tasks[0]).__name__)
 	# appnames  - names of the running apps to create be associated with the tasks
 	assert os.path.exists(popt.path), 'Target path should exist'
 	path = popt.path  # Assign path to a local variable to not corrupt the input data
@@ -1121,7 +1123,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 						, timeout=timeout, pathid=pathid, task=None if not tasks else tasks[ia], seed=seed)
 				except Exception as err:  #pylint: disable=W0703
 					errexectime = time.perf_counter() - exectime
-					print('ERROR, "{}" is interrupted by the exception {} on {:.4f} sec ({} h {} m {:.4f} s), callstack fragment:'
+					print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
 						.format(ealg.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
 					traceback.print_stack(limit=5, file=sys.stderr)
 			return jobsnum
@@ -1296,7 +1298,7 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 					jobsnum += eapp(execpool, qualsaver, net, asym=asymnet(netext, asym), odir=netshf, timeout=timeout, pathids=pathids, seed=seed)
 # 				except Exception as err:
 # 					errexectime = time.perf_counter() - exectime
-# 					print('ERROR, "{}" is interrupted by the exception {} on {:.4f} sec ({} h {} m {:.4f} s), callstack fragment:'
+# 					print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
 # 						.format(eapp.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
 # 					traceback.print_stack(limit=5, file=sys.stderr)
 # 			# Note: jobs are executed asynchronously, so here none of them is completed
@@ -1818,8 +1820,10 @@ if __name__ == '__main__':
 			', which is useful to include external manual evaluations into the final summarized results',
 			'ATTENTION: <resval_path> should include the algorithm name and target measure.',
 			'  --webaddr, -w  - run WebUI on the specified <webui_addr> in the format <host>[:<port>], default port={port}.',
-			'  --runtimeout  - global clustrering algorithms execution timeout in seconds, default: {runtimeout}.',
-			'  --evaltimeout  - global clustrering algorithms execution timeout in seconds, default: {evaltimeout}.',
+			'  --runtimeout  - global clustrering algorithms execution timeout in the'
+			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {runtimeout}.',
+			'  --evaltimeout  - global clustrering algorithms execution timeout in the'
+			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {evaltimeout}.',
 			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=_RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=_SEPINST, seppars=_SEPPARS, sepshf=_SEPSHF, rsvpathsmb=(_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID)
 				, anppsnum=len(apps), apps=', '.join(apps), th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60

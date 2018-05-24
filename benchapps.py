@@ -214,84 +214,6 @@ def preparePath(taskpath):  # , netshf=False
 #	return 0
 
 
-# class JobTracer(object):
-# 	"""Traces the number of completed jobs/tasks and the names of the uncompleted"""
-#
-# 	_lock = Lock()  # Lock for the embrasing jobs
-# 	_timeout = 2  # 2 sec lock timeout
-#
-# 	def __init__(self, name, jobs=set()):  #pylint: disable=W0102
-# 		"""JobTracer constructor
-#
-# 		Args:
-# 			object (JobTracer): JobTracer instance
-# 			name (str): the tracer name
-# 			jobs (set(str)): remained jobs
-# 		"""
-# 		assert name and isinstance(name, str), 'Invalid job name'
-# 		self.name = name
-# 		self.jobs = jobs  # Active jobs
-# 		self.ndone = 0  # The number of finished jobs
-#
-# 	def add(self, job):
-# 		"""Add job to the tracing
-#
-# 		Args:
-# 			job (str): the job name to be traced
-# 		"""
-# 		if job not in self.jobs and JobTracer._lock.acquire(timeout=JobTracer._timeout):
-# 			self.jobs.add(job)  # Would do nothing if the job is already in the jobs
-# 			JobTracer._lock.release()
-# 		else:
-# 			raise RuntimeError('Lock acqusition failed on add() of "{}"'.format(self.name))
-#
-#
-# 	def completed(self, jobs):
-# 		"""Remove the job from the tracer incrementing the number of completed jobs
-#
-# 		Args:
-# 			job (str): the completed job name
-# 		"""
-# 		if JobTracer._lock.acquire(timeout=JobTracer._timeout):
-# 			try:
-# 				self.jobs.remove(jobs)
-# 				self.ndone += 1
-# 			except KeyError as err:
-# 				print('The completing job "{}" should be among the active jobs: {}', jobs, err, file=sys.stderr)
-# 			finally:
-# 				JobTracer._lock.release()
-# 		else:
-# 			raise RuntimeError('Lock acqusition failed on completed() of "{}"'.format(self.name))
-#
-#
-# class Job(Job):
-# 	"""Job with automatic tracing"""
-# 	def __init__(self, name, workdir=None, args=(), timeout=0, rsrtonto=False, task=None #,*
-# 	, startdelay=0, onstart=None, ondone=None, params=None, task=task, category=None, size=0, slowdown=1.
-# 	, omitafn=False, memkind=1, stdout=sys.stdout, stderr=sys.stderr, tracer=None):
-# 		super(TracedJob, self).__init__(name, workdir, args, timeout, rsrtonto, task
-# 			, startdelay, onstart, ondone, params, category, size, slowdown, omitafn, memkind, stdout, stderr)
-# 		if tracer is not None:
-# 			self.tracer = tracer
-# 			self.tracer.add(self.name)  # Does nothing if the job is already in the tracer
-# 			# Wrap ondone with the tracer
-# 			if ondone is not None:
-# 				# Trace jobs completion
-# 				def tracerDecor(func):  #pylint: disable=C0111
-# 					@wraps(func)
-# 					def wrapper(*args, **kwds):  #pylint: disable=C0111
-# 						res = func(*args, **kwds)
-# 						self.tracer.completed(self.name)
-# 						return res
-# 					return wrapper
-# 				self.ondone = types.MethodType(tracerDecor(ondone), self)  # Bind the callback to the object
-# 			else:
-# 				def traceCompletion(job):
-# 					"""Job completion tracing"""
-# 					job.tracer.completed(job.name)
-# 				self.ondone = types.MethodType(traceCompletion, self)  # Bind the callback to the object
-
-
 def funcToAppName(funcname):
 	"""Fetch name of the execution application by the function name
 
@@ -303,11 +225,11 @@ def funcToAppName(funcname):
 	return funcname[len(_PREFEXEC):]  # .lower()
 
 
-def prepareResDir(appname, task, odir, pathid):
+def prepareResDir(appname, taskname, odir, pathid):
 	"""Prepare output directory for the app results and backup the previous results
 
 	appname  - application (algorithm) name
-	task  - task name
+	taskname  - task name
 	odir  - whether to output results to the dedicated dir named by the instance name,
 		which actual the the shuffles with non-flat structure
 	pathid  - path id (including the leading separator) of the input networks file, str
@@ -315,10 +237,10 @@ def prepareResDir(appname, task, odir, pathid):
 	return resulting directory without the ending '/' terminator
 	"""
 	# Preapare resulting directory
-	taskdir = task  # Relative task directory withouth the ending '/'
+	taskdir = taskname  # Relative task directory withouth the ending '/'
 	if odir:
-		nameparts = parseName(task, True)
-		taskdir = ''.join((nameparts[0], nameparts[2], '/', task))  # Use base name and instance id
+		nameparts = parseName(taskname, True)
+		taskdir = ''.join((nameparts[0], nameparts[2], '/', taskname))  # Use base name and instance id
 	taskpath = ''.join((_RESDIR, appname, '/', _CLSDIR, taskdir, pathid))
 
 	preparePath(taskpath)
@@ -327,7 +249,7 @@ def prepareResDir(appname, task, odir, pathid):
 
 # Louvain
 ## Original Louvain
-#def execLouvain(execpool, netfile, asym, odir, timeout, pathid='', tasknum=0):
+#def execLouvain(execpool, netfile, asym, odir, timeout, pathid='', tasknum=0, task=None):
 #	"""Execute Louvain
 #	Results are not stable => multiple execution is desirable.
 #
@@ -340,19 +262,19 @@ def prepareResDir(appname, task, odir, pathid):
 #		netsize *= 2
 #	# Fetch the task name and chose correct network filename
 #	netfile = os.path.splitext(netfile)[0]  # Remove the extension
-#	task = os.path.split(netfile)[1]  # Base name of the network
-#	assert task, 'The network name should exists'
+#	taskname = os.path.split(netfile)[1]  # Base name of the network
+#	assert taskname, 'The network name should exists'
 #	if tasknum:
-#		task = '-'.join((task, str(tasknum)))
+#		taskname = '-'.join((taskname, str(tasknum)))
 #	netfile = '../' + netfile  # Use network in the required format
 #
 #	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain'
 #	# ./community graph.bin -l -1 -w graph.weights > graph.tree
-#	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+#	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
 #		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
-#	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=_ALGSDIR, args=args
-#		, timeout=timeout, stdout=''.join((_RESDIR, algname, '/', task, '.loc'))
-#		, task=task, category=algname, size=netsize, stderr=''.join((_RESDIR, algname, '/', task, _EXTLOG))))
+#	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=_ALGSDIR, args=args
+#		, timeout=timeout, stdout=''.join((_RESDIR, algname, '/', taskname, '.loc'))
+#		, task=task, category=algname, size=netsize, stderr=''.join((_RESDIR, algname, '/', taskname, _EXTLOG))))
 #	return 1
 #
 #
@@ -454,15 +376,15 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	if not asym:
 		netsize *= 2
 	# Fetch the task name and chose correct network filename
-	task = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network; , netext
-	assert task, 'The network name should exists'
+	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network; , netext
+	assert taskname, 'The network name should exists'
 	#if tasknum:
-	#	task = '_'.join((task, str(tasknum)))
+	#	taskname = '_'.join((taskname, str(tasknum)))
 
 	# ATTENTION: for the correct execution algname must be always the same as func name without the prefix "exec"
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
 	# Backup prepated the resulting dir and backup the previous results if exist
-	taskpath = prepareResDir(algname, task, odir, pathid)
+	taskpath = prepareResDir(algname, taskname, odir, pathid)
 
 	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
 
@@ -505,11 +427,11 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 
-	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
 		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 		, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
-		, '-lo', ''.join((taskpath, '/', task, _EXTCLNODES)), netfile)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
+		, '-lo', ''.join((taskpath, '/', taskname, _EXTCLNODES)), netfile)
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
 		, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 
@@ -523,7 +445,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	#		netdir = .
 	#	netdir += '/'
 	#	#print('Netdir: ', netdir)sdf
-	#	for netfile in glob.iglob(''.join((escapePathWildcards(netdir), escapePathWildcards(task), '/*', netext))):
+	#	for netfile in glob.iglob(''.join((escapePathWildcards(netdir), escapePathWildcards(taskname), '/*', netext))):
 	#		execLouvain_ig(execpool, netfile, asym, odir, timeout, selfexec)
 	#		execnum += 1
 	return execnum
@@ -538,8 +460,8 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		.format(execpool, netfile, asym, timeout))
 
 	# Fetch the task name
-	task = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network; , netext
-	assert task, 'The network name should exists'
+	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network; , netext
+	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'scp'
 
 	# Evaluate relative network size considering whether the network is directed (asymmetric)
@@ -584,9 +506,9 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		kstr = str(k)
 		kstrex = 'k' + kstr
 		# Embed params into the task name
-		taskbasex = delPathSuffix(task, True)
-		tasksuf = task[len(taskbasex):]
-		ktask = ''.join((taskbasex, _SEPPARS, kstrex, tasksuf))
+		taskbasex = delPathSuffix(taskname, True)
+		tasksuf = taskname[len(taskbasex):]
+		ktaskname = ''.join((taskbasex, _SEPPARS, kstrex, tasksuf))
 		# Backup prepated the resulting dir and backup the previous results if exist
 		taskpath = prepareResDir(algname, ktask, odir, pathid)
 		errfile = taskpath + _EXTELOG
@@ -629,11 +551,11 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 		netsize *= 2
 	# Fetch the task name and chose correct network filename
 	netfile, netext = os.path.splitext(netfile)  # Remove the extension
-	task = os.path.split(netfile)[1]  # Base name of the network
-	assert task, 'The network name should exists'
+	taskname = os.path.split(netfile)[1]  # Base name of the network
+	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
 	# Backup prepated the resulting dir and backup the previous results if exist
-	taskpath = prepareResDir(algname, task, odir, pathid)
+	taskpath = prepareResDir(algname, taskname, odir, pathid)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
@@ -657,13 +579,13 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	gtfile = originpbase + _EXTCLNODES
 
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
-	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
 		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 		, pybin, './randcommuns.py', '-g=' + gtfile, ''.join(('-i=', netfile, netext)), '-o=' + taskpath
 		, '-n=' + str(instances)]
 	if seed is not None:
 		args.append('-r=' + str(seed))
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
 		, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 
@@ -740,10 +662,10 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 	if not asym:
 		netsize *= 2
 	# Fetch the task name and chose correct network filename
-	task = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension; , netext
-	assert task, 'The network name should exists'
+	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension; , netext
+	assert taskname, 'The network name should exists'
 	# Backup prepated the resulting dir and backup the previous results if exist
-	taskpath = prepareResDir(algname, task, odir, pathid)
+	taskpath = prepareResDir(algname, taskname, odir, pathid)
 	errfile = taskpath + _EXTELOG  # Errors log + lib tracing including modularity value and clustering summary
 	logfile = taskpath + _EXTLOG   # Tracing to stdout, contains timings
 
@@ -755,7 +677,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 	taskpath = relpath(taskpath)
 
 	# ./daoc -w -g=1 -te -cxl[:/0.8]s=../../results/Daoc/karate.cnl ../../realnets/karate.nse.txt
-	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
 		, './daoc', '-t']  # Trace timing
 	if opts.reduction is not None:
 		args.append('-r' + opts.reduction)
@@ -766,10 +688,11 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 		clsouto = 's' + opts.significance
 	args += ['-g=' + str(opts.gamma)  # Resolution parameter = 1 (standard modularity)
 		, '-n' + ('a' if asym else 'e')
-		# Output only max shares, per-level clusters output with step 0.8 in the simple format (with the header but without the share value)
+		# Output only max shares, per-level clusters output with step 0.8 in the simple format
+		# (with the header but without the share value)
 		, ''.join(('-cx', clsouto, 's=', taskpath, _EXTCLNODES)), netfile]
 	#print(''.join((algname, ' called with args: ', str(args))), file=sys.stderr)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
 		, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 	return 1
@@ -832,11 +755,11 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 	if not asym:
 		netsize *= 2
 	# Fetch the task name and chose correct network filename
-	task = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension; , netext
-	assert task, 'The network name should exists'
+	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension; , netext
+	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Ganxis'
 	# Backup prepated the resulting dir and backup the previous results if exist
-	taskpath = prepareResDir(algname, task, odir, pathid)
+	taskpath = prepareResDir(algname, taskname, odir, pathid)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
@@ -856,13 +779,13 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 			shutil.rmtree(tmp)
 
 	# java -jar GANXiSw.jar -Sym 1 -seed 12345 -i ../../realnets/karate.txt -d ../../results/ganxis/karate
-	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
 		, 'java', '-jar', './GANXiSw.jar', '-i', netfile, '-d', taskpath]
 	if not asym:
 		args.extend(['-Sym', '1'])
 	if seed is not None:
 		args.extend(['-seed', str(seed)])
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
 		, task=task, category=algname, size=netsize, ondone=tidy, stdout=logfile, stderr=errfile))
 	return 1
@@ -881,14 +804,14 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 	if not asym:
 		netsize *= 2
 	# Fetch the task name and chose correct network filename
-	netbasepath, task = os.path.split(netfile)  # Extract base path and file name
+	netbasepath, taskname = os.path.split(netfile)  # Extract base path and file name
 	if not netbasepath:
 		netbasepath = '.'  # Note: '/' is added later
-	task, netext = os.path.splitext(task)  # Separate file name and extension
-	assert task, 'The network name should exists'
+	taskname, netext = os.path.splitext(taskname)  # Separate file name and extension
+	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Oslom2'
 	# Backup prepated the resulting dir and backup the previous results if exist
-	taskpath = prepareResDir(algname, task, odir, pathid)
+	taskpath = prepareResDir(algname, taskname, odir, pathid)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
@@ -902,7 +825,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 	def postexec(job):  #pylint: disable=W0613
 		"""Refine the output"""
 		# Move communities output from the original location to the target one
-		origResDir = ''.join((netbasepath, '/', task, netext, '_oslo_files/'))
+		origResDir = ''.join((netbasepath, '/', taskname, netext, '_oslo_files/'))
 		for fname in glob.iglob(escapePathWildcards(origResDir) +'tp*'):
 			shutil.move(fname, taskpath)
 
@@ -919,11 +842,11 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 			os.remove(fname)
 
 	# ./oslom_[un]dir -f ../../realnets/karate.txt -w -seed 12345
-	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
 		, './oslom_' +  ('dir' if asym else 'undir'), '-f', netfile, '-w']
 	if seed is not None:
 		args.extend(['-seed', str(seed)])
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
 		, task=task, category=algname, size=netsize, ondone=postexec, stdout=logfile, stderr=errfile))
 	return 1
@@ -942,8 +865,8 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 	if not asym:
 		netsize *= 2
 	# Fetch the task name
-	task = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network;  , netext
-	assert task, 'The network name should exists'
+	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network;  , netext
+	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Pscan'
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
@@ -963,9 +886,9 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 		prm = '{:.2f}'.format(eps)  # Alg params (eps) as string
 		prmex = 'e' + prm
 		# Embed params into the task name
-		taskbasex = delPathSuffix(task, True)
-		tasksuf = task[len(taskbasex):]
-		ctask = ''.join((taskbasex, _SEPPARS, prmex, tasksuf))  # Current task
+		taskbasex = delPathSuffix(taskname, True)
+		tasksuf = taskname[len(taskbasex):]
+		ctaskname = ''.join((taskbasex, _SEPPARS, prmex, tasksuf))  # Current task
 		# Backup prepated the resulting dir and backup the previous results if exist
 		taskpath = prepareResDir(algname, ctask, odir, pathid)
 		errfile = taskpath + _EXTELOG
@@ -1010,10 +933,10 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 	if not asym:
 		netsize *= 2
 	# Fetch the task name and chose correct network filename
-	task = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension;  , netext
-	assert task, 'The network name should exists'
+	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension;  , netext
+	assert taskname, 'The network name should exists'
 	# Backup prepated the resulting dir and backup the previous results if exist
-	taskpath = prepareResDir(algname, task, odir, pathid)
+	taskpath = prepareResDir(algname, taskname, odir, pathid)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
@@ -1025,10 +948,10 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 	taskpath = relpath(taskpath)
 
 	# ./rgmc -a 2 -c tests/rgmc_2/email.nse.cnl -i e networks/email.nse.txt
-	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
-		, './rgmc', '-a', str(alg), '-c', ''.join((taskpath, '/', task, _EXTCLNODES))
+	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
+		, './rgmc', '-a', str(alg), '-c', ''.join((taskpath, '/', taskname, _EXTCLNODES))
 		, '-i', 'a' if asym else 'e', netfile)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
 		, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 	return 1
@@ -1062,11 +985,11 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	if not asym:
 		netsize *= 2
 	# Fetch the task name and chose correct network filename
-	task = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension;  , netext
-	assert task, 'The network name should exists'
+	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension;  , netext
+	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'scd'
 	# Backup prepated the resulting dir and backup the previous results if exist
-	taskpath = prepareResDir(algname, task, odir, pathid)
+	taskpath = prepareResDir(algname, taskname, odir, pathid)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
@@ -1078,10 +1001,10 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	taskpath = relpath(taskpath)
 
 	# ./scd -n 1 -o tests/scd/karate.nse.cnl -f networks/karate.nse.txt
-	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', task, pathid)), '-s=/etime_' + algname
+	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
 		, './scd', '-n', '1' # Use a single threaded implementation
-		, '-o', ''.join((taskpath, '/', task, _EXTCLNODES)), '-f', netfile)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, task)), workdir=workdir, args=args, timeout=timeout
+		, '-o', ''.join((taskpath, '/', taskname, _EXTCLNODES)), '-f', netfile)
+	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
 		, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 	return 1

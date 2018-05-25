@@ -96,7 +96,7 @@ _GENSEPSHF = '%'  # Shuffle number separator in the synthetic networks generatio
 _WPROCSMAX = max(cpu_count()-1, 1)  # Maximal number of the worker processes, should be >= 1
 assert _WPROCSMAX >= 1, 'Natural number is expected not exceeding the number of system cores'
 _VMLIMIT = 4096  # Set 4 TB or RAM to be automatically limited to the physical memory of the computer
-_PORT = 80  # Default port for WebUI
+_PORT = 8080  # Default port for the WebUI, Note: port 80 accessible only from the root in NIX
 _RUNTIMEOUT = 10*24*60*60  # Clustering execution timeout, 10 days
 _EVALTIMEOUT = 2*24*60*60  # Results evaluation timeout, 2 days
 
@@ -222,7 +222,7 @@ class Params(object):
 		self.host = None
 		self.port = _PORT
 		self.runtimeout = _RUNTIMEOUT
-		self.evaltimeout= _EVALTIMEOUT
+		self.evaltimeout = _EVALTIMEOUT
 
 
 # Input зarameters processing --------------------------------------------------
@@ -471,6 +471,10 @@ def parseParams(args):
 					except ValueError:
 						opts.port = _PORT
 						opts.host = host
+				else:
+					opts.host = host
+			# print('>>> Webaddr specified: {}, parced host: {}, port: {}'.format(
+			# 	host, opts.host, opts.port), file=sys.stderr)
 		else:
 			raise ValueError('Unexpected argument: ' + arg)
 
@@ -1628,7 +1632,10 @@ def benchmark(*args):
 	# Start WebUI if required
 	global _webuiapp  #pylint: disable=W0603
 	if _webuiapp is None and opts.host:
+		print('Calling WebUI on the host {}:{}'.format(opts.host, opts.port))
 		_webuiapp = WebUiApp(host=opts.host, port=opts.port, name='MpeWebUI', daemon=True)
+	else:
+		print('WARNING, WebUI app ({}) omitted on the host {}:{}'.format(_webuiapp, opts.host, opts.port), file=sys.stderr)
 
 	# Benchmark app can be called from the remote directory
 	bmname = 'lfrbench_udwov'  # Benchmark name for the synthetic networks generation

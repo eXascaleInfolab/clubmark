@@ -9,15 +9,21 @@
         "--ignored-classes=igraph.Graph",
         "--disable=W0212,W0312,W0603,C0103,C0330,C0301,C0302",
         "--indent-string='\t'",
-        "--max-line-length=120"
+        "--max-line-length=120",
         //"--function-rgx='(?:(?P<snake>[a-z_]+)|(?P<camel>_?[A-Z]+))$'"
         //"--ignore=hicbem.py"
         //"--variable-naming-style=camelCase"  # any, snake_case, PascalCase, UPPER_CASE
+        //"--dummy-variables=_,dummy,qdict"
+        //"--dummy-variables-rgx='(_+[a-zA-Z0-9]*?$)|dummy'"
     ],
     "spellright.language": "en_US",
     "spellright.documentTypes": [
-        "markdown",
         "latex",
-        "plaintext"
+        "markdown",
+        "plaintext",
+        // "python"
+    ],
+    "cSpell.words": [
+        "psutil"
     ]
 }

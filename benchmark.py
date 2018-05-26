@@ -96,6 +96,7 @@ _GENSEPSHF = '%'  # Shuffle number separator in the synthetic networks generatio
 _WPROCSMAX = max(cpu_count()-1, 1)  # Maximal number of the worker processes, should be >= 1
 assert _WPROCSMAX >= 1, 'Natural number is expected not exceeding the number of system cores'
 _VMLIMIT = 4096  # Set 4 TB or RAM to be automatically limited to the physical memory of the computer
+_SEPSUBTASK = '>'  # Sub-task separator
 _PORT = 8080  # Default port for the WebUI, Note: port 80 accessible only from the root in NIX
 _RUNTIMEOUT = 10*24*60*60  # Clustering execution timeout, 10 days
 _EVALTIMEOUT = 2*24*60*60  # Results evaluation timeout, 2 days
@@ -871,12 +872,15 @@ def basenetTasks(netname, pathidstr, basenets, rtasks):
 	return  nettasks: list(Task)  - tasks for the basenet of the specified netname
 	"""
 	iename = netname.find(_SEPINST)
-	basenet = netname if iename == -1 else netname[:iename]
+	if iename == -1:
+		basenet = os.path.splitext(netname)[0]  # Remove network extension if any
+	else:
+		basenet = netname[:iename]
 	if pathidstr:
 		basenet = _SEPPATHID.join((basenet, pathidstr))
 	nettasks = basenets.get(basenet)
 	if not nettasks:
-		nettasks = [Task('.'.join((t.name, basenet)), task=t) for t in rtasks]
+		nettasks = [Task(_SEPSUBTASK.join((t.name, basenet)), task=t) for t in rtasks]
 		basenets[basenet] = nettasks
 	return nettasks
 
@@ -924,7 +928,7 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 				# 	basenet = _SEPPATHID.join((basenet, xargs['pathidstr']))
 				# nettasks = bnets.get(basenet)
 				# if not nettasks:
-				# 	nettasks = [Task('.'.join((t.name, basenet)), task=t) for t in tasks]
+				# 	nettasks = [Task(_SEPSUBTASK.join((t.name, basenet)), task=t) for t in tasks]
 				# 	bnets[basenet] = nettasks
 				# #if popt.shfnum:  # ATTENTNION: shfnum is not available for non-synthetic networks
 				# Process dedicated dir of shuffles for the specified network,
@@ -955,7 +959,7 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 				# 	basenet = _SEPPATHID.join((basenet, xargs['pathidstr']))
 				# nettasks = bnets.get(basenet)
 				# if not nettasks:
-				# 	nettasks = [Task('.'.join((t.name, basenet)), task=t) for t in tasks]
+				# 	nettasks = [Task(_SEPSUBTASK.join((t.name, basenet)), task=t) for t in tasks]
 				# 	bnets[basenet] = nettasks
 				handler(net, False, xargs, tasks)
 	else:

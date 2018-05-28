@@ -543,7 +543,7 @@ def dirempty(dirpath):
 
 def basePathExists(path):
 	"""Whether there are any existent files/dirs with the specified base name.
-		ATTENTION: the basepathis escaped, i.e. wildcards are not supported
+	ATTENTION: the basepathis escaped, i.e. wildcards are not supported
 	"""
 	try:
 		next(glob.iglob(escapePathWildcards(path) + '*'))
@@ -659,7 +659,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 
 	basepath  - path, last component of which (file or dir) is a name for the backup
 		ATTENTION: the basepath is escaped, i.e. wildcards are NOT supported
-	expand  - expand prefix, backup all paths staring from basepath VS basepath only
+	expand  - expand prefix, back up all paths staring from basepath VS basepath only
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
 	compress  - compress or just copy spesified paths
@@ -668,18 +668,18 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 
 	ATTENTION: All paths are MOVED to the dedicated timestamped dir / archive
 
-	return  bckpath: str  - path of the made archive / backup dir
+	return  bckpath: str  - path of the made archive / backup dir or None
 	"""
 	# Check if there anything available to be backed up
 	if (expand and not basePathExists(basepath)) or (not expand
 	and (not os.path.exists(basepath) or (os.path.isdir(basepath) and dirempty(basepath)))):
-		return
+		return None
 	#print('Backuping "{}"{}...'.format(basepath, 'with synctime' if synctime else ''))
 	# Remove trailing path separator if exists
 	# Note: normpath() may change semantics in case symbolic link is used with parent dir:
 	# base/linkdir/../a -> base/a, which might be undesirable
 	basepath = escapePathWildcards(basepath).rstrip('/')  # os.path.normpath(escapePathWildcards(basepath))
-	# Create backup/ if required
+	# Create the backup if required
 	basedir, srcname = os.path.split(basepath)
 	if not basedir:
 		basedir = '.'  # Note: '/' is added later
@@ -717,7 +717,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 					if move:
 						#if _DEBUG_TRACE:
 						#	print('>> moving path: ', path, file=sys.stderr)
-						if os.path.isdir(path):
+						if os.path.isdir(path) and not os.path.islink(path):
 							shutil.rmtree(path)
 						else:
 							os.remove(path)
@@ -737,10 +737,13 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 		# Move data to the backup
 		if not os.path.exists(basename):
 			os.mkdir(basename)
+		sbasedir = os.path.split(basepath)[0]  # Base src dir
 		for basesrc in basepaths:
 			for path in glob.iglob(basesrc + ('*' if expand else '')):
-				bckop = shutil.move if move else shutil.copy2
-				bckop(path, '/'.join((basename, os.path.split(path)[1])))
+				bckop = shutil.move if move else (shutil.copy2 if
+					os.path.islink(path) or not os.path.isdir() else shutil.copytree)
+				# Destination depending on basesrc: dst VS _ORIGDIR/dst
+				bckop(path, basedir + path.replace(sbasedir, '', 1))
 		return basename
 
 

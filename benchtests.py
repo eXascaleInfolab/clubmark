@@ -15,9 +15,8 @@ import os
 import glob
 import tempfile
 import shutil
-# import sys
-# from sys import executable as PYEXEC  # Full path to the current Python interpreter
-from benchutils import SyncValue, nameVersion, tobackup
+import tarfile
+from benchutils import SyncValue, nameVersion, tobackup, _ORIGDIR
 from benchapps import preparePath
 
 
@@ -85,13 +84,26 @@ class TestUtils(unittest.TestCase):
 			clslog = tempfile.mkstemp(suffix='.log', prefix=clspref, dir=bdir)
 			bckarch = tobackup(clsdir, expand=False, xsuffix=bcksuf, move=False)
 			# print('bckarch: ' + bckarch)
-			self.assertTrue(os.path.exists(bckarch), 'The backup archive should exist')
+			self.assertTrue(bckarch.startswith(bdir) and os.path.exists(bckarch)
+				, 'The backup archive should exist')
 			self.assertTrue(os.path.exists(clsdir) and os.path.exists(clslog[1]))
 
+			# Move paths to the origdir and create symlinks instead of the former paths
+			origdir = '/'.join((bdir, _ORIGDIR))
+			os.mkdir(origdir)
+			for p in glob.iglob(''.join((bdir, '/', clspref, '*'))):
+				shutil.move(p, origdir)
+				newpath = origdir + os.path.split(p)[1]
+				newpath = os.path.relpath(newpath, bdir)
+				os.symlink(newpath, os.path.split(newpath)[1])
+			# Back up target symlinks with their origins
 			bckarch = tobackup(bdir + '/' + clspref, expand=True, xsuffix=bcksuf, move=True)
 			self.assertIn('_' + bcksuf, bckarch)
-			self.assertTrue(os.path.exists(bckarch), 'The backup archive should exist')
+			self.assertTrue(bckarch.startswith(bdir) and os.path.exists(bckarch)
+				, 'The backup archive should exist')
 			self.assertFalse(os.path.exists(clsdir) or os.path.exists(clslog[1]))
+			baf = tarfile.open(bckarch, 'r')
+			self.assertNotEqual(len(filter(lambda name: _ORIGDIR in name, baf.getnames())), 0)
 
 			# Test back up with symlinks
 		finally:

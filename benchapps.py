@@ -184,7 +184,7 @@ def preparePath(taskpath):  # , netshf=False
 	# Create target path if not exists
 	if not os.path.exists(taskpath):
 		os.makedirs(taskpath)
-	elif not dirempty(taskpath):
+	elif not dirempty(taskpath):  # Back up all instances and shuffles once per execution in a single archive
 		mainpath = delPathSuffix(taskpath)
 		tobackup(mainpath, True, move=True)  # Move to the backup (old results can't be reused in the forming results)
 		os.mkdir(taskpath)

@@ -199,8 +199,8 @@ class QualitySaver(object):
 						' New storage will be created.'.format(seed, ubparts[0]), file=sys.stderr)
 			if len(ubparts) < 2:
 				raise ValueError('Userblock should contain at least 2 items (seed and 1+ timestamp): ' + ublock)
-			bcksuffix = SyncValue(time.strptime(ubparts[-1], timefmt))  # Use last benchmarking start time
-			tobackup(storage, False, bcksuffix, move=not update)  # Copy/move to the backup
+			bcksftime = SyncValue(time.strptime(ubparts[-1], timefmt))  # Use last benchmarking start time
+			tobackup(storage, False, synctime=bcksftime, move=not update)  # Copy/move to the backup
 		# Mode: append; core driver is memory-mapped file, block_size is default (64 Kb)
 		self.storage = h5py.File(storage, driver='core', libver='latest', userblock_size=ublocksize)
 		# Initialize apps datasets holding algorithms parameters as ASCII strings of variable length

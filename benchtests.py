@@ -107,7 +107,8 @@ class TestUtils(unittest.TestCase):
 				# print('> bck src: ', bdir + '/' + clspref)
 				# print('> bckdir content:', os.listdir(bdir))
 				# print('> bckdir orig (', origdir, ') content:', os.listdir(origdir))
-				bckarch = tobackup(clspref, expand=True, xsuffix=bcksuf, move=True)
+				# relpath is False because clspref is already relative
+				bckarch = tobackup(clspref, expand=True, xsuffix=bcksuf, move=True, relpath=False)
 				# print('> bckarch ({}): {}'.format(type(bckarch).__name__, bckarch))
 				self.assertIn('_' + bcksuf, bckarch)
 				self.assertTrue(_BCKDIR in bckarch and os.path.exists(bckarch)

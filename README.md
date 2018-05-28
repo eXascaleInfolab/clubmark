@@ -65,9 +65,9 @@ Circulo is an excellent framework until you don't run evaluations on the large n
 
 ## Requirements
 
-The benchmarking can be run either directly on the *Linux Ubuntu 16.04 x64* or via the [Docker](https://docs.docker.com/get-started/) container with the preinstalled environment on any platform. Anyway, the sources are required:
+The benchmarking can be run either directly on the *Linux Ubuntu 16.04 x64* or via the [Docker](https://docs.docker.com/get-started/) container with the pre-installed environment on any platform. Anyway, the sources are required:
 ```sh
-$ git clone https://github.com/eXascaleInfolab/PyCABeM.git
+$ git clone https://github.com/eXascaleInfolab/PyCABeM.git 
 ```
 
 
@@ -371,7 +371,7 @@ Example of the `<net_instance>.mod` format:
 
 - ./realnets/  - simple gold standard networks with available ground-truth
   - dimacs/  - [10th DIMACS'13](http://www.cc.gatech.edu/dimacs10/) networks with the ground-truth modularity value for non-overlapping clustering (see "Modularity Maximization in Networks by Variable Neighborhood Search" by Daniel Aloise et al, 10th DIMACS'13)
-  - snap/  - Stanford SNAP large networks with available ground-truth communities (see "Defining and Evaluating Network Communities based on Ground-truth" by J. Yang and J. Leskovec., ICDM'12)
+  - snap/  - Stanford SNAP large networks with available ground-truth communities (see "Defining and Evaluating Network Communities based on Ground-truth" by J. Yang and J. Leskovec, ICDM'12)
 - ./syntnets/  - synthetic networks produced by the extended LFR framework: undirected weighted complex networks with overlaps, both mixing parameters are set for the topology and weights, both exponential nodes degree and weights distributions are set
   * `*.ngp`  - network generation parameters
   * `time_seed.dat`  - used time seed on batch generation

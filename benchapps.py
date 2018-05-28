@@ -50,7 +50,7 @@ from numbers import Number  # To verify that a variable is a number (int or floa
 from sys import executable as PYEXEC  #pylint: disable=C0412;  # Full path to the current Python interpreter
 # from functools import wraps  # Decorating tools for the JobTracer
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, \
- tobackup, escapePathWildcards, _SEPPARS, _UTILDIR, _TIMESTAMP_START_HEADER
+ tobackup, escapePathWildcards, _SEPPARS, _UTILDIR, _TIMESTAMP_START_HEADER, _SEPSUBTASK
 from benchevals import _SEPNAMEPART, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
 from utils.mpepool import Job, Task
 from algorithms.utils.parser_nsl import parseHeaderNslFile  #, asymnet
@@ -496,6 +496,10 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	# 	if os.path.isdir(job.params) and dirempty(job.params):
 	# 		os.rmdir(job.params)
 
+	# Create subtask to monitor execution for each clique size
+	taskbasex = delPathSuffix(taskname, True)
+	tasksuf = taskname[len(taskbasex):]
+	task = Task(taskname if task is None else _SEPSUBTASK.join((task.name, tasksuf)), task=task)
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 8  # Max clique size (~ min node degree to be considered)
 	steps = str(_LEVSMAX)  # Use 10 scale levels as in Ganxis
@@ -506,22 +510,20 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		kstr = str(k)
 		kstrex = 'k' + kstr
 		# Embed params into the task name
-		taskbasex = delPathSuffix(taskname, True)
-		tasksuf = taskname[len(taskbasex):]
 		ktaskname = ''.join((taskbasex, _SEPPARS, kstrex, tasksuf))
 		# Backup prepated the resulting dir and backup the previous results if exist
-		taskpath = prepareResDir(algname, ktask, odir, pathid)
+		taskpath = prepareResDir(algname, ktaskname, odir, pathid)
 		errfile = taskpath + _EXTELOG
 		logfile = taskpath + _EXTLOG
 		# Evaluate relative paths dependent of the alg params
 		reltaskpath = relpath(taskpath)
 
 		# scp.py netname k [start_linksnum end__linksnum numberofevaluations] [weight]
-		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ktask, pathid)), '-s=/etime_' + algname
-			, pybin, './scp.py', netfile, kstr, steps, ''.join((reltaskpath, '/', ktask, _EXTCLNODES)))
+		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ktaskname, pathid)), '-s=/etime_' + algname
+			, pybin, './scp.py', netfile, kstr, steps, ''.join((reltaskpath, '/', ktaskname, _EXTCLNODES)))
 
-		#print('> Starting job {} with args: {}'.format('_'.join((ktask, algname, kstrex)), args + [kstr]))
-		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ktask)), workdir=workdir, args=args, timeout=timeout
+		#print('> Starting job {} with args: {}'.format('_'.join((ktaskname, algname, kstrex)), args + [kstr]))
+		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ktaskname)), workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
 			# Note: increasing clique size k causes ~(k ** golden) increased consumption of both memory and time (up to k ^ 2),
 			# so it's better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
@@ -701,6 +703,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 # DAOC (using standard modularity as an optimization function, non-generelized)
 def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(rlevout=0.8, gamma=1, reduction=None, significance=None)):
+	"""DAOC with static gamma=1"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
 
@@ -708,6 +711,7 @@ def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
 def execDaocA(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(rlevout=0.8, gamma=-1, reduction=None, significance=None)):
+	"""DAOC with automatic dynamic gamma"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
 
@@ -890,7 +894,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 		tasksuf = taskname[len(taskbasex):]
 		ctaskname = ''.join((taskbasex, _SEPPARS, prmex, tasksuf))  # Current task
 		# Backup prepated the resulting dir and backup the previous results if exist
-		taskpath = prepareResDir(algname, ctask, odir, pathid)
+		taskpath = prepareResDir(algname, ctaskname, odir, pathid)
 		errfile = taskpath + _EXTELOG
 		#logfile = taskpath + _EXTLOG
 		# Evaluate relative paths dependent of the alg params
@@ -898,12 +902,12 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 
 		# ATTENTION: a single argument is k-clique size, specified later
 		# ./pscan -e 0.7 -o graph-e7.cnl -f NSE graph.nse
-		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ctask, pathid)), '-s=/etime_' + algname
-			, './pscan', '-e', prm, '-o', ''.join((reltaskpath, '/', ctask, _EXTCLNODES))
+		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ctaskname, pathid)), '-s=/etime_' + algname
+			, './pscan', '-e', prm, '-o', ''.join((reltaskpath, '/', ctaskname, _EXTCLNODES))
 			, '-f', 'NSA' if asym else 'NSE', netfile)
 
-		#print('> Starting job {} with args: {}'.format('_'.join((ctask, algname, prmex)), args + [prm]))
-		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ctask)), workdir=workdir, args=args, timeout=timeout
+		#print('> Starting job {} with args: {}'.format('_'.join((ctaskname, algname, prmex)), args + [prm]))
+		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ctaskname)), workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
 			#, stdout=logfile  # Skip standard log, because there are too many files, which does not contain useful information
 			# Note: eps has not monotonous impact mainly on the exectution time, not large impact and the clustring is fast anyway

@@ -74,7 +74,7 @@ from multiprocessing import cpu_count  # Returns the number of logical CPU units
 import benchapps  # Required for the functions name mapping to/from the app names
 from benchapps import PYEXEC, aggexec, funcToAppName, _PREFEXEC  # , _EXTCLNODES, _ALGSDIR
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsSec, secDhms \
- 	, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
+ 	, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _SEPSUBTASK, _UTILDIR, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
 from benchevals import aggEvaluations, _RESDIR, _EXTEXECTIME  # QualitySaver, evaluators,
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
@@ -96,7 +96,6 @@ _GENSEPSHF = '%'  # Shuffle number separator in the synthetic networks generatio
 _WPROCSMAX = max(cpu_count()-1, 1)  # Maximal number of the worker processes, should be >= 1
 assert _WPROCSMAX >= 1, 'Natural number is expected not exceeding the number of system cores'
 _VMLIMIT = 4096  # Set 4 TB or RAM to be automatically limited to the physical memory of the computer
-_SEPSUBTASK = '>'  # Sub-task separator
 _PORT = 8080  # Default port for the WebUI, Note: port 80 accessible only from the root in NIX
 _RUNTIMEOUT = 10*24*60*60  # Clustering execution timeout, 10 days
 _EVALTIMEOUT = 2*24*60*60  # Results evaluation timeout, 2 days

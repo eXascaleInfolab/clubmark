@@ -30,6 +30,7 @@ _SEPPARS = '!'  # Network parameters separator, must be a char
 _SEPINST = '^'  # Network instances separator, must be a char
 _SEPSHF = '%'  # Network shuffles separator, must be a char; ~
 _SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
+_SEPSUBTASK = '>'  # Sub-task separator
 _UTILDIR = 'utils/'  # Utilities directory with external applicaions for quality evaluation and other things
 _TIMESTAMP_START = time.gmtime()  # struct_time
 _TIMESTAMP_START_STR = time.strftime('%Y-%m-%d %H:%M:%S', _TIMESTAMP_START)
@@ -609,13 +610,12 @@ class SyncValue(object):
 
 
 def nameVersion(path, expand, synctime=None, suffix=''):
-	"""Name the last path component basedon modification time and return this part
+	"""Name the last path component based on modification time and returns this part
 
 	path  - the path to be named with version.
 		ATTENTION: the basepathis escaped, i.e. wildcards are not supported
-	expand  - whether to expand (take derivatives from this template) the path
-	synctime  - use the same time suffix for multiple paths when is not None,
-		SyncValue is expected
+	expand  - threat path as a prefix and expend it to the first matching item (file/dir)
+	synctime: SyncValue  - use the same time suffix for multiple paths when is not None
 	suffix  - suffix to be added to the backup name before the time suffix
 	"""
 	# Note: normpath() may change semantics in case symbolic link is used with parent dir:
@@ -637,7 +637,8 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 			except StopIteration:
 				pass
 		if not exists:
-			print('WARNING, specified path is not exist', file=sys.stderr)
+			print('WARNING nameVersion, specified path does not exist: ' + path
+				, file=sys.stderr if _DEBUG_TRACE else sys.stdout)
 			return name + suffix
 	# Process existing path
 	if synctime is not None:
@@ -647,7 +648,7 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 			mtime = synctime.value
 	else:
 		mtime = time.gmtime(os.path.getmtime(path))
-	assert isinstance(mtime, time.struct_time), 'Unexpected type of mtime'
+	assert isinstance(mtime, time.struct_time), 'Unexpected type of mtime: ' + type(mtime).__name__
 	mtstr = time.strftime('_%y%m%d_%H%M%S', mtime)  # Modification time
 	return ''.join((name, suffix, mtstr))
 

@@ -226,7 +226,7 @@ def funcToAppName(funcname):
 
 
 def prepareResDir(appname, taskname, odir, pathid):
-	"""Prepare output directory for the app results and backup the previous results
+	"""Prepare output directory for the app results and back up the previous results
 
 	appname  - application (algorithm) name
 	taskname  - task name
@@ -383,7 +383,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 
 	# ATTENTION: for the correct execution algname must be always the same as func name without the prefix "exec"
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
-	# Backup prepated the resulting dir and backup the previous results if exist
+	# Backup prepated the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathid)
 
 	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
@@ -511,7 +511,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		kstrex = 'k' + kstr
 		# Embed params into the task name
 		ktaskname = ''.join((taskbasex, _SEPPARS, kstrex, tasksuf))
-		# Backup prepated the resulting dir and backup the previous results if exist
+		# Backup prepated the resulting dir and back up the previous results if exist
 		taskpath = prepareResDir(algname, ktaskname, odir, pathid)
 		errfile = taskpath + _EXTELOG
 		logfile = taskpath + _EXTLOG
@@ -556,7 +556,7 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	taskname = os.path.split(netfile)[1]  # Base name of the network
 	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
-	# Backup prepated the resulting dir and backup the previous results if exist
+	# Backup prepated the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathid)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
@@ -666,7 +666,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 	# Fetch the task name and chose correct network filename
 	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension; , netext
 	assert taskname, 'The network name should exists'
-	# Backup prepated the resulting dir and backup the previous results if exist
+	# Backup prepated the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathid)
 	errfile = taskpath + _EXTELOG  # Errors log + lib tracing including modularity value and clustering summary
 	logfile = taskpath + _EXTLOG   # Tracing to stdout, contains timings
@@ -762,7 +762,7 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension; , netext
 	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Ganxis'
-	# Backup prepated the resulting dir and backup the previous results if exist
+	# Backup prepated the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathid)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
@@ -814,7 +814,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 	taskname, netext = os.path.splitext(taskname)  # Separate file name and extension
 	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Oslom2'
-	# Backup prepated the resulting dir and backup the previous results if exist
+	# Backup prepated the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathid)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
@@ -893,7 +893,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 		taskbasex = delPathSuffix(taskname, True)
 		tasksuf = taskname[len(taskbasex):]
 		ctaskname = ''.join((taskbasex, _SEPPARS, prmex, tasksuf))  # Current task
-		# Backup prepated the resulting dir and backup the previous results if exist
+		# Backup prepated the resulting dir and back up the previous results if exist
 		taskpath = prepareResDir(algname, ctaskname, odir, pathid)
 		errfile = taskpath + _EXTELOG
 		#logfile = taskpath + _EXTLOG
@@ -939,7 +939,7 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 	# Fetch the task name and chose correct network filename
 	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension;  , netext
 	assert taskname, 'The network name should exists'
-	# Backup prepated the resulting dir and backup the previous results if exist
+	# Backup prepated the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathid)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
@@ -992,7 +992,7 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension;  , netext
 	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'scd'
-	# Backup prepated the resulting dir and backup the previous results if exist
+	# Backup prepated the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathid)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG

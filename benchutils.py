@@ -654,12 +654,12 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 
 
 def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', move=True):  # basedir, name
-	"""MOVE or copy all files and dirs starting from the specified basepath into backup/
+	"""MOVE or copy all files and dirs starting from the specified basepath into _BCKDIR
 	located in the parent dir of the basepath with optional compression.
 
 	basepath  - path, last component of which (file or dir) is a name for the backup
 		ATTENTION: the basepath is escaped, i.e. wildcards are NOT supported
-	expand  - expand prefix, backup all paths staring from basepath, or basepath only
+	expand  - expand prefix, backup all paths staring from basepath VS basepath only
 	synctime  - use the same time suffix for multiple paths when is not None,
 		SyncValue is expected
 	compress  - compress or just copy spesified paths
@@ -667,8 +667,10 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	move  - whether to move or copy data to the backup
 
 	ATTENTION: All paths are MOVED to the dedicated timestamped dir / archive
+
+	return  bckpath: str  - path of the made archive / backup dir
 	"""
-	# Check if there anything available to be backuped
+	# Check if there anything available to be backed up
 	if (expand and not basePathExists(basepath)) or (not expand
 	and (not os.path.exists(basepath) or (os.path.isdir(basepath) and dirempty(basepath)))):
 		return
@@ -719,6 +721,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 							shutil.rmtree(path)
 						else:
 							os.remove(path)
+		return archname
 	else:
 		# Rename already existent backup if required
 		if os.path.exists(basename):
@@ -738,6 +741,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 			for path in glob.iglob(basesrc + ('*' if expand else '')):
 				bckop = shutil.move if move else shutil.copy2
 				bckop(path, '/'.join((basename, os.path.split(path)[1])))
+		return basename
 
 
 if __name__ == '__main__':

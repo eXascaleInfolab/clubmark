@@ -485,7 +485,7 @@ def parseParams(args):
 def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 , overwrite=False, seedfile=_SEEDFILE, gentimeout=3*60*60):  # 2-4 hours
 	"""Generate synthetic networks with ground-truth communities and save generation params.
-	Previously existed paths with the same name are backuped before being updated.
+	Previously existed paths with the same name are backed up before being updated.
 
 	genbin  - the binary used to generate the data (full path or relative to the base benchmark dir)
 	insnum  - the number of instances of each network to be generated, >= 1
@@ -518,7 +518,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 	for dirname in (basedir, paramsdirfull, seedsdirfull, netsdirfull):
 		if not os.path.exists(dirname):
 			os.mkdir(dirname)  # Note: mkdir does not create intermediate (non-leaf) dirs
-		# Backup target dirs on rewriting, removing backuped content
+		# Backup target dirs on rewriting, removing backed up content
 		elif overwrite and not dirempty(dirname):
 			tobackup(dirname, False, bcksuffix, move=True)  # Move to the backup
 			os.mkdir(dirname)
@@ -836,8 +836,8 @@ while True:
 						for net in glob.iglob('*'.join((path, dflext))):
 							shfnum += shuffleNet(net, popt.shfnum)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
 				else:
-					# Skip shuffles and their direct backup
-					# Note: previous shuffles are backuped from their origin instance
+					# Skip shuffles and their direct backing up
+					# Note: previous shuffles are backed up from their origin instance
 					netname = os.path.split(path)[1]
 					if netname.find(_SEPSHF) != -1:
 						continue
@@ -1758,7 +1758,7 @@ if __name__ == '__main__':
 			' and saving under another name) each dataset <shuffles_number> times (default: 0).'
 			' If <number> is omitted or set to 0 then ONLY shuffling of <outpdir>/{netsdir}/* is performed.'
 			' The generated networks are automatically added to the begin of the input datasets.',
-			'    o  - overwrite existing network instances (old data is backuped) instead of skipping generation',
+			'    o  - overwrite existing network instances (old data is backed up) instead of skipping generation',
 			'    a  - generate networks specified by arcs (directed) instead of edges (undirected)',
 			'NOTE: shuffled datasets have the following naming format:',
 			'\t<base_name>[(seppars)<param1>...][{sepinst}<instance_index>][{sepshf}<shuffle_index>].<net_extension>',
@@ -1766,7 +1766,7 @@ if __name__ == '__main__':
 			', which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension'
 			' (.ns{{e,a}}). Default: -ie={syntdir}{netsdir}*/, which are subdirs of the synthetic networks dir without shuffling.',
 			'    f  - make flat derivatives on shuffling instead of generating the dedicated directory (having the file base name)'
-			' for each input network, might cause flooding of the base directory. Existed shuffles are backuped.',
+			' for each input network, might cause flooding of the base directory. Existed shuffles are backed up.',
 			'    NOTE: variance over the shuffles of each network instance is evaluated only for the non-flat structure.',
 			'    a  - the dataset is specified by arcs (asymmetric, directed links) instead of edges (undirected links)'
 			', considered only for not .ns{{a,e}} extensions.',
@@ -1774,7 +1774,8 @@ if __name__ == '__main__':
 			'  - The following symbols in the path name have specific semantic and processed respectively: {rsvpathsmb}',
 			'  - Paths may contain wildcards: *, ?, +',
 			'  - Multiple directories and files wildcards can be specified via multiple -i options',
-			'  - Shuffles backup and OVERWRITE already existent shuffles',
+			'  - Existent shuffles are backed up and the new shuffles OVERWRITE already existent shuffles'
+			' (retainig the old non-matched shuffles)',
 			'  - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]',
 			'  - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
 			' is up to the clustering algorithm',
@@ -1782,13 +1783,13 @@ if __name__ == '__main__':
 			'Leading "-" means applying of all except the specified apps. Available apps ({anppsnum}): {apps}.',
 			'Impacts {{r, q}} options. Optional, all registered apps (see benchapps.py) are executed by default.',
 			'NOTE: output results are stored in the "{resdir}<algname>/" directory',
-			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
+			#'    f  - force execution even when the results already exists (existent datasets are moved to the backup)',
 			'  --runapps, -r  - run specified apps on the specified datasets, default: all',
 			'  --quality, -q[X]  - evaluate quality (including accuracy) of the results for the specified algorithms'
 			' on the specified datasets and form the summarized results. Default: NMI_max, F1h and F1p measures on all datasets',
 			#  -q[X][="<SEP><inpnet_pyregex><SEP><gtnet_pyregex>[<SEP><pyregex_glags>]"]
 			#  ";(?<=.)nse$;ncl;i", see details in https://docs.python.org/2/library/re.html
-			#'    f  - force execution even when the results already exists (existent datasets are moved to backup)',
+			#'    f  - force execution even when the results already exists (existent datasets are moved to the backup)',
 			'    e[Y]  - extrinsic measures for overlapping communities, default: all',
 			'      n[Z]  - NMI measure(s) for overlapping and multi-level communities: max, avg, min, sqrt',
 			'        x  - NMI_max,',

@@ -21,24 +21,24 @@ from benchutils import SyncValue, nameVersion, tobackup
 from benchapps import preparePath
 
 
-class UtilsTest(unittest.TestCase):
+class TestUtils(unittest.TestCase):
 	"""Tests for the Benchmark utilities"""
-	__bdir = None  # Base directory for the tests
+	# __bdir = None  # Base directory for the tests
 
 
-	@classmethod
-	def setUpClass(cls):
-		cls.__bdir = tempfile.mkdtemp(prefix='tmp_bmtests')
+	# @classmethod
+	# def setUpClass(cls):
+	# 	cls.__bdir = tempfile.mkdtemp(prefix='tmp_bmtests')
 
 
-	@classmethod
-	def tearDownClass(cls):
-		if cls.__bdir is not None:
-			shutil.rmtree(cls.__bdir)
+	# @classmethod
+	# def tearDownClass(cls):
+	# 	if cls.__bdir is not None:
+	# 		shutil.rmtree(cls.__bdir)
 
 
 	def test_nameVersion(self):
-		"""test_nameVersion() tests"""
+		"""nameVersion() tests"""
 		# Test for the non-existent name
 		randname = 's;35>.ds8u9'
 		stval0 = None
@@ -70,14 +70,32 @@ class UtilsTest(unittest.TestCase):
 		self.assertEqual(synctime.value, stval, 'synctime.value should be permanent')
 
 
-	# def test_tobackup(self):
-	# 	# Create tmp dir to test backuping
-	# 	bkdir = tempfile.mkdtemp(prefix='tmp_bmtests')
-	# 	try:
-	# 		clsdir
-	# 		tobackup()
-	# 	finally:
-	# 		shutil.rmtree(bkdir)
+	# $ python -m unittest benchtests.TestUtils.test_tobackup
+	def test_tobackup(self):
+		"""tobackup() tests"""
+		# Create tmp dir to test backuping
+		bdir = tempfile.mkdtemp(prefix='tmp_bmtests')
+		try:
+			clspref = 'cls1'  # Prefix of the items being backed up
+			bcksuf = 'k123'  # Backup name suffix
+			clsdir = tempfile.mkdtemp(prefix=clspref, dir=bdir)
+			clsf1 = tempfile.mkstemp(suffix='.cls', prefix=clspref, dir=clsdir, text=True)
+			os.write(clsf1[0], 'Some content\n')
+			os.close(clsf1[0])
+			clslog = tempfile.mkstemp(suffix='.log', prefix=clspref, dir=bdir)
+			bckarch = tobackup(clsdir, expand=False, xsuffix=bcksuf, move=False)
+			# print('bckarch: ' + bckarch)
+			self.assertTrue(os.path.exists(bckarch), 'The backup archive should exist')
+			self.assertTrue(os.path.exists(clsdir) and os.path.exists(clslog[1]))
+
+			bckarch = tobackup(bdir + '/' + clspref, expand=True, xsuffix=bcksuf, move=True)
+			self.assertIn('_' + bcksuf, bckarch)
+			self.assertTrue(os.path.exists(bckarch), 'The backup archive should exist')
+			self.assertFalse(os.path.exists(clsdir) or os.path.exists(clslog[1]))
+
+			# Test back up with symlinks
+		finally:
+			shutil.rmtree(bdir)
 
 
 

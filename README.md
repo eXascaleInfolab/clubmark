@@ -213,19 +213,19 @@ NOTE:
 Parameters:
   --help, -h  - show this usage description
   --generate, -g[o][a]=[<number>][%<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets of the required format in the <outpdir> (default: syntnets/), shuffling (randomly reordering network links and saving under another name) each dataset <shuffles_number> times (default: 0). If <number> is omitted or set to 0 then ONLY shuffling of <outpdir>/networks//* is performed. The generated networks are automatically added to the begin of the input datasets.
-    o  - overwrite existing network instances (old data is backuped) instead of skipping generation
+    o  - overwrite existing network instances (old data is backed up) instead of skipping generation
     a  - generate networks specified by arcs (directed) instead of edges (undirected)
 NOTE: shuffled datasets have the following naming format:
 	<base_name>[(seppars)<param1>...][^<instance_index>][%<shuffle_index>].<net_extension>
   --input, -i[X][%<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories, which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension (.ns{e,a}). Default: -ie=syntnets/networks/*/, which are subdirs of the synthetic networks dir without shuffling.
-    f  - make flat derivatives on shuffling instead of generating the dedicated directory (having the file base name) for each input network, might cause flooding of the base directory. Existed shuffles are backuped.
+    f  - make flat derivatives on shuffling instead of generating the dedicated directory (having the file base name) for each input network, might cause flooding of the base directory. Existed shuffles are backed up.
     NOTE: variance over the shuffles of each network instance is evaluated only for the non-flat structure.
     a  - the dataset is specified by arcs (asymmetric, directed links) instead of edges (undirected links), considered only for not .ns{a,e} extensions.
 NOTE:
   - The following symbols in the path name have specific semantic and processed respectively: ('!', '^', '%', '#')
   - Paths may contain wildcards: *, ?, +
   - Multiple directories and files wildcards can be specified via multiple -i options
-  - Shuffles backup and OVERWRITE already existent shuffles
+  - Existent shuffles are backed up and the new shuffles OVERWRITE already existent shuffles (retainig the old non-matched shuffles)
   - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]
   - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions) is up to the clustering algorithm
   --apps, -a[=[-]"app1 app2 ..."]  - apps (clustering algorithms) to be applied, default: all.
@@ -272,7 +272,7 @@ So, in case of shuffling, the original shuffles should be provided to reproduce 
 
 It is possible to have multiple input directories with similarly named files inside, which represent different instances / snapshots of the datasets. In such case, the results are produced per each snapshot, plus aggregated weighted average over all snapshots. This is useful to avoid occasional bias to the specific instance or to analyze evolving networks.  
 If any application is crashed, the crash is logged and does not affect execution of the remaining applications. The benchmark can be terminated by the timeout or manually.
-*automatic extension / backup* of the already existent results to the timestamped .gzip archives on the benchmarking re-execution.
+*automatic extension / back up* of the already existent results to the timestamped .gzip archives on the benchmarking re-execution.
 *logging of traces (stdout) and errors (stderr)* (outputs of the executables and their runtime statistics) for each executable and for the benchmarking framework itself;
 
 

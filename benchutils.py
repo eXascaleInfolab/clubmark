@@ -683,18 +683,20 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	basedir, srcname = os.path.split(basepath)
 	if not basedir:
 		basedir = '.'  # Note: '/' is added later
+	origdir = '/'.join((basedir, _ORIGDIR))
 	basedir = '/'.join((basedir, _BCKDIR))
 	if not os.path.exists(basedir):
 		os.mkdir(basedir)
-	origdir = '/'.join((basedir, _ORIGDIR))
 	# Backup files
 	basename = basedir + nameVersion(basepath, expand, synctime, xsuffix)  # Base name of the backup
 	bckname = '-'.join((basename, str(timeSeed())))
 	# Consider orig dir if required
 	basepaths = [basepath]
 	origname = origdir + srcname
-	if os.path.exists(origname):
+	if (expand and basePathExists(origname)) or (not expand and os.path.exists(origname)):
 		basepaths.append(origname)
+	# print('>> tobackup(), origname:', origname, ', expand:', expand, 'basePathExists(origname):'
+	# 	, basePathExists(origname), ', basepaths:', basepaths)
 	if compress:
 		archname = basename + '.tar.gz'
 		# Rename already existent archive if required
@@ -712,7 +714,9 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 		with tarfile.open(archname, 'w:gz', bufsize=128*1024, compresslevel=6) as tar:
 			for basesrc in basepaths:
 				for path in glob.iglob(basesrc + ('*' if expand else '')):
-					tar.add(path, arcname=os.path.split(path)[1])
+					# print('>> tobackup(), Archiving: ', path, ', basesrc: ', basesrc)
+					# Note: explicit arcname breaks relative paths
+					tar.add(path)  # arcname=os.path.split(path)[1]
 					# Delete the archived paths if required
 					if move:
 						#if _DEBUG_TRACE:

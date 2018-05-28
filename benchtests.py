@@ -16,7 +16,7 @@ import glob
 import tempfile
 import shutil
 import tarfile
-from benchutils import SyncValue, nameVersion, tobackup, _ORIGDIR
+from benchutils import SyncValue, nameVersion, tobackup, _ORIGDIR, _BCKDIR
 from benchapps import preparePath
 
 
@@ -89,23 +89,35 @@ class TestUtils(unittest.TestCase):
 			self.assertTrue(os.path.exists(clsdir) and os.path.exists(clslog[1]))
 
 			# Move paths to the origdir and create symlinks instead of the former paths
+			# Note: relative path are used otherwise orig files overwrite symlinks
 			origdir = '/'.join((bdir, _ORIGDIR))
 			os.mkdir(origdir)
-			for p in glob.iglob(''.join((bdir, '/', clspref, '*'))):
-				shutil.move(p, origdir)
-				newpath = origdir + os.path.split(p)[1]
-				newpath = os.path.relpath(newpath, bdir)
-				os.symlink(newpath, os.path.split(newpath)[1])
-			# Back up target symlinks with their origins
-			bckarch = tobackup(bdir + '/' + clspref, expand=True, xsuffix=bcksuf, move=True)
-			self.assertIn('_' + bcksuf, bckarch)
-			self.assertTrue(bckarch.startswith(bdir) and os.path.exists(bckarch)
-				, 'The backup archive should exist')
-			self.assertFalse(os.path.exists(clsdir) or os.path.exists(clslog[1]))
-			baf = tarfile.open(bckarch, 'r')
-			self.assertNotEqual(len(filter(lambda name: _ORIGDIR in name, baf.getnames())), 0)
+			curdir = os.getcwd()  # Original current dir
+			os.chdir(bdir)  # Base dir of the archiving items
+			try:
+				for p in glob.iglob(clspref + '*'):
+					shutil.move(p, _ORIGDIR)
+					# Create RELATIVE symlink to be able to extract the archive anywhere
+					pname = os.path.split(p)[1]
+					opath = _ORIGDIR + pname  # Path of the file in the orig dir
+					# opath = os.path.relpath(opath, bdir)
+					os.symlink(opath, pname)
 
-			# Test back up with symlinks
+				# Back up target symlinks with their origins
+				# print('> bck src: ', bdir + '/' + clspref)
+				# print('> bckdir content:', os.listdir(bdir))
+				# print('> bckdir orig (', origdir, ') content:', os.listdir(origdir))
+				bckarch = tobackup(clspref, expand=True, xsuffix=bcksuf, move=True)
+				# print('> bckarch ({}): {}'.format(type(bckarch).__name__, bckarch))
+				self.assertIn('_' + bcksuf, bckarch)
+				self.assertTrue(_BCKDIR in bckarch and os.path.exists(bckarch)
+					, 'The backup archive should exist')
+				self.assertFalse(os.path.exists(clsdir) or os.path.exists(clslog[1]))
+				with tarfile.open(bckarch, 'r') as baf:
+					# print('> arch content: ', baf.getnames())
+					self.assertNotEqual(len([name for name in baf.getnames() if _ORIGDIR in name]), 0)
+			finally:
+				os.chdir(curdir)
 		finally:
 			shutil.rmtree(bdir)
 

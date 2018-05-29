@@ -182,11 +182,16 @@ def preparePath(taskpath):  # , netshf=False
 	# ATTENTION: do not use only basePathExists(taskpath) here to avoid movement to the backup
 	# processing paths when xxx.mod.net is processed before the xxx.net (have the same base)
 	# Create target path if not exists
+	print('> preparePath(), for: {}'.format(taskpath))
 	if not os.path.exists(taskpath):
 		os.makedirs(taskpath)
+		print('> preparePath(), created dir ({}): {}'.format(
+			os.path.exists(taskpath) and os.path.isdir(taskpath), taskpath))
 	elif not dirempty(taskpath):  # Back up all instances and shuffles once per execution in a single archive
+		print('> preparePath(), backing up: {}, content: {}'.format(taskpath, os.listdir(taskpath)))
 		mainpath = delPathSuffix(taskpath)
-		tobackup(mainpath, True, move=True)  # Move to the backup (old results can't be reused in the forming results)
+		arpath = tobackup(mainpath, True, move=True)  # Move to the backup (old results can't be reused in the forming results)
+		print('> preparePath(), backup: {}'.format(arpath))
 		os.mkdir(taskpath)
 
 
@@ -454,7 +459,10 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 # SCP (Sequential algorithm for fast clique percolation)
 # Note: it is desirable to have a dedicated task for each type of networks or even for each network for this algorithm
 def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, task=None, seed=None):  #pylint: disable=W0613
-	"""SCP algorithm"""
+	"""SCP algorithm
+
+	return uint: the number of scheduled jobs
+	"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0, (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
@@ -858,7 +866,10 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 # pSCAN (Fast and Exact Structural Graph Clustering)
 def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, task=None, seed=None):  #pylint: disable=W0613
-	"""pScan algorithm"""
+	"""pScan algorithm
+
+	return uint: the number of scheduled jobs
+	"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
 		task is None or isinstance(task, Task)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
@@ -941,6 +952,8 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 	assert taskname, 'The network name should exists'
 	# Backup prepated the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathid)
+	print('> rgmcAlg(), taskpath exists:', os.path.exists(taskpath))
+	# os.close(os.open(taskpath + '/tmp.txt', os.O_WRONLY | os.O_CREAT))
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 

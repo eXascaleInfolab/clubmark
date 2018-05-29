@@ -1132,7 +1132,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 					errexectime = time.perf_counter() - exectime
 					print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
 						.format(ealg.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
-					traceback.print_stack(limit=5, file=sys.stderr)
+					# traceback.print_stack(limit=5, file=sys.stderr)
+					traceback.print_exc(5)
 			return jobsnum
 
 		def runner(net, netshf, xargs, tasks=None):
@@ -1307,7 +1308,8 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 # 					errexectime = time.perf_counter() - exectime
 # 					print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
 # 						.format(eapp.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
-# 					traceback.print_stack(limit=5, file=sys.stderr)
+# 					#traceback.print_stack(limit=5, file=sys.stderr)
+#					traceback.print_exc(5)
 # 			# Note: jobs are executed asynchronously, so here none of them is completed
 # 			#_STORAGE_FILE.flush()  # Write results to the persistent storage
 # 			return jobsnum

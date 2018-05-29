@@ -665,7 +665,8 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	compress: bool  - compress or just copy spesified paths
 	xsuffix  - extra suffix to be added to the backup name before the time suffix
 	move: bool  - whether to move or copy the data to the backup
-	relpath: bool  - convert the basepath to the relative one to it's parent dir
+	relpath: bool  - convert the basepath to the relative one to it's parent dir,
+		which makes the archive portable to other machines
 
 	return  bckpath: str  - path of the made archive / backup dir or None
 	"""
@@ -679,86 +680,82 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	# base/linkdir/../a -> base/a, which might be undesirable
 	basepath = escapePathWildcards(basepath).rstrip('/')  # os.path.normpath(escapePathWildcards(basepath))
 	# Create the backup if required
-	basedir, srcname = os.path.split(basepath)
+	basedir, srcname = os.path.split(basepath)  # ATTENTION: basedir might be empty
 	# Consider relative path to current dir to not write to the root (/)
 	if not basedir:  # ATTENTION: recuired independently on the value of relpath
 		basedir = '.'
-	if relpath:
-		curdir = os.getcwd()  # Original current dir
-		os.chdir(basedir)  # Base dir of the archiving items
-		origbasedir = basedir
-		basedir = '.'
-	try:
-		origdir = '/'.join((basedir, _ORIGDIR))
-		basedir = '/'.join((basedir, _BCKDIR))
-		if not os.path.exists(basedir):
-			os.mkdir(basedir)
-		# Backup files
-		basename = basedir + nameVersion(basepath, expand, synctime, xsuffix)  # Base name of the backup
-		bckname = '-'.join((basename, str(timeSeed())))
-		# Consider orig dir if required
-		basepaths = [basepath]
-		origname = origdir + srcname
-		if (expand and basePathExists(origname)) or (not expand and os.path.exists(origname)):
-			basepaths.append(origname)
-		# print('>> tobackup(), origname:', origname, ', expand:', expand, 'basePathExists(origname):'
-		# 	, basePathExists(origname), ', basepaths:', basepaths)
-		if compress:
-			archname = basename + '.tar.gz'
-			# Rename already existent archive if required
-			if os.path.exists(archname):
-				bckname += '.tar.gz'
-				if os.path.exists(bckname):
-					print('WARNING, backup file "{}" is being rewritten'.format(bckname), file=sys.stderr)
-				try:
-					os.rename(archname, bckname)
-				except OSError as err:
-					print('WARNING, removing old backup file "{}", as its renaming failed: {}'
-						.format(archname, err), file=sys.stderr)
-					os.remove(archname)
-			# Move data to the archive
-			with tarfile.open(archname, 'w:gz', bufsize=128*1024, compresslevel=6) as tar:
-				for basesrc in basepaths:
-					for path in glob.iglob(basesrc + ('*' if expand else '')):
-						# print('>> tobackup(), Archiving: ', path, ', basesrc: ', basesrc)
-						# Note: explicit arcname breaks relative paths
-						tar.add(path)  # arcname=os.path.split(path)[1]
-						# Delete the archived paths if required
-						if move:
-							#if _DEBUG_TRACE:
-							#	print('>> moving path: ', path, file=sys.stderr)
-							if os.path.isdir(path) and not os.path.islink(path):
-								shutil.rmtree(path)
-							else:
-								os.remove(path)
-			return archname if not relpath else '/'.join((origbasedir, archname.lstrip('./\\')))
-		else:
-			# Rename already existent backup if required
-			if os.path.exists(basename):
-				if os.path.exists(bckname):
-					print('WARNING, backup dir "{}" is being rewritten'.format(bckname), file=sys.stderr)
-					shutil.rmtree(bckname)
-				try:
-					os.rename(basename, bckname)
-				except OSError as err:
-					print('WARNING, removing old backup dir "{}", as its renaming failed: {}'
-						.format(basename, err), file=sys.stderr)
-					shutil.rmtree(basename)
-			# Move data to the backup
-			if not os.path.exists(basename):
-				os.mkdir(basename)
-			sbasedir = os.path.split(basepath)[0]  # Base src dir
+		basepath = './' + basepath
+	# origdir = _ORIGDIR if not basedir else '/'.join((basedir, _ORIGDIR))
+	# bckdir = _BCKDIR if not basedir else '/'.join((basedir, _BCKDIR))
+	origdir = '/'.join((basedir, _ORIGDIR))
+	bckdir = '/'.join((basedir, _BCKDIR))
+	if not os.path.exists(bckdir):
+		os.mkdir(bckdir)
+	# Backup files
+	basename = bckdir + nameVersion(basepath, expand, synctime, xsuffix)  # Base name of the backup
+	bckname = '-'.join((basename, str(timeSeed())))
+	# Consider orig dir if required
+	basepaths = [basepath]
+	origname = origdir + srcname
+	if (expand and basePathExists(origname)) or (not expand and os.path.exists(origname)):
+		basepaths.append(origname)
+	# print('>> tobackup(), origname:', origname, ', expand:', expand, 'basePathExists(origname):'
+	# 	, basePathExists(origname), ', basepaths:', basepaths)
+	if compress:
+		archname = basename + '.tar.gz'
+		# Rename already existent archive if required
+		if os.path.exists(archname):
+			bckname += '.tar.gz'
+			if os.path.exists(bckname):
+				print('WARNING, backup file "{}" is being rewritten'.format(bckname), file=sys.stderr)
+			try:
+				os.rename(archname, bckname)
+			except OSError as err:
+				print('WARNING, removing old backup file "{}", as its renaming failed: {}'
+					.format(archname, err), file=sys.stderr)
+				os.remove(archname)
+		# Move data to the archive
+		with tarfile.open(archname, 'w:gz', bufsize=128*1024, compresslevel=6) as tar:
 			for basesrc in basepaths:
 				for path in glob.iglob(basesrc + ('*' if expand else '')):
-					bckop = shutil.move if move else (shutil.copy2 if
-						os.path.islink(path) or not os.path.isdir() else shutil.copytree)
-					# Destination depending on basesrc: dst VS _ORIGDIR/dst
-					bckop(path, basedir + path.replace(sbasedir, '', 1))
-			return basename if not relpath else '/'.join((origbasedir, basename.lstrip('./\\')))
-	finally:
-		# Recover the original current dir
-		if relpath:
-			os.chdir(curdir)
+					# print('>> tobackup(), Archiving: ', path, ', basesrc: ', basesrc)
+					if relpath:
+						# Omit the basedir to have relative path
+						tar.add(path, path[len(basedir) + 1:])
+					else:
+						tar.add(path)
+					# Delete the archived paths if required
+					if move:
+						#if _DEBUG_TRACE:
+						#	print('>> moving path: ', path, file=sys.stderr)
+						if os.path.isdir(path) and not os.path.islink(path):
+							shutil.rmtree(path)
+						else:
+							os.remove(path)
+		return archname
+	else:
+		# Rename already existent backup if required
+		if os.path.exists(basename):
+			if os.path.exists(bckname):
+				print('WARNING, backup dir "{}" is being rewritten'.format(bckname), file=sys.stderr)
+				shutil.rmtree(bckname)
+			try:
+				os.rename(basename, bckname)
+			except OSError as err:
+				print('WARNING, removing old backup dir "{}", as its renaming failed: {}'
+					.format(basename, err), file=sys.stderr)
+				shutil.rmtree(basename)
+		# Move data to the backup
+		if not os.path.exists(basename):
+			os.mkdir(basename)
+		sbasedir = os.path.split(basepath)[0]  # Base src dir
+		for basesrc in basepaths:
+			for path in glob.iglob(basesrc + ('*' if expand else '')):
+				bckop = shutil.move if move else (shutil.copy2 if
+					os.path.islink(path) or not os.path.isdir() else shutil.copytree)
+				# Destination depending on basesrc: dst VS _ORIGDIR/dst
+				bckop(path, bckdir + path.replace(sbasedir, '', 1))
+		return basename
 
 
 if __name__ == '__main__':

@@ -637,7 +637,7 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 			except StopIteration:
 				pass
 		if not exists:
-			print('WARNING nameVersion, specified path does not exist: ' + path
+			print('WARNING nameVersion(), specified path does not exist: ' + path
 				, file=sys.stderr if _DEBUG_TRACE else sys.stdout)
 			return name + suffix
 	# Process existing path
@@ -718,6 +718,10 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 		with tarfile.open(archname, 'w:gz', bufsize=128*1024, compresslevel=6) as tar:
 			for basesrc in basepaths:
 				for path in glob.iglob(basesrc + ('*' if expand else '')):
+					# Skip empty dirs, which shoul be RETAINED (not moved) as they might be
+					# just created for the batch backup of other paths
+					if os.path.isdir(path) and dirempty(path):
+						continue
 					# print('>> tobackup(), Archiving: ', path, ', basesrc: ', basesrc)
 					if relpath:
 						# Omit the basedir to have relative path
@@ -751,6 +755,10 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 		sbasedir = os.path.split(basepath)[0]  # Base src dir
 		for basesrc in basepaths:
 			for path in glob.iglob(basesrc + ('*' if expand else '')):
+				# Skip empty dirs, which shoul be RETAINED (not moved) as they might be
+				# just created for the batch backup of other paths
+				if os.path.isdir(path) and dirempty(path):
+					continue
 				bckop = shutil.move if move else (shutil.copy2 if
 					os.path.islink(path) or not os.path.isdir() else shutil.copytree)
 				# Destination depending on basesrc: dst VS _ORIGDIR/dst

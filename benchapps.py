@@ -182,16 +182,13 @@ def preparePath(taskpath):  # , netshf=False
 	# ATTENTION: do not use only basePathExists(taskpath) here to avoid movement to the backup
 	# processing paths when xxx.mod.net is processed before the xxx.net (have the same base)
 	# Create target path if not exists
-	print('> preparePath(), for: {}'.format(taskpath))
+	# print('> preparePath(), for: {}'.format(taskpath))
 	if not os.path.exists(taskpath):
 		os.makedirs(taskpath)
-		print('> preparePath(), created dir ({}): {}'.format(
-			os.path.exists(taskpath) and os.path.isdir(taskpath), taskpath))
 	elif not dirempty(taskpath):  # Back up all instances and shuffles once per execution in a single archive
-		print('> preparePath(), backing up: {}, content: {}'.format(taskpath, os.listdir(taskpath)))
+		# print('> preparePath(), backing up: {}, content: {}'.format(taskpath, os.listdir(taskpath)))
 		mainpath = delPathSuffix(taskpath)
-		arpath = tobackup(mainpath, True, move=True)  # Move to the backup (old results can't be reused in the forming results)
-		print('> preparePath(), backup: {}'.format(arpath))
+		tobackup(mainpath, True, move=True)  # Move to the backup (old results can't be reused in the forming results)
 		os.mkdir(taskpath)
 
 
@@ -952,7 +949,7 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 	assert taskname, 'The network name should exists'
 	# Backup prepated the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathid)
-	print('> rgmcAlg(), taskpath exists:', os.path.exists(taskpath))
+	# print('> rgmcAlg(), taskpath exists:', os.path.exists(taskpath))
 	# os.close(os.open(taskpath + '/tmp.txt', os.O_WRONLY | os.O_CREAT))
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG

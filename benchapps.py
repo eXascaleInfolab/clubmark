@@ -317,7 +317,7 @@ class PyBin(object):
 		return pybin
 
 
-def reduceLevels(levs, num):
+def reduceLevels(levs, num, root0):
 	"""Uniformly fetch required number of levels from the levs giving priority
 	to the coarse-grained (top hierarchy levels) in case of the equal fit
 
@@ -325,30 +325,61 @@ def reduceLevels(levs, num):
 		level of the hierarchy having the highest (most fine-grained resolution) and the
 		last level in the list is the root level having the most coarse-grained resolution
 	num: uint  - target number of levels to be fetched uniformly
+	root0: bool  - whether the root (most coarse-crained) level has zero or maximal index
 
 	return  rlevs: list  - list of the reduced levels
 
-	>>> reduceLevels([1, 2], 1)
+	>>> reduceLevels([1, 2], 1, True)
 	[1]
-	>>> reduceLevels(range(0, 10), 9)
+	>>> reduceLevels([1, 2], 1, False)
+	[2]
+	>>> reduceLevels([1, 2, 3], 1, True)
+	[2]
+	>>> reduceLevels([1, 2, 3], 1, False)
+	[2]
+	>>> reduceLevels(range(0, 10), 9, True)
 	[0, 1, 2, 3, 4, 6, 7, 8, 9]
-	>>> reduceLevels(range(0, 10), 8)
+	>>> reduceLevels(range(0, 10), 9, False)
+	[0, 1, 2, 3, 5, 6, 7, 8, 9]
+	>>> reduceLevels(range(0, 10), 8, True)
 	[0, 1, 2, 4, 5, 6, 8, 9]
-	>>> reduceLevels(range(0, 10), 7)
+	>>> reduceLevels(range(0, 10), 8, False)
+	[0, 1, 3, 4, 5, 7, 8, 9]
+	>>> reduceLevels(range(0, 10), 7, True)
 	[0, 1, 3, 4, 6, 7, 9]
-	>>> reduceLevels(range(0, 10), 6)
+	>>> reduceLevels(range(0, 10), 7, False)
+	[0, 2, 3, 5, 6, 8, 9]
+	>>> reduceLevels(range(0, 10), 6, True)
 	[0, 1, 3, 5, 7, 9]
-	>>> reduceLevels(range(0, 10), 4)
+	>>> reduceLevels(range(0, 10), 6, False)
+	[0, 2, 4, 6, 8, 9]
+	>>> reduceLevels(range(0, 10), 5, True)
+	[0, 2, 4, 6, 8]
+
+	>>> reduceLevels(range(0, 10), 5, False)
+	[1, 3, 5, 7, 9]
+	>>> reduceLevels(range(0, 10), 4, True)
 	[0, 3, 6, 9]
-	>>> reduceLevels(range(0, 10), 3)
-	[0, 4, 9]
-	>>> reduceLevels(range(0, 10), 2)
+	>>> reduceLevels(range(0, 10), 4, False)
+	[0, 3, 6, 9]
+	>>> reduceLevels(range(0, 10), 3, True)
+	[0, 4, 8]
+	>>> reduceLevels(range(0, 10), 3, False)
+	[0, 5, 9]
+	>>> reduceLevels(range(0, 10), 2, True)
 	[0, 9]
-	>>> reduceLevels(range(0, 10), 1)
+	>>> reduceLevels(range(0, 10), 2, False)
+	[0, 9]
+	>>> reduceLevels(range(0, 10), 1, True)
 	[4]
-	>>> reduceLevels(range(0, 9), 1)
+	>>> reduceLevels(range(0, 10), 1, False)
+	[5]
+	>>> reduceLevels(range(0, 9), 1, True)
+	[4]
+	>>> reduceLevels(range(0, 9), 1, False)
 	[4]
 	"""
+	root0 = root0 >= 1  # Ensure {0, 1}
 	nlevs = len(levs)
 	if num >= nlevs:
 		return levs
@@ -356,14 +387,17 @@ def reduceLevels(levs, num):
 		assert num >= 1, 'At least one level is expected after the reduction'
 		return []
 	elif num == 1:
-		return [levs[(nlevs - 1) // 2]]  # Note: -1 to give priority to the begin
-	elif num * 2 <= nlevs:
+		return [levs[(nlevs - root0) // 2]]  # Note: -1 to give priority to the begin
+	elif num * 2 < nlevs:
 		# Fetch single levels in a step
 		# The number of intervals between the levels is num - 1,
 		# the first and the last levels are always added
-		rlen = (nlevs - 1) // (num - 1)
-		res = list(levs[0:nlevs - rlen + 1:rlen])
-		res.append(levs[-1])
+		rlen = (nlevs - root0) // (num - 1)
+		res = list(levs[0:nlevs:rlen])
+		if len(res) < num:
+			res.append(levs[-1])
+	elif num * 2 == nlevs:
+		res = list(levs[int(not root0):nlevs:2])
 	else:
 		assert num * 2 > nlevs, 'Slicing shuld be used to fetched the levels reduced at least twice'
 		# Fetch the intervals of levels
@@ -375,13 +409,20 @@ def reduceLevels(levs, num):
 		# Consider ipart shift (drift) impact on rstep (see the following cycle, omitting items)
 		if (ndel + 1) * 2 >= nlevs:
 			rstep -= 1
-			res.append(levs[0])
+			res.append(levs[0 - int(not root0)])
 			ipart += 1
 		while ipart < nlevs:
 			# print('ipart:', ipart, ';  res:', res, file=sys.stderr)
-			res += levs[ipart:ipart + rstep]
+			if root0:
+				res += levs[ipart:ipart + rstep]
+			else:
+				res += levs[-ipart - 1:-ipart - rstep - 1:-1]
+				# print('num: {}, ipart: {}, rstep: {}, res: {}'.format(
+				# 	num, ipart, rstep, res), file=sys.stderr)
 			ipart += rstep + 1
-	assert len(res) == num, 'Unexpected number of resulting levels: {} of {}'.format(len(res), num)
+		if not root0:
+			res.reverse()
+	assert len(res) == num, 'Unexpected number of resulting levels: {} of {}: {}'.format(len(res), num, res)
 	return res
 
 

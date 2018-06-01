@@ -317,6 +317,33 @@ class PyBin(object):
 		return pybin
 
 
+def iround(val, lower):
+	"""Round value to lower or upper integer in case of the equally good fit
+
+	val: float  - the value to be rounded
+	lower: bool  - direction of the rounding resolution in case of the equally good fit
+
+	return  v: int  - rounded value
+
+	>>> iround(2.5, True)
+	2
+	>>> iround(2.5, False)
+	3
+	>>> iround(2.2, True)
+	2
+	>>> iround(2.2, False)
+	2
+	>>> iround(2.7, True)
+	3
+	>>> iround(2.7, False)
+	3
+	"""
+	q, r = divmod(val, 1)
+	res = int(q if lower and r <= 0.5 or not lower  and r < 0.5 else q + 1)
+	# print('>> val: {:.3f}, q: {:.0f}, r: {:.3f}, res: {:.0f}'.format(val, q, r-0.5, res), file=sys.stderr)
+	return res
+
+
 def reduceLevels(levs, num, root0):
 	"""Uniformly fetch required number of levels from the levs giving priority
 	to the coarse-grained (top hierarchy levels) in case of the equal fit
@@ -327,103 +354,81 @@ def reduceLevels(levs, num, root0):
 	num: uint  - target number of levels to be fetched uniformly
 	root0: bool  - whether the root (most coarse-crained) level has zero or maximal index
 
-	return  rlevs: list  - list of the reduced levels
+	return  rlevs: list, tuple  - list of the reduced levels
 
-	>>> reduceLevels([1, 2], 1, True)
+	>>> list(reduceLevels([1, 2], 1, True))
 	[1]
-	>>> reduceLevels([1, 2], 1, False)
+	>>> list(reduceLevels([1, 2], 1, False))
 	[2]
-	>>> reduceLevels([1, 2, 3], 1, True)
+	>>> list(reduceLevels([1, 2, 3], 1, True))
 	[2]
-	>>> reduceLevels([1, 2, 3], 1, False)
+	>>> list(reduceLevels([1, 2, 3], 1, False))
 	[2]
 	>>> reduceLevels(range(0, 10), 9, True)
 	[0, 1, 2, 3, 4, 6, 7, 8, 9]
 	>>> reduceLevels(range(0, 10), 9, False)
 	[0, 1, 2, 3, 5, 6, 7, 8, 9]
 	>>> reduceLevels(range(0, 10), 8, True)
-	[0, 1, 2, 4, 5, 6, 8, 9]
+	[0, 1, 3, 4, 5, 6, 8, 9]
 	>>> reduceLevels(range(0, 10), 8, False)
-	[0, 1, 3, 4, 5, 7, 8, 9]
+	[0, 1, 3, 4, 5, 6, 8, 9]
 	>>> reduceLevels(range(0, 10), 7, True)
 	[0, 1, 3, 4, 6, 7, 9]
 	>>> reduceLevels(range(0, 10), 7, False)
 	[0, 2, 3, 5, 6, 8, 9]
 	>>> reduceLevels(range(0, 10), 6, True)
-	[0, 1, 3, 5, 7, 9]
+	[0, 2, 4, 5, 7, 9]
 	>>> reduceLevels(range(0, 10), 6, False)
-	[0, 2, 4, 6, 8, 9]
+	[0, 2, 4, 5, 7, 9]
 	>>> reduceLevels(range(0, 10), 5, True)
-	[0, 2, 4, 6, 8]
-
+	[0, 2, 4, 7, 9]
 	>>> reduceLevels(range(0, 10), 5, False)
-	[1, 3, 5, 7, 9]
+	[0, 2, 5, 7, 9]
 	>>> reduceLevels(range(0, 10), 4, True)
 	[0, 3, 6, 9]
 	>>> reduceLevels(range(0, 10), 4, False)
 	[0, 3, 6, 9]
 	>>> reduceLevels(range(0, 10), 3, True)
-	[0, 4, 8]
+	[0, 4, 9]
 	>>> reduceLevels(range(0, 10), 3, False)
 	[0, 5, 9]
-	>>> reduceLevels(range(0, 10), 2, True)
+	>>> list(reduceLevels(range(0, 10), 2, True))
 	[0, 9]
-	>>> reduceLevels(range(0, 10), 2, False)
+	>>> list(reduceLevels(range(0, 10), 2, False))
 	[0, 9]
-	>>> reduceLevels(range(0, 10), 1, True)
+	>>> list(reduceLevels(range(0, 10), 1, True))
 	[4]
-	>>> reduceLevels(range(0, 10), 1, False)
+	>>> list(reduceLevels(range(0, 10), 1, False))
 	[5]
-	>>> reduceLevels(range(0, 9), 1, True)
+	>>> list(reduceLevels(range(0, 9), 1, True))
 	[4]
-	>>> reduceLevels(range(0, 9), 1, False)
+	>>> list(reduceLevels(range(0, 9), 1, False))
 	[4]
 	"""
-	root0 = root0 >= 1  # Ensure {0, 1}
 	nlevs = len(levs)
 	if num >= nlevs:
 		return levs
-	elif num <= 0:
-		assert num >= 1, 'At least one level is expected after the reduction'
-		return []
-	elif num == 1:
-		return [levs[(nlevs - root0) // 2]]  # Note: -1 to give priority to the begin
-	elif num * 2 < nlevs:
-		# Fetch single levels in a step
-		# The number of intervals between the levels is num - 1,
-		# the first and the last levels are always added
-		rlen = (nlevs - root0) // (num - 1)
-		res = list(levs[0:nlevs:rlen])
-		if len(res) < num:
-			res.append(levs[-1])
-	elif num * 2 == nlevs:
-		res = list(levs[int(not root0):nlevs:2])
-	else:
-		assert num * 2 > nlevs, 'Slicing shuld be used to fetched the levels reduced at least twice'
-		# Fetch the intervals of levels
-		ndel = nlevs - num  # The number of levels to be removed
-		# The number of resulting fragments =  levels_removed + 1
-		rstep = nlevs // (ndel + 1)  # Step for the levels interval
+	elif num >= 2:
+		# Multiplication ratio >= 1
+		# The last source index is nlevs - 1, the number of dest indexes besides the zero is num - 1
+		mrt = (nlevs - 1) / float(num - 1)
+		# print('> num: {}, lower: {}, mrt: {:.3f}'.format(num, root0, mrt), file=sys.stderr)
 		res = []
-		ipart = 0  # Index of the processing part
-		# Consider ipart shift (drift) impact on rstep (see the following cycle, omitting items)
-		if (ndel + 1) * 2 >= nlevs:
-			rstep -= 1
-			res.append(levs[0 - int(not root0)])
-			ipart += 1
-		while ipart < nlevs:
-			# print('ipart:', ipart, ';  res:', res, file=sys.stderr)
-			if root0:
-				res += levs[ipart:ipart + rstep]
-			else:
-				res += levs[-ipart - 1:-ipart - rstep - 1:-1]
-				# print('num: {}, ipart: {}, rstep: {}, res: {}'.format(
-				# 	num, ipart, rstep, res), file=sys.stderr)
-			ipart += rstep + 1
-		if not root0:
-			res.reverse()
-	assert len(res) == num, 'Unexpected number of resulting levels: {} of {}: {}'.format(len(res), num, res)
-	return res
+		i = 0
+		while i < num:
+			res.append(levs[iround(i * mrt, root0)])
+			i += 1
+		assert len(res) == num, ('Unexpected number of resulting levels:'
+	 		' {} of {}: {}'.format(len(res), num, res))
+		return res
+	elif num == 1:
+		# 1 element tuple
+		return (levs[(nlevs - root0) // 2],)  # Note: -1 to give priority to the begin
+	elif num <= 0:
+		assert False, 'At least one level is expected after the reduction'
+		return ()
+	else:
+		raise ValueError('ERROR, unexpected value of ')
 
 
 # Louvain
@@ -577,7 +582,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 		# Uniformly link the required number of levels to the expected output dir
 		os.mkdir(taskpath)
 		levnames.sort(key=fetchLevId)
-		levnames = reduceLevels(levnames, _LEVSMAX)
+		levnames = reduceLevels(levnames, _LEVSMAX, False)
 
 	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
 	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname

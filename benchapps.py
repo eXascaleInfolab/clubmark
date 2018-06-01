@@ -318,7 +318,13 @@ class PyBin(object):
 
 
 def reduceLevels(levs, num):
-	"""Uniformly reduce the number of levels to the specified number
+	"""Uniformly fetch required number of levels from the levs giving priority
+	to the coarse-grained (top hierarchy levels) in case of the equal fit
+
+	levs: list  - ORDERED levels to be processed, where the list starts from the bottom
+		level of the hierarchy having the highest (most fine-grained resolution) and the
+		last level in the list is the root level having the most coarse-grained resolution
+	num: uint  - target number of levels to be fetched uniformly
 
 	return  rlevs: list  - list of the reduced levels
 
@@ -756,7 +762,11 @@ class DaocOpts(object):
 def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/'
 , task=None, seed=None, opts=DaocOpts(rlevout=0.8)):  #pylint: disable=W0613
 	"""Execute DAOC, Deterministic (including input order independent) Agglomerative Overlapping Clustering
-	using standard modularity as optimization function
+	using standard modularity as optimization function.
+	The output levels are enumerated starting from the bottom of the hierarchy having index 0
+	(corresponds to the most fine-grained level with the most number of clusters of the smallest size)
+	up to the top (root) level having the maximal index (corresponds to the most coarse-grained level,
+	typically having small number of large clusters).
 
 	algname  - name of the executing algorithm to be traced
 	...
@@ -907,7 +917,11 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 # Oslom2
 def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, task=None, seed=None):
-	"""OSLOM v2 algorithm"""
+	"""OSLOM v2 algorithm
+	The output levels are enumerated from the most fine-grained (tp) having max number of clusters
+	of the smallest size up to the most coarse-grained (tpN with N haing the maximal index)
+	having min number of clusters, where each cluster has the largest size.
+	"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
 		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tseed: {}'

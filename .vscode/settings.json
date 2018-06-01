@@ -17,13 +17,4 @@
         //"--dummy-variables-rgx='(_+[a-zA-Z0-9]*?$)|dummy'"
     ],
     "spellright.language": "en_US",
-    "spellright.documentTypes": [
-        "latex",
-        "markdown",
-        "plaintext",
-        // "python"
-    ],
-    "cSpell.words": [
-        "psutil"
-    ]
 }

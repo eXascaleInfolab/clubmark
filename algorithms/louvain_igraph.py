@@ -13,7 +13,7 @@ import sys
 import os  # Pathes processing
 import argparse
 from igraph import Graph
-from .utils.parser_nsl import asymnet, loadNsl
+from utils.parser_nsl import asymnet, loadNsl  #pylint: disable=E0611,E0401
 
 
 def louvain(args):
@@ -133,7 +133,10 @@ def parseArgs(params=None):
 	 ', default value is <network_name>{}'.format(outpext))
 	opars.add_argument('-l', '--perlev', dest='perlev', action='store_true'
 	 , help='output communities of each hierarchy level to the separate file'
-	 ' <outpfile_name>/<outpfile_name>_<lev_num>{}'.format(outpext))
+	 ' <outpfile_name>/<outpfile_name>_<lev_num>{} starting from the bottom level of'
+	 ' the hierarchy (the most fine-grained level having large number of small clusters)'
+	 ' indexed with 0 up to the top level (root, the most coarse-grained level typically'
+	 ' having small number of large clusters) having the maximal index'.format(outpext))
 
 	args = parser.parse_args(params)
 

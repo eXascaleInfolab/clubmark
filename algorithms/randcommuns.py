@@ -20,7 +20,7 @@ import sys
 import os  # Pathes processing
 #import igraph as ig
 import random as rand
-from .utils.parser_nsl import asymnet, loadNsl
+from utils.parser_nsl import asymnet, loadNsl  #pylint: disable=E0611,E0401
 
 # Default number of the resulting clusterings (partitions, i.e files that contain disjoint clusters)
 _RESNUM = 1

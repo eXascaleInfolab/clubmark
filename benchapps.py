@@ -431,6 +431,59 @@ def reduceLevels(levs, num, root0):
 		raise ValueError('ERROR, unexpected value of ')
 
 
+def limlevs(job):
+	"""Limit the number of output level to fit _LEVSMAX (unified for all algorithms).
+
+	Limit the number of hierarchy levels in the output by moving the original output
+	to the dedivated directory and uniformly linking the required number of levels it
+	to the expected output path.
+
+	Employed job params:
+	taskpath: str  - task path
+	fetchLevId: callable  - algorithm-specific callback to fetch level ids
+	levfmt (optional): str  - level format WILDCARD (only ? and * are supported
+		as in the shell) to fetch levels among other files, for example: 'tp*'.
+		Required at least for Oslom.
+	"""
+	# print('> limlevs() called from {}, taskpath: {}'.format(job.name, job.params))
+	lmax = _LEVSMAX  # Max number of the output levels for the network
+	# Check the number of output levels and restructure the output if required saving the original one
+	taskpath = job.params['taskpath']
+	fetchLevId = job.params['fetchLevId']
+	assert os.path.isdir(taskpath) and callable(fetchLevId), (
+		'Invalid job parameters:  taskpath: {}, fetchLevId callable: {}'.format(
+		taskpath, callable(fetchLevId)))
+	# Filter files from other items (accessory dirs)
+	levfmt = job.params.get('levfmt')
+	if levfmt:
+		levnames = glob.glob(levfmt)
+	else:
+		levnames = os.listdir(taskpath)  # Note: taskpath here is already relative
+	if len(levnames) <= lmax:
+		return
+	# Move the initial output to the _ORIGDIR
+	origdir, oname = os.path.split(taskpath)
+	if not origdir:
+		origdir = '.'
+	origdir = '/'.join((origdir, _ORIGDIR))
+	# Check existence of the destination dir
+	newdir = origdir + oname + '/'
+	if not os.path.exists(origdir):
+		os.mkdir(origdir)
+	else:
+		if os.path.exists(newdir):
+			print('WARNING execLouvainIg.limlevs(), removing the former _ORIGDIR clusters:', newdir)
+			# New destination of the original task output
+			shutil.rmtree(newdir)
+	shutil.move(taskpath, origdir)
+	# Uniformly link the required number of levels to the expected output dir
+	os.mkdir(taskpath)
+	levnames.sort(key=fetchLevId)
+	levnames = reduceLevels(levnames, lmax, False)
+	for lev in levnames:
+		os.symlink(os.path.relpath(newdir + lev, taskpath), '/'.join((taskpath, lev)))
+
+
 # Louvain
 ## Original Louvain
 #def execLouvain(execpool, netfile, asym, odir, timeout, pathid='', tasknum=0, task=None):
@@ -511,38 +564,11 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
-	# def relpath(path, basedir=workdir):
-	# 	"""Relative path to the specified basedir"""
-	# 	return os.path.relpath(path, basedir)
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
-	# Evaluate relative paths
-	xtimebin = relpath(_UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
-	netfile = relpath(netfile)
-	taskpath = relpath(taskpath)
-
-	## Louvain accumulated statistics over shuffled modification of the network or total statistics for all networks
-	#extres = '.acs'
-	#if not selfexec:
-	#	outpdir = ''.join((_RESDIR, algname, '/'))
-	#	if not os.path.exists(outpdir):
-	#		os.makedirs(outpdir)
-	#	# Just erase the file of the accum results
-	#	with open(taskpath + extres, 'w') as accres:
-	#		accres.write('# Accumulated results for the shuffles\n')
-	#
-	#def postexec(job):
-	#	"""Copy final modularity output to the separate file"""
-	#	# File name of the accumulated result
-	#	# Note: here full path is required
-	#	accname = ''.join((workdir, _RESDIR, algname, extres))
-	#	with open(accname, 'a') as accres:  # Append to the end
-	#		# TODO: Evaluate the average
-	#		subprocess.call(('tail', '-n 1', taskpath + _EXTLOG), stdout=accres)
-
 	def fetchLevId(name):
 		"""Fetch level id of the hierarchy from the output file name.
 		The format of the output file name: <outpfile_name>_<lev_num>.<extension>
+
+		name: str  - level name
 
 		return  id: uint  - hierarchy level id
 		"""
@@ -553,45 +579,26 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 		iide = name.rfind('.', iid)  # Extension index
 		if iide == -1:
 			iide = len(name)
-		return int(name[iid, iide])
+		return int(name[iid:iide])
 
-	def limlevs(job):
-		"""Limit the number of output level to fit _LEVSMAX (unified for all algorithms).
-
-		Limit the number of hierarchy levels in the output by moving the original output
-		to the dedivated directory and uniformly linking the required number of levels it
-		to the expected output path.
-		"""
-		# Check the number of output levels and restructure the output if required saving the original one
-		levnames = os.listdir(taskpath)  # Note: taskpath here is already relative
-		if len(levnames) <= _LEVSMAX:
-			return
-		# Move the initial output to the _ORIGDIR
-		origdir, oname = os.path.split(taskpath)
-		if not origdir:
-			origdir = '.'
-		origdir = '/'.join((origdir, _ORIGDIR))
-		# Check existence of the destination dir
-		if not os.path.exists(origdir):
-			os.mkdir(origdir)
-		elif os.path.exists(oname):
-			print('WARNING execLouvainIg.limlevs(), removing the former _ORIGDIR clusters:', oname)
-			# New destination of the original task output
-			shutil.rmtree('/'.join((origdir, oname)))
-		shutil.move(taskpath, origdir)
-		# Uniformly link the required number of levels to the expected output dir
-		os.mkdir(taskpath)
-		levnames.sort(key=fetchLevId)
-		levnames = reduceLevels(levnames, _LEVSMAX, False)
+	# def relpath(path, basedir=workdir):
+	# 	"""Relative path to the specified basedir"""
+	# 	return os.path.relpath(path, basedir)
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	# Evaluate relative paths
+	xtimebin = relpath(_UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	netfile = relpath(netfile)
+	# taskpath = relpath(taskpath)
 
 	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
 	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
 		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 		, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
-		, '-lo', ''.join((taskpath, '/', taskname, _EXTCLNODES)), netfile)
+		, '-lo', ''.join((relpath(taskpath), '/', taskname, _EXTCLNODES)), netfile)
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
-		#, stdout=os.devnull, params=taskpath
-		, ondone=limlevs
+		#, stdout=os.devnull
+		, ondone=limlevs, params={'taskpath': taskpath, 'fetchLevId': fetchLevId}
 		, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 
 	execnum = 1
@@ -995,6 +1002,11 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
 	netfile = relpath(netfile)
 
+	fetchLevId = lambda levname: 0 if levname == 'tp' else int(levname[2:])
+	"""Fetch level id of the hierarchy from the output file name.
+	The format of the output file name: tp[<num:uint+>]
+	"""
+
 	# Move final results to the required dir on postprocessing and clear up
 	def postexec(job):  #pylint: disable=W0613
 		"""Refine the output"""
@@ -1015,6 +1027,9 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 		if os.path.exists(fname):
 			os.remove(fname)
 
+		# Limit the number of output levels
+		limlevs(job)
+
 	# ./oslom_[un]dir -f ../../realnets/karate.txt -w -seed 12345
 	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
 		, './oslom_' +  ('dir' if asym else 'undir'), '-f', netfile, '-w']
@@ -1022,6 +1037,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 		args.extend(['-seed', str(seed)])
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
+		, params={'taskpath': taskpath, 'fetchLevId': fetchLevId, 'levfmt': 'tp*'}
 		, task=task, category=algname, size=netsize, ondone=postexec, stdout=logfile, stderr=errfile))
 	return 1
 

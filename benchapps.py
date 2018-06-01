@@ -50,7 +50,7 @@ from numbers import Number  # To verify that a variable is a number (int or floa
 from sys import executable as PYEXEC  #pylint: disable=C0412;  # Full path to the current Python interpreter
 # from functools import wraps  # Decorating tools for the JobTracer
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, \
- tobackup, escapePathWildcards, _SEPPARS, _UTILDIR, _TIMESTAMP_START_HEADER, _SEPSUBTASK
+ tobackup, escapePathWildcards, _SEPPARS, _UTILDIR, _ORIGDIR, _TIMESTAMP_START_HEADER, _SEPSUBTASK
 from benchevals import _SEPNAMEPART, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
 from utils.mpepool import Job, Task
 from algorithms.utils.parser_nsl import parseHeaderNslFile  #, asymnet
@@ -59,6 +59,8 @@ from algorithms.utils.parser_nsl import parseHeaderNslFile  #, asymnet
 _ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
 # Maximal number of the levels considered for the evaluation in the multi-scale or hierarchihal clustering
 _LEVSMAX = 10  # Use 10 scale levels as in Ganxis by default
+# Note: currently the output level are limited only for the algorithms that may produce more than 10 levels
+assert _LEVSMAX >= 10, 'The number of levels limitation should be addded to GANXiS and some others'
 _EXTLOG = '.log'  # Extension for the logs
 _EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
 _EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
@@ -249,41 +251,6 @@ def prepareResDir(appname, taskname, odir, pathid):
 	return taskpath
 
 
-# Louvain
-## Original Louvain
-#def execLouvain(execpool, netfile, asym, odir, timeout, pathid='', tasknum=0, task=None):
-#	"""Execute Louvain
-#	Results are not stable => multiple execution is desirable.
-#
-#	tasknum  - index of the execution on the same dataset
-#	"""
-#
-#	# Evaluate relative network size considering whether the network is directed (asymmetric)
-#	netsize = os.path.getsize(netfile)
-#	if not asym:
-#		netsize *= 2
-#	# Fetch the task name and chose correct network filename
-#	netfile = os.path.splitext(netfile)[0]  # Remove the extension
-#	taskname = os.path.split(netfile)[1]  # Base name of the network
-#	assert taskname, 'The network name should exists'
-#	if tasknum:
-#		taskname = '-'.join((taskname, str(tasknum)))
-#	netfile = '../' + netfile  # Use network in the required format
-#
-#	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain'
-#	# ./community graph.bin -l -1 -w graph.weights > graph.tree
-#	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
-#		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
-#	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=_ALGSDIR, args=args
-#		, timeout=timeout, stdout=''.join((_RESDIR, algname, '/', taskname, '.loc'))
-#		, task=task, category=algname, size=netsize, stderr=''.join((_RESDIR, algname, '/', taskname, _EXTLOG))))
-#	return 1
-#
-#
-#def evalLouvain(execpool, basefile, measure, timeout):
-#	return
-
-
 class PyBin(object):
 	"""Automatically identify the most appropriate Python interpreter among the available"""
 	#_pybin = PYEXEC
@@ -350,6 +317,103 @@ class PyBin(object):
 		return pybin
 
 
+def reduceLevels(levs, num):
+	"""Uniformly reduce the number of levels to the specified number
+
+	return  rlevs: list  - list of the reduced levels
+
+	>>> reduceLevels([1, 2], 1)
+	[1]
+	>>> reduceLevels(range(0, 10), 9)
+	[0, 1, 2, 3, 4, 6, 7, 8, 9]
+	>>> reduceLevels(range(0, 10), 8)
+	[0, 1, 2, 4, 5, 6, 8, 9]
+	>>> reduceLevels(range(0, 10), 7)
+	[0, 1, 3, 4, 6, 7, 9]
+	>>> reduceLevels(range(0, 10), 6)
+	[0, 1, 3, 5, 7, 9]
+	>>> reduceLevels(range(0, 10), 4)
+	[0, 3, 6, 9]
+	>>> reduceLevels(range(0, 10), 3)
+	[0, 4, 9]
+	>>> reduceLevels(range(0, 10), 2)
+	[0, 9]
+	>>> reduceLevels(range(0, 10), 1)
+	[4]
+	>>> reduceLevels(range(0, 9), 1)
+	[4]
+	"""
+	nlevs = len(levs)
+	if num >= nlevs:
+		return levs
+	elif num <= 0:
+		assert num >= 1, 'At least one level is expected after the reduction'
+		return []
+	elif num == 1:
+		return [levs[(nlevs - 1) // 2]]  # Note: -1 to give priority to the begin
+	elif num * 2 <= nlevs:
+		# Fetch single levels in a step
+		# The number of intervals between the levels is num - 1,
+		# the first and the last levels are always added
+		rlen = (nlevs - 1) // (num - 1)
+		res = list(levs[0:nlevs - rlen + 1:rlen])
+		res.append(levs[-1])
+	else:
+		assert num * 2 > nlevs, 'Slicing shuld be used to fetched the levels reduced at least twice'
+		# Fetch the intervals of levels
+		ndel = nlevs - num  # The number of levels to be removed
+		# The number of resulting fragments =  levels_removed + 1
+		rstep = nlevs // (ndel + 1)  # Step for the levels interval
+		res = []
+		ipart = 0  # Index of the processing part
+		# Consider ipart shift (drift) impact on rstep (see the following cycle, omitting items)
+		if (ndel + 1) * 2 >= nlevs:
+			rstep -= 1
+			res.append(levs[0])
+			ipart += 1
+		while ipart < nlevs:
+			# print('ipart:', ipart, ';  res:', res, file=sys.stderr)
+			res += levs[ipart:ipart + rstep]
+			ipart += rstep + 1
+	assert len(res) == num, 'Unexpected number of resulting levels: {} of {}'.format(len(res), num)
+	return res
+
+
+# Louvain
+## Original Louvain
+#def execLouvain(execpool, netfile, asym, odir, timeout, pathid='', tasknum=0, task=None):
+#	"""Execute Louvain
+#	Results are not stable => multiple execution is desirable.
+#
+#	tasknum  - index of the execution on the same dataset
+#	"""
+#
+#	# Evaluate relative network size considering whether the network is directed (asymmetric)
+#	netsize = os.path.getsize(netfile)
+#	if not asym:
+#		netsize *= 2
+#	# Fetch the task name and chose correct network filename
+#	netfile = os.path.splitext(netfile)[0]  # Remove the extension
+#	taskname = os.path.split(netfile)[1]  # Base name of the network
+#	assert taskname, 'The network name should exists'
+#	if tasknum:
+#		taskname = '-'.join((taskname, str(tasknum)))
+#	netfile = '../' + netfile  # Use network in the required format
+#
+#	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain'
+#	# ./community graph.bin -l -1 -w graph.weights > graph.tree
+#	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
+#		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
+#	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=_ALGSDIR, args=args
+#		, timeout=timeout, stdout=''.join((_RESDIR, algname, '/', taskname, '.loc'))
+#		, task=task, category=algname, size=netsize, stderr=''.join((_RESDIR, algname, '/', taskname, _EXTLOG))))
+#	return 1
+#
+#
+#def evalLouvain(execpool, basefile, measure, timeout):
+#	return
+
+
 def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, task=None, seed=None):  # , selfexec=False  - whether to call self recursively
 	"""Execute Louvain using the igraph library
 	Note: Louvain produces not stable results => multiple executions are desirable.
@@ -387,8 +451,23 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
 	# Backup prepated the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathid)
+	# print('> execLouvainIg(), taskpath exists:', os.path.exists(taskpath))
 
-	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
+	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
+	pybin = PyBin.bestof(pypy=False, v3=True)
+	# Note: Louvain_igraph creates the output dir if it has not been existed, but not the exectime app
+	errfile = taskpath + _EXTELOG
+	logfile = taskpath + _EXTLOG
+
+	# def relpath(path, basedir=workdir):
+	# 	"""Relative path to the specified basedir"""
+	# 	return os.path.relpath(path, basedir)
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	# Evaluate relative paths
+	xtimebin = relpath(_UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	netfile = relpath(netfile)
+	taskpath = relpath(taskpath)
 
 	## Louvain accumulated statistics over shuffled modification of the network or total statistics for all networks
 	#extres = '.acs'
@@ -409,32 +488,58 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	#		# TODO: Evaluate the average
 	#		subprocess.call(('tail', '-n 1', taskpath + _EXTLOG), stdout=accres)
 
-	def postexec(job):
-		"""Unify output to fit _LEVSMAX and trace the completed job"""
+	def fetchLevId(name):
+		"""Fetch level id of the hierarchy from the output file name.
+		The format of the output file name: <outpfile_name>_<lev_num>.<extension>
+
+		return  id: uint  - hierarchy level id
+		"""
+		iid = name.rfind('_')  # Index of the id
+		if iid == -1:
+			raise ValueError('The file name does not contain lev_num: ' + name)
+		iid += 1
+		iide = name.rfind('.', iid)  # Extension index
+		if iide == -1:
+			iide = len(name)
+		return int(name[iid, iide])
+
+	def limlevs(job):
+		"""Limit the number of output level to fit _LEVSMAX (unified for all algorithms).
+
+		Limit the number of hierarchy levels in the output by moving the original output
+		to the dedivated directory and uniformly linking the required number of levels it
+		to the expected output path.
+		"""
 		# Check the number of output levels and restructure the output if required saving the original one
+		levnames = os.listdir(taskpath)  # Note: taskpath here is already relative
+		if len(levnames) <= _LEVSMAX:
+			return
+		# Move the initial output to the _ORIGDIR
+		origdir, oname = os.path.split(taskpath)
+		if not origdir:
+			origdir = '.'
+		origdir = '/'.join((origdir, _ORIGDIR))
+		# Check existence of the destination dir
+		if not os.path.exists(origdir):
+			os.mkdir(origdir)
+		elif os.path.exists(oname):
+			print('WARNING execLouvainIg.limlevs(), removing the former _ORIGDIR clusters:', oname)
+			# New destination of the original task output
+			shutil.rmtree('/'.join((origdir, oname)))
+		shutil.move(taskpath, origdir)
+		# Uniformly link the required number of levels to the expected output dir
+		os.mkdir(taskpath)
+		levnames.sort(key=fetchLevId)
+		levnames = reduceLevels(levnames, _LEVSMAX)
 
-	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
-	pybin = PyBin.bestof(pypy=False, v3=True)
-	# Note: Louvain_igraph creates the output dir if it has not been existed, but not the exectime app
-	errfile = taskpath + _EXTELOG
-	logfile = taskpath + _EXTLOG
-
-	# def relpath(path, basedir=workdir):
-	# 	"""Relative path to the specified basedir"""
-	# 	return os.path.relpath(path, basedir)
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
-	# Evaluate relative paths
-	xtimebin = relpath(_UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
-	netfile = relpath(netfile)
-	taskpath = relpath(taskpath)
-
+	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
 	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
 		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 		, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
 		, '-lo', ''.join((taskpath, '/', taskname, _EXTCLNODES)), netfile)
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
-		#, ondone=postexec, stdout=os.devnull
+		#, stdout=os.devnull, params=taskpath
+		, ondone=limlevs
 		, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 
 	execnum = 1
@@ -949,8 +1054,6 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 	assert taskname, 'The network name should exists'
 	# Backup prepated the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathid)
-	# print('> rgmcAlg(), taskpath exists:', os.path.exists(taskpath))
-	# os.close(os.open(taskpath + '/tmp.txt', os.O_WRONLY | os.O_CREAT))
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
@@ -1024,7 +1127,13 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	return 1
 
 
-#if __name__ == '__main__':
-#	"""Doc tests execution"""
-#	import doctest
-#	doctest.testmod()  # Detailed tests output
+if __name__ == '__main__':
+	# Doc tests execution
+	import doctest
+	#doctest.testmod()  # Detailed tests output
+	flags = doctest.REPORT_NDIFF | doctest.REPORT_ONLY_FIRST_FAILURE
+	failed, total = doctest.testmod(optionflags=flags)
+	if failed:
+		print("Doctest FAILED: {} failures out of {} tests".format(failed, total))
+	else:
+		print('Doctest PASSED')

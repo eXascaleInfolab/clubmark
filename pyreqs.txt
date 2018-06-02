@@ -1,10 +1,12 @@
 # Requirements for the not too heavy apps or that link libs and run under CPython
 
 # Benchmarking requirements:
+# PyExPool (ExecPool and WebUI) are included but also can be installed from the pip
+pyexpool>=3.0.2
 # psutil is required for the jobs autobalancing on execution (mpepool only)
 psutil>=5.2
 # Future utils for Python2/3 compatibility (benchmarking & utils)
-future>=0.16.0
+future>=0.16.0 ;python_version<"3"
 # numpy is required for the datasets perturbation and for the Structured array used to write data to the HDF5 store
 numpy>=1.11
 # h5py for the quality evaluations serialization to HDF5 file
@@ -12,7 +14,7 @@ h5py>=2.7.0
 # Optional Web UI (mpepool only)
 bottle>=0.12.13
 # Enum class for Python2 to be compatible with Python3 (mpepool only)
-enum34>=1.1.6
+enum34>=1.1.6 ;python_version<"3.4"
 # TODO: matplotlib or +pandas or +(scipy and seaborn) for results visualization
 
 # Algorithms requirements:
@@ -24,4 +26,4 @@ python-igraph>=0.7
 #numpy>=1.11  # Already listed
 #future>=0.16  # Already listed
 # Unit tests (only if Python2 is used)
-#mock>=2.0.0
+#mock>=2.0.0 ;python_version<"3"

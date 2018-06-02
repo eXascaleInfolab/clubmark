@@ -6,8 +6,8 @@ FROM ubuntu:16.04
 # Note: spaces and quotes (") should be either escaped (with '\') or the spaces
 # can be taken into quotes
 LABEL vendor="eXascale Infolab" \
-      info.exascale.pycabem.version="2.0.2-env" \
-      info.exascale.pycabem.release-date="2017-07-21"
+      info.exascale.pycabem.version="3.0.0a-noeval" \
+      info.exascale.pycabem.release-date="2018-06-03"
 
 # Make the working directory an optional build parameter specified by --build-arg
 ARG WORK_DIR=/opt/pycabem
@@ -74,8 +74,8 @@ RUN pip3 install --upgrade pip
 # louvain_igraph.py:  python-igraph
 RUN pip3 install -r /tmp/$PYREQS && rm /tmp/$PYREQS
 
-# Make port 80 available to the world outside this container
-#EXPOSE 80
+# Make port 8080 available to the world outside this container for the WebUI
+EXPOSE 8080
 
 # Run something when the container launches
 # ATTENTION: Benchmarking in daemon mode should be run only if the Docker is run
@@ -120,6 +120,7 @@ ENTRYPOINT ["python3", "./benchmark.py"]
 #-------------------------------------------------------------------------------
 # Change log:
 #
+# 3.0.0a  - WebUI added, interfaces extended, lots of fixes made
 # 2.0.2  - h5py added for the evaluations output to the HDF5 file
 # 2.0.1  - hwloc added for the automatic identification of the CPUs enumeration
 #	type (required for the affinity masking)

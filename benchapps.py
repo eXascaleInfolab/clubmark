@@ -491,7 +491,7 @@ def limlevs(job):
 def subuniflevs(job):
 	"""Subtask of the levels output unification.
 	Aggregates output levels from the parameterized job and reports them to the
-	super task to unify resutls for all parameterized jobs of the algorithm on the
+	task to unify resutls for all parameterized jobs of the algorithm on the
 	current network (input dataset).
 	Required at least for Scp.
 
@@ -500,12 +500,14 @@ def subuniflevs(job):
 	"""
 	# fetchLevId: callable  - algorithm-specific callback to fetch level ids
 	# aparams: str  - algorithm parameters
-	assert job.task and job.task.task, 'A task and its super task should exist in the job: ' + job.name
-	supertask = job.task.task
-	if supertask.params is None:
-		supertask.params = {job.task.name: job.params}
+	task = job.task
+	assert task, 'A task should exist in the job: ' + job.name
+	if task.params is None:
+		task.params = {'subtasks': {job.name: job.params}}
 	else:
-		supertask.params[job.task.name] = job.params
+		sbtasks = task.params.setdefault('subtasks', {})
+		sbtasks[job.name] = job.params
+	# print('> subuniflevs() from job {}, {} sbtasks'.format(job.name, len(task.params['subtasks'])), file=sys.stderr)
 
 
 def uniflevs(task):
@@ -523,7 +525,8 @@ def uniflevs(task):
 	params: dict, str
 		outpname: str, str  - target output name without the path
 		fetchLevId: callable  - algorithm-specific callback to fetch level ids
-		<subtask_name>: str, <subtask_params>: dict  - processing outputs of the subtasks
+		subtasks: dict
+			<subtask_name>: str, <subtask_params>: dict  - processing outputs of the subtasks
 	"""
 	# root0: bool  - whether the hierarchy root (the most coarse-grained) level
 	# has index 0 or the maximal index
@@ -531,7 +534,7 @@ def uniflevs(task):
 		# Note: this is not an error to be reported to the stderr
 		print('WARNING, no any output levels are reported for the unification in the super task: ', task.name)
 		return
-	print('> uniflevs() of {} started'.format(task.name), file=sys.stderr)
+	# print('> uniflevs() of {} started'.format(task.name), file=sys.stderr)
 	lmax = _LEVSMAX  # Max number of the output levels for the network
 	# Check the number of output levels and restructure the output if required saving the original one
 	levsnum = 0  # Total number of the (valid) output levels for all alg. parameters
@@ -540,9 +543,9 @@ def uniflevs(task):
 	origdir = None
 	root0 = True  # Scp enumerates root on the zero level
 	fetchLevId = task.params['fetchLevId']  # Callback to fetch level ids
-	for sbt, tpars in viewitems(task.params):
+	for sbt, tpars in viewitems(task.params['subtasks']):
 		try:
-			taskpath = task.params if isinstance(task.params, str) else task.params['taskpath']
+			taskpath = tpars if isinstance(tpars, str) else tpars['taskpath']
 			# assert os.path.isdir(taskpath) and callable(fetchLevId), (
 			# 	'Invalid job parameters:  taskpath: {}, fetchLevId callable: {}'.format(
 			# 	taskpath, callable(fetchLevId)))
@@ -565,9 +568,10 @@ def uniflevs(task):
 				# Sort levnames in a way to start from the root (the most coarse-grained) level
 				levnames.sort(key=fetchLevId, reverse=not root0)
 				pouts.append((outname, levnames))  # Output dir name without the path and correponding levels
+				# print('> pout added: {} {} levs ({} .. {})'.format(outname, len(levnames), levnames[0], levnames[-1]), file=sys.stderr)
 		except Exception as err:  #pylint: disable=W0703
 			print('ERROR, {} subtask output levels aggregating unification failed'
-				', {} params ({}): {}. Discarded. {}'.format(sbt.name
+				', {} params ({}): {}. Discarded. {}'.format(sbt
 				, None if tpars is None else len(tpars), type(tpars).__name__
 				, err, traceback.format_exc(3)), file=sys.stderr)
 	if not pouts:
@@ -594,6 +598,7 @@ def uniflevs(task):
 	# NOTE: Take the most coarce-grained level when only a single level from the parameterized
 	# output is taken.
 	# Remained number of output clusterings after the reservation of a single level in each output
+	# print('> unidir: {}, {} pouts, {} levsnum'.format(unidir, len(pouts), levsnum), file=sys.stderr)
 	numouts = len(pouts)
 	iroot = 0 if root0 else -1  # Index of the root level
 	if numouts < lmax:
@@ -605,15 +610,17 @@ def uniflevs(task):
 			# Evaluate current number of the processing levels, take at least one
 			# in addition to the already reserved becaise the number of levels in
 			# the begin of pouts is maximal
-			numcur = iround(len(levs) * lmax / float(levsnum), False)
-			if lmax and not numcur:
-				numcur = 1
-			if numcur:
-				# Take 2+ levels
-				levnames = reduceLevels(levs, 1 + numcur, root0)
-				lmax -= numcur  # Note: the reserved 1 level was already considered
-				# Note: even when lmax becomes zero, the reserved levels should be linked below
-			else:
+			levnames = None
+			if levsnum:
+				numcur = iround(len(levs) * lmax / float(levsnum), False)
+				if lmax and not numcur:
+					numcur = 1
+				if numcur:
+					# Take 2+ levels
+					levnames = reduceLevels(levs, 1 + numcur, root0)
+					lmax -= numcur  # Note: the reserved 1 level was already considered
+					# Note: even when lmax becomes zero, the reserved levels should be linked below
+			if not levnames:
 				# Take only the root level
 				levnames = (levs[iroot],)
 			# Link the required levels

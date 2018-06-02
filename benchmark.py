@@ -1818,8 +1818,8 @@ if __name__ == '__main__':
 			'  ATTENTION: "-qu" requires at least one more "-qX" flag to indicate what measures should be (re)evaluated.'
 			' Applicable only for the same seed as existed evaluations had. The existed quality evaluations are backed up anyway.',
 			'NOTE: multiple quality evaluation options can be specified via the multiple -q options.',
-			'  --timeout, -t=[<days:int>d][<hours:int>h][<minutes:int>m][<seconds:float>] | -t[X]=<float>  - timeout for each benchmarking'
-			' application per single evaluation on each network in sec, min or hours; 0 - no timeout, default: {algtimeout}',
+			'  --timeout, -t=[<days:int>d][<hours:int>h][<minutes:int>m][<seconds:float>] | -t[X]=<float>  - timeout for each'
+			' benchmarking application per single evaluation on each network; 0 - no timeout, default: {algtimeout}. X option:',
 			'    s  - time in seconds, default option',
 			'    m  - time in minutes',
 			'    h  - time in hours',

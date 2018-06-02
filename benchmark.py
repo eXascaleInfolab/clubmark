@@ -447,11 +447,14 @@ def parseParams(args):
 			if pos == -1 or arg[2] not in 'smh=' or len(arg) == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
 			pos += 1
-			if arg[2] == 'm':
-				timemul = 60  # Minutes
-			elif arg[2] == 'h':
-				timemul = 3600  # Hours
-			opts.timeout = float(arg[pos:]) * timemul
+			if arg[2] == '=':
+				opts.timeout = dhmsSec(arg[pos:])
+			else:
+				if arg[2] == 'm':
+					timemul = 60  # Minutes
+				elif arg[2] == 'h':
+					timemul = 3600  # Hours
+				opts.timeout = float(arg[pos:]) * timemul
 			assert opts.timeout >= 0, 'Non-negative timeout is expected'
 		elif arg[1] == 'd':
 			if len(arg) <= 3 or arg[2] != '=':
@@ -1815,11 +1818,12 @@ if __name__ == '__main__':
 			'  ATTENTION: "-qu" requires at least one more "-qX" flag to indicate what measures should be (re)evaluated.'
 			' Applicable only for the same seed as existed evaluations had. The existed quality evaluations are backed up anyway.',
 			'NOTE: multiple quality evaluation options can be specified via the multiple -q options.',
-			'  --timeout, -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on'
-			' each network in sec, min or hours; 0 sec - no timeout, default: {th} h {tm} min {ts} sec',
+			'  --timeout, -t=[<days:int>d][<hours:int>h][<minutes:int>m][<seconds:float>] | -t[X]=<float>  - timeout for each benchmarking'
+			' application per single evaluation on each network in sec, min or hours; 0 - no timeout, default: {algtimeout}',
 			'    s  - time in seconds, default option',
 			'    m  - time in minutes',
 			'    h  - time in hours',
+			'    Examples: `-th=2.5` is the same as `-t=2h30m` and `--timeout=2h1800`',
 			'  --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and'
 			' stochastic algorithms, contains uint64_t value. Default: {seedfile}',
 			'NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seed.',
@@ -1839,7 +1843,7 @@ if __name__ == '__main__':
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {evaltimeout}.',
 			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=_RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=_SEPINST, seppars=_SEPPARS, sepshf=_SEPSHF, rsvpathsmb=(_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID)
-				, anppsnum=len(apps), apps=', '.join(apps), th=_TIMEOUT//3600, tm=_TIMEOUT//60%60, ts=_TIMEOUT%60
+				, anppsnum=len(apps), apps=', '.join(apps), algtimeout=secDhms(_TIMEOUT)
 				, seedfile=_SEEDFILE, port=_PORT, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
 	else:
 		# Fill signals mapping {value: name}

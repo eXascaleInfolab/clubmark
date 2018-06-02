@@ -265,6 +265,7 @@ def delPathSuffix(path, nameonly=False):
 
 def parseName(path, nameonly=False):
 	"""Fetch basename, instance id, algorithm params, shuffle id and path id
+	NOTE: the fetched components are prepended with their separators
 
 	path  - path to be processed WITHOUT the file extension
 	nameonly  - process path as name only component (do not split the basedir)

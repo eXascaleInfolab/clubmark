@@ -51,7 +51,7 @@ from sys import executable as PYEXEC  #pylint: disable=C0412;  # Full path to th
 # from functools import wraps  # Decorating tools for the JobTracer
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty \
 	, tobackup, escapePathWildcards, _UTILDIR, _ORIGDIR, _TIMESTAMP_START_HEADER \
-	, _SEPPARS , _SEPSUBTASK, _SEPPATHID
+	, _SEPPARS, _SEPSUBTASK, _SEPPATHID
 from benchevals import _SEPNAMEPART, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
 from utils.mpepool import Job, Task
 from algorithms.utils.parser_nsl import parseHeaderNslFile  #, asymnet
@@ -319,7 +319,8 @@ class PyBin(object):
 
 
 def iround(val, lower):
-	"""Round value to lower or upper integer in case of the equally good fit
+	"""Round value to lower or upper integer in case of the equally good fit.
+	Equas to math.round for lower = False.
 
 	val: float  - the value to be rounded
 	lower: bool  - direction of the rounding resolution in case of the equally good fit
@@ -340,7 +341,7 @@ def iround(val, lower):
 	3
 	"""
 	q, r = divmod(val, 1)
-	res = int(q if lower and r <= 0.5 or not lower  and r < 0.5 else q + 1)
+	res = int(q if lower and r <= 0.5 or not lower and r < 0.5 else q + 1)
 	# print('>> val: {:.3f}, q: {:.0f}, r: {:.3f}, res: {:.0f}'.format(val, q, r-0.5, res), file=sys.stderr)
 	return res
 
@@ -438,7 +439,7 @@ def limlevs(job):
 	to the dedivated directory and uniformly linking the required number of levels it
 	to the expected output path.
 
-	Employed job params:
+	Job params:
 	taskpath: str  - task path
 	fetchLevId: callable  - algorithm-specific callback to fetch level ids
 	levfmt (optional): str  - level format WILDCARD (only ? and * are supported
@@ -480,6 +481,7 @@ def limlevs(job):
 	# Uniformly link the required number of levels to the expected output dir
 	os.mkdir(taskpath)
 	levnames.sort(key=fetchLevId)
+	# Note: all callers have end indexing of the root level: Louvain, Oslom, Daoc
 	levnames = reduceLevels(levnames, lmax, False)
 	# print('> Creating symlinks for ', levnames, file=sys.stderr)
 	for lev in levnames:
@@ -493,17 +495,13 @@ def subuniflevs(job):
 	current network (input dataset).
 	Required at least for Scp.
 
-	Employed job params:
-	taskpath: str  - task path
-	fetchLevId: callable  - algorithm-specific callback to fetch level ids
+	Job params are propagated to the super-task params
+		taskpath: str  - task path
 	"""
-	assert job.task and job.task.task, 'A task and its super task should exist in the job: ' + job.name
+	# fetchLevId: callable  - algorithm-specific callback to fetch level ids
 	# aparams: str  - algorithm parameters
+	assert job.task and job.task.task, 'A task and its super task should exist in the job: ' + job.name
 	supertask = job.task.task
-	# assert os.path.isdir(taskpath) and callable(fetchLevId) and supertask, (
-	# 	'Invalid job parameters:  taskpath: {}, fetchLevId callable: {}, supertask: {}'.format(
-	# 	taskpath, callable(fetchLevId), supertask.name))
-	# levnames = os.listdir(taskpath)  # Note: only file names without the path are returned
 	if supertask.params is None:
 		supertask.params = {job.task.name: job.params}
 	else:
@@ -520,7 +518,15 @@ def uniflevs(task):
 	aggregated values to this task on successfull completion. Note that some
 	subtasks might be failed but this task should perform the final aggregation
 	till at least any subtask completed and provided required data.
+
+	Task params:
+	params: dict, str
+		outpname: str, str  - target output name without the path
+		fetchLevId: callable  - algorithm-specific callback to fetch level ids
+		<subtask_name>: str, <subtask_params>: dict  - processing outputs of the subtasks
 	"""
+	# root0: bool  - whether the hierarchy root (the most coarse-grained) level
+	# has index 0 or the maximal index
 	if not task.params:
 		# Note: this is not an error to be reported to the stderr
 		print('WARNING, no any output levels are reported for the unification in the super task: ', task.name)
@@ -529,12 +535,98 @@ def uniflevs(task):
 	lmax = _LEVSMAX  # Max number of the output levels for the network
 	# Check the number of output levels and restructure the output if required saving the original one
 	levsnum = 0  # Total number of the (valid) output levels for all alg. parameters
+	bpath = None  # Base path
+	pouts = []  # Parameterized outputs of levels to be processed: [(outname, levnames), ...]
+	origdir = None
+	root0 = True  # Scp enumerates root on the zero level
+	fetchLevId = task.params['fetchLevId']  # Callback to fetch level ids
 	for sbt, tpars in viewitems(task.params):
-		taskpath = task.params['taskpath']
-		fetchLevId = task.params['fetchLevId']
-		assert os.path.isdir(taskpath) and callable(fetchLevId), (
-			'Invalid job parameters:  taskpath: {}, fetchLevId callable: {}'.format(
-			taskpath, callable(fetchLevId)))
+		try:
+			taskpath = task.params if isinstance(task.params, str) else task.params['taskpath']
+			# assert os.path.isdir(taskpath) and callable(fetchLevId), (
+			# 	'Invalid job parameters:  taskpath: {}, fetchLevId callable: {}'.format(
+			# 	taskpath, callable(fetchLevId)))
+			# Define base path
+			if bpath is not None:
+				outbase, outname = os.path.split(taskpath)
+				if outbase != bpath:
+					print('ERROR, levels unification called for distinct networks. Omitted for', taskpath, file=sys.stderr)
+					continue
+			else:
+				bpath, outname = os.path.split(taskpath)
+			# Move parameterized levels to the orig dir
+			if origdir is None:
+				origdir = '/'.join((bpath if bpath else '.', _ORIGDIR))
+			# newdir = origdir + oname + '/'
+			levnames = os.listdir(taskpath)  # Note: only file names without the path are returned
+			shutil.move(taskpath, origdir)
+			if levnames:
+				levsnum += len(levnames)
+				# Sort levnames in a way to start from the root (the most coarse-grained) level
+				levnames.sort(key=fetchLevId, reverse=not root0)
+				pouts.append((outname, levnames))  # Output dir name without the path and correponding levels
+		except Exception as err:  #pylint: disable=W0703
+			print('ERROR, {} subtask output levels aggregating unification failed'
+				', {} params ({}): {}. Discarded. {}'.format(sbt.name
+				, None if tpars is None else len(tpars), type(tpars).__name__
+				, err, traceback.format_exc(3)), file=sys.stderr)
+	if not pouts:
+		print('WARNING uniflevs(), nothing to process because the output levels are empty for the task'
+			, task.name, file=sys.stderr)
+		return
+	# Sort pouts by the decreasing number of levels, i.e. from the fine to coarse grained outputs
+	pouts.sort(key=lambda outp: len(outp[1]), reverse=True)
+	# Create the unifying output dir
+	uniout = task.params.get('outpname')
+	if not uniout:
+		uniout, _apars, insid, shid, pathid = parseName(pouts[0], True)  # Parse name only without the path
+		uniout = ''.join((uniout, insid, shid, pathid))  # Note: alg params marker is intentionally omitted
+	assert uniout, 'Output directory name should be defined'
+	unidir = '/'.join((bpath if bpath else '.', uniout, ''))  # Note: ending '' to have the ending '/'
+	if os.path.exists(unidir):
+		if not (os.path.isdir(unidir) and dirempty(unidir)):
+			tobackup(unidir, False, move=True)  # Move to the backup (old results can't be reused)
+			os.mkdir(unidir)
+	else:
+		os.mkdir(unidir)
+	# Take lmax output levels from pnets parameterized outputs proportionally to the number of
+	# levels in each output but with at least one output per each network
+	# NOTE: Take the most coarce-grained level when only a single level from the parameterized
+	# output is taken.
+	# Remained number of output clusterings after the reservation of a single level in each output
+	numouts = len(pouts)
+	iroot = 0 if root0 else -1  # Index of the root level
+	if numouts < lmax:
+		# rlevs = levsnum - numouts
+		lmax -= numouts  # Remained limit considering the reserved levels from each output
+		levsnum -= numouts  # The number of levels besideds the reserved
+		for i in range(0, numouts):
+			outname, levs = pouts[i]
+			# Evaluate current number of the processing levels, take at least one
+			# in addition to the already reserved becaise the number of levels in
+			# the begin of pouts is maximal
+			numcur = iround(len(levs) * lmax / float(levsnum), False)
+			if lmax and not numcur:
+				numcur = 1
+			if numcur:
+				# Take 2+ levels
+				levnames = reduceLevels(levs, 1 + numcur, root0)
+				lmax -= numcur  # Note: the reserved 1 level was already considered
+				# Note: even when lmax becomes zero, the reserved levels should be linked below
+			else:
+				# Take only the root level
+				levnames = (levs[iroot],)
+			# Link the required levels
+			for lname in levnames:
+				os.symlink(os.path.relpath(''.join((origdir, outname, '/', lname)), unidir)
+					, '/'.join((unidir, lname)))
+		assert lmax >= 0, 'lmax levels at most shuld be outputted'
+	else:
+		# Link a single network from as many subsequent pouts as possible
+		for i in range(0, lmax):
+			outname, levs = pouts[i]
+			os.symlink(os.path.relpath(''.join((origdir, outname, '/', levs[iroot])), unidir)
+				, '/'.join((unidir, levs[iroot])))
 
 
 def fetchLevIdCnl(name):
@@ -724,7 +816,8 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	taskbasex = delPathSuffix(taskname, True)
 	tasksuf = taskname[len(taskbasex):]
 	aggtname = taskname if not pathid else _SEPPATHID.join((taskname, pathid))
-	task = Task(aggtname if task is None else _SEPSUBTASK.join((task.name, tasksuf)), task=task, onfinish=uniflevs)
+	task = Task(aggtname if task is None else _SEPSUBTASK.join((task.name, tasksuf))
+		, task=task, onfinish=uniflevs, params={'outpname': aggtname, 'fetchLevId': fetchLevIdCnl})
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 8  # Max clique size (~ min node degree to be considered)
 	steps = str(_LEVSMAX)  # Use 10 scale levels as in Ganxis
@@ -754,7 +847,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 			# so it is better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
 			, task=task, category=algname if avgnls is not None else '_'.join((algname, kstrex))
 			, size=size * (k ** golden if avgnls is None or k >= avgnls else (avgnls - k) ** (-1/golden))
-			, ondone=subuniflevs, params={'taskpath': taskpath, 'fetchLevId': fetchLevIdCnl}  # , 'aparams': kstrex
+			, ondone=subuniflevs, params=taskpath # {'taskpath': taskpath} # , 'aparams': kstrex
 			, stdout=logfile, stderr=errfile))
 
 	return kmax + 1 - kmin

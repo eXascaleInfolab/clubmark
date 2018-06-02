@@ -947,7 +947,7 @@ def inputFormats():
 {0}...
 """.format(ntspan)
 		, fmtdescr=
-"""{0}The header is optional. The arcs (directed links) are unique and always in pairs, i.e. BA should be specified until it's weight is zero if AB is specified.
+"""{0}The header is optional. The arcs (directed links) are unique and always in pairs, i.e. BA should be specified until its weight is zero if AB is specified.
 {0}Id is a positive integer number (>= 1), id range is solid.
 {0}Weight is a non-negative floating point number.""".format(ntspan))
 

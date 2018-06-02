@@ -374,7 +374,7 @@ class ShufflesAgg(object):
 
 		# Extract algorithm params if exist from the 'taskoutp' job param
 		taskname = os.path.splitext(os.path.split(resfile)[1])[0]
-		# Validate taskname, i.e. validate that shuffles aggregator is called for it's network
+		# Validate taskname, i.e. validate that shuffles aggregator is called for its network
 		assert taskname == self.name[self.name.rfind('/') + 1:], (
 			'taskname validation failed: "{}" does not belong to "{}"'.format(taskname, self.name))
 		algpars = ''  # Algorithm params
@@ -755,7 +755,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 			#	jbasename += pathid
 			clslev = jbasename[pos + icnpid:].lstrip('_-.')  # Note: clslev can be empty if jbasename == clsname[:icnpid]
 			#print('Lev naming: clslev = {}, jbasename = {}'.format(clslev, jbasename))
-			# Note: it's better to path clsname and shuffle separately to avoid redundant cut on evaluations processing
+			# Note: it is better to path clsname and shuffle separately to avoid redundant cut on evaluations processing
 			#if shuffle:
 			#	clslev = _SEPNAMEPART.join((clslev, shuffle))
 

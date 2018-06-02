@@ -667,7 +667,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	compress: bool  - compress or just copy spesified paths
 	xsuffix  - extra suffix to be added to the backup name before the time suffix
 	move: bool  - whether to move or copy the data to the backup
-	relpath: bool  - convert the basepath to the relative one to it's parent dir,
+	relpath: bool  - convert the basepath to the relative one to its parent dir,
 		which makes the archive portable to other machines
 
 	return  bckpath: str  - path of the made archive / backup dir or None

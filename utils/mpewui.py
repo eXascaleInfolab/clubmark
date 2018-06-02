@@ -266,15 +266,14 @@ class ResultOptions(object):
 					else:
 						vbeg = float('-inf')
 					# Consider optional filtering fields
-					val = UiResFilterVal(beg=vbeg, end=vend, opt=k[-1]=='*')  #pylint: disable=C0326
+					val = UiResFilterVal(beg=vbeg, end=vend, opt=k.endswith('*'))  #pylint: disable=C0326
 					if val.opt:
-						k = k[:-1]
+						k = k[:-1]  # Erase '*'
 					self.fltopts[k] = val
 				else:
+					if k.endswith('*'):
+						raise ValueError('Only defined attributes can be optional: ' + k)
 					# Filter meaning: the option should present with any (non-None) value
-					if k[-1] == '*':
-						assert False, 'Only defined attributes can be optional: ' + k
-						k = k[:-1]
 					self.fltopts[k] = None
 		# # Fetch the kind of items to be shown
 		# self.kind = qdict.get(UiResOpt.kind.name)  #pylint: disable=E1101
@@ -291,7 +290,6 @@ class ResultOptions(object):
 			self.refresh = int(self.refresh)  # Note: refresh content value is int
 
 
-
 class UiCmd(object):
 	"""UI Command (for the MVC controller)"""
 	def __init__(self, cid, data={}):
@@ -299,7 +297,7 @@ class UiCmd(object):
 
 		Args:
 			cid: UiCmdId  - Command identifier
-			data: dict  - request (parameters) to the ExecPool on it's call and
+			data: dict  - request (parameters) to the ExecPool on its call and
 				resulting (response) data (or empty dict) afterwards
 
 		Internal attributes:
@@ -395,7 +393,7 @@ class WebUiApp(threading.Thread):
 		self.daemon = daemon
 
 
-	# ATTENTION: a bottle decorator works only when it's the first decorator of the function
+	# ATTENTION: a bottle decorator works only when it is the first decorator of the function
 	@staticmethod
 	@bottle.get('/favicon.ico')
 	def favicon():
@@ -403,7 +401,7 @@ class WebUiApp(threading.Thread):
 		return bottle.static_file('favicon.ico', root='images')
 
 
-	# ATTENTION: a bottle decorator works only when it's the first decorator of the function
+	# ATTENTION: a bottle decorator works only when it is the first decorator of the function
 	@staticmethod
 	@bottle.error(404)
 	def error404(err, msg=''):
@@ -463,7 +461,7 @@ class WebUiApp(threading.Thread):
 		# Parse URL parameters and form the UI command parameters
 		try:
 			resopts = ResultOptions(bottle.request.query)
-		except (KeyError, ValueError, AssertionError) as err:
+		except (KeyError, ValueError) as err:
 			# 400  - Bad Request
 			# 415  - Unsupported Media Type
 			bottle.response.status = 400

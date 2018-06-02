@@ -49,8 +49,9 @@ import subprocess
 from numbers import Number  # To verify that a variable is a number (int or float)
 from sys import executable as PYEXEC  #pylint: disable=C0412;  # Full path to the current Python interpreter
 # from functools import wraps  # Decorating tools for the JobTracer
-from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, \
- tobackup, escapePathWildcards, _SEPPARS, _UTILDIR, _ORIGDIR, _TIMESTAMP_START_HEADER, _SEPSUBTASK
+from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty \
+	, tobackup, escapePathWildcards, _UTILDIR, _ORIGDIR, _TIMESTAMP_START_HEADER \
+	, _SEPPARS , _SEPSUBTASK, _SEPPATHID
 from benchevals import _SEPNAMEPART, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
 from utils.mpepool import Job, Task
 from algorithms.utils.parser_nsl import parseHeaderNslFile  #, asymnet
@@ -351,7 +352,7 @@ def reduceLevels(levs, num, root0):
 	levs: list  - ORDERED levels to be processed, where the list starts from the bottom
 		level of the hierarchy having the highest (most fine-grained resolution) and the
 		last level in the list is the root level having the most coarse-grained resolution
-	num: uint  - target number of levels to be fetched uniformly
+	num: uint >= 1  - target number of levels to be fetched uniformly
 	root0: bool  - whether the root (most coarse-crained) level has zero or maximal index
 
 	return  rlevs: list, tuple  - list of the reduced levels
@@ -425,10 +426,9 @@ def reduceLevels(levs, num, root0):
 		# 1 element tuple
 		return (levs[(nlevs - root0) // 2],)  # Note: -1 to give priority to the begin
 	elif num <= 0:
-		assert False, 'At least one level is expected after the reduction'
-		return ()
+		raise ValueError('The required number of levels should be positive: ' + str(num))
 	else:
-		raise ValueError('ERROR, unexpected value of ')
+		raise AssertionError('The value of num has not been handled: ' + str(num))
 
 
 def limlevs(job):
@@ -458,8 +458,8 @@ def limlevs(job):
 		levnames = [os.path.split(lev)[1] for lev in glob.iglob('/'.join((taskpath, levfmt)))]
 	else:
 		levnames = os.listdir(taskpath)  # Note: only file names without the path are returned
-	print('> limlevs() called from {}, levnames ({} / {}): {}'.format(
-		job.name, len(levnames), lmax, levnames), file=sys.stderr)
+	# print('> limlevs() called from {}, levnames ({} / {}): {}'.format(
+	# 	job.name, len(levnames), lmax, levnames), file=sys.stderr)
 	if len(levnames) <= lmax:
 		return
 	# Move the initial output to the _ORIGDIR
@@ -472,7 +472,8 @@ def limlevs(job):
 	if not os.path.exists(origdir):
 		os.mkdir(origdir)
 	elif os.path.exists(newdir):
-		print('WARNING execLouvainIg.limlevs(), removing the former _ORIGDIR clusters:', newdir)
+		# Note: this notification is not so significant to be logged to the stderr
+		print('WARNING {}.limlevs(), removing the former _ORIGDIR clusters: {}'.format(job.name, newdir))
 		# New destination of the original task output
 		shutil.rmtree(newdir)
 	shutil.move(taskpath, origdir)
@@ -480,9 +481,79 @@ def limlevs(job):
 	os.mkdir(taskpath)
 	levnames.sort(key=fetchLevId)
 	levnames = reduceLevels(levnames, lmax, False)
-	print('> Creating symlinks for ', levnames, file=sys.stderr)
+	# print('> Creating symlinks for ', levnames, file=sys.stderr)
 	for lev in levnames:
 		os.symlink(os.path.relpath(newdir + lev, taskpath), '/'.join((taskpath, lev)))
+
+
+def subuniflevs(job):
+	"""Subtask of the levels output unification.
+	Aggregates output levels from the parameterized job and reports them to the
+	super task to unify resutls for all parameterized jobs of the algorithm on the
+	current network (input dataset).
+	Required at least for Scp.
+
+	Employed job params:
+	taskpath: str  - task path
+	fetchLevId: callable  - algorithm-specific callback to fetch level ids
+	"""
+	assert job.task and job.task.task, 'A task and its super task should exist in the job: ' + job.name
+	# aparams: str  - algorithm parameters
+	supertask = job.task.task
+	# assert os.path.isdir(taskpath) and callable(fetchLevId) and supertask, (
+	# 	'Invalid job parameters:  taskpath: {}, fetchLevId callable: {}, supertask: {}'.format(
+	# 	taskpath, callable(fetchLevId), supertask.name))
+	# levnames = os.listdir(taskpath)  # Note: only file names without the path are returned
+	if supertask.params is None:
+		supertask.params = {job.task.name: job.params}
+	else:
+		supertask.params[job.task.name] = job.params
+
+
+def uniflevs(task):
+	"""Unify representation of the output levels.
+	Aggregates levels from each parameter in a uniform way limiting their number
+	to the requrired amount.
+
+	At least one level is taken from the levels output corresponding to each parameter.
+	The output levels of each parameter should be boun to task, which should pass
+	aggregated values to this task on successfull completion. Note that some
+	subtasks might be failed but this task should perform the final aggregation
+	till at least any subtask completed and provided required data.
+	"""
+	if not task.params:
+		# Note: this is not an error to be reported to the stderr
+		print('WARNING, no any output levels are reported for the unification in the super task: ', task.name)
+		return
+	print('> uniflevs() of {} started'.format(task.name), file=sys.stderr)
+	lmax = _LEVSMAX  # Max number of the output levels for the network
+	# Check the number of output levels and restructure the output if required saving the original one
+	levsnum = 0  # Total number of the (valid) output levels for all alg. parameters
+	for sbt, tpars in viewitems(task.params):
+		taskpath = task.params['taskpath']
+		fetchLevId = task.params['fetchLevId']
+		assert os.path.isdir(taskpath) and callable(fetchLevId), (
+			'Invalid job parameters:  taskpath: {}, fetchLevId callable: {}'.format(
+			taskpath, callable(fetchLevId)))
+
+
+def fetchLevIdCnl(name):
+	"""Fetch level id of the hierarchy/scale from the output Cnl file name.
+	The format of the output file name: <outpfile_name>_<lev_num>.cnl
+
+	name: str  - level name
+
+	return  id: uint  - hierarchy/scale level id
+	"""
+	iid = name.rfind('_')  # Index of the id
+	if iid == -1:
+		raise ValueError('The file name does not contain lev_num: ' + name)
+	iid += 1
+	iide = name.rfind('.', iid)  # Extension index
+	if iide == -1:
+		print('WARNING, Cnl files should be named with the .cnl extension:', name, file=sys.stderr)
+		iide = len(name)
+	return int(name[iid:iide])
 
 
 # Louvain
@@ -537,7 +608,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 
 	returns  - the number of executions or None
 	"""
-	# Note: .. + 0 >= 0 to be sure that type is arithmetic, otherwise it's always true for the str
+	# Note: .. + 0 >= 0 to be sure that type is arithmetic, otherwise it is always true for the str
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
 		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
@@ -565,23 +636,6 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
-	def fetchLevId(name):
-		"""Fetch level id of the hierarchy from the output file name.
-		The format of the output file name: <outpfile_name>_<lev_num>.<extension>
-
-		name: str  - level name
-
-		return  id: uint  - hierarchy level id
-		"""
-		iid = name.rfind('_')  # Index of the id
-		if iid == -1:
-			raise ValueError('The file name does not contain lev_num: ' + name)
-		iid += 1
-		iide = name.rfind('.', iid)  # Extension index
-		if iide == -1:
-			iide = len(name)
-		return int(name[iid:iide])
-
 	# def relpath(path, basedir=workdir):
 	# 	"""Relative path to the specified basedir"""
 	# 	return os.path.relpath(path, basedir)
@@ -599,7 +653,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 		, '-lo', ''.join((relpath(taskpath), '/', taskname, _EXTCLNODES)), netfile)
 	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, stdout=os.devnull
-		, ondone=limlevs, params={'taskpath': taskpath, 'fetchLevId': fetchLevId}
+		, ondone=limlevs, params={'taskpath': taskpath, 'fetchLevId': fetchLevIdCnl}
 		, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 
 	execnum = 1
@@ -629,7 +683,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
 		.format(execpool, netfile, asym, timeout))
 
-	# Fetch the task name
+	# Fetch the task name (includes networks instance and shuffle if any)
 	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network; , netext
 	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'scp'
@@ -669,7 +723,8 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	# Create subtask to monitor execution for each clique size
 	taskbasex = delPathSuffix(taskname, True)
 	tasksuf = taskname[len(taskbasex):]
-	task = Task(taskname if task is None else _SEPSUBTASK.join((task.name, tasksuf)), task=task)
+	aggtname = taskname if not pathid else _SEPPATHID.join((taskname, pathid))
+	task = Task(aggtname if task is None else _SEPSUBTASK.join((task.name, tasksuf)), task=task, onfinish=uniflevs)
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 8  # Max clique size (~ min node degree to be considered)
 	steps = str(_LEVSMAX)  # Use 10 scale levels as in Ganxis
@@ -696,9 +751,10 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ktaskname)), workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
 			# Note: increasing clique size k causes ~(k ** golden) increased consumption of both memory and time (up to k ^ 2),
-			# so it's better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
+			# so it is better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
 			, task=task, category=algname if avgnls is not None else '_'.join((algname, kstrex))
 			, size=size * (k ** golden if avgnls is None or k >= avgnls else (avgnls - k) ** (-1/golden))
+			, ondone=subuniflevs, params={'taskpath': taskpath, 'fetchLevId': fetchLevIdCnl}  # , 'aparams': kstrex
 			, stdout=logfile, stderr=errfile))
 
 	return kmax + 1 - kmin

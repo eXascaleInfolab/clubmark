@@ -95,7 +95,8 @@ def secDhms(seconds):
 
 	seconds: ufloat  - seconds to be converted
 
-	return  duration: str  - resulting duration in the format: [<days>d][<hours>h][<minutes>m<seconds>]
+	return  duration: str  - resulting duration in the format:
+		[<days:int>d][<hours:int>h][<minutes:int>m][<seconds:float>]
 
 	>>> secDhms(10)
 	'10'
@@ -132,7 +133,8 @@ def secDhms(seconds):
 def dhmsSec(dhms):
 	"""Convert dhms string duration to seconds
 
-	dhms  - duration given as string in the format: [<days>d][<hours>h][<minutes>m<seconds>]
+	dhms  - duration given as string in the format:
+		[<days:int>d][<hours:int>h][<minutes:int>m][<seconds:float>]
 
 	return  secs: uint  - seconds, unsigned int
 

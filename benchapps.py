@@ -445,7 +445,6 @@ def limlevs(job):
 		as in the shell) to fetch levels among other files, for example: 'tp*'.
 		Required at least for Oslom.
 	"""
-	# print('> limlevs() called from {}, taskpath: {}'.format(job.name, job.params))
 	lmax = _LEVSMAX  # Max number of the output levels for the network
 	# Check the number of output levels and restructure the output if required saving the original one
 	taskpath = job.params['taskpath']
@@ -456,9 +455,11 @@ def limlevs(job):
 	# Filter files from other items (accessory dirs)
 	levfmt = job.params.get('levfmt')
 	if levfmt:
-		levnames = glob.glob(levfmt)
+		levnames = [os.path.split(lev)[1] for lev in glob.iglob('/'.join((taskpath, levfmt)))]
 	else:
-		levnames = os.listdir(taskpath)  # Note: taskpath here is already relative
+		levnames = os.listdir(taskpath)  # Note: only file names without the path are returned
+	print('> limlevs() called from {}, levnames ({} / {}): {}'.format(
+		job.name, len(levnames), lmax, levnames), file=sys.stderr)
 	if len(levnames) <= lmax:
 		return
 	# Move the initial output to the _ORIGDIR
@@ -470,16 +471,16 @@ def limlevs(job):
 	newdir = origdir + oname + '/'
 	if not os.path.exists(origdir):
 		os.mkdir(origdir)
-	else:
-		if os.path.exists(newdir):
-			print('WARNING execLouvainIg.limlevs(), removing the former _ORIGDIR clusters:', newdir)
-			# New destination of the original task output
-			shutil.rmtree(newdir)
+	elif os.path.exists(newdir):
+		print('WARNING execLouvainIg.limlevs(), removing the former _ORIGDIR clusters:', newdir)
+		# New destination of the original task output
+		shutil.rmtree(newdir)
 	shutil.move(taskpath, origdir)
 	# Uniformly link the required number of levels to the expected output dir
 	os.mkdir(taskpath)
 	levnames.sort(key=fetchLevId)
 	levnames = reduceLevels(levnames, lmax, False)
+	print('> Creating symlinks for ', levnames, file=sys.stderr)
 	for lev in levnames:
 		os.symlink(os.path.relpath(newdir + lev, taskpath), '/'.join((taskpath, lev)))
 

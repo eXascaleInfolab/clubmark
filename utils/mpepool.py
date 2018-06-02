@@ -255,8 +255,8 @@ def infodata(obj, propflt=None, objflt=None):
 				print('  WARNING, objflt item does not belong to the {}: {}'.format(
 					type(obj).__name__, prop), file=sys.stderr)
 			# Note: pcon is None requires non-None pval
-			if (not pcon.opt and prop not in obj) or (pcon is None and pval is None) or (
-			pcon is not None and ((pcon.end is None and pval != pcon.beg)
+			if (pcon is None and pval is None) or (pcon is not None and (
+			(not pcon.opt and prop not in obj) or (pcon.end is None and pval != pcon.beg)
 			or pcon.end is not None and (pval < pcon.beg or pval >= pcon.end))):
 				# print('>>> ret None, 1:', prop not in obj, '2:', pcon.end is None and pval != pcon.beg
 				# 	, '3:', pcon.end is not None, '4:', pval < pcon.beg or pval >= pcon.end)
@@ -419,7 +419,8 @@ class TaskInfo(object):
 	@property
 	def duration(self):
 		"""Execution duration"""
-		return None if self.tstop is None or self.tstart is None else self.tstop - self.tstart
+		return None if self.tstart is None else (self.tstop if self.tstop is not None
+			else time.perf_counter()) - self.tstart
 
 
 class TaskInfoExt(object):
@@ -1644,8 +1645,11 @@ class ExecPool(object):
 								continue
 							tie = tinfe0.setdefault(fji.task, TaskInfoExt(props=None if not tdata else
 								(infoheader(TaskInfo.iterprop(), propflt), tdata)  #pylint: disable=E1101
-								, jobs=None if not jdata else [JobInfo.iterprop()]))  #pylint: disable=E1101
+								, jobs=None if not jdata else [infoheader(JobInfo.iterprop(), propflt)]))  #pylint: disable=E1101
 						if jdata:
+							# tie.jobs might be None if the task created before any of it's DIRECT jobs failed
+							if tie.jobs is None:
+								tie.jobs = [infoheader(JobInfo.iterprop(), propflt)]  #pylint: disable=E1101
 							tie.jobs.append(jdata)
 				# List jobs only if any payload exists besides the header
 				if jobsInfo:
@@ -1734,6 +1738,9 @@ class ExecPool(object):
 								(infoheader(TaskInfo.iterprop(), propflt), tdata)  #pylint: disable=E1101
 								, jobs=None if not jdata else [infoheader(JobInfo.iterprop(), propflt)]))  #pylint: disable=E1101
 						if jdata:
+							# tie.jobs might be None if the task created before any of it's DIRECT jobs created
+							if tie.jobs is None:
+								tie.jobs = [infoheader(JobInfo.iterprop(), propflt)]  #pylint: disable=E1101
 							tie.jobs.append(jdata)
 				if not tinfe0:
 					return

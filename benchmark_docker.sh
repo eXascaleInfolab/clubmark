@@ -27,14 +27,16 @@ WORK_DIR=/opt/clubmark  # Working directory of the benchmark inside the Docker c
 # via pip on pypy
 # Bind Docker :8080 to the host :80 for tcp. To bind with specific host IP: -p IP:8080:80/tcp
 # -rm is used to automaticaly clean up the executed container and remove the virtual file system on exit
-# docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint python3 luaxi/clubmark:env-U16.04-v2.0 ./benchmark.py "$@"
-docker run -it --rm -p 8080:8080/tcp -u `id -u $USER` -w ${WORK_DIR} -v ${CALLDIR}:${WORK_DIR} --entrypoint python3 luaxi/clubmark:v3.0.0a-U16.04 ./benchmark.py "$@"
+# docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint python3 luaxi/pycabem:env-U16.04-v2.0 ./benchmark.py "$@"
+docker run -it --rm -p 8080:8080/tcp -u `id -u $USER` -w ${WORK_DIR} -v ${CALLDIR}:${WORK_DIR} --entrypoint python3 luaxi/clubmark-env:v3.0-U16.04 ./benchmark.py "$@"
 # Or to open "bash" shell in the benchmarking directory:
-# $ docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint bash luaxi/clubmark:env-U16.04-v2.0
+# $ docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint bash luaxi/clubmark-env:v3.0-U16.04
 
 # Examples:
 # $ ./benchmark_docker.sh -a="LouvainIg Randcommuns" -i="syntnets/networks/*/" -i=./realnets -r -th=42 1>>./results/bench.log 2>>./results/bench.err
 # $ ./benchmark_docker.sh -a="LouvainIg Scp Randcommuns Pscan" -i%2=./realnets -r -th=42 1>> ./results/bench.log 2>> ./results/bench.err
+# $ ./benchmark_docker.sh -a="CggcRg CggciRg LouvainIg Oslom2 Pscan Randcommuns Scd Scp" -r -t=36h --runtimeout=12d 1>> ./results/bench.log 2>> ./results/bench.err
+# $ ./benchmark_docker.sh -g=3%5 -a="CggcRg CggciRg LouvainIg Oslom2 Pscan Randcommuns Scd Scp" -r -t=36h --runtimeout=12d 1>> ./results/bench.log 2>> ./results/bench.err
 
 # Note: to redirect host:80 to :8080, where the benchmark WebUI is run:
 # # iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080

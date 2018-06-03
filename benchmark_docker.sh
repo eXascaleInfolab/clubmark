@@ -15,10 +15,11 @@
 
 echo "Ensuring the required host environment..."
 CALLDIR=`dirname $0`  # Calling directory (base path) of this script
+CALLDIR=`readlink -f ${CALLDIR}`  # Conver path to the absolute canonical path (docker requires the absolute path)
 ${CALLDIR}/prepare_hostenv.sh
 
 echo "Starting docker from \"`pwd`\" under user \"$USER\" with the benchmark arguments: $@"
-WORK_DIR=/opt/pycabem  # Working directory of the benchmark inside the Docker container (may not exist on the host)
+WORK_DIR=/opt/clubmark  # Working directory of the benchmark inside the Docker container (may not exist on the host)
 # Notes:
 # - quoted $@ is required to retain internal quotation inside the arguments
 # - python3 is used to run the benchmark instead of pypy to reduce the number of
@@ -26,10 +27,10 @@ WORK_DIR=/opt/pycabem  # Working directory of the benchmark inside the Docker co
 # via pip on pypy
 # Bind Docker :8080 to the host :80 for tcp. To bind with specific host IP: -p IP:8080:80/tcp
 # -rm is used to automaticaly clean up the executed container and remove the virtual file system on exit
-# docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint python3 luaxi/pycabem:env-U16.04-v2.0 ./benchmark.py "$@"
-docker run -it --rm -p 8080:8080/tcp -u `id -u $USER` -w ${WORK_DIR} -v ${CALLDIR}:${WORK_DIR} --entrypoint python3 luaxi/pycabem:v3.0.0a-U16.04 ./benchmark.py "$@"
+# docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint python3 luaxi/clubmark:env-U16.04-v2.0 ./benchmark.py "$@"
+docker run -it --rm -p 8080:8080/tcp -u `id -u $USER` -w ${WORK_DIR} -v ${CALLDIR}:${WORK_DIR} --entrypoint python3 luaxi/clubmark:v3.0.0a-U16.04 ./benchmark.py "$@"
 # Or to open "bash" shell in the benchmarking directory:
-# $ docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint bash luaxi/pycabem:env-U16.04-v2.0
+# $ docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint bash luaxi/clubmark:env-U16.04-v2.0
 
 # Examples:
 # $ ./benchmark_docker.sh -a="LouvainIg Randcommuns" -i="syntnets/networks/*/" -i=./realnets -r -th=42 1>>./results/bench.log 2>>./results/bench.err

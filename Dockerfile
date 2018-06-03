@@ -6,11 +6,11 @@ FROM ubuntu:16.04
 # Note: spaces and quotes (") should be either escaped (with '\') or the spaces
 # can be taken into quotes
 LABEL vendor="eXascale Infolab" \
-      info.exascale.pycabem.version="3.0.0a-noeval" \
-      info.exascale.pycabem.release-date="2018-06-03"
-
+      info.exascale.clubmark_env.version="3.0" \
+      info.exascale.clubmark_env.release-date="2018-06-03" \
+	  description="Execution environment ONLY for the Clubmark (former PyCABeM): https://github.com/eXascaleInfolab/PyCABeM/tree/draft"
 # Make the working directory an optional build parameter specified by --build-arg
-ARG WORK_DIR=/opt/pycabem
+ARG WORK_DIR=/opt/clubmark
 # Requirements (dependencies) files for Python3 relative to the $WORKDIR and
 # without the directory prefix
 ARG PYREQS=pyreqs.txt
@@ -103,20 +103,20 @@ ENTRYPOINT ["python3", "./benchmark.py"]
 #-------------------------------------------------------------------------------
 
 # Expected to be built as
-# $ docker build [--no-cache] [--pull] [--squash] [--compress] -t luaxi/pycabem:env-U16.04-v2.0 .
-# $ docker build -t luaxi/pycabem:v3.0.0a-U16.04 .
-# $ docker push luaxi/pycabem:env-U16.04-v2.0
+# $ docker build [--no-cache] [--pull] [--squash] [--compress] -t luaxi/clubmark:env-U16.04-v2.0 .
+# $ docker build -t luaxi/clubmark:v3.0.0a-U16.04 .
+# $ docker push luaxi/clubmark:env-U16.04-v2.0
 
 # Expected to be called as:
-# $ docker run -it -u $UID -v `pwd`:$WORK_DIR luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
+# $ docker run -it -u $UID -v `pwd`:$WORK_DIR luaxi/clubmark:env-U16.04-v2.0 [<clubmark_args>]
 # Or to open a shell in the benchmarking directory:
-# $ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0
+# $ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/clubmark luaxi/clubmark:env-U16.04-v2.0
 
 # Notes:
 # - "$UID" or "`id -u $USER`" is host user id, otherwise default user is "root",
 #  which results in read-only files owned by the root created on benchmarking execution.
 #  $UID might not be defined in non-bash shells unlike $USER.
-# - "-w /opt/pycabem" should be used if the WORKDIR was omitted in the build file
+# - "-w /opt/clubmark" should be used if the WORKDIR was omitted in the build file
 
 #-------------------------------------------------------------------------------
 # Change log:

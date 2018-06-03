@@ -151,22 +151,22 @@ See also the [brief tutorial on Docker installation and usage](https://www.howto
 
 > Optionally, the `PyCaBeM` docker image containing the execution environment can be built from the source [Dockerfile](Dockerfile) by executing from the repository directory:
 > ```sh
-> $ docker build -t luaxi/pycabem:env-U16.04-v2.0 .
+> $ docker build -t luaxi/clubmark-env:v3.0-U16.04 .
 > ```
 The prebuilt image will be automatically pulled from the *Docker Hub* repository on first docker `run` if it has not been built locally.
 
 To **run the benchmark** you can either execute:
 ```sh
-$ docker run -it -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0 [<pycabem_args>]
+$ docker run -it -u $UID -v `pwd`:/opt/clubmark luaxi/clubmark-env:v3.0-U16.04 [<clubmark_args>]
 ```
-which calls `./benchmark.py [<pycabem_args>]`, or open a shell in the benchmarking directory:
+which calls `./benchmark.py [<clubmark_args>]`, or open a shell in the benchmarking directory:
 ```sh
-$ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/pycabem luaxi/pycabem:env-U16.04-v2.0
+$ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/clubmark luaxi/clubmark-env:v3.0-U16.04
 ```
 and call `./benchmark.py` with the required parameters there.
 > $UID might not be defined in the non-bash shell (sh, etc), then use `id -u $USER` instead.  
 `` `pwd` `` projects to `<PYCABEM_REPOSITORY_PATH>`, which is the current directory and the working directory of the benchmarking.  
-`/opt/pycabem` or any other local directory denotes the place where the benchmarking results and traces are stored, which can be the same as `` `pwd` ``.  
+`/opt/clubmark` or any other local directory denotes th e dirctory in the CONTAINER where the benchmarking results and traces are stored, which is mapped to the current host directory (`` `pwd` ``).  
 See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-with-examples).
 
 See the [Usage](#usage) section to learn more about the benchmark execution and results structure.

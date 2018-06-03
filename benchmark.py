@@ -277,11 +277,13 @@ def parseParams(args):
 				if len(arg) <= nend + 1 or arg[nend] != '=':
 					raise ValueError('Unexpected argument: ' + arg)
 				opts.runtimeout = dhmsSec(arg[nend+1:])
+				continue
 			elif arg.startswith('--evaltimeout'):
 				nend = len('--evaltimeout')
 				if len(arg) <= nend + 1 or arg[nend] != '=':
 					raise ValueError('Unexpected argument: ' + arg)
 				opts.evaltimeout = dhmsSec(arg[nend+1:])
+				continue
 			else:
 				raise ValueError('Unexpected argument: ' + arg)
 

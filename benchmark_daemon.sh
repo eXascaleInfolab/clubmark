@@ -28,7 +28,7 @@ fi
 
 echo "Starting the benchmark in the daemom mode under $PYTHON..."
 #  -dw=${DATASETS}
-nohup $PYTHON benchmark.py -g=3%5 -r -q  -i='realnets/*/' -t=$TIMEOUT \
+nohup $PYTHON benchmark.py -g=3%5 -r -q  -i='realnets/*/' -t=$TIMEOUT --runtimeout=12d \
   1>> $RESDIR/${EXECLOG} 2>> $RESDIR/${EXECERR} &
 
 # utils/exectime -o=results/bench.rcp -n=netgen_3%5_pypy pypy benchmark.py -g=3%5 -th=8\

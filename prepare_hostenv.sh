@@ -39,3 +39,9 @@ then
 	sudo sysctl -w vm.swappiness=$MAX_SWAP
 	echo "vm.swappiness set to $MAX_SWAP"
 fi
+
+# Note: to set these parameters permanently, add them to the /etc/sysctl.conf
+
+# Optionally, prepare dedirection from :8080 to :80 (works for actual IPs, not for the localhos/loopback):
+# sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080
+

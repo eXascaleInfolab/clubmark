@@ -15,9 +15,11 @@ else
 fi
 #echo "Starting under" $PYTHON
 
+CALLDIR=`dirname $0`  # Calling directory (base path) of this script
+
 TIMEOUT=1d12h  # 36 hours per singe execution of any algorithm on any network
 #DATASETS=syntnets
-RESDIR=results  # Directory for the benchmarking results
+RESDIR=${CALLDIR}/results  # Directory for the benchmarking results
 EXECLOG=bench.log  # Log for the execution status
 EXECERR=bench.err  # Log for execution errors
 
@@ -25,6 +27,9 @@ if [ ! -e $RESDIR ]
 then
 	mkdir $RESDIR
 fi
+
+echo "Ensuring the required host environment..."
+${CALLDIR}/prepare_hostenv.sh
 
 echo "Starting the benchmark in the daemom mode under $PYTHON..."
 #  -dw=${DATASETS}

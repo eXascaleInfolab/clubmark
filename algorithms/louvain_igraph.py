@@ -13,7 +13,11 @@ import sys
 import os  # Pathes processing
 import argparse
 from igraph import Graph
-from utils.parser_nsl import asymnet, loadNsl  #pylint: disable=E0611,E0401
+try:
+	# Note: Python3 in some cases might cause import error here unlike Python2
+	from utils.parser_nsl import asymnet, loadNsl  #pylint: disable=E0611,E0401
+except ImportError:
+	from .utils.parser_nsl import asymnet, loadNsl  #pylint: disable=E0611,E0401
 
 
 def louvain(args):

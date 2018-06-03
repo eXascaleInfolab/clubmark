@@ -20,7 +20,11 @@ import sys
 import os  # Pathes processing
 #import igraph as ig
 import random as rand
-from utils.parser_nsl import asymnet, loadNsl  #pylint: disable=E0611,E0401
+try:
+	# Note: Python3 in some cases might cause import error here unlike Python2
+	from utils.parser_nsl import asymnet, loadNsl  #pylint: disable=E0611,E0401
+except ImportError:
+	from .utils.parser_nsl import asymnet, loadNsl  #pylint: disable=E0611,E0401
 
 # Default number of the resulting clusterings (partitions, i.e files that contain disjoint clusters)
 _RESNUM = 1

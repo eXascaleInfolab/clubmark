@@ -104,6 +104,7 @@ ENTRYPOINT ["python3", "./benchmark.py"]
 
 # Expected to be built as
 # $ docker build [--no-cache] [--pull] [--squash] [--compress] -t luaxi/pycabem:env-U16.04-v2.0 .
+# $ docker build -t luaxi/pycabem:v3.0.0a-U16.04 .
 # $ docker push luaxi/pycabem:env-U16.04-v2.0
 
 # Expected to be called as:

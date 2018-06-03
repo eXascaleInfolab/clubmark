@@ -22,10 +22,13 @@ WORK_DIR=/opt/pycabem  # Working directory of the benchmark
 # via pip on pypy
 # Bind Docker :8080 to the host :80 for tcp. To bind with specific host IP: -p IP:8080:80/tcp
 # docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint python3 luaxi/pycabem:env-U16.04-v2.0 ./benchmark.py "$@"
-docker run -it -p 8080:80/tcp -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint python3 luaxi/pycabem:v3.0.0a-U16.04 ./benchmark.py "$@"
+docker run -it -p 8080:8080/tcp -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint python3 luaxi/pycabem:v3.0.0a-U16.04 ./benchmark.py "$@"
 # Or to open "bash" shell in the benchmarking directory:
 # $ docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint bash luaxi/pycabem:env-U16.04-v2.0
 
 # Examples:
 # $ ./benchmark_docker.sh -a="LouvainIg Randcommuns" -i="syntnets/networks/*/" -i=./realnets -r -th=42 1>>./results/bench.log 2>>./results/bench.err
 # $ ./benchmark_docker.sh -a="LouvainIg Scp Randcommuns Pscan" -i%2=./realnets -r -th=42 1>> ./results/bench.log 2>> ./results/bench.err
+
+# Note: to redirect host:80 to :8080, where the benchmark WebUI is run:
+# # iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080

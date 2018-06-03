@@ -35,7 +35,7 @@ docker run -it --rm -p 8080:8080/tcp -u `id -u $USER` -w ${WORK_DIR} -v ${CALLDI
 # Examples:
 # $ ./benchmark_docker.sh -a="LouvainIg Randcommuns" -i="syntnets/networks/*/" -i=./realnets -r -th=42 1>>./results/bench.log 2>>./results/bench.err
 # $ ./benchmark_docker.sh -a="LouvainIg Scp Randcommuns Pscan" -i%2=./realnets -r -th=42 1>> ./results/bench.log 2>> ./results/bench.err
-# $ ./benchmark_docker.sh -a="CggcRg CggciRg LouvainIg Oslom2 Pscan Randcommuns Scd Scp" -r -t=36h --runtimeout=12d 1>> ./results/bench.log 2>> ./results/bench.err
+# $ ./benchmark_docker.sh -w=0.0.0.0:8080 -a="CggcRg CggciRg LouvainIg Oslom2 Pscan Randcommuns Scd Scp" -r -t=36h --runtimeout=12d 1>> ./results/bench.log 2>> ./results/bench.err
 # $ ./benchmark_docker.sh -g=3%5 -a="CggcRg CggciRg LouvainIg Oslom2 Pscan Randcommuns Scd Scp" -r -t=36h --runtimeout=12d 1>> ./results/bench.log 2>> ./results/bench.err
 
 # Note: to redirect host:80 to :8080, where the benchmark WebUI is run:

@@ -1212,7 +1212,10 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			# Extend algorithms execution tracing files (.rcp) with time tracing, once per an executing algorithm
 			# to distinguish different executions (benchmark runs)
 			for alg in algorithms:
-				aexecres = ''.join((_RESDIR, alg, '/', alg, _EXTEXECTIME))
+				aresdir = _RESDIR + alg
+				if not os.path.exists(aresdir):
+					os.mkdir(aresdir)
+				aexecres = ''.join((aresdir, '/', alg, _EXTEXECTIME))
 				with open(aexecres, 'a') as faexres:
 					faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
 		finally:

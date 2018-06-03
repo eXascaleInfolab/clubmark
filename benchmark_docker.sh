@@ -20,7 +20,9 @@ WORK_DIR=/opt/pycabem  # Working directory of the benchmark
 # - python3 is used to run the benchmark instead of pypy to reduce the number of
 # dependencies, because otherwise Python is also required to install the psutil
 # via pip on pypy
-docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint python3 luaxi/pycabem:env-U16.04-v2.0 ./benchmark.py "$@"
+# Bind Docker :8080 to the host :80 for tcp. To bind with specific host IP: -p IP:8080:80/tcp
+# docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint python3 luaxi/pycabem:env-U16.04-v2.0 ./benchmark.py "$@"
+docker run -it -p 8080:80/tcp -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint python3 luaxi/pycabem:v3.0.0a-U16.04 ./benchmark.py "$@"
 # Or to open "bash" shell in the benchmarking directory:
 # $ docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint bash luaxi/pycabem:env-U16.04-v2.0
 

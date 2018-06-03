@@ -16,4 +16,5 @@
 echo "Starting docker from \"`pwd`\" under user \"$USER\""
 WORK_DIR=/opt/pycabem  # Working directory of the benchmark
 # Note: quoted $@ is required to retain internal quotation inside the arguments
-docker run -it -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint "bash" luaxi/pycabem:env-U16.04-v2.0 "$@"
+# Bind Doker :8080 to the host :80 for tcp. To bind with specific host IP: -p IP:8080:80/tcp
+docker run -it -p 8080:80/tcp -u `id -u $USER` -w ${WORK_DIR} -v `pwd`:${WORK_DIR} --entrypoint "bash" luaxi/pycabem:v3.0.0a-U16.04 "$@"

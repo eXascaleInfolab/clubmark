@@ -24,7 +24,7 @@ fi
 #echo "Starting under" $PYTHON
 
 ALG="DaocA_s_r"  # Algorithm to be evaluated;  Scp;  DaocA, DaocA_s_r
-TIMEOUT=3  # Hours
+TIMEOUT=3h  # Hours
 
 mkdir "results/${ALG}" 2> /dev/null
 for dir in "$@"
@@ -32,6 +32,6 @@ do
 	# Skip dir path, leaving only the name
 	dirname=`echo $dir | sed 's/.*\/\([^/]*\)/\1/'`
 	#echo $dirname
-	nohup $PYTHON ./benchmark.py -i="$dir" -a=$ALG -r -th=$TIMEOUT > "results/${ALG}/bench_${dirname}.log" \
+	nohup $PYTHON ./benchmark.py -i="$dir" -a=$ALG -r -t=$TIMEOUT > "results/${ALG}/bench_${dirname}.log" \
 		2> "results/${ALG}/bench_${dirname}.err" &
 done

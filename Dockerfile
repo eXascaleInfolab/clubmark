@@ -104,8 +104,9 @@ ENTRYPOINT ["python3", "./benchmark.py"]
 
 # Expected to be built as
 # $ docker build [--no-cache] [--pull] [--squash] [--compress] -t luaxi/clubmark-env:v3.0-U16.04 .
-# $ docker build -t luaxi/clubmark-env:v3.0-U16.04 .
-# $ docker push luaxi/clubmark-env:v3.0-U16.04
+# Note: `luaxi/clubmark-env` is the same as `luaxi/clubmark-env:latest`
+# $ docker build -t luaxi/clubmark-env:v3.0-U16.04 -t luaxi/clubmark-env .
+# $ docker push luaxi/clubmark-env
 
 # Expected to be called as:
 # $ docker run -it -u $UID -v `pwd`:$WORK_DIR luaxi/clubmark-env:v3.0-U16.04 [<clubmark_args>]

@@ -151,7 +151,7 @@ See also the [brief tutorial on Docker installation and usage](https://www.howto
 
 > Optionally, the `PyCaBeM` docker image containing the execution environment can be built from the source [Dockerfile](Dockerfile) by executing from the repository directory:
 > ```sh
-> $ docker build -t luaxi/clubmark-env:v3.0-U16.04 .
+> $ docker build -t luaxi/clubmark-env:v3.0-U16.04 -t luaxi/clubmark-env .
 > ```
 The prebuilt image will be automatically pulled from the *Docker Hub* repository on first docker `run` if it has not been built locally.
 

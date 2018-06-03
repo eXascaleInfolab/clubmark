@@ -14,9 +14,11 @@ import os  # Pathes processing
 import argparse
 from igraph import Graph
 try:
-	# Note: Python3 in some cases might cause import error here unlike Python2
+	# ATTENTION: Python3 newer treats imports as realtive and results in error here unlike Python2
 	from utils.parser_nsl import asymnet, loadNsl  #pylint: disable=E0611,E0401
 except ImportError:
+	# Note: this case should be the second because explicit relative imports cause various errors
+	# under Python2 and Python3, which complicates thier handling
 	from .utils.parser_nsl import asymnet, loadNsl  #pylint: disable=E0611,E0401
 
 

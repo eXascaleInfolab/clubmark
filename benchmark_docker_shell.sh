@@ -23,7 +23,9 @@ WORK_DIR=/opt/clubmark  # Working directory of the benchmark inside the Docker c
 # Note: quoted $@ is required to retain internal quotation inside the arguments
 # Bind Doker :8080 to the host :80 for tcp. To bind with specific host IP: -p IP:8080:80/tcp
 # -rm is used to automaticaly clean up the executed container and remove the virtual file system on exit
-docker run -it --rm -p 8080:8080/tcp -u `id -u $USER` -w ${WORK_DIR} -v ${CALLDIR}:${WORK_DIR} --entrypoint "bash" luaxi/clubmark-env:v3.0-U16.04 "$@"
+# Note: the container is not automatically removed after the execution
+# and the default loggin is retained and accessible via `docker logs <container>`
+docker run -it -p 8080:8080/tcp -u `id -u $USER` -w ${WORK_DIR} -v ${CALLDIR}:${WORK_DIR} --entrypoint "bash" luaxi/clubmark-env:v3.0-U16.04 "$@"
 
 # Note: to redirect host:80 to :8080, where the benchmark WebUI is run:
 # # iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080

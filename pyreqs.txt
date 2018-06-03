@@ -2,7 +2,7 @@
 
 # Benchmarking requirements:
 # PyExPool (ExecPool and WebUI) are included but also can be installed from the pip
-pyexpool>=3.0.2
+#pyexpool>=3.0.2
 # psutil is required for the jobs autobalancing on execution (mpepool only)
 psutil>=5.2
 # Future utils for Python2/3 compatibility (benchmarking & utils)

@@ -1862,7 +1862,12 @@ if __name__ == '__main__':
 		signal.signal(signal.SIGQUIT, terminationHandler)
 		signal.signal(signal.SIGABRT, terminationHandler)
 
+		# Ignore terminated children procs to avoid zombies
+		# ATTENTION: signal.SIG_IGN affects the return code of the former zombie resetting it to 0,
+		# where signal.SIG_DFL works fine and without any the side effects.
+		signal.signal(signal.SIGCHLD, signal.SIG_DFL)
+
 		# Set termination handler for the internal termination
-		atexit.register(terminationHandler, terminate=False)
+		atexit.register(terminationHandler, terminate=False)  # Note: False because it is already terminating
 
 		benchmark(*sys.argv[1:])

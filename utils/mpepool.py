@@ -59,7 +59,7 @@ import subprocess
 import errno
 # # Async Tasks management
 # import threading  # Used only for the concurrent Tasks termination by timeout
-# import signal  # Required for the correct handling of KeyboardInterrupt: https://docs.python.org/2/library/thread.html
+import signal  # Required for the correct handling of KeyboardInterrupt: https://docs.python.org/2/library/thread.html
 import itertools  # chain
 
 from multiprocessing import cpu_count, Lock  #, Queue  #, active_children, Value, Process
@@ -2243,11 +2243,13 @@ class ExecPool(object):
 		if graceful is None:
 			graceful = not job.terminates and job.proc is not None and not job.proc.returncode
 		job.complete(graceful)
-		# Update failures list skipping the tasks restarting on timeout
+		# Update failures list skipping automatically tasks restarting on timeout
+		# or because of the GROUP memory limit violation (where the job itself does not violate any constraints)
 		if graceful:
 			self.jobsdone += 1
-		elif (not job.rsrtonto or job.tstart is None or job.tstop is None
-		or job.tstop - job.tstart < job.timeout):
+		elif not (job.proc.returncode == -signal.SIGTERM and ((self.memlimit and job.mem >= self.memlimit)
+		or (not job.rsrtonto and job.timeout and job.tstart is not None or job.tstop is not None
+		and job.tstop - job.tstart >= job.timeout))):
 			self.failures.append(JobInfo(job))  # Note: job.tstop should be defined here
 
 
@@ -2444,13 +2446,15 @@ class ExecPool(object):
 				# Reinitialize the heaviest remained jobs and continue
 				for job in self._workers:
 					if not self.alive or (not job.terminates and job not in pjobs):
-						hws.append(job)
+						hws.append(job)  # Take the first appropriate executing job as a heavy one
 						break
-				assert self._workers and hws, 'Non-terminated worker processes must exist here'
+				assert hws, 'Non-terminated heavy worker processes must exist here: {} / {}'.format(
+					len(hws), len(self._workers))
 				for job in self._workers:
 					# Note: check for the termination in all cycles
 					if not self.alive:
 						return
+					# Extend the heavy jobs list with more heavy items than the already present there
 					# Note: use some threshold for mem evaluation and consider starting time on scheduling
 					# to terminate first the least worked processes (for approximately the same memory consumption)
 					dr = 0.1  # Threshold parameter ratio, recommended value: 0.05 - 0.15; 0.1 means delta of 10%

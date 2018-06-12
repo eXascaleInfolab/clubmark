@@ -543,40 +543,52 @@ def uniflevs(task):
 	origdir = None
 	root0 = True  # Scp enumerates root on the zero level
 	fetchLevId = task.params['fetchLevId']  # Callback to fetch level ids
-	for sbt, tpars in viewitems(task.params['subtasks']):
-		try:
-			taskpath = tpars if isinstance(tpars, str) else tpars['taskpath']
-			# assert os.path.isdir(taskpath) and callable(fetchLevId), (
-			# 	'Invalid job parameters:  taskpath: {}, fetchLevId callable: {}'.format(
-			# 	taskpath, callable(fetchLevId)))
-			# Define base path
-			if bpath is not None:
-				outbase, outname = os.path.split(taskpath)
-				if outbase != bpath:
-					print('ERROR, levels unification called for distinct networks. Omitted for', taskpath, file=sys.stderr)
-					continue
-			else:
-				bpath, outname = os.path.split(taskpath)
-			# Move parameterized levels to the orig dir
-			if origdir is None:
-				origdir = '/'.join((bpath if bpath else '.', _ORIGDIR))
-			# newdir = origdir + oname + '/'
-			levnames = os.listdir(taskpath)  # Note: only file names without the path are returned
-			shutil.move(taskpath, origdir)
-			if levnames:
-				levsnum += len(levnames)
-				# Sort levnames in a way to start from the root (the most coarse-grained) level
-				levnames.sort(key=fetchLevId, reverse=not root0)
-				pouts.append((outname, levnames))  # Output dir name without the path and correponding levels
-				# print('> pout added: {} {} levs ({} .. {})'.format(outname, len(levnames), levnames[0], levnames[-1]), file=sys.stderr)
-		except Exception as err:  #pylint: disable=W0703
-			print('ERROR, {} subtask output levels aggregating unification failed'
-				', {} params ({}): {}. Discarded. {}'.format(sbt
-				, None if tpars is None else len(tpars), type(tpars).__name__
-				, err, traceback.format_exc(3)), file=sys.stderr)
+	subtasks = task.params.get('subtasks')
+	if subtasks:
+		for sbt, tpars in viewitems(subtasks):
+			try:
+				taskpath = tpars if isinstance(tpars, str) else tpars['taskpath']
+				# assert os.path.isdir(taskpath) and callable(fetchLevId), (
+				# 	'Invalid job parameters:  taskpath: {}, fetchLevId callable: {}'.format(
+				# 	taskpath, callable(fetchLevId)))
+				# Define base path
+				if bpath is not None:
+					outbase, outname = os.path.split(taskpath)
+					if outbase != bpath:
+						print('ERROR, levels unification called for distinct networks. Omitted for', taskpath, file=sys.stderr)
+						continue
+				else:
+					bpath, outname = os.path.split(taskpath)
+				# Move parameterized levels to the orig dir
+				if origdir is None:
+					origdir = '/'.join((bpath if bpath else '.', _ORIGDIR))
+				# newdir = origdir + oname + '/'
+				levnames = os.listdir(taskpath)  # Note: only file names without the path are returned
+				# Check existance of the dest path, which causes exception in shutil.move()
+				dstpath = origdir + os.path.split(taskpath)[1]
+				if os.path.exists(dstpath):
+					try:
+						os.rmdir(dstpath)
+					except OSError as err:
+						print('WARNING uniflevs(), orig dest dir is dirty. Replaced with the latest version.'
+							, err, file=sys.stderr)
+						shutil.rmtree(dstpath)
+				assert os.path.isdir(taskpath), 'A directory is expected: ' + taskpath
+				shutil.move(taskpath, origdir)
+				if levnames:
+					levsnum += len(levnames)
+					# Sort levnames in a way to start from the root (the most coarse-grained) level
+					levnames.sort(key=fetchLevId, reverse=not root0)
+					pouts.append((outname, levnames))  # Output dir name without the path and correponding levels
+					# print('> pout added: {} {} levs ({} .. {})'.format(outname, len(levnames), levnames[0], levnames[-1]), file=sys.stderr)
+			except Exception as err:  #pylint: disable=W0703
+				print('ERROR, {} subtask output levels aggregating unification failed'
+					', {} params ({}): {}. Discarded. {}'.format(sbt
+					, None if tpars is None else len(tpars), type(tpars).__name__
+					, err, traceback.format_exc(3)), file=sys.stderr)
 	if not pouts:
 		print('WARNING uniflevs(), nothing to process because the output levels are empty for the task'
-			, task.name, file=sys.stderr)
+			', which may happen if there are no any completed subtasks/jobs', task.name, file=sys.stderr)
 		return
 	# Sort pouts by the decreasing number of levels, i.e. from the fine to coarse grained outputs
 	pouts.sort(key=lambda outp: len(outp[1]), reverse=True)
@@ -1159,10 +1171,11 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
 	netfile = relpath(netfile)
 
-	fetchLevId = lambda levname: 0 if levname == 'tp' else int(levname[2:])
-	"""Fetch level id of the hierarchy from the output file name.
-	The format of the output file name: tp[<num:uint+>]
-	"""
+	def fetchLevId(levname):
+		"""Fetch level id of the hierarchy from the output file name.
+		The format of the output file name: tp[<num:uint+>]
+		"""
+		return 0 if levname == 'tp' else int(levname[2:])
 
 	# Move final results to the required dir on postprocessing and clear up
 	def postexec(job):  #pylint: disable=W0613

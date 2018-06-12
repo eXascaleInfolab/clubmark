@@ -562,6 +562,8 @@ def uniflevs(task):
 				# Move parameterized levels to the orig dir
 				if origdir is None:
 					origdir = '/'.join((bpath if bpath else '.', _ORIGDIR))
+					if not os.path.exists(origdir):
+						os.mkdir(origdir)
 				# newdir = origdir + oname + '/'
 				levnames = os.listdir(taskpath)  # Note: only file names without the path are returned
 				# Check existance of the dest path, which causes exception in shutil.move()
@@ -573,7 +575,8 @@ def uniflevs(task):
 						print('WARNING uniflevs(), orig dest dir is dirty. Replaced with the latest version.'
 							, err, file=sys.stderr)
 						shutil.rmtree(dstpath)
-				assert os.path.isdir(taskpath), 'A directory is expected: ' + taskpath
+				# # Note: os.listdir would throw OSError if taskpath would not be a dir
+				# assert os.path.isdir(taskpath), 'A directory is expected: ' + taskpath
 				shutil.move(taskpath, origdir)
 				if levnames:
 					levsnum += len(levnames)

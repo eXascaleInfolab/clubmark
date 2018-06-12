@@ -116,7 +116,7 @@ def randcommuns(*args):
 	print('Starting randcommuns clustering:'
 	 '\n\tgroundtruth: {}'
 	 '\n\t{} network: {}'
-	 '\n\t{} {} in {} with randseed: {}'
+	 '\n\t{} cls of {} in {} with randseed: {}'
 	 .format(prm.groundtruth, 'directed' if prm.dirnet else 'undirected', prm.network
 	  , prm.outnum, prm.outname + prm.outext, prm.outdir, prm.randseed))
 	# Load Data from simple real-world networks

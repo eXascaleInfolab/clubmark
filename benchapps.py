@@ -236,7 +236,7 @@ def prepareResDir(appname, taskname, odir, pathid):
 	appname  - application (algorithm) name
 	taskname  - task name
 	odir  - whether to output results to the dedicated dir named by the instance name,
-		which actual the the shuffles with non-flat structure
+		which is typically used for shuffles with the non-flat structure
 	pathid  - path id (including the leading separator) of the input networks file, str
 
 	return resulting directory without the ending '/' terminator
@@ -910,13 +910,17 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	pybin = PyBin.bestof(pypy=False, v3=True)
 
 	# Form name of the ground-truth file on base of the input network filename with the extension relpaced to '.cnl'
-	originpbase = netfile
-	if odir:
-		originpbase = os.path.split(netfile)[0]
-		if not originpbase:
-			assert 0, 'odir parameter validation failed, netfile should have some base directory'
-			originpbase = os.path.splitext(netfile)[0]  # Take wile name without the extension instead of the parent dir
+	originpbase = netfile  # Note: netext is already split
+	if odir or not os.path.exists(originpbase + _EXTCLNODES):
+		# Take file with the target name but in the upper dir
+		dirbase, namebase = os.path.split(netfile)
+		dirbase = os.path.split(dirbase)[0]
+		if not dirbase:
+			dirbase = '..'
+		originpbase = '/'.join((dirbase, namebase))
 	gtfile = originpbase + _EXTCLNODES
+	# print('> Starting Randcommuns; odir: {}, asym: {}, netfile: {}, gtfile (exists: {}): {}'
+	# 	.format(odir, asym, netfile, os.path.exists(gtfile), gtfile))
 
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
 	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname

@@ -202,6 +202,8 @@ def delPathSuffix(path, nameonly=False):
 	'1K10'
 	>>> delPathSuffix("1K10^1%2#f1") == '1K10'
 	True
+	>>> delPathSuffix('../syntnets/networks/5K75^1') == '../syntnets/networks/5K75'
+	True
 	>>> delPathSuffix('2K5^1', False) == '2K5'
 	True
 	>>> delPathSuffix('scp/mod/2K5%1', True) == 'scp/mod/2K5'

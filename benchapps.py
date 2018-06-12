@@ -899,28 +899,31 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
 
+	# Form name of the ground-truth file on base of the input network filename with the extension relpaced to '.cnl'
+	# Note: take base name if the instance of shuffle id components are present
+	originpbase = delPathSuffix(netfile)  # Note: netext is already split
+	if odir or not os.path.exists(originpbase + _EXTCLNODES):
+		# Take file with the target name but in the upper dir
+		dirbase, namebase = os.path.split(originpbase)
+		dirbase = os.path.split(dirbase)[0]
+		if not dirbase:
+			dirbase = '..'
+		originpbase = '/'.join((dirbase, namebase))
+	gtfile = originpbase + _EXTCLNODES
+	assert os.path.exists(gtfile), 'Ground-truth file should exist to apply randcommuns: ' + gtfile
+	# print('> Starting Randcommuns; odir: {}, asym: {}, netfile: {}, gtfile (exists: {}): {}'
+	# 	.format(odir, asym, netfile, os.path.exists(gtfile), gtfile))
+
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(_UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
+	gtfile = relpath(gtfile)
 	# Set the best possible interpreter
 	# Note: randcommuns loads input network using external igraph-python lib, which interacts slower with PyPy than with CPython
 	pybin = PyBin.bestof(pypy=False, v3=True)
-
-	# Form name of the ground-truth file on base of the input network filename with the extension relpaced to '.cnl'
-	originpbase = netfile  # Note: netext is already split
-	if odir or not os.path.exists(originpbase + _EXTCLNODES):
-		# Take file with the target name but in the upper dir
-		dirbase, namebase = os.path.split(netfile)
-		dirbase = os.path.split(dirbase)[0]
-		if not dirbase:
-			dirbase = '..'
-		originpbase = '/'.join((dirbase, namebase))
-	gtfile = originpbase + _EXTCLNODES
-	# print('> Starting Randcommuns; odir: {}, asym: {}, netfile: {}, gtfile (exists: {}): {}'
-	# 	.format(odir, asym, netfile, os.path.exists(gtfile), gtfile))
 
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
 	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname

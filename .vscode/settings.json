@@ -22,8 +22,13 @@
         "html",
         "latex",
         "markdown",
-        "plaintext",
-        // "python",
-        // "xml"
+        "plaintext"
     ],
+    "spellright.parserByClass": {
+        "cpp": "code",
+        "html": "xml",
+        "latex": "latex",
+        "markdown": "markdown",
+        "python": "code"
+    },
 }

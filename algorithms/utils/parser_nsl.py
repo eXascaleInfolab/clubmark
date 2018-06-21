@@ -44,6 +44,7 @@ def dflnetext(asym):
 
 class NetInfo(object):
 	"""Network information (description) encoded in the file header"""
+	__slots__ = ('directed', 'ndsnum', 'lnsnum', 'weighted')
 
 	def __init__(self, directed, ndsnum, lnsnum, weighted):
 		"""Network information attributes
@@ -115,7 +116,7 @@ def parseHeaderNslFile(finp, directed=None):
 							weighted = bool(int(ln[5]))  # Note: int() is required because bool('0') is True
 			except ValueError as err:
 				# Part of the attributes could be initialized, others just have initial values
-				print('WARNING, NSL header is corrupted: ', err)  # Note: this is a minor issue
+				print('WARNING, NSL header is omitted being corrupted:', err)  # Note: this is a minor issue
 		break
 
 	return NetInfo(directed=directed, ndsnum=ndsnum, lnsnum=lnsnum, weighted=weighted)
@@ -187,7 +188,11 @@ def loadNsl(network, directed=None):
 			if weighted:
 				weights.append(float(parts[2]))
 
-		assert not netinfo.ndsnum or len(nodes) == netinfo.ndsnum, 'Validation of the number of nodes failed'
+		# assert not netinfo.ndsnum or len(nodes) == netinfo.ndsnum, 'Validation of the number of nodes failed'
+		if netinfo.ndsnum and len(nodes) != netinfo.ndsnum:
+			print('WARNING, The number of nodes in the header of "{}" is imprecise: {} != {}'
+				.format(os.path.split(network)[1], netinfo.ndsnum, len(nodes)))
+			netinfo.ndsnum = len(nodes)
 		if not netinfo.ndsnum:
 			netinfo.ndsnum = len(nodes)
 		#nodes = list(nodes)

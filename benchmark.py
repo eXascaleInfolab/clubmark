@@ -570,8 +570,9 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
-	# Note: set affinity in a way to maximize the CPU cache L1/2 for each process
-	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(AffinityMask.CORE_THREADS)
+	# Note: AffinityMask.CORE_THREADS - set affinity in a way to maximize the CPU cache L1/2 for each process
+	# 1 - maximizes parallelization => overall execution speed
+	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1)
 	, memlimit=_VMLIMIT, name='gennets', webuiapp=_webuiapp) as _execpool:
 		bmname = os.path.split(genbin)[1]  # Benchmark name
 		genbin = os.path.relpath(genbin, basedir)  # Update path to the executable relative to the job workdir

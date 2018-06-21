@@ -126,6 +126,9 @@ def randcommuns(*args):
 	groundstat = []
 	with open(prm.groundtruth, 'r') as fground:
 		for line in fground:
+			# Skip empty lines and comments (possible header)
+			if not line or line['0'] == '#':
+				continue
 			groundstat.append(len(line.split()))
 
 	# Create outpdir if required
@@ -148,18 +151,18 @@ def randcommuns(*args):
 			ind = rand.sample(actnodes, 1)[0]
 			actnodes.remove(ind)
 			nodes.append(ind)
-			inds = 0  # Index of the node in the current cluster
+			inode = 0  # Index of the node in the current cluster
 			# Select neighbors of the selected nodes to fill the clusters
 			while len(nodes) < clmarg and actnodes:
-				for nd in graph.vs[nodes[inds]].neighbors():  #pylint: disable=E1136
+				for nd in graph.vs[nodes[inode]].neighbors():  #pylint: disable=E1136
 					if nd.index not in actnodes:
 						continue
 					actnodes.remove(nd.index)
 					nodes.append(nd.index)
 					if len(nodes) >= clmarg or not actnodes:
 						break
-				inds += 1
-				if inds >= len(nodes) and len(nodes) < clmarg and actnodes:
+				inode += 1
+				if inode >= len(nodes) and len(nodes) < clmarg and actnodes:
 					ind = rand.sample(actnodes, 1)[0]
 					actnodes.remove(ind)
 					nodes.append(ind)

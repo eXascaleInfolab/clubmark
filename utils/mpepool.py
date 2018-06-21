@@ -296,6 +296,7 @@ def propslist(cls):
 	- _props: set  - all public attributes of the class
 		and all __slots__ members even if the latter are underscored
 	- `in` operator support added to test membership in the _props
+	- json  - dict representation for the JSON serialization
 	- iterprop() method to iterate over the properties present in _props starting
 		from __slots__ in the order of declaration and then over the computed properties
 		in the alphabetical order
@@ -304,6 +305,12 @@ def propslist(cls):
 		"""Whether the specified property is present"""
 		assert len(self._props) >= 2, 'At least 2 properties are expected'
 		return self._props.endswith(' ' + prop) or self._props.find(prop + ' ') != -1  #pylint: disable=W0212
+
+
+	def json(self):
+		"""Serialize self to the JSON representation"""
+		return {p: self.__getattribute__(p) if p != 'task' else self.__getattribute__(p).name for p in self.iterprop()}
+
 
 	def iterprop(cls):
 		"""Properties generator/iterator"""
@@ -327,6 +334,7 @@ def propslist(cls):
 	# ATTENTION: the methods are bound automatically to self (but not to the cls in Python2)
 	# since they are defined before the class is created.
 	cls.__contains__ = contains
+	cls.json = json
 	cls.iterprop = types.MethodType(iterprop, cls)  # Note: required only in Python2 for the static methods
 	return cls
 
@@ -551,6 +559,11 @@ class TaskInfoPrefmt(object):
 		self.compound = compound
 		self.ident = ident
 		self.data = data
+
+
+	def json(self):
+		"""Serialize self to the JSON representation"""
+		return {p: self.__getattribute__(p) for p in self.__slots__}
 
 
 def unfoldDepthFirst(tinfext, indent=0):
@@ -1584,11 +1597,11 @@ class ExecPool(object):
 							' filter values (not a list): ' + type(propflt).__name__)
 						raise
 				objflt = data.get(UiResOpt.flt)
-				jlim = int(data.get(UiResOpt.jlim, WUIJOBS_LIMIT))
+				lim = int(data.get(UiResOpt.lim, WUIJOBS_LIMIT))
 			else:
 				propflt = None
 				objflt = None
-				jlim = WUIJOBS_LIMIT
+				lim = WUIJOBS_LIMIT
 			if _DEBUG_TRACE:
 				print("> uicmd.id: {}, propflt: {}, objflt: {}".format(
 					self._uicmd.id, propflt, objflt), file=sys.stderr)
@@ -1602,7 +1615,7 @@ class ExecPool(object):
 				data['cpuLoad'] = 0
 				data['ramUsage'] = 0
 			# Set the actual Jobs limit value
-			data[UiResOpt.jlim] = jlim
+			data[UiResOpt.lim] = lim
 			# Summary of the execution pool:
 			# Note: executed in the main thread, so the lock check is required only
 			# to check for the termination
@@ -1642,8 +1655,8 @@ class ExecPool(object):
 			data['summary'] = smr
 
 			# Form command-specific data
-			jnum = 0  # The number of showing jobs without the tasks, to be <= jlim
-			tjnum = 0  # The number of showing jobs having tasks and showing tasks, to be <= jlim
+			jnum = 0  # The number of showing jobs without the tasks, to be <= lim
+			tjnum = 0  # The number of showing jobs having tasks and showing tasks, to be <= lim
 			if self._uicmd.id == UiCmdId.FAILURES:
 				# Fetch info about the failed jobs considering the filtering
 				jobsInfo = None  # Information about the failed jobs not assigned to any tasks
@@ -1655,14 +1668,14 @@ class ExecPool(object):
 						return
 					jdata = infodata(fji, propflt, objflt)
 					if fji.task is None:
-						if not jdata or (jlim and jnum >= jlim):
+						if not jdata or (lim and jnum >= lim):
 							continue
 						if header:
 							jobsInfo = [infoheader(JobInfo.iterprop(), propflt)]  #pylint: disable=E1101
 							header = False
 						jobsInfo.append(jdata)
 						jnum += 1
-					elif not jlim or tjnum < jlim:
+					elif not lim or tjnum < lim:
 						tie = tinfe0.get(fji.task)
 						if tie is None:
 							tdata = infodata(TaskInfo(fji.task), propflt, objflt)
@@ -1678,7 +1691,7 @@ class ExecPool(object):
 								tie.jobs = [infoheader(JobInfo.iterprop(), propflt)]  #pylint: disable=E1101
 							tie.jobs.append(jdata)
 							tjnum += 1
-					if jlim and jnum >= jlim and tjnum >= jlim:
+					if lim and jnum >= lim and tjnum >= lim:
 						break
 				# List jobs only if any payload exists besides the header
 				if jobsInfo:
@@ -1740,7 +1753,7 @@ class ExecPool(object):
 						header = False
 					jobsInfo.append(jdata)
 					jnum += 1  # Note: only the filtered jobs are considered
-					if jlim and jnum >= jlim:
+					if lim and jnum >= lim:
 						break
 				if jobsInfo:
 					data['jobsInfo'] = jobsInfo
@@ -1751,7 +1764,7 @@ class ExecPool(object):
 					return
 				# List the tasks with their jobs up to the specified limit of covered jobs
 				tinfe0 = dict()  # dict(Task, TaskInfoExt)  - Task information extended, bottom level of the hierarchy
-				tjnum = 0  # The number of showing jobs having tasks and showing tasks, to be <= jlim
+				tjnum = 0  # The number of showing jobs having tasks and showing tasks, to be <= lim
 				for jobs in (self._workers, self._jobs):
 					for job in jobs:
 						# Note: check for the termination in all cycles
@@ -1776,7 +1789,7 @@ class ExecPool(object):
 								tie.jobs = [infoheader(JobInfo.iterprop(), propflt)]  #pylint: disable=E1101
 							tie.jobs.append(jdata)
 							tjnum += 1
-						if jlim and tjnum >= jlim:
+						if lim and tjnum >= lim:
 							break
 				if not tinfe0:
 					return
@@ -2214,7 +2227,7 @@ class ExecPool(object):
 				# Kill non-terminated process
 				if active:
 					if job.proc.poll() is None:
-						print('  Killing ~zombie "{}" #{} ...'.format(job.name, job.proc.pid), file=sys.stderr)
+						print('  Killing ~hanged "{}" #{} ...'.format(job.name, job.proc.pid), file=sys.stderr)
 						job.proc.kill()
 			self.__complete(job, False)
 			# ATTENTION: re-raise exception for the BaseException but not Exception sub-classes
@@ -2394,7 +2407,6 @@ class ExecPool(object):
 			# 	print('>  Updating chained constraints in non-started jobs: ', ', '.join([job.name for job in self._jobs]))
 			jrot = 0  # Accumulated rotation
 			ij = 0  # Job index
-			ijf = len(self.failures)
 			while ij < len(self._jobs) - jrot:  # Note: len(jobs) catches external jobs termination / modification
 				job = self._jobs[ij]
 				if job.category is not None and job.size:
@@ -2511,7 +2523,6 @@ class ExecPool(object):
 			memall = self.memlimit + memov  # Note: memov is negative here
 
 		# Process completed (and terminated) jobs: execute callbacks and remove the workers
-		#cterminated = False  # Completed terminated procs processed
 		for job in completed:
 			# Note: check for the termination in all cycles
 			if not self.alive:
@@ -2521,7 +2532,6 @@ class ExecPool(object):
 			exectime = job.tstop - job.tstart
 			# Restart the job if it was terminated and should be restarted
 			if not job.terminates:
-				#cterminated = True
 				continue
 			print('WARNING, "{}" #{} is terminated because of the {} violation'
 				', chtermtime: {}, consumes {:.4f} / {:.4f} GB, timeout {:.4f} sec, executed: {:.4f} sec ({} h {} m {:.4f} s)'
@@ -2563,7 +2573,8 @@ class ExecPool(object):
 				self.__postpone(job, True)
 		# Note: the number of workers is not reduced to less than 1
 
-		# Note: active_children() does not impact on the existence of zombie procs
+		# Note: active_children() does not impact on the existence of zombie procs,
+		# proc table clearup implemented in complete() using wait()
 		#if cterminated:
 		#	# Note: required to join terminated child procs and avoid zombies
 		#	# Return list of all live children of the current process,joining any processes which have already finished

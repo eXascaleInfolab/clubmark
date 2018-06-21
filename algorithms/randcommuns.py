@@ -127,7 +127,7 @@ def randcommuns(*args):
 	with open(prm.groundtruth, 'r') as fground:
 		for line in fground:
 			# Skip empty lines and comments (possible header)
-			if not line or line['0'] == '#':
+			if not line or line[0] == '#':
 				continue
 			groundstat.append(len(line.split()))
 

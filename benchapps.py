@@ -925,9 +925,10 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 	taskpath = relpath(taskpath)
 	gtfile = relpath(gtfile)
 	# Set the best possible interpreter
-	# Note: randcommuns loads input network using external igraph-python lib,
-	# which interacts slower with PyPy than with CPython but the execution on large networks is slow on CPython
-	pybin = PyBin.bestof(pypy=True, v3=True)
+	# Note: randcommuns loads input network using external igraph-python lib, which interacts
+	# slower with PyPy than with CPython but the execution on large networks is slow on CPython.
+	# Anyway, randcommuns requires igraph-python which is not present in pypy out of the box
+	pybin = PyBin.bestof(pypy=False, v3=True)
 
 	# ./randcommuns.py -g=../syntnets/1K5.cnl -i=../syntnets/1K5.nsa -n=10
 	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname

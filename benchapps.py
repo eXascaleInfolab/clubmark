@@ -951,19 +951,26 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 # DAOC Options
 class DaocOpts(object):
 	"""DAOC execution options"""
-	__slots__ = ('gamma', 'reduction', 'rlevout', 'significance', 'srweight', 'ndsmin')
+	__slots__ = ('gamma', 'reduction', 'gband', 'exclude', 'rlevout', 'significance', 'srweight', 'ndsmin')
 
-	def __init__(self, gamma=-1, reduction=None, rlevout=0.8, significance='sd', srweight=0.85, ndsmin=3):
+	def __init__(self, gamma=-1, reduction=None, gband='r0.005', exclude='a', rlevout=0.8, significance='sd', srweight=0.85, ndsmin=3):
 		"""DAOC execution options initialization
 
 		gamma  - resolution parameter, float:
 			> 0 - static manual gamma for all clusters (1 is the default manual value for the standard modularity)
 			-1  - dynamic automatic identification for each cluster
-		reduction  - items links reduction policy on clustering, X[w], where X:
+		reduction  - items links reduction policy on clustering, X[w] or None (disabled), where X:
 			a  - ACCURATE
 			m  - MEAN (recommended)
 			s  - SEVERE
 			'' - default reduction policy (-m)
+		gband  - band of the mutual maximal gain for the imprecise fast clustering, default: None (disabled)
+			r<float>  - ratio of the maximal modularity gain, recommended: [0.001 .. ] 0.005
+			n<float>  - normalized value by the total weight of the network, recommended: 0.05
+			''  - default gband value (-r0.005)
+		exclude  - exclude application of the features:
+			a  - aagregating hashing being used for the fast matching of the fully mutual mcands
+				(extremely profitable to apply it in semantic networks or converted attributed graphs)
 		rlevout  - ratio (at least) of output levels shrinking starting from the widest (bottom) level,
 			applied only for the multi-level output, (0, 1]. Recommended (if used): 0.75 .. 0.9.
 		significance  - significant clusters output policy:
@@ -981,13 +988,17 @@ class DaocOpts(object):
 		# Note the significance potentially can be more precise: 'ad%0.86/0.14~'
 		assert (isinstance(gamma, Number) and (reduction is None or reduction == ''
 				or (1 <= len(reduction) <= 2 and reduction[0] in 'ams' and (len(reduction) == 1 or reduction[1] == 'w')))
+			and (gband is None or gband == '' or (isinstance(gband, str) and len(exclude) >= 3 and gband[0] in 'rn'))
+			and (exclude is None or exclude == 'a')
 			and (rlevout is None or rlevout > 0) and (significance is None or significance in ('', 'sd', 'ad', 'sh', 'ah'))
 			and (srweight is None or 0 < srweight <= 1) and (ndsmin is None or ndsmin >= 0)
-			), ('Invalid input parameters:\n\tgamma: {}\n\treduction: {}'
+			), ('Invalid input parameters:\n\tgamma: {}\n\treduction: {}\n\tgband: {}\n\texclude: {}'
 			',\n\trlevout: {}\n\tsignificance: {},\n\tsrweight: {},\n\tndsmin: {}'
-			.format(gamma, reduction, rlevout, significance, srweight, ndsmin))
+			.format(gamma, reduction, gband, exclude, rlevout, significance, srweight, ndsmin))
 		self.gamma = gamma
 		self.reduction = reduction
+		self.gband = gband
+		self.exclude = exclude
 		self.significance = significance
 		self.rlevout = rlevout
 		self.srweight = srweight
@@ -1047,6 +1058,11 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 		, '-n' + ('a' if asym else 'e')]
 	if opts.reduction is not None:
 		args.append('-r' + opts.reduction)
+	if opts.gband is not None:
+		args.append('-d' + opts.gband if opts.gband == '' else '='.join((opts.gband[0], opts.gband[1:])))
+	if opts.exclude is not None:
+		args.append('-d' + opts.exclude)
+
 	# Clusters optput options
 	# Output only max shares, per-level clusters output with step 0.8 in the simple format
 	# (with the header but without the share value)
@@ -1074,24 +1090,59 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
 def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=1, reduction=None)):
+, seed=None, opts=DaocOpts(gamma=1)):
 	"""DAOC with static gamma=1"""
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
+
+
+# DAOC (using standard modularity as an optimization function, non-generelized)
+def execDaocX(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+, seed=None, opts=DaocOpts(gamma=1, exclude='a')):
+	"""DAOC with static gamma=1 and exclusion of the aggregating hashing being
+	used for the fast match of the fully mutual mcands"""
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
+
+
+# DAOC (using standard modularity as an optimization function, non-generelized)
+def execDaocR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+, seed=None, opts=DaocOpts(gamma=1, reduction='m')):
+	"""DAOC with static gamma=1 and medium reduction policy of the insignificant links"""
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
+
+
+# DAOC (using standard modularity as an optimization function, non-generelized)
+# Note: Expected to be the fastest among DAOC versions
+def execDaocRB(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+, seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.005')):
+	"""DAOC with static gamma=1, medium reduction policy and band for mutual maximal gain taken as a ratio of MMG"""
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
+
+
+# DAOC (using standard modularity as an optimization function, non-generelized)
+def execDaocRBX(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+, seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.005', exclude='a')):
+	"""DAOC with static gamma=1, medium reduction policy, MMG band and exclusion of the aggregting hashing application"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
 def execDaocA(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=-1, reduction=None)):
+, seed=None, opts=DaocOpts(gamma=-1)):
 	"""DAOC with automatic dynamic gamma"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
-def execDaocAR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=-1, reduction='m')):  # Note: '' values mean use default
-	"""DAOC with automatic dynamic gamma and default reduction policy"""
+# Note: Expected to be pretty fast and accurate
+def execDaocARB(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+, seed=None, opts=DaocOpts(gamma=-1, reduction='m', gband='r0.005')):  # Note: '' values mean use default
+	"""DAOC with automatic dynamic gamma and medium reduction policy and MMG band"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocAR'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
 

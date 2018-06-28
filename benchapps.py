@@ -953,7 +953,7 @@ class DaocOpts(object):
 	"""DAOC execution options"""
 	__slots__ = ('gamma', 'reduction', 'gband', 'exclude', 'rlevout', 'significance', 'srweight', 'ndsmin')
 
-	def __init__(self, gamma=-1, reduction=None, gband='r0.005', exclude='a', rlevout=0.8, significance='sd', srweight=0.85, ndsmin=3):
+	def __init__(self, gamma=-1, reduction=None, gband=None, exclude=None, rlevout=0.8, significance='sd', srweight=0.85, ndsmin=3):
 		"""DAOC execution options initialization
 
 		gamma  - resolution parameter, float:
@@ -988,7 +988,7 @@ class DaocOpts(object):
 		# Note the significance potentially can be more precise: 'ad%0.86/0.14~'
 		assert (isinstance(gamma, Number) and (reduction is None or reduction == ''
 				or (1 <= len(reduction) <= 2 and reduction[0] in 'ams' and (len(reduction) == 1 or reduction[1] == 'w')))
-			and (gband is None or gband == '' or (isinstance(gband, str) and len(exclude) >= 3 and gband[0] in 'rn'))
+			and (gband is None or gband == '' or (isinstance(gband, str) and len(gband) >= 3 and gband[0] in 'rn'))
 			and (exclude is None or exclude == 'a')
 			and (rlevout is None or rlevout > 0) and (significance is None or significance in ('', 'sd', 'ad', 'sh', 'ah'))
 			and (srweight is None or 0 < srweight <= 1) and (ndsmin is None or ndsmin >= 0)

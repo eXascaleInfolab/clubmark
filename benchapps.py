@@ -1059,7 +1059,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 	if opts.reduction is not None:
 		args.append('-r' + opts.reduction)
 	if opts.gband is not None:
-		args.append('-d' + opts.gband if opts.gband == '' else '='.join((opts.gband[0], opts.gband[1:])))
+		args.append('-d' + (opts.gband if opts.gband == '' else '='.join((opts.gband[0], opts.gband[1:]))))
 	if opts.exclude is not None:
 		args.append('-x' + opts.exclude)
 

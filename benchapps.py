@@ -1061,7 +1061,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 	if opts.gband is not None:
 		args.append('-d' + opts.gband if opts.gband == '' else '='.join((opts.gband[0], opts.gband[1:])))
 	if opts.exclude is not None:
-		args.append('-d' + opts.exclude)
+		args.append('-x' + opts.exclude)
 
 	# Clusters optput options
 	# Output only max shares, per-level clusters output with step 0.8 in the simple format

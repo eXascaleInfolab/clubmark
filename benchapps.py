@@ -106,18 +106,20 @@ def aggexec(algs):
 					if not ln or ln[0] == '#':
 						continue
 					# Parse the content
-					fields = ln.split(None, 5)
+					fields = ln.split(None, 6)
 					# Note: empty and spaces strings were already excluded
-					assert len(fields) == 6, (
+					# 6 fields in the old format withou the rcode
+					assert 6 <= len(fields) <= 7, (
 						'Invalid format of the resource consumption file "{}": {}'.format(algesfile, ln))
 					# Fetch and accumulate measures
-					# Note: rstrip() is required, because fields[5] can ends with '\n';  os.path.split(...)[1]
-					net = delPathSuffix(fields[5].rstrip(), True)  # Note: name can't be a path here
+					# Note: rstrip() is required, because fields[-1] can ends with '\n';  os.path.split(...)[1]
+					net = delPathSuffix(fields[-1].rstrip(), True)  # Note: name can't be a path here
 					#print('> net: >>>{}<<< from >{}<'.format(net, fields[5]), file=sys.stderr)
 					assert net, 'Network name must exist'
 					etime = float(fields[0])
 					ctime = float(fields[1])
 					rmem = float(fields[4])
+					#rcode = float(fields[5])  # Note: in the old format 5-th field is the last and is the app name
 					for imsr, val in enumerate((etime, ctime, rmem)):
 						netstats = measures[imsr].setdefault(net, [])
 						if len(netstats) <= ialg:

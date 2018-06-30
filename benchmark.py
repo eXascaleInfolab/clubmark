@@ -1209,16 +1209,6 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 						print('  Scheduling apps execution for the path options ({})'.format(str(pcuropt)))
 					processPath(pcuropt, runner, xargs=xargs, tasks=tasks)
 			netnames = None  # Free memory from filenames
-
-			# Extend algorithms execution tracing files (.rcp) with time tracing, once per an executing algorithm
-			# to distinguish different executions (benchmark runs)
-			for alg in algorithms:
-				aresdir = _RESDIR + alg
-				if not os.path.exists(aresdir):
-					os.mkdir(aresdir)
-				aexecres = ''.join((aresdir, '/', alg, _EXTEXECTIME))
-				with open(aexecres, 'a') as faexres:
-					faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
 		finally:
 			# Flush the formed fpathids
 			if fpathids:
@@ -1241,6 +1231,20 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			print('WARNING, algorithms execution pool is interrupted by: {}. {}'
 				.format(err, traceback.format_exc(5)), file=sys.stderr)
 			raise
+		finally:
+			# Extend algorithms execution tracing files (.rcp) with time tracing, once per an executing algorithm
+			# to distinguish different executions (benchmark runs)
+			for alg in algorithms:
+				aresdir = _RESDIR + alg
+				# if not os.path.exists(aresdir):
+				# 	os.mkdir(aresdir)
+				aexecres = ''.join((aresdir, '/', alg, _EXTEXECTIME))
+				# Output timings only to the existing files after the execution results
+				# to not affect the original header
+				if os.path.isfile(aexecres):
+					with open(aexecres, 'a') as faexres:
+						faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
+			
 	_execpool = None
 	stime = time.perf_counter() - stime
 	print('The apps execution is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'

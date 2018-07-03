@@ -1156,6 +1156,16 @@ def execDaocRB1(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGS
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
+# Note: Expected to be the fastest among DAOC versions
+def execDaocRB5(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+, seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.05')):
+	"""DAOC with the static gamma=1, medium reduction policy and a band for the
+	mutual maximal gain taken as 1% of MMG"""
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
+
+
+# DAOC (using standard modularity as an optimization function, non-generelized)
 def execDaocRBX(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.005', exclude='a')):
 	"""DAOC with the static gamma=1, a medium reduction policy, an MMG band
@@ -1185,6 +1195,15 @@ def execDaocARB(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGS
 # Note: Expected to be pretty fast and accurate
 def execDaocARB1(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=-1, reduction='m', gband='r0.01')):  # Note: '' values mean use default
+	"""DAOC with an automatic dynamic gamma, a medium reduction policy and an MMG band of 1%"""
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocAR'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
+
+
+# DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
+# Note: Expected to be pretty fast and accurate
+def execDaocARB5(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+, seed=None, opts=DaocOpts(gamma=-1, reduction='m', gband='r0.05')):  # Note: '' values mean use default
 	"""DAOC with an automatic dynamic gamma, a medium reduction policy and an MMG band of 1%"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocAR'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)

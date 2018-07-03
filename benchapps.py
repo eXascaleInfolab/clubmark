@@ -1119,6 +1119,14 @@ def execDaocB1(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
+def execDaocB5(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+, seed=None, opts=DaocOpts(gamma=1, gband='r0.05')):
+	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as 1% of MMG"""
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
+
+
+# DAOC (using standard modularity as an optimization function, non-generelized)
 def execDaocR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, reduction='m')):
 	"""DAOC with the static gamma=1 and a medium reduction policy of the insignificant links"""

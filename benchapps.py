@@ -843,7 +843,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	task = Task(aggtname if task is None else _SEPSUBTASK.join((task.name, tasksuf))
 		, task=task, onfinish=uniflevs, params={'outpname': aggtname, 'fetchLevId': fetchLevIdCnl})
 	kmin = 3  # Min clique size to be used for the communities identificaiton
-	kmax = 8  # Max clique size (~ min node degree to be considered)
+	kmax = 7  # Max clique size (~ min node degree to be considered)
 	steps = str(_LEVSMAX)  # Use 10 scale levels as in Ganxis
 	golden = (1 + 5 ** 0.5) * 0.5  # Golden section const: 1.618
 	# Run for range of clique sizes
@@ -1187,6 +1187,14 @@ def execDaocA(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 , seed=None, opts=DaocOpts(gamma=-1)):
 	"""DAOC with an automatic dynamic gamma"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
+
+
+# DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
+def execDaocAR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+, seed=None, opts=DaocOpts(gamma=-1, reduction='m')):  # Note: '' values mean use default
+	"""DAOC with an automatic dynamic gamma, a medium reduction policy and an MMG band"""
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocAR'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, opts)
 
 

@@ -21,7 +21,7 @@ import re
 from multiprocessing import RLock
 from math import sqrt, copysign
 
-_PREFINTERNDIR = '<'  # Internal directory prefix
+_PREFINTERNDIR = '-'  # Internal directory prefix
 _BCKDIR = _PREFINTERNDIR + 'backup/'  # Backup directory
 _ORIGDIR = _PREFINTERNDIR + 'orig/'  # Backup directory
 _REFLOAT = re.compile(r'[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')  # Regular expression to parse float

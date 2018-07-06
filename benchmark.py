@@ -690,8 +690,8 @@ def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
 
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
-	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
 	shufnets = 0  # The number of shuffled networks
+	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
 	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='shufnets') as _execpool:
 		def shuffle(job):
 			"""Shuffle network instance specified by the job"""

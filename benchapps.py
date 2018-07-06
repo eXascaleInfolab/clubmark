@@ -185,7 +185,7 @@ def preparePath(taskpath):  # , netshf=False
 	#
 	# Backup existent files & dirs with such base only if this path exists and is not empty
 	# ATTENTION: do not use only basePathExists(taskpath) here to avoid movement to the backup
-	# processing paths when xxx.mod.net is processed before the xxx.net (have the same base)
+	# processing paths when xxx.mod.net is processed before the xxx.net (has the same base)
 	# Create target path if not exists
 	# print('> preparePath(), for: {}'.format(taskpath))
 	if not os.path.exists(taskpath):

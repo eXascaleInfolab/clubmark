@@ -777,35 +777,53 @@ while True:
 				, timeout=timeout1*shfnum, category='shuffle', size=os.path.getsize(netfile)))
 			return shfnum  # The network is shuffled shfnum times
 
-		def prepareDir(dirname, netfile, bcksuffix=None):
+		def prepareDir(dirpath, netfile, backup, bcksuffix=None):
 			"""Make the dir if not exists, otherwise move to the backup if the dir is not empty.
 			Link the original network inside the dir.
 
-			dirname  - directory to be initialized or moved to the backup
-			netfile  - network file to be linked into the <dirname> dir
+			dirpath  - directory to be initialized or moved to the backup
+			netfile  - network file to be linked into the <dirpath> dir
+			backup  - whether to backup the directory content
 			bcksuffix  - backup suffix for the group of directories, formed automatically
 				from the SyncValue()
 
 			return  - shuffle0, the origin network filename for the shuffles
 			"""
 			# Make hard link of the origin network to the target dir if this file does not exist yet
-			shuf0 = '/'.join((dirname, os.path.split(netfile)[1]))
-			if not os.path.exists(dirname):
-				os.mkdir(dirname)
+			shuf0 = '/'.join((dirpath, os.path.split(netfile)[1]))
+			if not os.path.exists(dirpath):
+				os.mkdir(dirpath)
 				# Hard link is used to have initial former copy of the archive even when the origin is deleted
 				os.link(netfile, shuf0)
-			elif not dirempty(dirname):
-				tobackup(dirname, False, bcksuffix, move=False)  # Copy to the backup to not regenerate existing networks
-			#if os.path.exists(dirname) and not dirempty(dirname):
-			#	tobackup(dirname, False, bcksuffix, move=True)  # Move to the backup
-			#if not os.path.exists(dirname):
-			#	os.mkdir(dirname)
+			# Avoid backup of the fully retained shuffles
+			elif not dirempty(dirpath):
+				if backup:
+					tobackup(dirpath, False, bcksuffix, move=False)  # Copy to the backup to not regenerate existing networks
+				if not os.path.exists(shuf0):
+					os.link(netfile, shuf0)
+			#if os.path.exists(dirpath) and not dirempty(dirpath):
+			#	tobackup(dirpath, False, bcksuffix, move=True)  # Move to the backup
+			#if not os.path.exists(dirpath):
+			#	os.mkdir(dirpath)
 			## Make hard link of the origin network to the target dir if this file does not exist
-			#shuf0 = '/'.join((dirname, os.path.split(netfile)[1]))
+			#shuf0 = '/'.join((dirpath, os.path.split(netfile)[1]))
 			#if not os.path.exists(shuf0):
 			#	# Hard link is used to have initial former copy of the archive even when the origin is deleted
 			#	os.link(netfile, shuf0)
 			return shuf0
+
+		def xpathExists(wildcard):
+			"""Whether the path specified by the wildcard exist
+
+			wildcard: str  - path wildcard
+
+			return: bool  - path existance
+			"""
+			try:
+				next(glob.iglob(wildcard))
+			except StopIteration:
+				return False  # Such path does not exist
+			return True
 
 		bcksuffix = SyncValue()  # Use unified suffix for the backup of various network instances
 		shfnum = 0  # Total number of shuffles
@@ -830,16 +848,28 @@ while True:
 							netname = os.path.split(net)[1]
 							if netname.find(_SEPSHF) != -1:
 								continue
+							# Whether the shuffles will be modified and need to be backuped
+							backup = xpathExists(''.join((path, os.path.splitext(netname)[0]
+								, '*', _SEPSHF, str(popt.shfnum + 1), '*', dflext)))
 							# Backup existed dir (path, not just a name)
-							dirname = os.path.splitext(net)[0]
-							shuf0 = prepareDir(dirname, net, bcksuffix)
+							shuf0 = prepareDir(os.path.splitext(net)[0], net, backup, bcksuffix)
 							shfnum += shuffleNet(shuf0, popt.shfnum)
 					else:
 						# Backup the whole dir of network instances with possible shuffles,
 						# which are going to be shuffled
 						tobackup(path, False, bcksuffix, move=False)  # Copy to the backup
 						# Note: the folder containing the network instance originating the shuffling should not be deleted
+						# notbacked = True
 						for net in glob.iglob('*'.join((path, dflext))):
+							# # Skip the shuffles if any to avoid dir preparation for them
+							# netname = os.path.split(net)[1]
+							# if netname.find(_SEPSHF) != -1:
+							# 	continue
+							# # Whether the shuffles will be modified and need to be backuped
+							# backup = xpathExists(''.join((path, os.path.splitext(netname)[0]
+							# 	, '*', _SEPSHF, str(popt.shfnum + 1), '*', dflext)))
+							# if backup and notbacked:
+							# 	tobackup(path, False, bcksuffix, move=False)  # Copy to the backup
 							shfnum += shuffleNet(net, popt.shfnum)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
 				else:
 					# Skip shuffles and their direct backing up
@@ -848,13 +878,19 @@ while True:
 					if netname.find(_SEPSHF) != -1:
 						continue
 					# Generate dirs if required
+					dirpath = os.path.splitext(path)[0]
+					basename = os.path.splitext(netname)[0]
 					if not popt.flat:
-						dirname = os.path.splitext(path)[0]
-						shuf0 = prepareDir(dirname, path, bcksuffix)
+						# Whether the shuffles will be modified and need to be backuped
+						backup = xpathExists(''.join((dirpath, '/', basename
+							, '*', _SEPSHF, str(popt.shfnum + 1), '*', dflext)))
+						shuf0 = prepareDir(dirpath, path, backup, bcksuffix)
 						shfnum += shuffleNet(shuf0, popt.shfnum)
 					else:
 						# Backup existing flat shuffles if any (expanding the base path), which will be updated the subsequent shuffling
-						tobackup(path, True, bcksuffix, move=False)  # Copy to the backup
+						# Whether the shuffles will be modified and need to be backuped
+						if xpathExists('*'.join((dirpath, _SEPSHF + str(popt.shfnum + 1), dflext))):
+							tobackup(os.path.split(path)[0], True, bcksuffix, move=False)  # Copy to the backup
 						shfnum += shuffleNet(path, popt.shfnum)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
 				shufnets += 1
 

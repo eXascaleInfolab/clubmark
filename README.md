@@ -1,4 +1,4 @@
-# PyCABeM  - Bench ![bench mark icon](images/benchmark-64.png) marking Framework for the Clustering Algorithms Evaluation
+# Clubmark (former [PyCABeM](https://github.com/eXascaleInfolab/PyCABeM/tree/draft)) - Bench ![bench mark icon](images/benchmark-64.png) marking Framework for the Clustering Algorithms Evaluation
 
 `\brief` Benchmarking of the clustering (community detection) algorithms using extrinsic (various Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information)(NMI) and Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) measures) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks))(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures, considering overlaps (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of some cluster and parent clusters of that cluster).  
 `\authors` (c) Artem Lutov <artem@exascale.info>  
@@ -21,7 +21,7 @@
 
 ## Overview
 
-The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks), measures execution statistics and evaluates accuracy of the results using specified measures. PyCABeM is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation. The generic functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multiprocess execution pool and load balancer.
+The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks), measures execution statistics and evaluates accuracy of the results using specified measures. Clubmark is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation. The generic functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multiprocess execution pool and load balancer.
 
 Generic properties:
 - Data preprocessing (synthetic networks generation, shuffling, etc.);
@@ -59,7 +59,7 @@ Ideally, the applications should be executed in parallel in a way to guarantee t
 - localize the CPU cache (the processes are not jumped between the CPUs and work with the hot cache);
 - are automatically terminated from the execution on more complex datasets if do not satisfy the execution constraints on lighter datasets.
 
-Before starting PyCABeM development I found several open source frameworks for the "Community Detection Algorithms" evaluation but they do not fulfill the outlined constraints. The most comprehensive one is [Circulo](http://www.lab41.org/circulo-a-community-detection-evaluation-framework/) from [Lab41](https://github.com/Lab41/Circulo/tree/master/experiments), another one is called [CommunityEvaluation](https://github.com/rabbanyk/CommunityEvaluation).  
+Before starting Clubmark development I found several open source frameworks for the "Community Detection Algorithms" evaluation but they do not fulfill the outlined constraints. The most comprehensive one is [Circulo](http://www.lab41.org/circulo-a-community-detection-evaluation-framework/) from [Lab41](https://github.com/Lab41/Circulo/tree/master/experiments), another one is called [CommunityEvaluation](https://github.com/rabbanyk/CommunityEvaluation).  
 Circulo is an excellent framework until you don't run evaluations on the large networks, don't need to specify per-algorithm time/memory constraints and in case the default pipeline is sufficient, which was not the case for me.
 
 
@@ -67,7 +67,7 @@ Circulo is an excellent framework until you don't run evaluations on the large n
 
 The benchmarking can be run either directly on the *Linux Ubuntu 16.04 x64* or via the [Docker](https://docs.docker.com/get-started/) container with the pre-installed environment on any platform. Anyway, the sources are required:
 ```sh
-$ git clone https://github.com/eXascaleInfolab/PyCABeM.git 
+$ git clone https://github.com/eXascaleInfolab/ulubmark.git 
 ```
 
 
@@ -149,7 +149,7 @@ $ docker version
 ```
 See also the [brief tutorial on Docker installation and usage](https://www.howtoforge.com/tutorial/docker-installation-and-usage-on-ubuntu-16.04/) or the [official getting started tutorial](https://docs.docker.com/get-started/).
 
-> Optionally, the `PyCaBeM` docker image containing the execution environment can be built from the source [Dockerfile](Dockerfile) by executing from the repository directory:
+> Optionally, the `clubmark` docker image containing the execution environment can be built from the source [Dockerfile](Dockerfile) by executing from the repository directory:
 > ```sh
 > $ docker build -t luaxi/clubmark-env:v3.0-U16.04 -t luaxi/clubmark-env .
 > ```
@@ -165,7 +165,7 @@ $ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/clubmark luaxi/clubmark-e
 ```
 and call `./benchmark.py` with the required parameters there.
 > $UID might not be defined in the non-bash shell (sh, etc), then use `id -u $USER` instead.  
-`` `pwd` `` projects to `<PYCABEM_REPOSITORY_PATH>`, which is the current directory and the working directory of the benchmarking.  
+`` `pwd` `` projects to `<CLUBMARK_REPOSITORY_PATH>`, which is the current directory and the working directory of the benchmarking.  
 `/opt/clubmark` or any other local directory denotes th e dirctory in the CONTAINER where the benchmarking results and traces are stored, which is mapped to the current host directory (`` `pwd` ``).  
 See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-with-examples).
 
@@ -175,7 +175,7 @@ See the [Usage](#usage) section to learn more about the benchmark execution and 
 
 > This section should be omitted if the benchmarking is run on the docker container.
 
-The target environment is *Linux Ubuntu 16.04 x64*. To install all the requirements locally, execute from the PyCABeM repository directory:
+The target environment is *Linux Ubuntu 16.04 x64*. To install all the requirements locally, execute from the Clubmark repository directory:
 ```sh
 $ ./install_reqs.sh
 ```
@@ -436,4 +436,4 @@ All the evaluations will be performed automatically, the algorithm should just f
 * [PyExPool](https://github.com/eXascaleInfolab/PyExPool)  - multiprocess execution pool and load balancer, which provides [external] applications scheduling for the in-RAM execution on NUMA architecture with capabilities of the affinity control, CPU cache vs parallelization maximization, memory consumption and execution time constrains specification for the whole execution pool and per each executor process (called worker, executes a job).
 * DAOC - (former [HiReCS](https://github.com/eXascaleInfolab/hirecs) High Resolution Hierarchical Clustering with Stable State, which was totally redesigned).
 * [eXascale Infolab](https://github.com/eXascaleInfolab) GitHub repository and [our website](http://exascale.info/) where you can find another projects and research papers related to Big Data processing!  
-Please, [star this project](https://github.com/eXascaleInfolab/PyCABeM) if you use it.
+Please, [star this project](https://github.com/eXascaleInfolab/clubmark) if you use it.

@@ -67,7 +67,7 @@ Circulo is an excellent framework until you don't run evaluations on the large n
 
 The benchmarking can be run either directly on the *Linux Ubuntu 16.04 x64* or via the [Docker](https://docs.docker.com/get-started/) container with the pre-installed environment on any platform. Anyway, the sources are required:
 ```sh
-$ git clone https://github.com/eXascaleInfolab/ulubmark.git 
+$ git clone https://github.com/eXascaleInfolab/clubmark.git 
 ```
 
 

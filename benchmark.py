@@ -1124,17 +1124,6 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	assert appsmodule and isinstance(datas[0], PathOpts) and exectime + 0 >= 0 and timeout + 0 >= 0, 'Invalid input arguments'
 	assert isinstance(seed, int) and seed >= 0, 'Seed value is invalid'
 
-	def unknownApp(name):
-		"""A stub for the unknown / not implemented apps (algorithms) to be benchmaked
-
-		name  - name of the function to be called (traced and skipped)
-		"""
-		def stub(*args, **kwargs):  #pylint: disable=W0613
-			"""The algorithm stab to be called"""
-			print(' '.join(('ERROR: ', name, 'function is not implemented, the call is skipped.')), file=sys.stderr)
-		stub.__name__ = name  # Set original name to the stub func
-		return stub
-
 	stime = time.perf_counter()  # Procedure start time; ATTENTION: .perf_counter() should not be used, because it does not consider "sleep" time
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
@@ -1149,7 +1138,19 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			algorithms = appnames(appsmodule)
 			#algorithms = [alg.lower() for alg in algorithms]
 		# Execute the specified algorithms
-		execalgs = [getattr(appsmodule, _PREFEXEC + alg, unknownApp(_PREFEXEC + alg)) for alg in algorithms]
+		execalgs = [getattr(appsmodule, _PREFEXEC + alg, None) for alg in algorithms]
+		# Ensure that all specified algorithms correspond to the functions
+		invalalgs = []
+		for i in range(len(execalgs)):
+			if execalgs[i] is None:
+				invalalgs.append(i)
+		if invalalgs:
+			print('WARNING, the specified algorithms are omitted as not existent: '
+				, ' '.join([algorithms[ia] for ia in invalalgs]), file=sys.stderr)
+			while invalalgs:
+				i = invalalgs.pop()
+				del algorithms[i]
+				del execalgs[i]
 		assert len(algorithms) == len(execalgs), 'execalgs are not synced with the algorithms'
 
 		def runapp(net, asym, netshf, pathid='', tasks=None):

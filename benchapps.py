@@ -1355,6 +1355,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 
 	return uint: the number of scheduled jobs
 	"""
+	# Note: the original implementation does not specify the default parameter values
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
 		task is None or isinstance(task, Task)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
@@ -1380,7 +1381,11 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 	steps = _LEVSMAX  # The number of steps (similarity thresholds). Use 10 scale levels as in Ganxis.
 	# Run for range of eps
 	# Epsilon delta for each step; -1 is used because of the inclusive range
-	deps = (epsMax - eps) / (steps - 1) if _LEVSMAX >= 2 else (eps + epsMax) / 2.
+	if steps >= 2:
+		deps = (epsMax - eps) / (steps - 1)
+	else:
+		eps = (eps + epsMax) / 2.
+		deps = epsMax - eps
 	while eps <= epsMax:
 		#prm = '{:3g}'.format(eps)  # Alg params (eps) as string
 		prm = '{:.2f}'.format(eps)  # Alg params (eps) as string
@@ -1421,6 +1426,9 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 	...
 	alg  - the algorithm to be executed:  1: RG, 2: CGGC_RG, 3: CGGCi_RG
 	"""
+	# Note: the influential parameters are --ensemblesize and --finalk but they take absolute
+	# values, which depend on the networks size making the algorithm hardly parameterizable,
+	# so only the default values used
 	algs = ('RG', 'CGGC_RG', 'CGGCi_RG')
 	assert isinstance(algname, str) and algname and execpool and netfile and (asym is None or isinstance(asym, bool)
 		) and timeout + 0 >= 0 and (task is None or isinstance(task, Task)
@@ -1475,6 +1483,8 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	Note: SCD os applicable only for the undirected unweighted networks, it skips the weight
 	in the weighted network.
 	"""
+	# Note: -a parameter controls cohension of the communities, E (0, 1] and can be thought
+	# as a resolution (scale) parameter, but is not presented in the documentation.
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
 		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
@@ -1500,13 +1510,30 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 
-	# ./scd -n 1 -o tests/scd/karate.nse.cnl -f networks/karate.nse.txt
-	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
-		, './scd', '-n', '1' # Use a single threaded implementation
-		, '-o', ''.join((taskpath, '/', taskname, _EXTCLNODES)), '-f', netfile)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
-		#, ondone=postexec, stdout=os.devnull
-		, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
+	alfa = 0.25  # Min value of "alfa"
+	amax = 1.  # Max value of "alfa", default
+	steps = _LEVSMAX  # The number of steps (similarity thresholds). Use 10 scale levels as in Ganxis.
+	if steps >= 2:
+		da = (amax - alfa) / (steps - 1)
+		# print('>> steps: {}, da: {:.2f}'.format(steps, da))
+	else:
+		alfa = (alfa + amax) / 2.
+		da = amax - alfa
+	while alfa <= amax:
+		astr = '{:.2f}'.format(alfa)  # Alg params (alpha) as string
+		# Embed params into the task name
+		taskparname = delPathSuffix(taskname, True)
+		tasksuf = taskname[len(taskparname):]
+		taskparname = ''.join((taskparname, _SEPPARS, 'a', astr, tasksuf))  # Current task
+		# ./scd -n 1 [-a 1] -o tests/scd/karate.nse.cnl -f networks/karate.nse.txt
+		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskparname, pathid)), '-s=/etime_' + algname
+			, './scd', '-n', '1' # Use a single threaded implementation
+			, '-a', astr
+			, '-o', ''.join((taskpath, '/', taskparname, _EXTCLNODES)), '-f', netfile)
+		execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskparname)), workdir=workdir, args=args, timeout=timeout
+			#, ondone=postexec, stdout=os.devnull
+			, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
+		alfa += da
 	return 1
 
 

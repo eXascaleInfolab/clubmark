@@ -1369,12 +1369,17 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network;  , netext
 	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Pscan'
+	# Backup prepated the resulting dir and back up the previous results if exist
+	taskpath = prepareResDir(algname, taskname, odir, pathid)
+	errfile = taskpath + _EXTELOG
+	# logfile = taskpath + _EXTLOG
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(_UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
 	netfile = relpath(netfile)
+	taskpath = relpath(taskpath)
 
 	eps = 0.05  # Min epsilon (similarity threshold)
 	epsMax = 0.9  # Max epsilon (similarity threshold)
@@ -1389,22 +1394,16 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 	while eps <= epsMax:
 		#prm = '{:3g}'.format(eps)  # Alg params (eps) as string
 		prm = '{:.2f}'.format(eps)  # Alg params (eps) as string
-		prmex = 'e' + prm
+		# prmex = 'e' + prm
 		# Embed params into the task name
 		taskbasex = delPathSuffix(taskname, True)
 		tasksuf = taskname[len(taskbasex):]
-		ctaskname = ''.join((taskbasex, _SEPPARS, prmex, tasksuf))  # Current task
-		# Backup prepated the resulting dir and back up the previous results if exist
-		taskpath = prepareResDir(algname, ctaskname, odir, pathid)
-		errfile = taskpath + _EXTELOG
-		#logfile = taskpath + _EXTLOG
-		# Evaluate relative paths dependent of the alg params
-		reltaskpath = relpath(taskpath)
+		ctaskname = ''.join((taskbasex, _SEPPARS, 'e', prm, tasksuf))  # Current task
 
 		# ATTENTION: a single argument is k-clique size, specified later
 		# ./pscan -e 0.7 -o graph-e7.cnl -f NSE graph.nse
 		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ctaskname, pathid)), '-s=/etime_' + algname
-			, './pscan', '-e', prm, '-o', ''.join((reltaskpath, '/', ctaskname, _EXTCLNODES))
+			, './pscan', '-e', prm, '-o', ''.join((taskpath, '/', ctaskname, _EXTCLNODES))
 			, '-f', 'NSA' if asym else 'NSE', netfile)
 
 		#print('> Starting job {} with args: {}'.format('_'.join((ctaskname, algname, prmex)), args + [prm]))
@@ -1412,7 +1411,8 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
 			#, stdout=logfile  # Skip standard log, because there are too many files, which does not contain useful information
 			# Note: eps has not monotonous impact mainly on the exectution time, not large impact and the clustring is fast anyway
-			, task=task, category='_'.join((algname, prmex)), size=netsize, stdout=os.devnull, stderr=errfile))
+			 #, category='_'.join((algname, prmex))
+			, task=task, category=algname, size=netsize, stdout=os.devnull, stderr=errfile))
 		eps += deps
 
 	return steps
@@ -1531,8 +1531,8 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 			, '-a', astr
 			, '-o', ''.join((taskpath, '/', taskparname, _EXTCLNODES)), '-f', netfile)
 		execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskparname)), workdir=workdir, args=args, timeout=timeout
-			#, ondone=postexec, stdout=os.devnull
-			, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
+			#, ondone=postexec, stdout=os.devnull, stdout=logfile
+			, task=task, category=algname, size=netsize, stdout=os.devnull, stderr=errfile))
 		alfa += da
 	return 1
 

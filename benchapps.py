@@ -1426,8 +1426,8 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 	...
 	alg  - the algorithm to be executed:  1: RG, 2: CGGC_RG, 3: CGGCi_RG
 	"""
-	# Note: the influential parameters are --ensemblesize and --finalk but they take absolute
-	# values, which depend on the networks size making the algorithm hardly parameterizable,
+	# Note: the influential parameter is --finalk but it takes an absolute value,
+	# which depends on the network size making the algorithm hardly parameterizable,
 	# so only the default values used
 	algs = ('RG', 'CGGC_RG', 'CGGCi_RG')
 	assert isinstance(algname, str) and algname and execpool and netfile and (asym is None or isinstance(asym, bool)
@@ -1501,7 +1501,7 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	# Backup prepated the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathid)
 	errfile = taskpath + _EXTELOG
-	logfile = taskpath + _EXTLOG
+	# logfile = taskpath + _EXTLOG
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths

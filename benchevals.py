@@ -280,6 +280,10 @@ class QualitySaver(object):
 				raise
 
 
+def execMF1(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=_UTILDIR, seed=None):
+	pass
+
+
 def execGecmi(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=_UTILDIR, seed=None):
 	pass
 

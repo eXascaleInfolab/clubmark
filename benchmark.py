@@ -180,21 +180,8 @@ class Params(object):
 				0b11 - force conversion (overwrite all)
 			0b100 - resolve duplicated links on conversion
 		runalgs  - execute algorithm or not
-		quality  - quality measures to evaluate on the results:
-			Note: all measures are applicable for overlapping clusters
-			0  - nothing
-			0b00000001  - NMI_max
-			0b00000011  - all NMIs (max, min, avg, sqrt)
-			0b00000100  - ONMI_max
-			0b00001100  - all ONMIs (max, avg, lfk)
-			0b00010000  - Average F1h Score
-			0b00100000  - F1p measure
-			0b01110000  - All F1s (F1p, F1h, F1s)
-			0b10000000  - Default extrinsic measures (NMI_max, F1h and F1p)
-			0b1111'1111  - All extrinsic measures (NMI-s, ONMI-s, F1-s)
-			0x1xx  - Q (modularity)
-			0x2xx  - f (conductance)
-			0xFxx  - All intrinsic measures
+		qmeasures  - quality measures with their parameters to be evaluated
+			on the clustering results. None means do not evaluate.
 		updqual  - update quality evaluations storage rewriting existed values
 			instead of creating a new storage. Allowed only for the same seed.
 			The existed quality evaluations are backed up anyway.
@@ -210,7 +197,7 @@ class Params(object):
 		"""
 		self.syntpo = None  # SyntPathOpts()
 		self.runalgs = False
-		self.quality = 0
+		self.qmeasures = None  # Evaluating quality measures with their parameters
 		self.updqual = False
 		self.datas = []  # Input datasets, list of PathOpts, where path is either dir or file wildcard
 		self.timeout = _TIMEOUT
@@ -359,12 +346,12 @@ def parseParams(args):
 			if 'r' in arg:
 				opts.convnets |= 0b100
 		elif arg[1] == 'a':
-			if not (arg[:3] == '-a=' and len(arg) >= 4):
+			if not (arg.startswith('-a=') and len(arg) >= 4):
 				raise ValueError('Unexpected argument: ' + arg)
 			inverse = arg[3] == '-'  # Consider inversing (run all except)
 			if inverse and len(arg) <= 4:
 				raise ValueError('Unexpected argument: ' + arg)
-			opts.algorithms = arg[3 + inverse:].strip('"\'').split()  # Note: argparse automatically performs this escaping
+			opts.algorithms = arg[3 + inverse:].strip('"').strip("'").split()  # Note: argparse automatically performs this escaping
 			# Exclude algorithms if required
 			if opts.algorithms and inverse:
 				algs = appnames(benchapps)
@@ -381,65 +368,12 @@ def parseParams(args):
 				raise ValueError('Unexpected argument: ' + arg)
 			opts.runalgs = True
 		elif arg[1] == 'q':
-			# [-q[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]]
-			#0b00000001  - NMI_max
-			#0b00000011  - all NMIs (max, min, avg, sqrt)
-			#0b00000100  - ONMI_max
-			#0b00001100  - all ONMIs (max, avg, lfk)
-			#0b00010000  - Average F1h Score
-			#0b00100000  - F1p measure
-			#0b01110000  - All F1s (F1p, F1h, F1s)
-			#0b10000000  - Default extrinsic measures (NMI_max, F1h and F1p)
-			#0b1111'1111  - All extrinsic measures (NMI-s, ONMI-s, F1-s)
-			#0x1xx  - Q (modularity)
-			#0x2xx  - f (conductance)
-			#0xFxx  - All intrinsic measures
-			quality = 0  # Quality measures bitmask
-			pos = 2
-			if len(arg) == pos:
-				quality = 0b10000000  # Use default extrinsic measures
-			elif arg[pos] == 'e':
-				pos += 1
-				if len(arg) == pos:
-					quality |= 0xFF  # All extrinsic measures
-				elif arg[pos] == 'n':
-					pos += 1
-					if len(arg) == pos:
-						quality |= 0b11  # All NMIs
-					elif arg[pos] == 'x':
-						quality |= 0b01  # NMI_max
-				elif arg[pos] == 'o':
-					pos += 1
-					if len(arg) == pos:
-						quality |= 0b1100  # All ONMIs
-					elif arg[pos] == 'x':
-						quality |= 0b0100  # ONMI_max
-				elif arg[pos] == 'f':
-					pos += 1
-					if len(arg) == pos:
-						quality |= 0b1110000  # All F1s
-					elif arg[pos] == 'h':
-						quality |= 0b0010000  # F1h
-					elif arg[pos] == 'p':
-						quality |= 0b0100000  # F1p
-				elif arg[pos] == 'r':  # Recommended extrinsic measures
-					quality |= 0b0110001  # NMI_max, F1h, F1p
-			elif arg[pos] == 'i':
-				pos += 1
-				if len(arg) == pos:
-					quality |= 0xF00  # All intrinsic measures
-				elif arg[pos] == 'm':
-					quality |= 0x100  # Modularity
-				elif arg[pos] == 'c':
-					quality |= 0x200  # Conductance
-			elif arg[pos] == 'u' and len(arg) == pos+1:
-				opts.updqual = True
-				continue
-
-			if quality:
-				opts.quality |= quality
-			else:
+			if not (arg == '-q' or (arg.startswith('-q=') and len(arg) >= 4)):
 				raise ValueError('Unexpected argument: ' + arg)
+			# Note: this option can be supplied multiple time with various values
+			if opts.qmeasures is None:
+				opts.qmeasures = []
+			opts.qmeasures.append(arg[3:].strip('"').strip("'").split())
 		elif arg[1] == 's':
 			if len(arg) <= 3 or arg[2] != '=':
 				raise ValueError('Unexpected argument: ' + arg)
@@ -903,12 +837,13 @@ while True:
 
 
 def basenetTasks(netname, pathidstr, basenets, rtasks):
-	"""Fetch or make tasks for the specific base network name (with pathidstr and whitout instance and shuffle id)
+	"""Fetch or make tasks for the specific base network name (with pathidstr
+	and whitout the instance and shuffle id)
 
 	netname: str  - network name, possibly includes instance but NOT shuffle id
 	pathidstr: str  - network path id in the string representation
 	basenets: dict(basenet: str, nettasks: list(Task))  - tasks for the basenet
-	rtasks: list(Task)  - root tasks for the running appson all networks
+	rtasks: list(Task)  - root tasks for the running apps on all networks
 
 	return  nettasks: list(Task)  - tasks for the basenet of the specified netname
 	"""
@@ -961,7 +896,7 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 				netname = os.path.split(net)[1]
 				if netname.find(_SEPSHF) != -1:
 					continue
-				# Fetch base network name (whitout instance and shuffle id)
+				# Fetch base network name (whitout the instance and shuffle id)
 				nettasks = basenetTasks(netname, None if not xargs else xargs['pathidstr'], bnets, tasks)
 				# iename = netname.find(_SEPINST)
 				# basenet = netname if iename == -1 else netname[:iename]
@@ -1010,7 +945,7 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 			netname = os.path.split(path)[1]
 			if netname.find(_SEPSHF) != -1:
 				return
-			# Fetch base network name (whitout instance and shuffle id)
+			# Fetch base network name (whitout the instance and shuffle id)
 			nettasks = basenetTasks(netname, None if not xargs else xargs['pathidstr'], bnets, tasks)
 			#if popt.shfnum:  # ATTENTNION: shfnum is not available for non-synthetic networks
 			# Process dedicated dir of shuffles for the specified network,
@@ -1120,6 +1055,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	runtimeout  - timeout for all algorithms execution, >= 0, 0 means unlimited time
 	"""
 	if not datas:
+		print('WRANING runApps(), there are no algorithms specified to be executed', file=sys.stderr)
 		return
 	assert appsmodule and isinstance(datas[0], PathOpts) and exectime + 0 >= 0 and timeout + 0 >= 0, 'Invalid input arguments'
 	assert isinstance(seed, int) and seed >= 0, 'Seed value is invalid'
@@ -1281,7 +1217,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 				if os.path.isfile(aexecres):
 					with open(aexecres, 'a') as faexres:
 						faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
-			
+
 	_execpool = None
 	stime = time.perf_counter() - stime
 	print('The apps execution is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
@@ -1291,25 +1227,11 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	print('Execution statistics aggregated')
 
 
-def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout  #pylint: disable=W0613
+def evalResults(qmeasures, appsmodule, algorithms, datas, seed, exectime, timeout  #pylint: disable=W0613
 , evaltimeout=14*24*60*60, update=False):  #pylint: disable=W0613
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
-	quality  - evaluation measures mask
-		Note: all measures are applicable for the overlapping clusters
-		0  - nothing
-		0b00000001  - NMI_max
-		0b00000011  - all NMIs (max, min, avg, sqrt)
-		0b00000100  - ONMI_max
-		0b00001100  - all ONMIs (max, avg, lfk)
-		0b00010000  - Average F1h Score
-		0b00100000  - F1p measure
-		0b01110000  - All F1s (F1p, F1h, F1s)
-		0b10000000  - Default extrinsic measures (NMI_max, F1h and F1p)
-		0b1111'1111  - All extrinsic measures (NMI-s, ONMI-s, F1-s)
-		0x1xx  - Q (modularity)
-		0x2xx  - f (conductance)
-		0xFxx  - All intrinsic measures
+	qmeasures  - evaluating qualituy measures with their parameters
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
 	algorithms  - list of the algorithms to be executed
 	datas  - input datasets, wildcards of files or directories containing files
@@ -1324,7 +1246,10 @@ def evalResults(quality, appsmodule, algorithms, datas, seed, exectime, timeout 
 	update  - update evaluations file or create a new one, anyway existed evaluations
 		are backed up.
 	"""
-	assert (quality and appsmodule and datas and exectime + 0 >= 0
+	if qmeasures is None:
+		print('WRANING evalResults(), there are no quality measures specified to be evaluated', file=sys.stderr)
+		return
+	assert (qmeasures and appsmodule and datas and exectime + 0 >= 0
 	 and timeout + 0 >= 0), 'Invalid input arguments'
 	assert isinstance(seed, int) and seed >= 0, 'Seed value is invalid'
 
@@ -1677,12 +1602,13 @@ def benchmark(*args):
 
 	opts = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tsyntpo: "{}"\n\tconvnets: 0b{:b}'
-		'\n\trunalgs: {}\n\tquality: 0b{:b}\n\tupdqual: {}\n\tdatas: {}\n\talgorithms: {}'
+		'\n\trunalgs: {}\n\tquality measures: 0b{:b}\n\tupdqual: {}\n\tdatas: {}\n\talgorithms: {}'
 		'\n\taggrespaths: {}\n\ttimeout: {} h {} m {:.4f} sec'
-	 .format(opts.syntpo, opts.convnets, opts.runalgs, opts.quality, opts.updqual
-	  , '; '.join([str(pathopts) for pathopts in opts.datas])  # Note: ';' because internal separator is ','
-	  , ', '.join(opts.algorithms) if opts.algorithms else ''
-	  , ', '.join(opts.aggrespaths) if opts.aggrespaths else '', *secondsToHms(opts.timeout)))
+	 .format(opts.syntpo, opts.convnets, opts.runalgs
+		, None if opts.qmeasures is None else ' '.join([qm[0] for qm in opts.qmeasures]), opts.updqual
+		, '; '.join([str(pathopts) for pathopts in opts.datas])  # Note: ';' because internal separator is ','
+		, ', '.join(opts.algorithms) if opts.algorithms else ''
+		, ', '.join(opts.aggrespaths) if opts.aggrespaths else '', *secondsToHms(opts.timeout)))
 
 	# Start WebUI if required
 	global _webuiapp  #pylint: disable=W0603
@@ -1745,8 +1671,8 @@ def benchmark(*args):
 			, exectime=exectime, timeout=opts.timeout, runtimeout=opts.runtimeout)
 
 	# Evaluate results
-	if opts.quality:
-		evalResults(quality=opts.quality, appsmodule=benchapps, algorithms=opts.algorithms
+	if opts.qmeasures is not None:
+		evalResults(qmeasures=opts.qmeasures, appsmodule=benchapps, algorithms=opts.algorithms
 			, datas=opts.datas, seed=seed, exectime=exectime, timeout=opts.timeout
 			, evaltimeout=opts.evaltimeout, update=opts.updqual)
 
@@ -1791,7 +1717,7 @@ if __name__ == '__main__':
 		print('\n'.join(('Usage:',
 			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
 			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
-			' [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[e[{{n[x],o[x],f[{{h,p}}],d}}][i[{{m,c}}]]]'
+			' [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[="qmapp [arg1 arg2 ...]"]]'
 			' [-s=<resval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] [-w=<webui_addr>] | -h',
 			'',
 			'Example:',
@@ -1801,7 +1727,7 @@ if __name__ == '__main__':
 			'  - The expected format of input datasets (networks) is .ns<l> - network specified by'
 			' <links> (arcs / edges), a generalization of the .snap, .ncol and Edge/Arcs Graph formats.',
 			'  - Paths can contain wildcards: *, ?, +.',
-			'  - Multiple paths can be specified via multiple -i, -s options (one per the item).',
+			'  - Multiple paths can be specified with multiple -i, -s options (one per the item).',
 			'',
 			'Parameters:',
 			'  --help, -h  - show this usage description',
@@ -1814,57 +1740,52 @@ if __name__ == '__main__':
 			'    a  - generate networks specified by arcs (directed) instead of edges (undirected)',
 			'NOTE: shuffled datasets have the following naming format:',
 			'\t<base_name>[(seppars)<param1>...][{sepinst}<instance_index>][{sepshf}<shuffle_index>].<net_extension>',
-			'  --input, -i[X][{gensepshuf}<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories'
+			'  --input, -i[f][a][{gensepshuf}<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories'
 			', which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension'
-			' (.ns{{e,a}}). Default: -ie={syntdir}{netsdir}*/, which are subdirs of the synthetic networks dir without shuffling.',
+			' (.ns{{e,a}}). Default: -i={syntdir}{netsdir}*/, which are subdirs of the synthetic networks dir without shuffling.',
 			'    f  - make flat derivatives on shuffling instead of generating the dedicated directory (having the file base name)'
 			' for each input network, might cause flooding of the base directory. Existed shuffles are backed up.',
 			'    NOTE: variance over the shuffles of each network instance is evaluated only for the non-flat structure.',
 			'    a  - the dataset is specified by arcs (asymmetric, directed links) instead of edges (undirected links)'
 			', considered only for not .ns{{a,e}} extensions.',
 			'NOTE:',
-			'  - The following symbols in the path name have specific semantic and processed respectively: {rsvpathsmb}',
-			'  - Paths may contain wildcards: *, ?, +',
-			'  - Multiple directories and files wildcards can be specified via multiple -i options',
-			'  - Existent shuffles are backed up and the new shuffles OVERWRITE already existent shuffles'
-			' (retainig the old non-matched shuffles)',
+			'  - The following symbols in the path name have specific semantic and processed respectively: {rsvpathsmb}.',
+			'  - Paths may contain wildcards: *, ?, +.',
+			'  - Multiple directories and files wildcards can be specified with multiple -i options.',
+			'  - Existent shuffles are backed up if reduced, the existend shuffles are RETAINED and only the additional'
+			' shuffles are generated if required.',
 			'  - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]',
 			'  - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
-			' is up to the clustering algorithm',
+			' is up to the clustering algorithm.',
 			'  --apps, -a[=[-]"app1 app2 ..."]  - apps (clustering algorithms) to be applied, default: all.',
 			'Leading "-" means applying of all except the specified apps. Available apps ({anppsnum}): {apps}.',
 			'Impacts {{r, q}} options. Optional, all registered apps (see benchapps.py) are executed by default.',
 			'NOTE: output results are stored in the "{resdir}<algname>/" directory',
 			#'    f  - force execution even when the results already exists (existent datasets are moved to the backup)',
 			'  --runapps, -r  - run specified apps on the specified datasets, default: all',
-			'  --quality, -q[X]  - evaluate quality (including accuracy) of the results for the specified algorithms'
-			' on the specified datasets and form the summarized results. Default: NMI_max, F1h and F1p measures on all datasets',
-			#  -q[X][="<SEP><inpnet_pyregex><SEP><gtnet_pyregex>[<SEP><pyregex_glags>]"]
-			#  ";(?<=.)nse$;ncl;i", see details in https://docs.python.org/2/library/re.html
-			#'    f  - force execution even when the results already exists (existent datasets are moved to the backup)',
-			'    e[Y]  - extrinsic measures for overlapping communities, default: all',
-			'      n[Z]  - NMI measure(s) for overlapping and multi-level communities: max, avg, min, sqrt',
-			'        x  - NMI_max,',
-			'      NOTE: unified NMI evaluation is stochastic and does not provide the seed parameter.',
-			#'        a  - NMI_avg (also known as NMI_sum),',
-			#'        n  - NMI_min,',
-			#'        r  - NMI_sqrt',
-			'      o[Z]  - overlapping NMI measure(s) for overlapping communities'
-			' that are not multi-level: max, sum, lfk. Note: it is much faster than generalized NMI',
-			'        x  - NMI_max',
-			'      f[Z]  - avg F1-Score(s) for overlapping and multi-level communities: avg, hmean, pprob',
-			#'        a  - avg F1-Score',
-			'        h  - harmonic mean of F1-Score',
-			'        p  - F1p measure (harmonic mean of the weighted average of partial probabilities)',
-			'      r  - recommended extrinsic measures (NMI_max, F1_h, F1_p) for overlapping multi-level communities',
-			'    i[Y]  - intrinsic measures for overlapping communities, default: all',
-			'      m  - modularity Q',
-			'      c  - conductance f',
-			'    u  - update quality evaluations appending the new results to the existing stored evaluations (if any)'
-			' and then aggregate everything to the final summarized results skipping older duplicates (if any).',
-			'  ATTENTION: "-qu" requires at least one more "-qX" flag to indicate what measures should be (re)evaluated.'
-			' Applicable only for the same seed as existed evaluations had. The existed quality evaluations are backed up anyway.',
-			'NOTE: multiple quality evaluation options can be specified via the multiple -q options.',
+			'  --quality, -q[="qmapp [arg1 arg2 ...]"  - evaluate quality (accuracy) with the specified quality measure'
+			' application (<qmapp>) for the algorithms (specified with "-a") on the datasets (specified with "-i")'
+			' and form the aggregated final results. Default: MF1p, GNMI_max, OIx extrinsic and Q, f intrinsic measures'
+			' on all datasets. Available qmapps ({qmappsnum}): {qmapps}.',
+			'NOTE: Multiple quality measure applications can be specified with multiple -q options.',
+			'Notations of the quality mesurements:',
+			' = Extrinsic Quality (Accuracy) Measures =',
+			'   - GNMI[_{{max,sqrt}}]  - Generalized Normalized Mutual Information for overlapping and multi-resolution clusterings'
+			' (collections of clusters), equals to the standard NMI when applied to the non-overlapping single-resolution clusterings.',
+			'   - MF1{{p,h,a}}[_{{w,u,c}}]  - mean F1 measure (harmonic or average) of all local best matches by the'
+			' Partial Probabilities or F1 (harmonic mean) considering macro/micro/combined weighting.',
+			'   - OI[x]  - [x - extended] Omega Index for the overlapping clusterings, non-extended version equals to the'
+			' Adjusted Rand Index when applied to the non-overlapping single-resolution clusterings.',
+			' --- Less Indicative Extrinsic Quality Measures ---',
+			'   - F1{{p,h}}_[{{w,u}}]  - perform labelling of the evaluating clusters with the specified ground-truth'
+			' and evaluate F1-measure of the labeled clusters',
+			'   - ONMI[_{{max,sqrt,avg,lfk}}]  - Ovelapping NMI suitable for a single-resolution clusterins having light overlaps,'
+			' the resulting values are not compatible with the standard NMI when applied to the non-overlapping clsuters.',
+			# '   - NMI[_{{max,sqrt,avg,min}}]  - standart NMI for the non-overlapping (disjoint) clusters only.',
+			' = Intrinsic Quality Measures =',
+			'   - Cds  - conducance f for the overlapping clustering.',  # Cds, f
+			'   - Q[a]  - [autoscaled] modularity for the overlapping clustering, non-autoscaled equals to the standard modularity',
+			' when applied to the non-overlapping single-resolution clustering.',
 			'  --timeout, -t=[<days:int>d][<hours:int>h][<minutes:int>m][<seconds:float>] | -t[X]=<float>  - timeout for each'
 			' benchmarking application per single evaluation on each network; 0 - no timeout, default: {algtimeout}. X option:',
 			'    s  - time in seconds, default option',

@@ -16,7 +16,7 @@ import glob
 import tempfile
 import shutil
 import tarfile
-from benchutils import SyncValue, nameVersion, tobackup, _ORIGDIR, _BCKDIR
+from benchutils import SyncValue, nameVersion, tobackup, ORIGDIR, _BCKDIR
 from benchapps import preparePath
 
 
@@ -90,16 +90,16 @@ class TestUtils(unittest.TestCase):
 
 			# Move paths to the origdir and create symlinks instead of the former paths
 			# Note: relative path are used otherwise orig files overwrite symlinks
-			origdir = '/'.join((bdir, _ORIGDIR))
+			origdir = '/'.join((bdir, ORIGDIR))
 			os.mkdir(origdir)
 			curdir = os.getcwd()  # Original current dir
 			os.chdir(bdir)  # Base dir of the archiving items
 			try:
 				for p in glob.iglob(clspref + '*'):
-					shutil.move(p, _ORIGDIR)
+					shutil.move(p, ORIGDIR)
 					# Create RELATIVE symlink to be able to extract the archive anywhere
 					pname = os.path.split(p)[1]
-					opath = _ORIGDIR + pname  # Path of the file in the orig dir
+					opath = ORIGDIR + pname  # Path of the file in the orig dir
 					# opath = os.path.relpath(opath, bdir)
 					os.symlink(opath, pname)
 
@@ -116,7 +116,7 @@ class TestUtils(unittest.TestCase):
 				self.assertFalse(os.path.exists(clsdir) or os.path.exists(clslog[1]))
 				with tarfile.open(bckarch, 'r') as baf:
 					# print('> arch content: ', baf.getnames())
-					self.assertNotEqual(len([name for name in baf.getnames() if _ORIGDIR in name]), 0)
+					self.assertNotEqual(len([name for name in baf.getnames() if ORIGDIR in name]), 0)
 			finally:
 				os.chdir(curdir)
 		finally:

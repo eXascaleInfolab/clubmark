@@ -50,14 +50,14 @@ from numbers import Number  # To verify that a variable is a number (int or floa
 from sys import executable as PYEXEC  #pylint: disable=C0412;  # Full path to the current Python interpreter
 # from functools import wraps  # Decorating tools for the JobTracer
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty \
-	, tobackup, escapePathWildcards, _UTILDIR, _ORIGDIR, _TIMESTAMP_START_HEADER \
-	, _SEPPARS, _SEPSUBTASK, _SEPPATHID
-from benchevals import _SEPNAMEPART, _RESDIR, _CLSDIR, _EXTEXECTIME, _EXTAGGRES, _EXTAGGRESEXT
+	, tobackup, escapePathWildcards, UTILDIR, ORIGDIR, TIMESTAMP_START_HEADER \
+	, SEPPARS, SEPSUBTASK, SEPPATHID
+from benchevals import SEPNAMEPART, RESDIR, CLSDIR, EXTEXECTIME, EXTAGGRES, EXTAGGRESEXT
 from utils.mpepool import Job, Task
 from algorithms.utils.parser_nsl import parseHeaderNslFile  #, asymnet
 
 
-_ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
+ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
 # Maximal number of the levels considered for the evaluation in the multi-scale or hierarchihal clustering
 _LEVSMAX = 10  # Use 10 scale levels as in Ganxis by default
 # Note: currently the output level are limited only for the algorithms that may produce more than 10 levels
@@ -65,7 +65,7 @@ assert _LEVSMAX >= 10, 'The number of levels limitation should be addded to GANX
 _EXTLOG = '.log'  # Extension for the logs
 _EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
 _EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
-_PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
+PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
 
 
 # reFirstDigits = re.compile(r'\d+')  # First digit regex
@@ -95,7 +95,7 @@ def aggexec(algs):
 	malgs = []  # Measured algs
 	ialg = 0  # Algorithm index
 	for alg in algs:
-		algesfile = ''.join((_RESDIR, alg, '/', alg, _EXTEXECTIME))
+		algesfile = ''.join((RESDIR, alg, '/', alg, EXTEXECTIME))
 		try:
 			with open(algesfile, 'r') as aest:
 				malgs.append(alg)
@@ -137,8 +137,8 @@ def aggexec(algs):
 		return
 	# Output results
 	for imsr, measure in enumerate(mnames):
-		resfile = ''.join((_RESDIR, measure, _EXTAGGRES))
-		resxfile = ''.join((_RESDIR, measure, _EXTAGGRESEXT))
+		resfile = ''.join((RESDIR, measure, EXTAGGRES))
+		resxfile = ''.join((RESDIR, measure, EXTAGGRESEXT))
 		try:
 			with open(resfile, 'a') as outres, open(resxfile, 'a') as outresx:
 				# The header is unified for multiple outputs only for the outresx
@@ -147,8 +147,8 @@ def aggexec(algs):
 					outresx.write('# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n')
 				# Output timestamp
 				# Note: print() unlike .write() outputs also ending '\n'
-				print(_TIMESTAMP_START_HEADER, file=outres)
-				print(_TIMESTAMP_START_HEADER, file=outresx)
+				print(TIMESTAMP_START_HEADER, file=outres)
+				print(TIMESTAMP_START_HEADER, file=outresx)
 				# Output header, which might differ for distinct runs by number of algs
 				outres.write('# <network>')
 				for alg in malgs:
@@ -228,8 +228,8 @@ def funcToAppName(funcname):
 
 	returns  - name of the algorithm
 	"""
-	assert funcname.startswith(_PREFEXEC), 'Executing appliation is expected instead of "{}"'.format(funcname)
-	return funcname[len(_PREFEXEC):]  # .lower()
+	assert funcname.startswith(PREFEXEC), 'Executing appliation is expected instead of "{}"'.format(funcname)
+	return funcname[len(PREFEXEC):]  # .lower()
 
 
 def prepareResDir(appname, taskname, odir, pathid):
@@ -248,7 +248,7 @@ def prepareResDir(appname, taskname, odir, pathid):
 	if odir:
 		nameparts = parseName(taskname, True)
 		taskdir = ''.join((nameparts[0], nameparts[2], '/', taskname))  # Use base name and instance id
-	taskpath = ''.join((_RESDIR, appname, '/', _CLSDIR, taskdir, pathid))
+	taskpath = ''.join((RESDIR, appname, '/', CLSDIR, taskdir, pathid))
 
 	preparePath(taskpath)
 	return taskpath
@@ -465,18 +465,18 @@ def limlevs(job):
 	# 	job.name, len(levnames), lmax, levnames), file=sys.stderr)
 	if len(levnames) <= lmax:
 		return
-	# Move the initial output to the _ORIGDIR
+	# Move the initial output to the ORIGDIR
 	origdir, oname = os.path.split(taskpath)
 	if not origdir:
 		origdir = '.'
-	origdir = '/'.join((origdir, _ORIGDIR))
+	origdir = '/'.join((origdir, ORIGDIR))
 	# Check existence of the destination dir
 	newdir = origdir + oname + '/'
 	if not os.path.exists(origdir):
 		os.mkdir(origdir)
 	elif os.path.exists(newdir):
 		# Note: this notification is not so significant to be logged to the stderr
-		print('WARNING {}.limlevs(), removing the former _ORIGDIR clusters: {}'.format(job.name, newdir))
+		print('WARNING {}.limlevs(), removing the former ORIGDIR clusters: {}'.format(job.name, newdir))
 		# New destination of the original task output
 		shutil.rmtree(newdir)
 	shutil.move(taskpath, origdir)
@@ -563,7 +563,7 @@ def uniflevs(task):
 					bpath, outname = os.path.split(taskpath)
 				# Move parameterized levels to the orig dir
 				if origdir is None:
-					origdir = '/'.join((bpath if bpath else '.', _ORIGDIR))
+					origdir = '/'.join((bpath if bpath else '.', ORIGDIR))
 					if not os.path.exists(origdir):
 						os.mkdir(origdir)
 				# newdir = origdir + oname + '/'
@@ -695,11 +695,11 @@ def fetchLevIdCnl(name):
 #
 #	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain'
 #	# ./community graph.bin -l -1 -w graph.weights > graph.tree
-#	args = ('../exectime', ''.join(('-o=../', _RESDIR, algname, _EXTEXECTIME)), ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
+#	args = ('../exectime', ''.join(('-o=../', RESDIR, algname, EXTEXECTIME)), ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
 #		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
-#	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=_ALGSDIR, args=args
-#		, timeout=timeout, stdout=''.join((_RESDIR, algname, '/', taskname, '.loc'))
-#		, task=task, category=algname, size=netsize, stderr=''.join((_RESDIR, algname, '/', taskname, _EXTLOG))))
+#	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=ALGSDIR, args=args
+#		, timeout=timeout, stdout=''.join((RESDIR, algname, '/', taskname, '.loc'))
+#		, task=task, category=algname, size=netsize, stderr=''.join((RESDIR, algname, '/', taskname, _EXTLOG))))
 #	return 1
 #
 #
@@ -707,7 +707,7 @@ def fetchLevIdCnl(name):
 #	return
 
 
-def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, task=None, seed=None):  # , selfexec=False  - whether to call self recursively
+def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, task=None, seed=None):  # , selfexec=False  - whether to call self recursively
 	"""Execute Louvain using the igraph library
 	Note: Louvain produces not stable results => multiple executions are desirable.
 
@@ -757,8 +757,8 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 	# 	return os.path.relpath(path, basedir)
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
-	xtimebin = relpath(_UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	xtimebin = relpath(UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
 	netfile = relpath(netfile)
 	# taskpath = relpath(taskpath)
 
@@ -767,7 +767,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 		, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
 		, '-lo', ''.join((relpath(taskpath), '/', taskname, _EXTCLNODES)), netfile)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
+	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, stdout=os.devnull
 		, ondone=limlevs, params={'taskpath': taskpath, 'fetchLevId': fetchLevIdCnl}
 		, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
@@ -790,7 +790,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_AL
 
 # SCP (Sequential algorithm for fast clique percolation)
 # Note: it is desirable to have a dedicated task for each type of networks or even for each network for this algorithm
-def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, task=None, seed=None):  #pylint: disable=W0613
+def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, task=None, seed=None):  #pylint: disable=W0613
 	"""SCP algorithm
 
 	return uint: the number of scheduled jobs
@@ -820,8 +820,8 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
-	xtimebin = relpath(_UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	xtimebin = relpath(UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
 	netfile = relpath(netfile)
 
 	# Set the best possible interpreter, run under pypy if possible
@@ -839,8 +839,8 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	# Create subtask to monitor execution for each clique size
 	taskbasex = delPathSuffix(taskname, True)
 	tasksuf = taskname[len(taskbasex):]
-	aggtname = taskname if not pathid else _SEPPATHID.join((taskname, pathid))
-	task = Task(aggtname if task is None else _SEPSUBTASK.join((task.name, tasksuf))
+	aggtname = taskname if not pathid else SEPPATHID.join((taskname, pathid))
+	task = Task(aggtname if task is None else SEPSUBTASK.join((task.name, tasksuf))
 		, task=task, onfinish=uniflevs, params={'outpname': aggtname, 'fetchLevId': fetchLevIdCnl})
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 7  # Max clique size (~ min node degree to be considered)
@@ -852,7 +852,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		kstr = str(k)
 		kstrex = 'k' + kstr
 		# Embed params into the task name
-		ktaskname = ''.join((taskbasex, _SEPPARS, kstrex, tasksuf))
+		ktaskname = ''.join((taskbasex, SEPPARS, kstrex, tasksuf))
 		# Backup prepated the resulting dir and back up the previous results if exist
 		taskpath = prepareResDir(algname, ktaskname, odir, pathid)
 		errfile = taskpath + _EXTELOG
@@ -865,7 +865,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 			, pybin, './scp.py', netfile, kstr, steps, ''.join((reltaskpath, '/', ktaskname, _EXTCLNODES)))
 
 		#print('> Starting job {} with args: {}'.format('_'.join((ktaskname, algname, kstrex)), args + [kstr]))
-		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ktaskname)), workdir=workdir, args=args, timeout=timeout
+		execpool.execute(Job(name=SEPNAMEPART.join((algname, ktaskname)), workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
 			# Note: increasing clique size k causes ~(k ** golden) increased consumption of both memory and time (up to k ^ 2),
 			# so it is better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
@@ -877,7 +877,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 	return kmax + 1 - kmin
 
 
-def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, task=None, seed=None, instances=5):  # _netshuffles + 1
+def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, task=None, seed=None, instances=5):  # _netshuffles + 1
 	"""Execute Randcommuns, Random Disjoint Clustering
 	Results are not stable => multiple execution is desirable.
 
@@ -921,8 +921,8 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
-	xtimebin = relpath(_UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	xtimebin = relpath(UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 	gtfile = relpath(gtfile)
@@ -939,7 +939,7 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=_
 		, '-n=' + str(instances)]
 	if seed is not None:
 		args.append('-r=' + str(seed))
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
+	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
 		, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 
@@ -1017,7 +1017,7 @@ class DaocOpts(object):
 
 
 # DAOC wit parameterized gamma
-def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/'
+def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/'
 , task=None, seed=None, opts=DaocOpts()):  #pylint: disable=W0613
 	"""Execute DAOC, Deterministic (including input order independent) Agglomerative Overlapping Clustering
 	using standard modularity as optimization function.
@@ -1051,8 +1051,8 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
-	xtimebin = relpath(_UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	xtimebin = relpath(UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
 	netfile = relpath(netfile)
 	reltaskpath = relpath(taskpath)
 
@@ -1087,7 +1087,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 	args.append(netfile)
 
 	# print(algname, 'called with args:', str(args), '\n\ttaskpath:', taskpath)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
+	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
 		, ondone=limlevs, params={'taskpath': taskpath, 'fetchLevId': fetchLevIdCnl}
 		, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
@@ -1095,7 +1095,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
-def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1)):
 	"""DAOC with static gamma=1"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
@@ -1103,7 +1103,7 @@ def execDaoc(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
-def execDaocB(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocB(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, gband='r0.005')):
 	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as a ratio of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
@@ -1111,7 +1111,7 @@ def execDaocB(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
-def execDaocB1(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocB1(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, gband='r0.01')):
 	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as 1% of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
@@ -1119,7 +1119,7 @@ def execDaocB1(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
-def execDaocB5(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocB5(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, gband='r0.05')):
 	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as 1% of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
@@ -1127,7 +1127,7 @@ def execDaocB5(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
-def execDaocR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocR(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, reduction='m')):
 	"""DAOC with the static gamma=1 and a medium reduction policy of the insignificant links"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
@@ -1135,7 +1135,7 @@ def execDaocR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
-def execDaocX(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocX(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, exclude='a')):
 	"""DAOC with the static gamma=1 and exclusion of the aggregating hashing being
 	used for the fast match of the fully mutual mcands"""
@@ -1145,7 +1145,7 @@ def execDaocX(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
 # Note: Expected to be the fastest among DAOC versions
-def execDaocRB(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocRB(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.005')):
 	"""DAOC with the static gamma=1, medium reduction policy and a band for the
 	mutual maximal gain taken as a ratio of MMG"""
@@ -1155,7 +1155,7 @@ def execDaocRB(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
 # Note: Expected to be the fastest among DAOC versions
-def execDaocRB1(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocRB1(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.01')):
 	"""DAOC with the static gamma=1, medium reduction policy and a band for the
 	mutual maximal gain taken as 1% of MMG"""
@@ -1165,7 +1165,7 @@ def execDaocRB1(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGS
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
 # Note: Expected to be the fastest among DAOC versions
-def execDaocRB5(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocRB5(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.05')):
 	"""DAOC with the static gamma=1, medium reduction policy and a band for the
 	mutual maximal gain taken as 1% of MMG"""
@@ -1174,7 +1174,7 @@ def execDaocRB5(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGS
 
 
 # DAOC (using standard modularity as an optimization function, non-generelized)
-def execDaocRBX(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocRBX(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.005', exclude='a')):
 	"""DAOC with the static gamma=1, a medium reduction policy, an MMG band
 	and exclusion of the aggregting hashing application"""
@@ -1183,7 +1183,7 @@ def execDaocRBX(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGS
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
-def execDaocA(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocA(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=-1)):
 	"""DAOC with an automatic dynamic gamma"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
@@ -1191,7 +1191,7 @@ def execDaocA(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
-def execDaocAR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocAR(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=-1, reduction='m')):  # Note: '' values mean use default
 	"""DAOC with an automatic dynamic gamma, a medium reduction policy and an MMG band"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocAR'
@@ -1200,7 +1200,7 @@ def execDaocAR(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
 # Note: Expected to be pretty fast and accurate
-def execDaocARB(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocARB(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=-1, reduction='m', gband='r0.005')):  # Note: '' values mean use default
 	"""DAOC with an automatic dynamic gamma, a medium reduction policy and an MMG band"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocAR'
@@ -1209,7 +1209,7 @@ def execDaocARB(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGS
 
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
 # Note: Expected to be pretty fast and accurate
-def execDaocARB1(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocARB1(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=-1, reduction='m', gband='r0.01')):  # Note: '' values mean use default
 	"""DAOC with an automatic dynamic gamma, a medium reduction policy and an MMG band of 1%"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocAR'
@@ -1218,7 +1218,7 @@ def execDaocARB1(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALG
 
 # DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
 # Note: Expected to be pretty fast and accurate
-def execDaocARB5(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'daoc/', task=None
+def execDaocARB5(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=-1, reduction='m', gband='r0.05')):  # Note: '' values mean use default
 	"""DAOC with an automatic dynamic gamma, a medium reduction policy and an MMG band of 1%"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocAR'
@@ -1226,7 +1226,7 @@ def execDaocARB5(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALG
 
 
 # Ganxis (SLPA)
-def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR+'ganxis/', task=None, seed=None):
+def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR+'ganxis/', task=None, seed=None):
 	"""GANXiS/SLPA algorithm"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
 		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
@@ -1248,14 +1248,14 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
-	xtimebin = relpath(_UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	xtimebin = relpath(UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 
 	def tidy(job):  #pylint: disable=W0613
 		"""Tidy the temporary output dirs"""
-		# Note: GANXiS leaves empty ./output dir in the _ALGSDIR, which should be deleted
+		# Note: GANXiS leaves empty ./output dir in the ALGSDIR, which should be deleted
 		tmp = workdir + 'output/'
 		if os.path.exists(tmp):
 			#os.rmdir(tmp)
@@ -1268,14 +1268,14 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 		args.extend(['-Sym', '1'])
 	if seed is not None:
 		args.extend(['-seed', str(seed)])
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
+	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
 		, task=task, category=algname, size=netsize, ondone=tidy, stdout=logfile, stderr=errfile))
 	return 1
 
 
 # Oslom2
-def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, task=None, seed=None):
+def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, task=None, seed=None):
 	"""OSLOM v2 algorithm
 	The output levels are enumerated from the most fine-grained (tp) having max number of clusters
 	of the smallest size up to the most coarse-grained (tpN with N haing the maximal index)
@@ -1304,8 +1304,8 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
-	xtimebin = relpath(_UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	xtimebin = relpath(UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
 	netfile = relpath(netfile)
 
 	def fetchLevId(levname):
@@ -1342,7 +1342,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 		, './oslom_' +  ('dir' if asym else 'undir'), '-f', netfile, '-w']
 	if seed is not None:
 		args.extend(['-seed', str(seed)])
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
+	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
 		, params={'taskpath': taskpath, 'fetchLevId': fetchLevId, 'levfmt': 'tp*'}
 		, task=task, category=algname, size=netsize, ondone=postexec, stdout=logfile, stderr=errfile))
@@ -1350,7 +1350,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSD
 
 
 # pSCAN (Fast and Exact Structural Graph Clustering)
-def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, task=None, seed=None):  #pylint: disable=W0613
+def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, task=None, seed=None):  #pylint: disable=W0613
 	"""pScan algorithm
 
 	return uint: the number of scheduled jobs
@@ -1376,8 +1376,8 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
-	xtimebin = relpath(_UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	xtimebin = relpath(UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 
@@ -1398,7 +1398,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 		# Embed params into the task name
 		taskbasex = delPathSuffix(taskname, True)
 		tasksuf = taskname[len(taskbasex):]
-		ctaskname = ''.join((taskbasex, _SEPPARS, 'e', prm, tasksuf))  # Current task
+		ctaskname = ''.join((taskbasex, SEPPARS, 'e', prm, tasksuf))  # Current task
 
 		# ATTENTION: a single argument is k-clique size, specified later
 		# ./pscan -e 0.7 -o graph-e7.cnl -f NSE graph.nse
@@ -1407,7 +1407,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 			, '-f', 'NSA' if asym else 'NSE', netfile)
 
 		#print('> Starting job {} with args: {}'.format('_'.join((ctaskname, algname, prmex)), args + [prm]))
-		execpool.execute(Job(name=_SEPNAMEPART.join((algname, ctaskname)), workdir=workdir, args=args, timeout=timeout
+		execpool.execute(Job(name=SEPNAMEPART.join((algname, ctaskname)), workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
 			#, stdout=logfile  # Skip standard log, because there are too many files, which does not contain useful information
 			# Note: eps has not monotonous impact mainly on the exectution time, not large impact and the clustring is fast anyway
@@ -1419,7 +1419,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDI
 
 
 # rgmc algorithms family: 1: RG, 2: CGGC_RG, 3: CGGCi_RG
-def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, task=None, seed=None, alg=None):
+def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, task=None, seed=None, alg=None):
 	"""Rgmc algorithms family
 
 	algname  - name of the executing algorithm to be traced
@@ -1450,8 +1450,8 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
-	xtimebin = relpath(_UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	xtimebin = relpath(UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 
@@ -1459,26 +1459,26 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
 		, './rgmc', '-a', str(alg), '-c', ''.join((taskpath, '/', taskname, _EXTCLNODES))
 		, '-i', 'a' if asym else 'e', netfile)
-	execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
+	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
 		, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))
 	return 1
 
 
 # CGGC_RG (rgmc -a 2)
-def execCggcRg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, task=None, seed=None):  #pylint: disable=C0111
+def execCggcRg(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, task=None, seed=None):  #pylint: disable=C0111
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggcRg'
 	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, alg=2)
 
 
 # CGGCi_RG (rgmc -a 3)
-def execCggciRg(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, task=None, seed=None):  #pylint: disable=C0111
+def execCggciRg(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, task=None, seed=None):  #pylint: disable=C0111
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggciRg'
 	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid, workdir, task, seed, alg=3)
 
 
 # SCD
-def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR, task=None, seed=None):
+def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, task=None, seed=None):
 	"""Scalable Community Detection (SCD)
 	Note: SCD os applicable only for the undirected unweighted networks, it skips the weight
 	in the weighted network.
@@ -1505,8 +1505,8 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
-	xtimebin = relpath(_UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((_RESDIR, algname, '/', algname, _EXTEXECTIME)))
+	xtimebin = relpath(UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 
@@ -1524,13 +1524,13 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=_ALGSDIR,
 		# Embed params into the task name
 		taskparname = delPathSuffix(taskname, True)
 		tasksuf = taskname[len(taskparname):]
-		taskparname = ''.join((taskparname, _SEPPARS, 'a', astr, tasksuf))  # Current task
+		taskparname = ''.join((taskparname, SEPPARS, 'a', astr, tasksuf))  # Current task
 		# ./scd -n 1 [-a 1] -o tests/scd/karate.nse.cnl -f networks/karate.nse.txt
 		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskparname, pathid)), '-s=/etime_' + algname
 			, './scd', '-n', '1' # Use a single threaded implementation
 			, '-a', astr
 			, '-o', ''.join((taskpath, '/', taskparname, _EXTCLNODES)), '-f', netfile)
-		execpool.execute(Job(name=_SEPNAMEPART.join((algname, taskparname)), workdir=workdir, args=args, timeout=timeout
+		execpool.execute(Job(name=SEPNAMEPART.join((algname, taskparname)), workdir=workdir, args=args, timeout=timeout
 			#, ondone=postexec, stdout=os.devnull, stdout=logfile
 			, task=task, category=algname, size=netsize, stdout=os.devnull, stderr=errfile))
 		alfa += da

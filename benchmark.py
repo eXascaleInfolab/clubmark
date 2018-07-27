@@ -72,11 +72,12 @@ from math import sqrt
 from multiprocessing import cpu_count  # Returns the number of logical CPU units (hw treads) if defined
 
 import benchapps  # Required for the functions name mapping to/from the app names
-from benchapps import PYEXEC, aggexec, funcToAppName, _PREFEXEC  # , _EXTCLNODES, _ALGSDIR
+import benchevals  # Required for the functions name mapping to/from the quality measures names
+from benchapps import PYEXEC, aggexec, funcToAppName, PREFEXEC  # , _EXTCLNODES, ALGSDIR
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsSec, secDhms \
- 	, _SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _SEPSUBTASK, _UTILDIR, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
+ 	, SEPPARS, SEPINST, SEPSHF, SEPPATHID, SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
-from benchevals import aggEvaluations, _RESDIR, _EXTEXECTIME  # QualitySaver, evaluators,
+from benchevals import aggEvaluations, RESDIR, EXTEXECTIME  # QualitySaver, evaluators,
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
 from algorithms.utils.parser_nsl import asymnet, dflnetext
@@ -88,9 +89,9 @@ from algorithms.utils.parser_nsl import asymnet, dflnetext
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 _SYNTDIR = 'syntnets/'  # Default base directory for the synthetic datasets (both networks, params and seeds)
 _NETSDIR = 'networks/'  # Networks sub-directory of the synthetic networks (inside _SYNTDIR)
-assert _RESDIR.endswith('/'), 'A directory should have a valid terminator'
-_SEEDFILE = _RESDIR + 'seed.txt'
-_PATHIDFILE = _RESDIR + 'pathid.map'  # Path id map file for the results interpretation (mapping back to the input networks)
+assert RESDIR.endswith('/'), 'A directory should have a valid terminator'
+_SEEDFILE = RESDIR + 'seed.txt'
+_PATHIDFILE = RESDIR + 'pathid.map'  # Path id map file for the results interpretation (mapping back to the input networks)
 _TIMEOUT = 36 * 60*60  # Default execution timeout for each algorithm for a single network instance
 _GENSEPSHF = '%'  # Shuffle number separator in the synthetic networks generation parameters
 _WPROCSMAX = max(cpu_count()-1, 1)  # Maximal number of the worker processes, should be >= 1
@@ -212,7 +213,7 @@ class Params(object):
 		self.evaltimeout = _EVALTIMEOUT
 
 
-# Input зarameters processing --------------------------------------------------
+# Input parameters processing --------------------------------------------------
 def parseParams(args):
 	"""Parse user-specified parameters
 
@@ -226,16 +227,16 @@ def parseParams(args):
 		# Validate input format
 		if arg[0] != '-':
 			raise ValueError('Unexpected argument: ' + arg)
-		# Always output _TIMESTAMP_START_HEADER to both stdout and stderr
-		print(_TIMESTAMP_START_HEADER)
-		print(_TIMESTAMP_START_HEADER, file=sys.stderr)
+		# Always output TIMESTAMP_START_HEADER to both stdout and stderr
+		print(TIMESTAMP_START_HEADER)
+		print(TIMESTAMP_START_HEADER, file=sys.stderr)
 		# Process long args
 		if arg[1] == '-':
 			# if arg.startswith('--std'):
 			# 	if arg == '--stderr-stamp':  # or arg == '--stdout-stamp':
 			# 		#if len(args) == 1:
 			# 		#	raise  ValueError('More input arguments are expected besides: ' + arg)
-			# 		print(_TIMESTAMP_START_HEADER, file=sys.stderr if arg == '--stderr-stamp' else sys.stdout)
+			# 		print(TIMESTAMP_START_HEADER, file=sys.stderr if arg == '--stderr-stamp' else sys.stdout)
 			# 		continue
 			# 	raise ValueError('Unexpected argument: ' + arg)
 			if arg.startswith('--generate'):
@@ -545,7 +546,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 				if os.path.isfile(fnamex):
 					netpath = name.join((netsdir, '/'))  # syntnets/networks/<netname>/  netname.*
 					netparams = name.join((paramsdir, ext))  # syntnets/params/<netname>.<ext>
-					xtimebin = os.path.relpath(_UTILDIR + 'exectime', basedir)
+					xtimebin = os.path.relpath(UTILDIR + 'exectime', basedir)
 					jobseed = os.path.relpath(netseed, basedir)
 					# Generate required number of network instances
 					netpathfull = basedir + netpath
@@ -556,7 +557,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 					if _DEBUG_TRACE:
 						print('Generating {netfile} as {name} by {netparams}'.format(netfile=netfile, name=name, netparams=netparams))
 					if insnum and overwrite or not os.path.exists(netfile.join((basedir, netext))):
-						args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, _EXTEXECTIME))  # Output .rcp in the current dir, basedir
+						args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, EXTEXECTIME))  # Output .rcp in the current dir, basedir
 							, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
 						if asymarg:
 							args.extend(asymarg)
@@ -567,10 +568,10 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 							#, ondone=shuffle if shfnum > 0 else None
 							, startdelay=startdelay, category='generate_' + str(k), size=N))
 					for i in range(1, insnum):
-						namext = ''.join((name, _SEPINST, str(i)))
+						namext = ''.join((name, SEPINST, str(i)))
 						netfile = netpath + namext
 						if overwrite or not os.path.exists(netfile.join((basedir, netext))):
-							args = [xtimebin, '-n=' + namext, ''.join(('-o=', bmname, _EXTEXECTIME))
+							args = [xtimebin, '-n=' + namext, ''.join(('-o=', bmname, EXTEXECTIME))
 								, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
 							if asymarg:
 								args.extend(asymarg)
@@ -680,7 +681,7 @@ while True:
 		i += 1
 	else:
 		break
-""".format(jobname=job.name, sepshf=_SEPSHF, netext=job.params['netext'], shfnum=job.params['shfnum']
+""".format(jobname=job.name, sepshf=SEPSHF, netext=job.params['netext'], shfnum=job.params['shfnum']
 			, overwrite=False))  # Skip the shuffling if the respective file already exists
 			job.name += '_shf'  # Update jobname to clearly associate it with the shuffling process
 			_execpool.execute(job)
@@ -699,8 +700,8 @@ while True:
 			if not path:
 				path = '.'  # Note: '/' is added later
 			name, netext = os.path.splitext(name)
-			if name.find(_SEPSHF) != -1:
-				shf = name.rsplit(_SEPSHF, 1)[1]
+			if name.find(SEPSHF) != -1:
+				shf = name.rsplit(SEPSHF, 1)[1]
 				# Omit shuffling of the shuffles, remove redundant shuffles
 				if int(shf[1:]) > shfnum:
 					os.remove(netfile)
@@ -780,11 +781,11 @@ while True:
 						for net in glob.iglob('*'.join((path, dflext))):  # Allow wildcards
 							# Skip the shuffles if any to avoid dir preparation for them
 							netname = os.path.split(net)[1]
-							if netname.find(_SEPSHF) != -1:
+							if netname.find(SEPSHF) != -1:
 								continue
 							# Whether the shuffles will be modified and need to be backuped
 							backup = xpathExists(''.join((path, os.path.splitext(netname)[0]
-								, '*', _SEPSHF, str(popt.shfnum + 1), '*', dflext)))
+								, '*', SEPSHF, str(popt.shfnum + 1), '*', dflext)))
 							# Backup existed dir (path, not just a name)
 							shuf0 = prepareDir(os.path.splitext(net)[0], net, backup, bcksuffix)
 							shfnum += shuffleNet(shuf0, popt.shfnum)
@@ -797,11 +798,11 @@ while True:
 						for net in glob.iglob('*'.join((path, dflext))):
 							# # Skip the shuffles if any to avoid dir preparation for them
 							# netname = os.path.split(net)[1]
-							# if netname.find(_SEPSHF) != -1:
+							# if netname.find(SEPSHF) != -1:
 							# 	continue
 							# # Whether the shuffles will be modified and need to be backuped
 							# backup = xpathExists(''.join((path, os.path.splitext(netname)[0]
-							# 	, '*', _SEPSHF, str(popt.shfnum + 1), '*', dflext)))
+							# 	, '*', SEPSHF, str(popt.shfnum + 1), '*', dflext)))
 							# if backup and notbacked:
 							# 	tobackup(path, False, bcksuffix, move=False)  # Copy to the backup
 							shfnum += shuffleNet(net, popt.shfnum)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
@@ -809,7 +810,7 @@ while True:
 					# Skip shuffles and their direct backing up
 					# Note: previous shuffles are backed up from their origin instance
 					netname = os.path.split(path)[1]
-					if netname.find(_SEPSHF) != -1:
+					if netname.find(SEPSHF) != -1:
 						continue
 					# Generate dirs if required
 					dirpath = os.path.splitext(path)[0]
@@ -817,13 +818,13 @@ while True:
 					if not popt.flat:
 						# Whether the shuffles will be modified and need to be backuped
 						backup = xpathExists(''.join((dirpath, '/', basename
-							, '*', _SEPSHF, str(popt.shfnum + 1), '*', dflext)))
+							, '*', SEPSHF, str(popt.shfnum + 1), '*', dflext)))
 						shuf0 = prepareDir(dirpath, path, backup, bcksuffix)
 						shfnum += shuffleNet(shuf0, popt.shfnum)
 					else:
 						# Backup existing flat shuffles if any (expanding the base path), which will be updated the subsequent shuffling
 						# Whether the shuffles will be modified and need to be backuped
-						if xpathExists('*'.join((dirpath, _SEPSHF + str(popt.shfnum + 1), dflext))):
+						if xpathExists('*'.join((dirpath, SEPSHF + str(popt.shfnum + 1), dflext))):
 							tobackup(os.path.split(path)[0], True, bcksuffix, move=False)  # Copy to the backup
 						shfnum += shuffleNet(path, popt.shfnum)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
 				shufnets += 1
@@ -847,16 +848,16 @@ def basenetTasks(netname, pathidstr, basenets, rtasks):
 
 	return  nettasks: list(Task)  - tasks for the basenet of the specified netname
 	"""
-	iename = netname.find(_SEPINST)
+	iename = netname.find(SEPINST)
 	if iename == -1:
 		basenet = os.path.splitext(netname)[0]  # Remove network extension if any
 	else:
 		basenet = netname[:iename]
 	if pathidstr:
-		basenet = _SEPPATHID.join((basenet, pathidstr))
+		basenet = SEPPATHID.join((basenet, pathidstr))
 	nettasks = basenets.get(basenet)
 	if not nettasks:
-		nettasks = [Task(_SEPSUBTASK.join((t.name, basenet)), task=t) for t in rtasks]
+		nettasks = [Task(SEPSUBTASK.join((t.name, basenet)), task=t) for t in rtasks]
 		basenets[basenet] = nettasks
 	return nettasks
 
@@ -894,17 +895,17 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 				# Skip the shuffles if any to process only specified networks
 				# (all target shuffles are located in the dedicated dirs for non-flat paths)
 				netname = os.path.split(net)[1]
-				if netname.find(_SEPSHF) != -1:
+				if netname.find(SEPSHF) != -1:
 					continue
 				# Fetch base network name (whitout the instance and shuffle id)
 				nettasks = basenetTasks(netname, None if not xargs else xargs['pathidstr'], bnets, tasks)
-				# iename = netname.find(_SEPINST)
+				# iename = netname.find(SEPINST)
 				# basenet = netname if iename == -1 else netname[:iename]
 				# if xargs and xargs['pathidstr']:
-				# 	basenet = _SEPPATHID.join((basenet, xargs['pathidstr']))
+				# 	basenet = SEPPATHID.join((basenet, xargs['pathidstr']))
 				# nettasks = bnets.get(basenet)
 				# if not nettasks:
-				# 	nettasks = [Task(_SEPSUBTASK.join((t.name, basenet)), task=t) for t in tasks]
+				# 	nettasks = [Task(SEPSUBTASK.join((t.name, basenet)), task=t) for t in tasks]
 				# 	bnets[basenet] = nettasks
 				# #if popt.shfnum:  # ATTENTNION: shfnum is not available for non-synthetic networks
 				# Process dedicated dir of shuffles for the specified network,
@@ -925,17 +926,17 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 				#
 				# # Fetch base network name (whitout instance and shuffle id)
 				# basenet = os.path.split(net)[1]
-				# iename = basenet.find(_SEPINST)
+				# iename = basenet.find(SEPINST)
 				# if iename != -1:
 				# 	basenet = basenet[:iename]
-				# iename = basenet.find(_SEPSHF)
+				# iename = basenet.find(SEPSHF)
 				# if iename != -1:
 				# 	basenet = basenet[:iename]
 				# if xargs and xargs['pathidstr']:
-				# 	basenet = _SEPPATHID.join((basenet, xargs['pathidstr']))
+				# 	basenet = SEPPATHID.join((basenet, xargs['pathidstr']))
 				# nettasks = bnets.get(basenet)
 				# if not nettasks:
-				# 	nettasks = [Task(_SEPSUBTASK.join((t.name, basenet)), task=t) for t in tasks]
+				# 	nettasks = [Task(SEPSUBTASK.join((t.name, basenet)), task=t) for t in tasks]
 				# 	bnets[basenet] = nettasks
 				handler(net, False, xargs, tasks)
 	else:
@@ -943,7 +944,7 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 			# Skip the shuffles if any to process only specified networks
 			# (all target shuffles are located in the dedicated dirs for non-flat paths)
 			netname = os.path.split(path)[1]
-			if netname.find(_SEPSHF) != -1:
+			if netname.find(SEPSHF) != -1:
 				return
 			# Fetch base network name (whitout the instance and shuffle id)
 			nettasks = basenetTasks(netname, None if not xargs else xargs['pathidstr'], bnets, tasks)
@@ -987,7 +988,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 			timeout  - network conversion timeout, 0 means unlimited
 			"""
 			try:
-				args = [PYEXEC, _UTILDIR + 'convert.py', inpnet, '-o rcg', '-r ' + ('o' if overwrite else 's')]
+				args = [PYEXEC, UTILDIR + 'convert.py', inpnet, '-o rcg', '-r ' + ('o' if overwrite else 's')]
 				if resdub:
 					args.append('-d')
 				_execpool.execute(Job(name=os.path.splitext(os.path.split(inpnet)[1])[0], args=args, timeout=timeout
@@ -1002,7 +1003,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 			#	# ./convert [-r] -i graph.txt -o graph.bin -w graph.weights
 			#	# r  - renumber nodes
 			#	# ATTENTION: original Louvain implementation processes incorrectly weighted networks with uniform weights (=1) if supplied as unweighted
-			#	subprocess.call((_ALGSDIR + 'convert', '-i', net, '-o', netnoext + '.lig'
+			#	subprocess.call((ALGSDIR + 'convert', '-i', net, '-o', netnoext + '.lig'
 			#		, '-w', netnoext + '.liw'))
 			#except Exception as err:
 			#	print('ERROR on "{}" conversion into .lig, the network is skipped: {}'.format(net), err, file=sys.stderr)
@@ -1039,7 +1040,7 @@ def appnames(appsmodule):
 	appsmodule  - module that implements execution of the apps
 	return  - list of the apps names
 	"""
-	return [funcToAppName(func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
+	return [funcToAppName(func) for func in dir(appsmodule) if func.startswith(PREFEXEC)]
 
 
 def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=10*24*60*60):  # 10 days
@@ -1055,7 +1056,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	runtimeout  - timeout for all algorithms execution, >= 0, 0 means unlimited time
 	"""
 	if not datas:
-		print('WRANING runApps(), there are no algorithms specified to be executed', file=sys.stderr)
+		print('WRANING runApps(), there are no input datasets specified to be clustered', file=sys.stderr)
 		return
 	assert appsmodule and isinstance(datas[0], PathOpts) and exectime + 0 >= 0 and timeout + 0 >= 0, 'Invalid input arguments'
 	assert isinstance(seed, int) and seed >= 0, 'Seed value is invalid'
@@ -1068,13 +1069,13 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	, memlimit=_VMLIMIT, name='runapps', webuiapp=_webuiapp) as _execpool:
 		# Run all algs if not specified the concrete algorithms to be run
 		# # Algorithms callers
-		# execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(_PREFEXEC)]
+		# execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(PREFEXEC)]
 		if not algorithms:
 			# Save algorithms names to perform results aggregation after the execution
 			algorithms = appnames(appsmodule)
 			#algorithms = [alg.lower() for alg in algorithms]
 		# Execute the specified algorithms
-		execalgs = [getattr(appsmodule, _PREFEXEC + alg, None) for alg in algorithms]
+		execalgs = [getattr(appsmodule, PREFEXEC + alg, None) for alg in algorithms]
 		# Ensure that all specified algorithms correspond to the functions
 		invalalgs = []
 		for i in range(len(execalgs)):
@@ -1129,8 +1130,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 
 		# Prepare resulting paths mapping file
 		fpathids = None  # File of paths ids
-		if not os.path.exists(_RESDIR):
-			os.mkdir(_RESDIR)
+		if not os.path.exists(RESDIR):
+			os.mkdir(RESDIR)
 		try:
 			fpathids = open(_PATHIDFILE, 'a')
 		except IOError as err:
@@ -1141,8 +1142,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			# Write header if required
 			#timestamp = datetime.utcnow()
 			if not os.fstat(fpathids.fileno()).st_size:
-				fpathids.write('# Name{}ID\tPath\n'.format(_SEPPATHID))  # Note: buffer flushing is not necessary here, because the execution is not concurrent
-			fpathids.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
+				fpathids.write('# Name{}ID\tPath\n'.format(SEPPATHID))  # Note: buffer flushing is not necessary here, because the execution is not concurrent
+			fpathids.write('# --- {time} (seed: {seed}) ---\n'.format(time=TIMESTAMP_START_STR, seed=seed))  # Write timestamp
 
 			xargs = {'asym': False,  # Asymmetric network
 				 'pathidstr': '',  # Id of the duplicated path shortcut to have the unique shortcut
@@ -1172,7 +1173,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 					else:
 						pathid += 1
 						netnames[net] = pathid
-						nameid = _SEPPATHID + str(pathid)
+						nameid = SEPPATHID + str(pathid)
 						xargs['pathidstr'] = nameid
 						fpathids.write('{}\t{}\n'.format(net + nameid, mpath))
 					#if _DEBUG_TRACE >= 2:
@@ -1208,15 +1209,15 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			# Extend algorithms execution tracing files (.rcp) with time tracing, once per an executing algorithm
 			# to distinguish different executions (benchmark runs)
 			for alg in algorithms:
-				aresdir = _RESDIR + alg
+				aresdir = RESDIR + alg
 				# if not os.path.exists(aresdir):
 				# 	os.mkdir(aresdir)
-				aexecres = ''.join((aresdir, '/', alg, _EXTEXECTIME))
+				aexecres = ''.join((aresdir, '/', alg, EXTEXECTIME))
 				# Output timings only to the existing files after the execution results
 				# to not affect the original header
 				if os.path.isfile(aexecres):
 					with open(aexecres, 'a') as faexres:
-						faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
+						faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=TIMESTAMP_START_STR, seed=seed))  # Write timestamp
 
 	_execpool = None
 	stime = time.perf_counter() - stime
@@ -1227,11 +1228,12 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	print('Execution statistics aggregated')
 
 
-def evalResults(qmeasures, appsmodule, algorithms, datas, seed, exectime, timeout  #pylint: disable=W0613
+def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exectime, timeout  #pylint: disable=W0613
 , evaltimeout=14*24*60*60, update=False):  #pylint: disable=W0613
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
-	qmeasures  - evaluating qualituy measures with their parameters
+	qmsmodule  - module with quality measures definitions to be run; sys.modules[__name__]
+	qmeasures  - evaluating quality measures with their parameters
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
 	algorithms  - list of the algorithms to be executed
 	datas  - input datasets, wildcards of files or directories containing files
@@ -1246,21 +1248,30 @@ def evalResults(qmeasures, appsmodule, algorithms, datas, seed, exectime, timeou
 	update  - update evaluations file or create a new one, anyway existed evaluations
 		are backed up.
 	"""
+	if not datas:
+		print('WRANING evalResults(), there are no input datasets specified to be clustered', file=sys.stderr)
+		return
 	if qmeasures is None:
 		print('WRANING evalResults(), there are no quality measures specified to be evaluated', file=sys.stderr)
 		return
-	assert (qmeasures and appsmodule and datas and exectime + 0 >= 0
-	 and timeout + 0 >= 0), 'Invalid input arguments'
+	assert qmsmodule and appsmodule and isinstance(datas[0], PathOpts) and exectime + 0 >= 0 and timeout + 0 >= 0, 'Invalid input arguments'
 	assert isinstance(seed, int) and seed >= 0, 'Seed value is invalid'
 
-# 	stime = time.perf_counter()  # Procedure start time
-# 	print('Starting quality evaluations...')
-# 	# Run evaluations for all algs if not specified the concrete algorithms to be run
-# 	if not algorithms:
-# 		algorithms = appnames(appsmodule)
+	stime = time.perf_counter()  # Procedure start time; ATTENTION: .perf_counter() should not be used, because it does not consider "sleep" time
+	print('Starting quality evaluations...')
 
-# 	global _execpool
-# 	assert _execpool is None, 'The global execution pool should not exist'
+	# Run evaluations by all quality measures if not specified the concrete measures for the evaluation
+	if not qmeasures:
+		qmeasures = appnames(qmsmodule)
+	# Run evaluations for all algs if not specified the concrete algorithms to be run
+	if not algorithms:
+		algorithms = appnames(appsmodule)
+
+	global _execpool
+	assert _execpool is None, 'The global execution pool should not exist'
+
+	# TODO: consider QMSRAFN
+
 # 	# Prepare HDF5 evaluations store
 # 	with QualitySaver(apps=algorithms, seed=seed, update=update) as qualsaver:
 # 		def evalquality(execpool, evalapps, net, asym, netshf, pathids=None):
@@ -1364,7 +1375,7 @@ def evalResults(qmeasures, appsmodule, algorithms, datas, seed, exectime, timeou
 # 						else:
 # 							pathid += 1
 # 							netnames[net] = pathid
-# 							nameid = _SEPPATHID + str(pathid)
+# 							nameid = SEPPATHID + str(pathid)
 # 							xargs['pathidstr'] = nameid
 # 							# Validate loaded pathids mapping
 # 							if pathids.get(nameid) != mpath:
@@ -1430,7 +1441,7 @@ def evalResults(qmeasures, appsmodule, algorithms, datas, seed, exectime, timeou
 # 						else:
 # 							pathid += 1
 # 							netnames[net] = pathid
-# 							nameid = _SEPPATHID + str(pathid)
+# 							nameid = SEPPATHID + str(pathid)
 # 							xargs['pathidstr'] = nameid
 # 						pcuropt.path = path
 # 						if _DEBUG_TRACE:
@@ -1442,9 +1453,9 @@ def evalResults(qmeasures, appsmodule, algorithms, datas, seed, exectime, timeou
 # 				evaluator.mark(algorithms, seed)
 
 # 				for alg in algorithms:
-# 					aexecres = ''.join((_RESDIR, alg, '/', measure, _EXTEXECTIME))
+# 					aexecres = ''.join((RESDIR, alg, '/', measure, EXTEXECTIME))
 # 					with open(aexecres, 'a') as faexres:
-# 						faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=_TIMESTAMP_START_STR, seed=seed))  # Write timestamp
+# 						faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=TIMESTAMP_START_STR, seed=seed))  # Write timestamp
 
 # 				if runtimeout <= 0:
 # 					runtimeout = timeout * xargs['jobsnum']
@@ -1489,7 +1500,7 @@ def evalResults(qmeasures, appsmodule, algorithms, datas, seed, exectime, timeou
 # 			# 	return
 # 			# 		jobsnum  - updated accumulated number of scheduled jobs
 # 			# 	"""
-# 			# 	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
+# 			# 	assert not pathid or pathid[0] == SEPPATHID, 'pathid must include pathid separator'
 # 			#
 # 			# 	for algname in evalalgs:
 # 			# 		try:
@@ -1539,7 +1550,7 @@ def evalResults(qmeasures, appsmodule, algorithms, datas, seed, exectime, timeou
 # 			# # Track processed file names to resolve cases when files with the same name present in different input dirs
 # 			# filenames = set()
 # 			# for pathid, (asym, ddir) in enumerate(datadirs):
-# 			# 	pathid = _SEPPATHID + str(pathid)
+# 			# 	pathid = SEPPATHID + str(pathid)
 # 			# 	# Read ground truth
 # 			# 	for basefile in glob.iglob('*'.join((ddir, fileext))):  # Allow wildcards in the names
 # 			# 		netname = os.path.split(basefile)[1]
@@ -1550,8 +1561,8 @@ def evalResults(qmeasures, appsmodule, algorithms, datas, seed, exectime, timeou
 # 			# 			ambiguous = True
 # 			# 		evaluate(measure, basefile, asym, jobsnum, pathid if ambiguous else '')
 # 			# for pathid, (asym, basefile) in enumerate(datafiles):
-# 			# 	#pathid = ''.join((_SEPPATHID, _PATHID_FILE, str(pathid)))
-# 			# 	pathid = ''.join((_SEPPATHID, str(pathid)))
+# 			# 	#pathid = ''.join((SEPPATHID, _PATHID_FILE, str(pathid)))
+# 			# 	pathid = ''.join((SEPPATHID, str(pathid)))
 # 			# 	# Use files with required extension
 # 			# 	basefile = os.path.splitext(basefile)[0] + fileext
 # 			# 	netname = os.path.split(basefile)[1]
@@ -1620,8 +1631,8 @@ def benchmark(*args):
 
 	# Benchmark app can be called from the remote directory
 	bmname = 'lfrbench_udwov'  # Benchmark name for the synthetic networks generation
-	assert _UTILDIR.endswith('/'), 'A directory should have a valid terminator'
-	benchpath = _UTILDIR + bmname  # Benchmark path
+	assert UTILDIR.endswith('/'), 'A directory should have a valid terminator'
+	benchpath = UTILDIR + bmname  # Benchmark path
 
 	# Create the global seed file if not exists
 	if not os.path.exists(opts.seedfile):
@@ -1672,9 +1683,9 @@ def benchmark(*args):
 
 	# Evaluate results
 	if opts.qmeasures is not None:
-		evalResults(qmeasures=opts.qmeasures, appsmodule=benchapps, algorithms=opts.algorithms
-			, datas=opts.datas, seed=seed, exectime=exectime, timeout=opts.timeout
-			, evaltimeout=opts.evaltimeout, update=opts.updqual)
+		evalResults(qmsmodule=benchevals, qmeasures=opts.qmeasures, appsmodule=benchapps
+			, algorithms=opts.algorithms, datas=opts.datas, seed=seed, exectime=exectime
+			, timeout=opts.timeout, evaltimeout=opts.evaltimeout, update=opts.updqual)
 
 	if opts.aggrespaths:
 		aggEvaluations(opts.aggrespaths)
@@ -1809,8 +1820,8 @@ if __name__ == '__main__':
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {runtimeout}.',
 			'  --evaltimeout  - global clustrering algorithms execution timeout in the'
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {evaltimeout}.',
-			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=_RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
-				, sepinst=_SEPINST, seppars=_SEPPARS, sepshf=_SEPSHF, rsvpathsmb=(_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID)
+			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
+				, sepinst=SEPINST, seppars=SEPPARS, sepshf=SEPSHF, rsvpathsmb=(SEPPARS, SEPINST, SEPSHF, SEPPATHID)
 				, anppsnum=len(apps), apps=', '.join(apps), algtimeout=secDhms(_TIMEOUT)
 				, seedfile=_SEEDFILE, port=_PORT, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
 	else:

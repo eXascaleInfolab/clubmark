@@ -24,11 +24,12 @@ import time
 # from collections import namedtuple
 from subprocess import PIPE
 from multiprocessing import cpu_count, Process, Queue   # Required to asynchronously save evaluated quality measures to the persistent storage
+from benchapps import funcToAppName, ALGSDIR
 from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
 	escapePathWildcards, envVarDefined, SyncValue, tobackup, \
-	_SEPPARS, _SEPINST, _SEPSHF, _SEPPATHID, _UTILDIR, \
-	_TIMESTAMP_START, _TIMESTAMP_START_STR, _TIMESTAMP_START_HEADER
-from utils.mpepool import Task, Job
+	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, \
+	TIMESTAMP_START, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
+from utils.mpepool import Task, Job, AffinityMask
 
 # Identify type of the Variable-length ASCII (bytes) for the HDF5 storage
 try:
@@ -38,16 +39,18 @@ except NameError:
 
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
-_RESDIR = 'results/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm, specified RELATIVE to _ALGSDIR
-_CLSDIR = 'clusters/'  # Clusters directory for the resulting clusters of algorithms execution
+RESDIR = 'results/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm, specified RELATIVE to ALGSDIR
+CLSDIR = 'clusters/'  # Clusters directory for the resulting clusters of algorithms execution
 _QUALITY_STORAGE = 'quality.h5'  # Quality evaluation storage file name
 _EXTERR = '.err'
 #_EXTLOG = '.log'  # Extension for the logs
 #_EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
-_EXTEXECTIME = '.rcp'  # Resource Consumption Profile
-_EXTAGGRES = '.res'  # Aggregated results
-_EXTAGGRESEXT = '.resx'  # Extended aggregated results
-_SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not apear in a file name, which can be part of job name)
+EXTEXECTIME = '.rcp'  # Resource Consumption Profile
+EXTAGGRES = '.res'  # Aggregated results
+EXTAGGRESEXT = '.resx'  # Extended aggregated results
+SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not apear in a file name, which can be part of job name)
+
+QMSRAFN = {}  # Soecific affinities of the quality measures;  qmsrAffinity
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
@@ -135,7 +138,7 @@ class QualityEntry(object):
 class QualitySaver(object):
 	# Max number of the buffered items in the queue that have not been processed
 	# before blocking the caller on appending more items
-	# Shuold not be too much to save them into the persistent store on the
+	# Should not be too much to save them into the persistent store on the
 	# program termination or any external interruptions
 	QUEUE_SIZEMAX = max(128, cpu_count() * 2)  # At least 128 or twice the number of the logical CPUs in the system
 
@@ -170,11 +173,11 @@ class QualitySaver(object):
 		update  - update existing storage (or create if not exists), or create a new one
 		"""
 		self.storage = None  # Persistent storage object (file)
-		storage = _RESDIR + _QUALITY_STORAGE
+		storage = RESDIR + _QUALITY_STORAGE
 		ublocksize = 512  # Userblock size in bytes
 		ublocksep = ':'  # Userblock vals separator
 		timefmt = '%y%m%d_%H%M%S'  # Time format
-		timestamp = time.strftime(timefmt, _TIMESTAMP_START)  # Timestamp string
+		timestamp = time.strftime(timefmt, TIMESTAMP_START)  # Timestamp string
 		if os.path.exists(storage):
 			# Read userblock: seed and timestamps, validate new seed and estimate whether
 			# there is enought space for one more timestamp
@@ -280,55 +283,38 @@ class QualitySaver(object):
 				raise
 
 
-def execMF1(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=_UTILDIR, seed=None):
-	pass
+def metainfo(afnmask=1):
+	"""Set some meta information for the executing evaluation measures
 
-
-def execGecmi(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=_UTILDIR, seed=None):
-	pass
-
-
-def execOnmi(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=_UTILDIR, seed=None):
-	pass
-
-
-def execXmeasures(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=_UTILDIR, seed=None):
-	pass
-
-
-def execDaoc(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=_UTILDIR, seed=None):
-	pass
-
-
-def evaluators(quality):
-	"""Fetch tuple of the evaluation executable calling functions for the specified measures
-
-	quality  - quality measures mask
-		Note: all measures are applicable for the overlapping clusters
-		0  - nothing
-		0b00000001  - NMI_max
-		0b00000011  - all NMIs (max, sqrt, avg, min), only max and sqrt are saved
-		0b00000100  - ONMI_max
-		0b00001100  - all ONMIs (max, sqrt, avg, lfk), only max and sqrt are saved
-		0b00010000  - Average F1h Score
-		0b00100000  - F1p measure
-		0b01110000  - All F1s (F1p, F1h, F1s)
-		0b10000000  - Default extrinsic measures (NMI_max, F1h and F1p)
-		0b1111'1111  - All extrinsic measures (NMI-s, ONMI-s, F1-s)
-		0x1xx  - Q (modularity)
-		0x2xx  - f (conductance)
-		0xFxx  - All intrinsic measures
+	afnmask: AffinityMask  - affinity mask
 	"""
-	evals = []
-	if quality & 0b11:  # NMI multiresolution (multiscale) and overlapping (gecmi)
-		evals.append(execGecmi)
-	if quality & 0b1100:  # NMI overlapping (onmi)
-		evals.append(execOnmi)
-	if quality & 0xF0:  # F1-s (xmeasures)
-		evals.append(execXmeasures)
-	if quality & 0xF00:  # Intrinsic measures: Q and f (daoc)
-		evals.append(execDaoc)
-	return tuple(evals)
+	def decor(func):
+		"""Decorator returning the original function"""
+		assert isinstance(afnmask, int) and 1 <= afnmask <= AffinityMask.CPUS, (
+			'Unexpected value of the affinity mask: {} is not E 1 .. {}'.format(afnmask, AffinityMask.CPUS))
+		QMSRAFN[funcToAppName(func)] = afnmask
+		return func
+	return decor
+
+
+# Note: default AffinityMask is 1 (logical CPUs, i.e. hardware threads)
+def execXmeasures(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
+	"""Evaluate extrinsic quality measures (accuracy)"""
+	pass
+
+
+@metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS))
+def execGnmi(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
+	pass
+
+
+def execOnmi(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
+	pass
+
+
+def execImeasures(execpool, qualsaver, inpnet, asym, timeout, pathid='', workdir=ALGSDIR+'daoc/', seed=None):
+	"""Evaluate intrinsic quality measures using DAOC"""
+	pass
 
 
 class ShufflesAgg(object):
@@ -351,7 +337,7 @@ class ShufflesAgg(object):
 		fixed  - whether all items are aggregated and summarization is performed
 		bestlev  - cluster level with the best value, defined for the finalized evaluations
 		"""
-		assert name.count(_SEPNAMEPART) == 2, 'Name format validatoin failed: ' + name
+		assert name.count(SEPNAMEPART) == 2, 'Name format validatoin failed: ' + name
 		self.name = name
 		# Aggregation data
 		self.levels = {}  # Name: LevelStat
@@ -374,7 +360,7 @@ class ShufflesAgg(object):
 		# [Evaluate max avg among the aggregated level and transfer it to teh instagg as final result]
 		assert not self.fixed, 'Only non-fixed aggregator can be modified'
 		# Validate lev to guarantee it does not contain shuffle part
-		assert lev.find(_SEPNAMEPART) == -1, 'Level name should not contain shuffle part'
+		assert lev.find(SEPNAMEPART) == -1, 'Level name should not contain shuffle part'
 
 		# Extract algorithm params if exist from the 'taskoutp' job param
 		taskname = os.path.splitext(os.path.split(resfile)[1])[0]
@@ -382,10 +368,10 @@ class ShufflesAgg(object):
 		assert taskname == self.name[self.name.rfind('/') + 1:], (
 			'taskname validation failed: "{}" does not belong to "{}"'.format(taskname, self.name))
 		algpars = ''  # Algorithm params
-		ipb = taskname.find(_SEPPARS, 1)  # Index of params begin. Params separator can't be the first symbol of the name
+		ipb = taskname.find(SEPPARS, 1)  # Index of params begin. Params separator can't be the first symbol of the name
 		if ipb != -1 and ipb != len(taskname) - 1:
 			# Find end of the params
-			ipe = filter(lambda x: x >= 0, [taskname[ipb:].rfind(c) for c in (_SEPINST, _SEPPATHID, _SEPSHF)])
+			ipe = filter(lambda x: x >= 0, [taskname[ipb:].rfind(c) for c in (SEPINST, SEPPATHID, SEPSHF)])
 			if ipe:
 				ipe = min(ipe) + ipb  # Conside ipb offset
 			else:
@@ -394,7 +380,7 @@ class ShufflesAgg(object):
 		# Update statiscit
 		levname = lev
 		if algpars:
-			levname = _SEPNAMEPART.join((levname, algpars))  # Note: _SEPNAMEPART never occurs in the filename, levname
+			levname = SEPNAMEPART.join((levname, algpars))  # Note: SEPNAMEPART never occurs in the filename, levname
 		#print('addraw lev: {}, aps: {}, taskname: {}'.format(levname, algpars, taskname))
 		levstat = self.levels.get(levname)
 		if levstat is None:
@@ -464,7 +450,7 @@ class EvalsAgg(object):
 				print('WARNING, shuffles aggregator for task "{}" was not fixed on final aggregation'
 					.format(inst.name), file=sys.stderr)
 				inst.fix()
-			measure, algname, netname = inst.name.split(_SEPNAMEPART)
+			measure, algname, netname = inst.name.split(SEPNAMEPART)
 			#print('Final aggregate over net: {}, pathid: {}'.format(netname, pathid))
 			# Remove instance id if exists (initial name does not contain params and pathid)
 			netname, apars, insid, shid, pathid = parseName(netname, True)
@@ -473,7 +459,7 @@ class EvalsAgg(object):
 			# and the max for alg params among the obtained results
 			if apars:
 				nameps = True
-				netname = _SEPNAMEPART.join((netname, apars))
+				netname = SEPNAMEPART.join((netname, apars))
 			# Maintain list of all evaluated algs to output results in the table format
 			self.algs.add(algname)
 			# Update global network evaluation results
@@ -489,7 +475,7 @@ class EvalsAgg(object):
 			netsev = {}
 			for net, algsev in viewitems(self.netsev):
 				# Cut params from the network name
-				pos = net.find(_SEPNAMEPART)
+				pos = net.find(SEPNAMEPART)
 				if pos != -1:
 					apars = net[pos+1:]
 					net = net[:pos]
@@ -514,14 +500,14 @@ class EvalsAgg(object):
 		# Order available algs names
 		self.algs = sorted(self.algs)
 		# Output aggregated results for this measure for all algorithms
-		resbase = _RESDIR + self.measure
-		with open(resbase + _EXTAGGRES, 'a') as fmeasev, open(resbase + _EXTAGGRESEXT, 'a') as fmeasevx:
+		resbase = RESDIR + self.measure
+		with open(resbase + EXTAGGRES, 'a') as fmeasev, open(resbase + EXTAGGRESEXT, 'a') as fmeasevx:
 			# Append to the results and extended results
 			#timestamp = datetime.utcnow()
-			fmeasev.write('# --- {}, output:  Q_avg\n'.format(_TIMESTAMP_START_STR))  # format = Q_avg: Q_min Q_max, Q_sd count;
+			fmeasev.write('# --- {}, output:  Q_avg\n'.format(TIMESTAMP_START_STR))  # format = Q_avg: Q_min Q_max, Q_sd count;
 			# Extended output has notations in each row
 			# Note: print() unlike .write() outputs also ending '\n'
-			print(_TIMESTAMP_START_HEADER, file=fmeasevx)
+			print(TIMESTAMP_START_HEADER, file=fmeasevx)
 			header = True  # Output header
 			for net, algsev in viewitems(self.netsev):
 				if header:
@@ -580,7 +566,7 @@ class EvalsAgg(object):
 
 	def register(self, shfagg):
 		"""Register new partial aggregator, shuffles aggregator"""
-		measure = shfagg.name.split(_SEPNAMEPART, 1)[0]
+		measure = shfagg.name.split(SEPNAMEPART, 1)[0]
 		assert measure == self.measure, (
 			'This aggregator serves "{}" measure, but "{}" is registering'
 			.format(self.measure, measure))
@@ -620,7 +606,7 @@ def aggEvaluations(respaths):
 				eagg = EvalsAgg(measure)
 				evalaggs[measure] = eagg
 			with open(resfile, 'r') as finp:
-				partagg = ShufflesAgg(eagg, _SEPNAMEPART.join((measure, algname, netname)))
+				partagg = ShufflesAgg(eagg, SEPNAMEPART.join((measure, algname, netname)))
 				#print('Aggregating partial: ', partagg.name)
 				for ln in finp:
 					# Skip header
@@ -629,7 +615,7 @@ def aggEvaluations(respaths):
 						continue
 					# Process values:  <value>\t<lev_with_shuffle>
 					val, levname = ln.split(None, 1)
-					levname = levname.split(_SEPNAMEPART, 1)[0]  # Remove shuffle part from the levname if exists
+					levname = levname.split(SEPNAMEPART, 1)[0]  # Remove shuffle part from the levname if exists
 					partagg.addraw(resfile, levname, float(val))
 				partagg.fix()
 	# Aggregate total statistics
@@ -657,10 +643,10 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 	tidy  - delete previously existent results. Must be False if a few apps output results into the same dir
 	"""
 	assert execpool and basefile and measure and algname, 'Parameters must be defined'
-	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
+	assert not pathid or pathid[0] == SEPPATHID, 'pathid must include pathid separator'
 	# Fetch the task name and chose correct network filename
 	taskcapt = os.path.splitext(os.path.split(basefile)[1])[0]  # Name of the basefile (network or ground-truth clusters)
-	ishuf = None if taskcapt.find(_SEPSHF) == -1 else taskcapt.rsplit(_SEPSHF, 1)[1]  # Separate shuffling index (with possible pathid) if exists
+	ishuf = None if taskcapt.find(SEPSHF) == -1 else taskcapt.rsplit(SEPSHF, 1)[1]  # Separate shuffling index (with possible pathid) if exists
 	assert taskcapt and not ishuf, 'The base file name must exists and should not be shuffled, file: {}, ishuf: {}'.format(
 		taskcapt, ishuf)
 	# Define index of the task suffix (identifier) start
@@ -668,10 +654,10 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 	#print('Processing {}, pathid: {}'.format(taskcapt, pathid))
 
 	# Resource consumption profile file name
-	rcpoutp = ''.join((_RESDIR, algname, '/', measure, _EXTEXECTIME))
+	rcpoutp = ''.join((RESDIR, algname, '/', measure, EXTEXECTIME))
 	jobs = []
 	# Traverse over directories of clusters corresponding to the base network
-	for clsbase in glob.iglob(''.join((_RESDIR, algname, '/', _CLSDIR, escapePathWildcards(taskcapt), '*'))):
+	for clsbase in glob.iglob(''.join((RESDIR, algname, '/', CLSDIR, escapePathWildcards(taskcapt), '*'))):
 		# Skip execution of log files, leaving only dirs
 		if not os.path.isdir(clsbase):
 			continue
@@ -684,7 +670,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 			continue
 		# Skip cases whtn processing clusters have unexpected pathid
 		elif not pathid:
-			icnpid = clsname.rfind(_SEPPATHID)  # Index of pathid in clsname
+			icnpid = clsname.rfind(SEPPATHID)  # Index of pathid in clsname
 			if icnpid != -1 and icnpid + 1 < clsnameLen:
 				# Validate pathid
 				try:
@@ -692,7 +678,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 				except ValueError as err:
 					# This is not the pathid, or this pathid has invalid format
 					print('WARNING, invalid suffix or the separator "{}" represents part of the path "{}", exception: {}. Skipped.'
-					.format(_SEPPATHID, clsname, err), file=sys.stderr)
+					.format(SEPPATHID, clsname, err), file=sys.stderr)
 					# Continue processing as ordinary clusters wthout pathid
 				else:
 					# Skip this clusters having unexpected pathid
@@ -700,11 +686,11 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 		icnpid = clsnameLen - len(pathid)  # Index of pathid in clsname
 
 		# Filter out unexpected instances of the network (when then instance without id is processed)
-		if clsnameLen > tcapLen and clsname[tcapLen] == _SEPINST:
+		if clsnameLen > tcapLen and clsname[tcapLen] == SEPINST:
 			continue
 
 		# Fetch shuffling index if exists
-		ish = clsname[:icnpid].rfind(_SEPSHF) + 1  # Note: reverse direction to skip possible separator symbols in the name itself
+		ish = clsname[:icnpid].rfind(SEPSHF) + 1  # Note: reverse direction to skip possible separator symbols in the name itself
 		shuffle = clsname[ish:icnpid] if ish else ''
 		# Validate shufflng index
 		if shuffle:
@@ -712,13 +698,13 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 				int(shuffle)
 			except ValueError as err:
 				print('WARNING, invalid suffix or the separator "{}" represents part of the path "{}", exception: {}. Skipped.'
-					.format(_SEPSHF, clsname, err), file=sys.stderr)
+					.format(SEPSHF, clsname, err), file=sys.stderr)
 				# Continue processing skipping such index
 				shuffle = ''
 
 		# Note: separate dir is created, because modularity is evaluated for all files in the target dir,
 		# which are different granularity / hierarchy levels
-		logsbase = clsbase.replace(_CLSDIR, measdir)
+		logsbase = clsbase.replace(CLSDIR, measdir)
 		# Remove previous results if exist and required
 		if tidy and os.path.exists(logsbase):
 			shutil.rmtree(logsbase)
@@ -728,7 +714,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 		# Skip shuffle indicator to accumulate values from all shuffles into the single file
 		taskoutp = logsbase
 		if shuffle:
-			taskoutp = taskoutp.rsplit(_SEPSHF, 1)[0]
+			taskoutp = taskoutp.rsplit(SEPSHF, 1)[0]
 			# Recover lost pathid if required
 			if pathid:
 				taskoutp += pathid
@@ -736,9 +722,9 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 		if tidy and os.path.exists(taskoutp):
 			os.remove(taskoutp)
 
-		#shuffagg = ShufflesAgg(resagg, name=_SEPNAMEPART.join((measure, algname, taskcapt, pathid)))  # Note: taskcapt here without alg params
+		#shuffagg = ShufflesAgg(resagg, name=SEPNAMEPART.join((measure, algname, taskcapt, pathid)))  # Note: taskcapt here without alg params
 		taskname = os.path.splitext(os.path.split(taskoutp)[1])[0]
-		shagg = ShufflesAgg(resagg, _SEPNAMEPART.join((measure, algname, taskname)))
+		shagg = ShufflesAgg(resagg, SEPNAMEPART.join((measure, algname, taskname)))
 		task = Task(name=taskname, params=shagg, ondone=shagg.fix)  # , params=EvalState(taskcapt, )
 		# Traverse over all resulting communities for each ground truth, log results
 		for cfile in glob.iglob(escapePathWildcards(clsbase) + '/*'):
@@ -761,9 +747,9 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 			#print('Lev naming: clslev = {}, jbasename = {}'.format(clslev, jbasename))
 			# Note: it is better to path clsname and shuffle separately to avoid redundant cut on evaluations processing
 			#if shuffle:
-			#	clslev = _SEPNAMEPART.join((clslev, shuffle))
+			#	clslev = SEPNAMEPART.join((clslev, shuffle))
 
-			#jobname = _SEPNAMEPART.join((measure, algname, clsname))
+			#jobname = SEPNAMEPART.join((measure, algname, clsname))
 			logfilebase = '/'.join((logsbase, jbasename))
 			# pathid must be part of jobname, and  bun not of the clslev
 			jobs.append(evaljob(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logfilebase))
@@ -793,7 +779,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 	pathid  - path id of the basefile to distinguish files with the same name located in different dirs
 		Note: pathid includes pathid separator
 	"""
-	assert not pathid or pathid[0] == _SEPPATHID, 'pathid must include pathid separator'
+	assert not pathid or pathid[0] == SEPPATHID, 'pathid must include pathid separator'
 	if _DEBUG_TRACE:
 		print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
 
@@ -844,10 +830,10 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 				# Define result caption
 				shuffle = job.params['shuffle']
 				if shuffle:
-					clslev = _SEPNAMEPART.join((clslev, shuffle))
+					clslev = SEPNAMEPART.join((clslev, shuffle))
 				tmod.write('{}\t{}\n'.format(mod, clslev))
 
-		return Job(name=_SEPSHF.join((task.name, shuffle)), workdir=_ALGSDIR, args=args, timeout=timeout
+		return Job(name=SEPSHF.join((task.name, shuffle)), workdir=ALGSDIR, args=args, timeout=timeout
 			, ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle}
 			# Output modularity to the proc PIPE buffer to be aggregated on postexec to avoid redundant files
 			, stdout=PIPE, stderr=logsbase + _EXTERR)
@@ -891,7 +877,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 			os.environ[ldpname] = ldpath
 
 		# Processing is performed from the algorithms dir
-		jobname = _SEPSHF.join((task.name, shuffle))  # Name of the creating job
+		jobname = SEPSHF.join((task.name, shuffle))  # Name of the creating job
 		args = ('../exectime', '-o=../' + rcpoutp, '-n=' + jobname, './gecmi', '../' + basefile, '../' + cfile)
 
 		# Job postprocessing
@@ -916,10 +902,10 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 					# Define result caption
 					shuffle = job.params['shuffle']
 					if shuffle:
-						clslev = _SEPNAMEPART.join((clslev, shuffle))
+						clslev = SEPNAMEPART.join((clslev, shuffle))
 					tnmi.write('{}\t{}\n'.format(nmi, clslev))
 
-		return Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout
+		return Job(name=jobname, task=task, workdir=ALGSDIR, args=args, timeout=timeout
 			, ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle}
 			, stdout=PIPE, stderr=logsbase + _EXTERR)
 
@@ -939,7 +925,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 			job  - resulting evaluating job
 		"""
 		# Processing is performed from the algorithms dir
-		jobname = _SEPSHF.join((task.name, shuffle))  # Name of the creating job
+		jobname = SEPSHF.join((task.name, shuffle))  # Name of the creating job
 		args = ('../exectime', '-o=../' + rcpoutp, '-n=' + jobname, './onmi_sum', '../' + basefile, '../' + cfile)
 
 		# Job postprocessing
@@ -964,10 +950,10 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 					# Define result caption
 					shuffle = job.params['shuffle']
 					if shuffle:
-						clslev = _SEPNAMEPART.join((clslev, shuffle))
+						clslev = SEPNAMEPART.join((clslev, shuffle))
 					tnmi.write('{}\t{}\n'.format(nmi, clslev))
 
-		return Job(name=jobname, task=task, workdir=_ALGSDIR, args=args, timeout=timeout
+		return Job(name=jobname, task=task, workdir=ALGSDIR, args=args, timeout=timeout
 			, ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle}
 			, stdout=PIPE, stderr=logsbase + _EXTERR)
 

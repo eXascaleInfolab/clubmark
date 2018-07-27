@@ -23,18 +23,18 @@ from math import sqrt, copysign
 
 _PREFINTERNDIR = '-'  # Internal directory prefix
 _BCKDIR = _PREFINTERNDIR + 'backup/'  # Backup directory
-_ORIGDIR = _PREFINTERNDIR + 'orig/'  # Backup directory
+ORIGDIR = _PREFINTERNDIR + 'orig/'  # Backup directory
 _REFLOAT = re.compile(r'[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')  # Regular expression to parse float
 _REINT = re.compile(r'[-+]?\d+(?=\W)')  # Regular expression to parse int
-_SEPPARS = '!'  # Network parameters separator, must be a char
-_SEPINST = '^'  # Network instances separator, must be a char
-_SEPSHF = '%'  # Network shuffles separator, must be a char; ~
-_SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
-_SEPSUBTASK = '>'  # Sub-task separator
-_UTILDIR = 'utils/'  # Utilities directory with external applicaions for quality evaluation and other things
-_TIMESTAMP_START = time.gmtime()  # struct_time
-_TIMESTAMP_START_STR = time.strftime('%Y-%m-%d %H:%M:%S', _TIMESTAMP_START)
-_TIMESTAMP_START_HEADER = ' '.join(('# ---', _TIMESTAMP_START_STR, '-'*32))
+SEPPARS = '!'  # Network parameters separator, must be a char
+SEPINST = '^'  # Network instances separator, must be a char
+SEPSHF = '%'  # Network shuffles separator, must be a char; ~
+SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
+SEPSUBTASK = '>'  # Sub-task separator
+UTILDIR = 'utils/'  # Utilities directory with external applicaions for quality evaluation and other things
+TIMESTAMP_START = time.gmtime()  # struct_time
+TIMESTAMP_START_STR = time.strftime('%Y-%m-%d %H:%M:%S', TIMESTAMP_START)
+TIMESTAMP_START_HEADER = ' '.join(('# ---', TIMESTAMP_START_STR, '-'*32))
 
 # Consider Python2
 if not hasattr(glob, 'escape'):
@@ -232,7 +232,7 @@ def delPathSuffix(path, nameonly=False):
 	# Find position of the separator symbol, considering that it can't be begin of the name
 	if len(pname) >= 2:
 		# Note: +1 compensates start from the symbol at index 1. Also a separator can't be the first symbol
-		poses = [pname[1:].rfind(c) + 1 for c in (_SEPINST, _SEPPATHID, _SEPSHF)]  # Note: reverse direction to skip possible separator symbols in the name itself
+		poses = [pname[1:].rfind(c) + 1 for c in (SEPINST, SEPPATHID, SEPSHF)]  # Note: reverse direction to skip possible separator symbols in the name itself
 		## Consider possible extension of the filename
 		## Note: this handling is fine, but not reliable (part of the name of file extension can be handled as a shuffle index
 		#pos = pname[1:].rfind('.') + 1
@@ -241,7 +241,7 @@ def delPathSuffix(path, nameonly=False):
 		#	pos = pname[1:pos].rfind('.') + 1
 		#	if pos:
 		#		poses.append(pos)
-		poses.append(pname[1:].find(_SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is required
+		poses.append(pname[1:].find(SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is required
 		# Filter out non-existent results: -1 -> 0
 		poses = sorted(filter(lambda x: x >= 1, poses))
 		#print('Initial poses: ', poses)
@@ -250,7 +250,7 @@ def delPathSuffix(path, nameonly=False):
 			pose = poses[0] if poses else len(pname)  # Index of the next separator or end of the name
 			# Note: parameters can be any, but another suffixes are strictly specified
 			# Validate the suffix in case it is an instance or shuffle suffix
-			if pname[pos] in (_SEPINST, _SEPPATHID, _SEPSHF):
+			if pname[pos] in (SEPINST, SEPPATHID, SEPSHF):
 				try:
 					int(pname[pos + 1:pose])
 				except ValueError as err:
@@ -309,8 +309,8 @@ def parseName(path, nameonly=False):
 	# Find position of the separator symbol, considering that it can't be begin of the name
 	if len(pname) >= 2:
 		# Note: +1 compensates start from the symbol at index 1. Also a separator can't be the first symbol
-		poses = [pname[1:].rfind(c) + 1 for c in (_SEPINST, _SEPSHF, _SEPPATHID)]  # Note: reverse direction to skip possible separator symbols in the name itself
-		poses.append(pname[1:].find(_SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is required
+		poses = [pname[1:].rfind(c) + 1 for c in (SEPINST, SEPSHF, SEPPATHID)]  # Note: reverse direction to skip possible separator symbols in the name itself
+		poses.append(pname[1:].find(SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is required
 		# Filter out non-existent results: -1 -> 0
 		poses = sorted(filter(lambda x: x >= 1, poses))
 		#print('Initial poses: ', poses)
@@ -319,7 +319,7 @@ def parseName(path, nameonly=False):
 			pose = poses[0] if poses else len(pname)  # Index of the next separator or end of the name
 			# Note: parameters can be any, but another suffixes are strictly specified
 			# Validate the suffix in case it is an instance or shuffle suffix
-			if pname[pos] in (_SEPINST, _SEPSHF, _SEPPATHID):
+			if pname[pos] in (SEPINST, SEPSHF, SEPPATHID):
 				try:
 					int(pname[pos + 1:pose])
 				except ValueError as err:
@@ -330,14 +330,14 @@ def parseName(path, nameonly=False):
 			if basename is pname:
 				basename = pname[:pos]
 			val = pname[pos:pose]
-			if pname[pos] == _SEPPARS:
+			if pname[pos] == SEPPARS:
 				apars = val
-			elif pname[pos] == _SEPINST:
+			elif pname[pos] == SEPINST:
 				insid = val
-			elif pname[pos] == _SEPSHF:
+			elif pname[pos] == SEPSHF:
 				shid = val
 			else:
-				assert pname[pos] == _SEPPATHID, 'pathid separator is expected instead of: {}'.format(val)
+				assert pname[pos] == SEPPATHID, 'pathid separator is expected instead of: {}'.format(val)
 				pathid = val
 		#print('path: {}, pname: {}, pos: {}, poses: {}'.format(path, pname, pos, poses), file=sys.stderr)
 
@@ -689,9 +689,9 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	if not basedir:  # ATTENTION: recuired independently on the value of relpath
 		basedir = '.'
 		basepath = './' + basepath
-	# origdir = _ORIGDIR if not basedir else '/'.join((basedir, _ORIGDIR))
+	# origdir = ORIGDIR if not basedir else '/'.join((basedir, ORIGDIR))
 	# bckdir = _BCKDIR if not basedir else '/'.join((basedir, _BCKDIR))
-	origdir = '/'.join((basedir, _ORIGDIR))
+	origdir = '/'.join((basedir, ORIGDIR))
 	bckdir = '/'.join((basedir, _BCKDIR))
 	if not os.path.exists(bckdir):
 		os.mkdir(bckdir)
@@ -765,7 +765,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 					continue
 				bckop = shutil.move if move else (shutil.copy2 if
 					os.path.islink(path) or not os.path.isdir() else shutil.copytree)
-				# Destination depending on basesrc: dst VS _ORIGDIR/dst
+				# Destination depending on basesrc: dst VS ORIGDIR/dst
 				bckop(path, bckdir + path.replace(sbasedir, '', 1))
 		return basename
 

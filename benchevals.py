@@ -24,10 +24,10 @@ import time
 # from collections import namedtuple
 from subprocess import PIPE
 from multiprocessing import cpu_count, Process, Queue   # Required to asynchronously save evaluated quality measures to the persistent storage
-from benchapps import funcToAppName, ALGSDIR
+# from benchapps import  # funcToAppName,
 from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
 	escapePathWildcards, envVarDefined, SyncValue, tobackup, \
-	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, \
+	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, ALGSDIR, \
 	TIMESTAMP_START, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 from utils.mpepool import Task, Job, AffinityMask
 
@@ -55,47 +55,47 @@ QMSRAFN = {}  # Soecific affinities of the quality measures;  qmsrAffinity
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
-class Measures(object):
-	"""Quality Measures"""
-	def __init__(self, eval_num=None, nmi_max=None, nmi_sqrt=None, onmi_max=None, onmi_sqrt=None
-	, f1p=None, f1h=None, f1s=None, mod=None, cdt=None):
-		"""Quality Measures to be saved
-
-		eval_num  - number/id of the evaluation to take average over multiple (re)evaluations
-			(NMI from gecmi provides stochastic results), uint8 or None
-		nmi_max  - NMI multiresolution overlapping (gecmi) normalized by max (default)
-		nmi_sqrt  - NMI multiresolution overlapping (gecmi) normalized by sqrt
-		onmi_max  - Overlapping nonstandard NMI (onmi) normalized by max (default)
-		onmi_sqrt  - Overlapping nonstandard NMI (onmi) normalized by sqrt
-		f1p  - F1p measure (harmonic mean of partial probabilities)
-		f1h  - harmonic F1-score measure (harmonic mean of weighted average F1 measures)
-		f1s  - average F1-score measure (arithmetic mean of weighted average F1 measures)
-		mod  - modularity
-		cdt  - conductance
-		"""
-		assert ((eval_num is None or (isinstance(eval_num, int) and 0 <= eval_num <= 0xFF)) and
-			(nmi_max is None or 0. <= nmi_max <= 1.) and (nmi_sqrt is None or 0. <= nmi_sqrt <= 1.) and
-			(onmi_max is None or 0. <= onmi_max <= 1.) and(onmi_sqrt is None or 0. <= onmi_sqrt <= 1.) and
-			(f1p is None or 0. <= f1p <= 1.) and (f1h is None or 0. <= f1h <= 1.) and (f1s is None or 0. <= f1s <= 1.) and
-			(mod is None or -0.5 <= mod <= 1.) and (cdt is None or 0. <= cdt <= 1.)), (
-			'Parameters validation failed  nmi_max: {}, nmi_sqrt: {}, eval_num: {}, onmi_max: {}, onmi_sqrt: {}'
-			', f1p: {}, f1h: {}, f1s: {}, q: {}, cdt: {}'.format(nmi_max, nmi_sqrt, eval_num
-			, onmi_max, onmi_sqrt, f1p, f1h, f1s, mod, cdt))
-		self._eval_num = eval_num  # Note: distinct attr name prefix ('_') is used to distinguish from the measure name
-		self.nmi_max = nmi_max
-		self.nmi_sqrt = nmi_sqrt
-		self.onmi_max = onmi_max
-		self.onmi_sqrt = onmi_sqrt
-		self.f1p = f1p
-		self.f1h = f1h
-		self.f1s = f1s
-		self.mod = mod  # Modularity
-		self.cdt = cdt  # Conductance
-
-
-	def __str__(self):
-		"""String conversion"""
-		return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
+# class Measures(object):
+# 	"""Quality Measures"""
+# 	def __init__(self, eval_num=None, nmi_max=None, nmi_sqrt=None, onmi_max=None, onmi_sqrt=None
+# 	, f1p=None, f1h=None, f1s=None, mod=None, cdt=None):
+# 		"""Quality Measures to be saved
+#
+# 		eval_num  - number/id of the evaluation to take average over multiple (re)evaluations
+# 			(NMI from gecmi provides stochastic results), uint8 or None
+# 		nmi_max  - NMI multiresolution overlapping (gecmi) normalized by max (default)
+# 		nmi_sqrt  - NMI multiresolution overlapping (gecmi) normalized by sqrt
+# 		onmi_max  - Overlapping nonstandard NMI (onmi) normalized by max (default)
+# 		onmi_sqrt  - Overlapping nonstandard NMI (onmi) normalized by sqrt
+# 		f1p  - F1p measure (harmonic mean of partial probabilities)
+# 		f1h  - harmonic F1-score measure (harmonic mean of weighted average F1 measures)
+# 		f1s  - average F1-score measure (arithmetic mean of weighted average F1 measures)
+# 		mod  - modularity
+# 		cdt  - conductance
+# 		"""
+# 		assert ((eval_num is None or (isinstance(eval_num, int) and 0 <= eval_num <= 0xFF)) and
+# 			(nmi_max is None or 0. <= nmi_max <= 1.) and (nmi_sqrt is None or 0. <= nmi_sqrt <= 1.) and
+# 			(onmi_max is None or 0. <= onmi_max <= 1.) and(onmi_sqrt is None or 0. <= onmi_sqrt <= 1.) and
+# 			(f1p is None or 0. <= f1p <= 1.) and (f1h is None or 0. <= f1h <= 1.) and (f1s is None or 0. <= f1s <= 1.) and
+# 			(mod is None or -0.5 <= mod <= 1.) and (cdt is None or 0. <= cdt <= 1.)), (
+# 			'Parameters validation failed  nmi_max: {}, nmi_sqrt: {}, eval_num: {}, onmi_max: {}, onmi_sqrt: {}'
+# 			', f1p: {}, f1h: {}, f1s: {}, q: {}, cdt: {}'.format(nmi_max, nmi_sqrt, eval_num
+# 			, onmi_max, onmi_sqrt, f1p, f1h, f1s, mod, cdt))
+# 		self._eval_num = eval_num  # Note: distinct attr name prefix ('_') is used to distinguish from the measure name
+# 		self.nmi_max = nmi_max
+# 		self.nmi_sqrt = nmi_sqrt
+# 		self.onmi_max = onmi_max
+# 		self.onmi_sqrt = onmi_sqrt
+# 		self.f1p = f1p
+# 		self.f1h = f1h
+# 		self.f1s = f1s
+# 		self.mod = mod  # Modularity
+# 		self.cdt = cdt  # Conductance
+#
+#
+# 	def __str__(self):
+# 		"""String conversion"""
+# 		return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
 
 
 class QualityEntry(object):
@@ -103,10 +103,10 @@ class QualityEntry(object):
 	def __init__(self, measures, appname, netname, appargs=None, levhash=0, instance=0, shuffle=0):
 		"""Quality evaluations to be saved
 
-		measures  - quality measures to be saved, Measures
-		appname  - application (algorithm) name, str
-		netname  - network (dataset) name, str
-		appargs  - non-deault application parameters packed into ASCII encoded str if any, byte str
+		measures: dict  - quality measures to be saved
+		appname: str  - application (clustering algorithm) name
+		netname: str  - network (dataset) name
+		appargs: bytes  - non-deault application parameters packed into ASCII encoded str if any
 		levhash  - hash of the filename do distinguish clustering hierarchy levels if any, int.
 			NOTE: named levhash instead of levnum, because for some algorithms levels are defined
 			by the parameter(s) variation, for example Ganxis varies r = 0.01 .. 0.5 by default
@@ -114,7 +114,7 @@ class QualityEntry(object):
 			natural 0 number
 		shuffle  - network shuffle if any, actula for the shuffled networks, natural 0 number
 		"""
-		assert (isinstance(measures, Measures) and isinstance(appname, str) and isinstance(netname, str)
+		assert (isinstance(measures, dict) and isinstance(appname, str) and isinstance(netname, str)
 			and (appargs is None or isinstance(appargs, _h5str)) and isinstance(levhash, int)
 			and isinstance(instance, int) and instance >= 0 and isinstance(shuffle, int) and shuffle >= 0
 			), ('Parameters validation failed  measures type: {}, appname: {}, netname: {}, appargs: {}'
@@ -286,13 +286,13 @@ class QualitySaver(object):
 def metainfo(afnmask=1):
 	"""Set some meta information for the executing evaluation measures
 
-	afnmask: AffinityMask  - affinity mask
+	afnstep: AffinityMask  - affinity mask
 	"""
 	def decor(func):
 		"""Decorator returning the original function"""
-		assert isinstance(afnmask, int) and 1 <= afnmask <= AffinityMask.CPUS, (
-			'Unexpected value of the affinity mask: {} is not E 1 .. {}'.format(afnmask, AffinityMask.CPUS))
-		QMSRAFN[funcToAppName(func)] = afnmask
+		assert isinstance(afnmask, AffinityMask), 'Unexpected type of the affinity mask: {}'.format(type(a).__name__)
+		# QMSRAFN[funcToAppName(func)] = afnmask
+		QMSRAFN[func] = afnmask
 		return func
 	return decor
 

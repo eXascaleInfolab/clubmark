@@ -200,7 +200,7 @@ To see the possible input parameters, run the benchmark without the arguments or
 ```sh
 $ ./benchmark.py 
 Usage:
-  ./benchmark.py [-g[o][a]=[<number>][%<shuffles_number>][=<outpdir>] [-i[f][a][%<shuffles_number>]=<datasets_{dir,file}_wildcard> [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[e[{n[x],o[x],f[{h,p}],d}][i[{m,c}]]] [-s=<eval_path>] [-t[{s,m,h}]=<timeout>] [-d=<seed_file>] | -h
+  ./benchmark.py [-g[o][a]=[<number>][%<shuffles_number>][=<outpdir>] [-i[f][a][%<shuffles_number>]=<datasets_{dir,file}_wildcard> [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[="qmapp [arg1 arg2 ...]"]] [-s=<resval_path>] [-t[{s,m,h}]=<timeout>] [-d=<seed_file>] [-w=<webui_addr>] | -h
 
 Example:
   ./benchmark.py -g=3%5 -r -q -th=2.5 1> results/bench.log 2> results/bench.err
@@ -208,7 +208,7 @@ NOTE:
   - The benchmark should be executed exclusively from the current directory (./).
   - The expected format of input datasets (networks) is .ns<l> - network specified by <links> (arcs / edges), a generalization of the .snap, .ncol and Edge/Arcs Graph formats.
   - Paths can contain wildcards: *, ?, +.
-  - Multiple paths can be specified via multiple -i, -s options (one per the item).
+  - Multiple paths can be specified with multiple -i, -s options (one per the item).
 
 Parameters:
   --help, -h  - show this usage description
@@ -217,52 +217,53 @@ Parameters:
     a  - generate networks specified by arcs (directed) instead of edges (undirected)
 NOTE: shuffled datasets have the following naming format:
 	<base_name>[(seppars)<param1>...][^<instance_index>][%<shuffle_index>].<net_extension>
-  --input, -i[X][%<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories, which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension (.ns{e,a}). Default: -ie=syntnets/networks/*/, which are subdirs of the synthetic networks dir without shuffling.
+  --input, -i[f][a][%<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories, which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension (.ns{e,a}). Default: -i=syntnets/networks/*/, which are subdirs of the synthetic networks dir without shuffling.
     f  - make flat derivatives on shuffling instead of generating the dedicated directory (having the file base name) for each input network, might cause flooding of the base directory. Existed shuffles are backed up.
     NOTE: variance over the shuffles of each network instance is evaluated only for the non-flat structure.
     a  - the dataset is specified by arcs (asymmetric, directed links) instead of edges (undirected links), considered only for not .ns{a,e} extensions.
 NOTE:
-  - The following symbols in the path name have specific semantic and processed respectively: ('!', '^', '%', '#')
-  - Paths may contain wildcards: *, ?, +
-  - Multiple directories and files wildcards can be specified via multiple -i options
-  - Existent shuffles are backed up and the new shuffles OVERWRITE already existent shuffles (retainig the old non-matched shuffles)
+  - The following symbols in the path name have specific semantic and processed respectively: ('!', '^', '%', '#').
+  - Paths may contain wildcards: *, ?, +.
+  - Multiple directories and files wildcards can be specified with multiple -i options.
+  - Existent shuffles are backed up if reduced, the existend shuffles are RETAINED and only the additional shuffles are generated if required.
   - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]
-  - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions) is up to the clustering algorithm
+  - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions) is up to the clustering algorithm.
   --apps, -a[=[-]"app1 app2 ..."]  - apps (clustering algorithms) to be applied, default: all.
-Leading "-" means applying of all except the specified apps. Available apps (13): CggcRg, CggciRg, Daoc, DaocA, DaocA_s_r, Daoc_s_r, Ganxis, LouvainIg, Oslom2, Pscan, Randcommuns, Scd, Scp.
+Leading "-" means apply all except the specified apps. Available apps (24): CggcRg, CggciRg, Daoc, DaocA, DaocAR, DaocARB, DaocARB1, DaocARB5, DaocB, DaocB1, DaocB5, DaocR, DaocRB, DaocRB1, DaocRB5, DaocRBX, DaocX, Ganxis, LouvainIg, Oslom2, Pscan, Randcommuns, Scd, Scp.
 Impacts {r, q} options. Optional, all registered apps (see benchapps.py) are executed by default.
 NOTE: output results are stored in the "results/<algname>/" directory
   --runapps, -r  - run specified apps on the specified datasets, default: all
-  --quality, -q[X]  - evaluate quality (including accuracy) of the results for the specified algorithms on the specified datasets and form the summarized results. Default: NMI_max, F1h and F1p measures on all datasets
-    e[Y]  - extrinsic measures for overlapping communities, default: all
-      n[Z]  - NMI measure(s) for overlapping and multi-level communities: max, avg, min, sqrt
-        x  - NMI_max,
-      NOTE: unified NMI evaluation is stochastic and does not provide the seed parameter.
-      o[Z]  - overlapping NMI measure(s) for overlapping communities that are not multi-level: max, sum, lfk. Note: it is much faster than generalized NMI
-        x  - NMI_max
-      f[Z]  - avg F1-Score(s) for overlapping and multi-level communities: avg, hmean, pprob
-        h  - harmonic mean of F1-Score
-        p  - F1p measure (harmonic mean of the weighted average of partial probabilities)
-      r  - recommended extrinsic measures (NMI_max, F1_h, F1_p) for overlapping multi-level communities
-    i[Y]  - intrinsic measures for overlapping communities, default: all
-      m  - modularity Q
-      c  - conductance f
-    u  - update quality evaluations appending the new results to the existing stored evaluations (if any) and then aggregate everything to the final summarized results skipping older duplicates (if any).
-  ATTENTION: "-qu" requires at least one more "-qX" flag to indicate what measures should be (re)evaluated. Applicable only for the same seed as existed evaluations had. The existed quality evaluations are backed up anyway.
-NOTE: multiple quality evaluation options can be specified via the multiple -q options.
-  --timeout, -t[X]=<float_number>  - specifies timeout for each benchmarking application per single evaluation on each network in sec, min or hours; 0 sec - no timeout, default: 36 h 0 min 0 sec
+  --quality, -q[="qmapp [arg1 arg2 ...]"  - evaluate quality (accuracy) with the specified quality measure application (<qmapp>) for the algorithms (specified with "-a") on the datasets (specified with "-i") and form the aggregated final results. Default: MF1p, GNMI_max, OIx extrinsic and Q, f intrinsic measures on all datasets. Available qmapps (4): Gnmi, Imeasures, Onmi, Xmeasures.
+NOTE: Multiple quality measure applications can be specified with multiple -q options.
+Notations of the quality mesurements:
+ = Extrinsic Quality (Accuracy) Measures =
+   - GNMI[_{max,sqrt}]  - Generalized Normalized Mutual Information for overlapping and multi-resolution clusterings (collections of clusters), equals to the standard NMI when applied to the non-overlapping single-resolution clusterings.
+   - MF1{p,h,a}[_{w,u,c}]  - mean F1 measure (harmonic or average) of all local best matches by the Partial Probabilities or F1 (harmonic mean) considering macro/micro/combined weighting.
+   - OI[x]  - [x - extended] Omega Index for the overlapping clusterings, non-extended version equals to the Adjusted Rand Index when applied to the non-overlapping single-resolution clusterings.
+ --- Less Indicative Extrinsic Quality Measures ---
+   - F1{p,h}_[{w,u}]  - perform labelling of the evaluating clusters with the specified ground-truth and evaluate F1-measure of the labeled clusters
+   - ONMI[_{max,sqrt,avg,lfk}]  - Ovelapping NMI suitable for a single-resolution clusterins having light overlaps, the resulting values are not compatible with the standard NMI when applied to the non-overlapping clsuters.
+ = Intrinsic Quality Measures =
+   - Cdt  - conducance f for the overlapping clustering.
+   - Q[a]  - [autoscaled] modularity for the overlapping clustering, non-autoscaled equals to the standard modularity
+ when applied to the non-overlapping single-resolution clustering.
+  --timeout, -t=[<days:int>d][<hours:int>h][<minutes:int>m][<seconds:float>] | -t[X]=<float>  - timeout for each benchmarking application per single evaluation on each network; 0 - no timeout, default: 1d12h. X option:
     s  - time in seconds, default option
     m  - time in minutes
     h  - time in hours
+    Examples: `-th=2.5` is the same as `-t=2h30m` and `--timeout=2h1800`
   --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms, contains uint64_t value. Default: results/seed.txt
 NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seed.
 
 Advanced parameters:
-  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.)
+  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.), deprecated
     f  - force the conversion even when the data is already exist
     r  - resolve (remove) duplicated links on conversion (recommended to be used)
   --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results, which is useful to include external manual evaluations into the final summarized results
 ATTENTION: <resval_path> should include the algorithm name and target measure.
+  --webaddr, -w  - run WebUI on the specified <webui_addr> in the format <host>[:<port>], default port=8080.
+  --runtimeout  - global clustrering algorithms execution timeout in the format [<days>d][<hours>h][<minutes>m<seconds>], default: 10d.
+  --evaltimeout  - global clustrering algorithms execution timeout in the format [<days>d][<hours>h][<minutes>m<seconds>], default: 2d.
 ```
 <!-- #endregion BenchParams -->
 > _REPRODUCIBILITY NOTICE_: Use seed to reproduce the evaluations but be aware that:
@@ -435,5 +436,6 @@ All the evaluations will be performed automatically, the algorithm should just f
 ## Related Projects
 * [PyExPool](https://github.com/eXascaleInfolab/PyExPool)  - multiprocess execution pool and load balancer, which provides [external] applications scheduling for the in-RAM execution on NUMA architecture with capabilities of the affinity control, CPU cache vs parallelization maximization, memory consumption and execution time constrains specification for the whole execution pool and per each executor process (called worker, executes a job).
 * DAOC - (former [HiReCS](https://github.com/eXascaleInfolab/hirecs) High Resolution Hierarchical Clustering with Stable State, which was totally redesigned).
-* [eXascale Infolab](https://github.com/eXascaleInfolab) GitHub repository and [our website](http://exascale.info/) where you can find another projects and research papers related to Big Data processing!  
-Please, [star this project](https://github.com/eXascaleInfolab/clubmark) if you use it.
+
+See also [eXascale Infolab](https://github.com/eXascaleInfolab) GitHub repository and [our website](http://exascale.info/) where you can find another projects and research papers related to Big Data processing!  
+**Note:** Please, [star this project](https://github.com/eXascaleInfolab/clubmark) if you use it.

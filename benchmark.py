@@ -1725,6 +1725,7 @@ def terminationHandler(signal=None, frame=None, terminate=True):  #pylint: disab
 if __name__ == '__main__':
 	if len(sys.argv) <= 1 or (len(sys.argv) == 2 and sys.argv[1] in ('-h', '--help')):
 		apps = appnames(benchapps)
+		qmapps = appnames(benchevals)
 		print('\n'.join(('Usage:',
 			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
 			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
@@ -1769,7 +1770,7 @@ if __name__ == '__main__':
 			'  - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
 			' is up to the clustering algorithm.',
 			'  --apps, -a[=[-]"app1 app2 ..."]  - apps (clustering algorithms) to be applied, default: all.',
-			'Leading "-" means applying of all except the specified apps. Available apps ({anppsnum}): {apps}.',
+			'Leading "-" means apply all except the specified apps. Available apps ({anppsnum}): {apps}.',
 			'Impacts {{r, q}} options. Optional, all registered apps (see benchapps.py) are executed by default.',
 			'NOTE: output results are stored in the "{resdir}<algname>/" directory',
 			#'    f  - force execution even when the results already exists (existent datasets are moved to the backup)',
@@ -1794,7 +1795,7 @@ if __name__ == '__main__':
 			' the resulting values are not compatible with the standard NMI when applied to the non-overlapping clsuters.',
 			# '   - NMI[_{{max,sqrt,avg,min}}]  - standart NMI for the non-overlapping (disjoint) clusters only.',
 			' = Intrinsic Quality Measures =',
-			'   - Cds  - conducance f for the overlapping clustering.',  # Cds, f
+			'   - Cdt  - conducance f for the overlapping clustering.',  # Cdt, Cds, f
 			'   - Q[a]  - [autoscaled] modularity for the overlapping clustering, non-autoscaled equals to the standard modularity',
 			' when applied to the non-overlapping single-resolution clustering.',
 			'  --timeout, -t=[<days:int>d][<hours:int>h][<minutes:int>m][<seconds:float>] | -t[X]=<float>  - timeout for each'
@@ -1822,8 +1823,9 @@ if __name__ == '__main__':
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {evaltimeout}.',
 			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=SEPINST, seppars=SEPPARS, sepshf=SEPSHF, rsvpathsmb=(SEPPARS, SEPINST, SEPSHF, SEPPATHID)
-				, anppsnum=len(apps), apps=', '.join(apps), algtimeout=secDhms(_TIMEOUT)
-				, seedfile=_SEEDFILE, port=_PORT, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
+				, anppsnum=len(apps), apps=', '.join(apps), qmappsnum=len(qmapps), qmapps=', '.join(qmapps)
+				, algtimeout=secDhms(_TIMEOUT), seedfile=_SEEDFILE, port=_PORT
+				, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
 	else:
 		# Fill signals mapping {value: name}
 		_signals = {sv: sn for sn, sv in viewitems(signal.__dict__)

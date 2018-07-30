@@ -32,6 +32,7 @@ SEPSHF = '%'  # Network shuffles separator, must be a char; ~
 SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
 SEPSUBTASK = '>'  # Sub-task separator
 UTILDIR = 'utils/'  # Utilities directory with external applicaions for quality evaluation and other things
+ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
 TIMESTAMP_START = time.gmtime()  # struct_time
 TIMESTAMP_START_STR = time.strftime('%Y-%m-%d %H:%M:%S', TIMESTAMP_START)
 TIMESTAMP_START_HEADER = ' '.join(('# ---', TIMESTAMP_START_STR, '-'*32))

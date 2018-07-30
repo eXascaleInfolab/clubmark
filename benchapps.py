@@ -50,14 +50,13 @@ from numbers import Number  # To verify that a variable is a number (int or floa
 from sys import executable as PYEXEC  #pylint: disable=C0412;  # Full path to the current Python interpreter
 # from functools import wraps  # Decorating tools for the JobTracer
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty \
-	, tobackup, escapePathWildcards, UTILDIR, ORIGDIR, TIMESTAMP_START_HEADER \
+	, tobackup, escapePathWildcards, UTILDIR, ALGSDIR, ORIGDIR, TIMESTAMP_START_HEADER \
 	, SEPPARS, SEPSUBTASK, SEPPATHID
 from benchevals import SEPNAMEPART, RESDIR, CLSDIR, EXTEXECTIME, EXTAGGRES, EXTAGGRESEXT
 from utils.mpepool import Job, Task
 from algorithms.utils.parser_nsl import parseHeaderNslFile  #, asymnet
 
 
-ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
 # Maximal number of the levels considered for the evaluation in the multi-scale or hierarchihal clustering
 _LEVSMAX = 10  # Use 10 scale levels as in Ganxis by default
 # Note: currently the output level are limited only for the algorithms that may produce more than 10 levels

@@ -813,9 +813,10 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, 
 			avgnls = None
 		else:
 			# The number of arcs in the network
-			size = netinfo.lnsnum * (1 + (not netinfo.directed))  # arcs = edges * 2
+			# ATTENTION: / 2. is important since the resulting value affects avgnls, which affects the k powering
+			size = netinfo.lnsnum * (1 + (not netinfo.directed)) / 2.  # arcs = edges * 2
 			avgnls = size / float(netinfo.ndsnum)  # Average number of arcs per node
-			size *= avgnls
+			# size *= avgnls  # To partially consider complexity increase with the density
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
@@ -844,7 +845,8 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, 
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 7  # Max clique size (~ min node degree to be considered)
 	steps = str(_LEVSMAX)  # Use 10 scale levels as in Ganxis
-	golden = (1 + 5 ** 0.5) * 0.5  # Golden section const: 1.618
+	# Power rario to consider non-linear memory complexity increase depending on k
+	pratio = (1 + 5 ** 0.5) * 0.5  # Golden section const: 1.618  # 2.718  # exp(1)
 	# Run for range of clique sizes
 	for k in range(kmin, kmax + 1):
 		# A single argument is k-clique size
@@ -866,10 +868,10 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, 
 		#print('> Starting job {} with args: {}'.format('_'.join((ktaskname, algname, kstrex)), args + [kstr]))
 		execpool.execute(Job(name=SEPNAMEPART.join((algname, ktaskname)), workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
-			# Note: increasing clique size k causes ~(k ** golden) increased consumption of both memory and time (up to k ^ 2),
+			# Note: increasing clique size k causes ~(k ** pratio) increased consumption of both memory and time (up to k ^ 2),
 			# so it is better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
 			, task=task, category=algname if avgnls is not None else '_'.join((algname, kstrex))
-			, size=size * (k ** golden if avgnls is None or k >= avgnls else (avgnls - k) ** (-1/golden))
+			, size=size * (k ** pratio if avgnls is None or k >= avgnls else ((k + avgnls)/2.) ** (1./pratio))
 			, ondone=subuniflevs, params=taskpath # {'taskpath': taskpath} # , 'aparams': kstrex
 			, stdout=logfile, stderr=errfile))
 

@@ -1613,7 +1613,7 @@ def benchmark(*args):
 
 	opts = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tsyntpo: "{}"\n\tconvnets: 0b{:b}'
-		'\n\trunalgs: {}\n\tquality measures: 0b{:b}\n\tupdqual: {}\n\tdatas: {}\n\talgorithms: {}'
+		'\n\trunalgs: {}\n\tquality measures: {}\n\tupdqual: {}\n\tdatas: {}\n\talgorithms: {}'
 		'\n\taggrespaths: {}\n\ttimeout: {} h {} m {:.4f} sec'
 	 .format(opts.syntpo, opts.convnets, opts.runalgs
 		, None if opts.qmeasures is None else ' '.join([qm[0] for qm in opts.qmeasures]), opts.updqual

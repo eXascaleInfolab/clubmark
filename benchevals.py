@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
@@ -31,17 +31,21 @@ from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseN
 	TIMESTAMP_START, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 from utils.mpepool import Task, Job, AffinityMask
 
-# Identify type of the Variable-length ASCII (bytes) for the HDF5 storage
-try:
-	_h5str = h5py.special_dtype(vlen=bytes)  # For Python3
-except NameError:
-	_h5str = h5py.special_dtype(vlen=str)  # For Python2
 
+# Identify type of the Variable-length ASCII (bytes) / UTF8 types for the HDF5 storage
+try:
+	# For Python3
+	h5str = h5py.special_dtype(vlen=bytes)  # ASCII str, bytes
+	h5ustr = h5py.special_dtype(vlen=str)  # UTF8 str
+except NameError:  # bytes are not defined in Python2
+	# For Python2
+	h5str = h5py.special_dtype(vlen=str)  # ASCII str, bytes
+	h5ustr = h5py.special_dtype(vlen=unicode)  # UTF8 str
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 RESDIR = 'results/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm, specified RELATIVE to ALGSDIR
 CLSDIR = 'clusters/'  # Clusters directory for the resulting clusters of algorithms execution
-_QUALITY_STORAGE = 'quality.h5'  # Quality evaluation storage file name
+# _QUALITY_STORAGE = 'quality.h5'  # Quality evaluation storage file name
 _EXTERR = '.err'
 #_EXTLOG = '.log'  # Extension for the logs
 #_EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
@@ -53,6 +57,27 @@ SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, beca
 QMSRAFN = {}  # Soecific affinities of the quality measures;  qmsrAffinity
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
+
+
+# # Accessory Routines ----------------------------------------------------------- 
+# def toH5str(text):
+# 	"""Convert text to the h5str
+#
+# 	text: str  - the text to be converted
+#
+# 	return  h5str  - the converted text
+# 	"""
+# 	return text.encode()  # Required for Python3, stub in Python2
+#
+#
+# def toH5ustr(text):
+# 	"""Convert text to the h5ustr
+#
+# 	text: str  - the text to be converted
+#
+# 	return  h5ustr  - the converted text
+# 	"""
+# 	return text.decode()  # Required for Python2, stub in Python3
 
 
 # class Measures(object):
@@ -100,33 +125,39 @@ _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 class QualityEntry(object):
 	"""Quality evaluations etry to be saved to the persistent storage"""
-	def __init__(self, measures, appname, netname, appargs=None, levhash=0, instance=0, shuffle=0):
+	def __init__(self, measures, appname, inpnet, clsname):  #, appargs=None, level=0, instance=0, shuffle=0):
 		"""Quality evaluations to be saved
 
 		measures: dict  - quality measures to be saved
 		appname: str  - application (clustering algorithm) name
-		netname: str  - network (dataset) name
-		appargs: bytes  - non-deault application parameters packed into ASCII encoded str if any
-		levhash  - hash of the filename do distinguish clustering hierarchy levels if any, int.
-			NOTE: named levhash instead of levnum, because for some algorithms levels are defined
-			by the parameter(s) variation, for example Ganxis varies r = 0.01 .. 0.5 by default
-		instance  - network instance if any, actual for the synthetic networks with the same params,
-			natural 0 number
-		shuffle  - network shuffle if any, actula for the shuffled networks, natural 0 number
+		inpnet: str  - full network (dataset) name
+		clsname: str:  - the file name of the evaluated clustering (including alg params, net inst, shuf, etc.)
 		"""
-		assert (isinstance(measures, dict) and isinstance(appname, str) and isinstance(netname, str)
-			and (appargs is None or isinstance(appargs, _h5str)) and isinstance(levhash, int)
-			and isinstance(instance, int) and instance >= 0 and isinstance(shuffle, int) and shuffle >= 0
-			), ('Parameters validation failed  measures type: {}, appname: {}, netname: {}, appargs: {}'
-			', levhash: {}, instance: {}, shuffle: {}'.format(type(measures)
-			, appname, netname, appargs, levhash, instance, shuffle))
+		# appargs: str  - non-deault application parameters packed into ASCII encoded str if any
+		# level: uint32  - index of the level to distinguish clustering hierarchy levels if any.
+		# 	NOTE: For some algorithms levels are defined by the parameter(s) variation,
+		# 	for example Ganxis varies r = 0.01 .. 0.5 by default
+		# instance: unit8  - network instance if any, actual for the synthetic networks with the same params,
+		# 	natural 0 number
+		# shuffle: unit8  - network shuffle if any, actual for the shuffled networks, natural 0 number
+		# assert (isinstance(measures, dict) and isinstance(appname, str) and isinstance(netname, str)
+		# 	and (appargs is None or isinstance(appargs, str)) and isinstance(levhash, int)
+		# 	and isinstance(instance, int) and instance >= 0 and isinstance(shuffle, int) and shuffle >= 0
+		# 	), ('Parameters validation failed  measures type: {}, appname: {}, netname: {}, appargs: {}'
+		# 	', levhash: {}, instance: {}, shuffle: {}'.format(type(measures)
+		# 	, appname, netname, appargs, levhash, instance, shuffle))
+		assert (isinstance(measures, dict) and isinstance(appname, str) and isinstance(inpnet, str)
+			and isinstance(clsname, str)), ('Parameters validation failed;  measures type: {}'
+			', appname: {}, inpnet: {}, clsname: {}'.format(type(measures).__name__, appname, inpnet, clsname))
 		self.measures = measures
 		self.appname = appname
-		self.netname = netname
-		self.appargs = appargs
-		self.levhash = levhash
-		self.instance = instance
-		self.shuffle = shuffle
+		# self.inpdir =
+		# self.netname =
+
+		# self.appargs = appargs
+		# self.level = level
+		# self.instance = instance
+		# self.shuffle = shuffle
 
 
 	def __str__(self):
@@ -142,80 +173,137 @@ class QualitySaver(object):
 	# program termination or any external interruptions
 	QUEUE_SIZEMAX = max(128, cpu_count() * 2)  # At least 128 or twice the number of the logical CPUs in the system
 
-	"""Quality evaluations serializer to the persistent sotrage"""
-	@staticmethod
-	def _datasaver(qualsaver):
-		"""Worker process function to save data to the persistent storage
+	# """Quality evaluations serializer to the persistent sotrage"""
+	# @staticmethod
+	# def _datasaver(qualsaver):
+	# 	"""Worker process function to save data to the persistent storage
+	#
+	# 	qualsaver  - quality saver wrapper containing the storage and queue
+	# 		of the evaluating measures
+	# 	"""
+	# 	while qualsaver._active or not qualsaver._dpool.empty():
+	# 		# TODO: fetch QualityEntry item, not just Measures
+	# 		qms = qualsaver._dpool.get()  # Measures to be stored
+	# 		assert isinstance(qms, Measures), 'Unexpected type of the measures'
+	# 		for qname, qval in viewitems(qms.__dict__):
+	# 			# Skip undefined quality measures nad store remained {qname: qval}
+	# 			if qval is None:
+	# 				continue
+	# 			# TODO: save data to HDF5
+	# 			# pscan01 = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
 
-		qualsaver  - quality saver wrapper containing the storage and queue
-			of the evaluating measures
-		"""
-		while qualsaver._active or not qualsaver._dpool.empty():
-			# TODO: fetch QualityEntry item, not just Measures
-			qms = qualsaver._dpool.get()  # Measures to be stored
-			assert isinstance(qms, Measures), 'Unexpected type of the measures'
-			for qname, qval in viewitems(qms.__dict__):
-				# Skip undefined quality measures nad store remained {qname: qval}
-				if qval is None:
-					continue
-				# TODO: save data to HDF5
-				# pscan01 = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
 
-
-	def __init__(self, apps, seed, update=False):
+	def __init__(self, algs, qms, nets, seed, update=False):
 		"""Prepare for evaluations creating HDF5 storage
 
 		Check whether the storage exist, copy/move old storage to the backup and
 		create the new one if the storage is not exist.
 
-		apps  - evaluating applicaitons (algorithms), list of strings
-		seed  - benchmarking seed, natural number
-		update  - update existing storage (or create if not exists), or create a new one
+		Arguments:
+			algs: iterable(str)  - evaluating clustering algorithms (names of the algorithms)
+			qms: iterable(str)  - computing quality measurs (names)
+			nets: iterable(str)  - input network names with pathid to be indexed
+			seed: uint64  - benchmarking seed, natural number
+			update: bool  - update existing storage creating if not exists, or create a new one backing up the existent
+
+		Members:
+			storage: h5py.File  - HDF5 storage
+			mrescons: list(str)  - meta data of resource consumption
+			irescons: dict(resname: str, resindex: uint)  - back mapping of the resource consumption metadata
 		"""
+		assert (isinstance(algs[0], str) and isinstance(qms[0], str) and isinstance(nets[0], str)
+			and isinstance(seed, int)), ('Invalid data types, algs: {}, qms: {}, nets: {}, seed: {}'
+			.format(type(algs).__name__, type(qms).__name__, type(nets).__name__, type(seed).__name__, ))
+		# Open or init the HDF5 storage
 		self.storage = None  # Persistent storage object (file)
-		storage = RESDIR + _QUALITY_STORAGE
+		timefmt = '%y%m%d-%H%M%S'  # Start time of the benchmarking, time format: YYMMDD_HHMMSS
+		timestamp = time.strftime(timefmt, TIMESTAMP_START)  # Timestamp string
+		seedstr = str(seed)
+		storage = '/'.join((RESDIR, 'measures_', seedstr, '.h5'))  # File name of the HDF5.storage
 		ublocksize = 512  # Userblock size in bytes
 		ublocksep = ':'  # Userblock vals separator
-		timefmt = '%y%m%d_%H%M%S'  # Time format
-		timestamp = time.strftime(timefmt, TIMESTAMP_START)  # Timestamp string
-		if os.path.exists(storage):
+		if os.path.isfile(storage):
 			# Read userblock: seed and timestamps, validate new seed and estimate whether
 			# there is enought space for one more timestamp
-			with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
-				# Note: userblock contains '<seed>:<timestamp1>:<timestamp2>...',
-				# where timestamp has timefmt
-				ublocksize = fstore.userblock_size
-				ublock = fstore.read(ublocksize).rstrip('\0')
-				ubparts = ublock.split(ublocksep)
-				if update and int(ubparts[0]) != seed:
-					update = False
-					print('WARNING, update is supported only for the same seed.'
-						' Specified seed {} != {} storage seed. New storage will be created.'
-						.format(seed, ubparts[0]), file=sys.stderr)
-				# Update userblock if possible
-				if len(ublock) + len(ublocksep) + len(timestamp) <= ublocksize:
-					fstore.seek(len(ublock))
-					fstore.write(ublocksep + timestamp)
-				else:
-					update = False
-					print('WARNING, update can not be performed because the userblock is already full.'
-						' New storage will be created.'.format(seed, ubparts[0]), file=sys.stderr)
-			if len(ubparts) < 2:
-				raise ValueError('Userblock should contain at least 2 items (seed and 1+ timestamp): ' + ublock)
-			bcksftime = SyncValue(time.strptime(ubparts[-1], timefmt))  # Use last benchmarking start time
+			if update:
+				with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
+					# Note: userblock contains '<seed>:<timestamp1>:<timestamp2>...',
+					# where timestamp has timefmt
+					ublocksize = fstore.userblock_size
+					ublock = fstore.read(ublocksize).rstrip('\0')
+					ubparts = ublock.split(ublocksep)
+					if len(ubparts) < 2:
+						update = False
+						print('ERROR, {} userblock should contain at least 2 items (seed and 1+ timestamp): {}.'
+							' The new store will be created.'.format(storage, ublock), file=sys.stderr)
+					if update and int(ubparts[0]) != seed:
+						update = False
+						print('WARNING, update is supported only for the same seed.'
+							' Specified seed {} != {} storage seed. New storage will be created.'
+							.format(seed, ubparts[0]), file=sys.stderr)
+					# Update userblock if possible
+					if update:
+						if len(ublock) + len(ublocksep) + len(timestamp) <= ublocksize:
+							fstore.seek(len(ublock))
+							fstore.write(ublocksep)  # Note: initially userblock is filled with 0
+							fstore.write(timestamp)
+						else:
+							update = False
+							print('WARNING, {} can not be updated because the userblock is already full.'
+								' A new storage will be created.'.format(storage), file=sys.stderr)
+			bcksftime = SyncValue(ubparts[-1])  # Use last benchmarking start time
 			tobackup(storage, False, synctime=bcksftime, move=not update)  # Copy/move to the backup
-		# Mode: append; core driver is memory-mapped file, block_size is default (64 Kb)
-		self.storage = h5py.File(storage, driver='core', libver='latest', userblock_size=ublocksize)
-		# Initialize apps datasets holding algorithms parameters as ASCII strings of variable length
-		self.apps = {}  # Datasets for each algorithm holding params
-		appsdir = self.storage.require_group('apps')  # Applications / algorithms
-		for app in apps:
-			# Open or create dataset for each app
-			# Allocate chunks of 10 items starting with empty dataset and with possibility
-			# to resize up to 500 items (params combinations)
-			self.apps[app] = appsdir.require_dataset(app, shape=(0,), dtype=h5py.special_dtype(vlen=_h5str)
-				, chunks=(10,), maxshape=(500,))  # , maxshape=(None,), fletcher32=True
-		self.evals = self.storage.require_group('evals')  # Quality evaluations dir (group)
+		elif update:
+			update = False
+			print('WARNING, the storage does not exist and can not be updated, created:', storage, file=sys.stderr)
+		if not update:
+			# Create the storage, fail if exists ('w-' or 'x')
+			self.storage = h5py.File(storage, mode='w-', driver='core', libver='latest', userblock_size=ublocksize)
+			self.storage.close()
+			# Write the userblock
+			if (self.storage.userblock_size
+			and len(seedstr) + len(ublocksep) + len(timestamp) < self.storage.userblock_size):
+				with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
+					fstore.write(seedstr)
+					fstore.write(ublocksep)  # Note: initially userblock is filled with 0
+					fstore.write(timestamp)
+			else:
+				raise RuntimeError('ERROR, the userblock creation failed in the {}, userblock_size: {}'
+					', initial data size: {} (seed: {}, sep: {}, timestamp:{})'.format(storage
+					, self.storage.userblock_size, len(seedstr) + len(ublocksep) + len(timestamp)
+					, len(seedstr), len(ublocksep), len(timestamp)))
+
+		# Note: append mode is the default one; core driver is a memory-mapped file, block_size is default (64 Kb)
+		self.storage = h5py.File(storage, mode='a', driver='core', libver='latest', userblock_size=ublocksize)
+		# Initialize or update metadata and groups
+		# rescons meta data (h5str array)
+		try:
+			self.mrescons = [b.encode() for b in self.storage['rescons.inf'][()]]
+		except IndexError:
+			self.mrescons = ['ExecTime', 'CPU_time', 'RSS_peak']
+			# Note: None in maxshape means resizable, fletcher32 used for the checksum
+			self.storage.create_dataset('rescons.inf', shape=(len(self.mrescons),)
+				, dtype=h5str, data=[s.decode() for s in self.mrescons], fletcher32=True)  # fillvalue=''
+		# # Note: None in maxshape means resizable, fletcher32 used for the checksum,
+		# # exact used torequire shape and type to match exactly
+		# metares = self.storage.require_dataset('rescons.meta', shape=(len(self.mrescons),), dtype=h5str
+		# 	, data=self.mrescons, exact=True, fletcher32=True)  # fillvalue=''
+		#
+		# rescons str to the index mapping
+		self.irescons = {s: i for i, s in enumerate(self.mrescons)}
+
+		self.nets = {net: self.storage.require_group('nets/' + net) for net in nets}
+		# rcrows0 = 64
+		# rccols = 6
+		self.algs = {alg: self.storage.require_group('algs/' + alg) for alg in algs}  # Datasets for each algorithm holding params
+		# appsdir = self.storage.require_group('apps')  # Applications / algorithms
+		# for app in apps:
+		# 	# Open or create dataset for each app
+		# 	# Allocate chunks of 10 items starting with empty dataset and with possibility
+		# 	# to resize up to 500 items (params combinations)
+		# 	self.apps[app] = appsdir.require_dataset(app, shape=(0,), dtype=h5py.special_dtype(vlen=_h5str)
+		# 		, chunks=(10,), maxshape=(500,))  # , maxshape=(None,), fletcher32=True
+		# self.evals = self.storage.require_group('evals')  # Quality evaluations dir (group)
 
 
 	def __del__(self):
@@ -242,12 +330,12 @@ class QualitySaver(object):
 		return self
 
 
-	def __exit__(self, etype, evalue, traceback):
+	def __exit__(self, etype, evalue, tracebk):
 		"""Contex exit
 
 		etype  - exception type
 		evalue  - exception value
-		traceback  - exception traceback
+		tracebk  - exception traceback
 		"""
 		#self.apps.clear()
 		#self.storage.close()
@@ -298,21 +386,21 @@ def metainfo(afnmask=1):
 
 
 # Note: default AffinityMask is 1 (logical CPUs, i.e. hardware threads)
-def execXmeasures(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
+def execXmeasures(execpool, args, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
 	"""Evaluate extrinsic quality measures (accuracy)"""
 	pass
 
 
 @metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS))
-def execGnmi(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
+def execGnmi(execpool, args, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
 	pass
 
 
-def execOnmi(execpool, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
+def execOnmi(execpool, args, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
 	pass
 
 
-def execImeasures(execpool, qualsaver, inpnet, asym, timeout, pathid='', workdir=ALGSDIR+'daoc/', seed=None):
+def execImeasures(execpool, args, qualsaver, inpnet, asym, timeout, pathid='', workdir=ALGSDIR+'daoc/', seed=None):
 	"""Evaluate intrinsic quality measures using DAOC"""
 	pass
 

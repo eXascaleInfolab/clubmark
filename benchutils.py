@@ -662,13 +662,12 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	"""MOVE or copy all files and dirs starting from the specified basepath into _BCKDIR
 	located in the parent dir of the basepath with optional compression.
 
-	basepath  - path, last component of which (file or dir) is a name for the backup
+	basepath: str  - path, last component of which (file or dir) is a name for the backup
 		ATTENTION: the basepath is escaped, i.e. wildcards are NOT supported
-	expand  - expand prefix, back up all paths staring from basepath VS basepath only
-	synctime  - use the same time suffix for multiple paths when is not None,
-		SyncValue is expected
+	expand: bool  - expand prefix, back up all paths staring from basepath VS basepath only
+	synctime: SyncValue  - use the same time suffix for multiple paths if not None
 	compress: bool  - compress or just copy spesified paths
-	xsuffix  - extra suffix to be added to the backup name before the time suffix
+	xsuffix: str  - extra suffix to be added to the backup name before the time suffix
 	move: bool  - whether to move or copy the data to the backup
 	relpath: bool  - convert the basepath to the relative one to its parent dir,
 		which makes the archive portable to other machines

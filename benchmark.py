@@ -77,7 +77,7 @@ from benchapps import PYEXEC, aggexec, funcToAppName, PREFEXEC  # , _EXTCLNODES,
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsSec, secDhms \
  	, SEPPARS, SEPINST, SEPSHF, SEPPATHID, SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
-from benchevals import aggEvaluations, RESDIR, EXTEXECTIME  # QualitySaver, evaluators,
+from benchevals import aggEvaluations, RESDIR, EXTEXECTIME, QualitySaver #, evaluators,
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
 from algorithms.utils.parser_nsl import asymnet, dflnetext
@@ -99,7 +99,7 @@ assert _WPROCSMAX >= 1, 'Natural number is expected not exceeding the number of 
 _VMLIMIT = 4096  # Set 4 TB or RAM to be automatically limited to the physical memory of the computer
 _PORT = 8080  # Default port for the WebUI, Note: port 80 accessible only from the root in NIX
 _RUNTIMEOUT = 10*24*60*60  # Clustering execution timeout, 10 days
-_EVALTIMEOUT = 2*24*60*60  # Results evaluation timeout, 2 days
+_EVALTIMEOUT = 5*24*60*60  # Results evaluation timeout, 5 days
 
 #_TRACE = 1  # Tracing level: 0 - none, 1 - lightweight, 2 - debug, 3 - detailed
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
@@ -174,32 +174,36 @@ class Params(object):
 		"""Sets default values for the input parameters
 
 		syntpo  - synthetic networks path options, SyntPathOpts
-		convnets  - convert existing networks into the .rcg format, deprecated
+		runalgs  - execute algorithm or not
+		qmeasures  - quality measures with their parameters to be evaluated
+			on the clustering results. None means do not evaluate.
+		qupdate  - update quality evaluations storage with the lacking evaluations
+			omitting the existent one, applicable only for the same seed.
+		datas: PathOpts  - list of datasets to be run with asym flag (asymmetric
+			/ symmetric links weights):
+			[PathOpts, ...] , where path is either dir or file [wildcard]
+		timeout  - execution timeout in sec per each algorithm
+		algorithms  - algorithms to be executed (just names as in the code)
+		seedfile  - seed file name
+		convnets: bits  - convert existing networks into the .rcg format, DEPRECATED
 			0 - do not convert
 			0b001  - convert:
 				0b01 - convert only if this network is not exist
 				0b11 - force conversion (overwrite all)
 			0b100 - resolve duplicated links on conversion
-		runalgs  - execute algorithm or not
-		qmeasures  - quality measures with their parameters to be evaluated
-			on the clustering results. None means do not evaluate.
-		updqual  - update quality evaluations storage rewriting existed values
-			instead of creating a new storage. Allowed only for the same seed.
-			The existed quality evaluations are backed up anyway.
-		datas: PathOpts  - list of datasets to be run with asym flag (asymmetric
-			/ symmetric links weights):
-			[PathOpts, ...] , where path is either dir or file [wildcard]
-		netext  - network file extension, should have the leading '.'
-		timeout  - execution timeout in sec per each algorithm
-		algorithms  - algorithms to be executed (just names as in the code)
-		aggrespaths = paths for the evaluated results aggregation (to be done for
+			TODO: replace with IntEnum like in mpewui
+		aggrespaths: iterable(str)  -  paths for the evaluated results aggregation (to be done for
 			already existent evaluations)
-		seedfile  - seed file name
+			TODO: clarify and check availability in the latest version
+		host: str  - WebUI host, None to disable WebUI
+		port: int  - WebUI port
+		runtimeout: uint  - clustering algoritims execution timeout
+		evaltimeout: uint  - resulting clusterings evaluations timeout
 		"""
 		self.syntpo = None  # SyntPathOpts()
 		self.runalgs = False
 		self.qmeasures = None  # Evaluating quality measures with their parameters
-		self.updqual = False
+		self.qupdate = True
 		self.datas = []  # Input datasets, list of PathOpts, where path is either dir or file wildcard
 		self.timeout = _TIMEOUT
 		self.algorithms = []
@@ -260,6 +264,8 @@ def parseParams(args):
 			elif arg.startswith('--webaddr'):
 				arg = '-w' + arg[len('--webaddr'):]
 			# Exclusive long options
+			elif arg.startswith('--quality-revalue '):
+				opts.qupdate = False
 			elif arg.startswith('--runtimeout'):
 				nend = len('--runtimeout')
 				if len(arg) <= nend + 1 or arg[nend] != '=':
@@ -1270,10 +1276,13 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 
-	# TODO: consider QMSRAFN
+	netnames = []
 
-# 	# Prepare HDF5 evaluations store
-# 	with QualitySaver(apps=algorithms, seed=seed, update=update) as qualsaver:
+	# Prepare HDF5 evaluations store
+	with QualitySaver(algs=algorithms, qms=qmeasures, nets=netnames, seed=seed, update=update) as qualsaver:
+		# TODO: consider QMSRAFN, actual for Gnmi
+		tasks = [Task(qmname) for qmname in qmeasures]
+
 # 		def evalquality(execpool, evalapps, net, asym, netshf, pathids=None):
 # 			"""Evaluate algorithms results on the specified network counting number of ran jobs
 
@@ -1613,13 +1622,15 @@ def benchmark(*args):
 
 	opts = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tsyntpo: "{}"\n\tconvnets: 0b{:b}'
-		'\n\trunalgs: {}\n\tquality measures: {}\n\tupdqual: {}\n\tdatas: {}\n\talgorithms: {}'
-		'\n\taggrespaths: {}\n\ttimeout: {} h {} m {:.4f} sec'
+		'\n\trunalgs: {}\n\talgorithms: {}\n\tquality measures: {}\n\tqupdate: {}\n\tdatas: {}'
+		'\n\taggrespaths: {}\n\twebui: {}\n\ttimeout: {} h {} m {:.4f} sec'
 	 .format(opts.syntpo, opts.convnets, opts.runalgs
-		, None if opts.qmeasures is None else ' '.join([qm[0] for qm in opts.qmeasures]), opts.updqual
-		, '; '.join([str(pathopts) for pathopts in opts.datas])  # Note: ';' because internal separator is ','
 		, ', '.join(opts.algorithms) if opts.algorithms else ''
-		, ', '.join(opts.aggrespaths) if opts.aggrespaths else '', *secondsToHms(opts.timeout)))
+		, None if opts.qmeasures is None else ' '.join([qm[0] for qm in opts.qmeasures]), opts.qupdate
+		, '; '.join([str(pathopts) for pathopts in opts.datas])  # Note: ';' because internal separator is ','
+		, ', '.join(opts.aggrespaths) if opts.aggrespaths else ''
+		, None if opts.host is None else '{}:{}'.format(opts.host, opts.port)
+		, *secondsToHms(opts.timeout)))
 
 	# Start WebUI if required
 	global _webuiapp  #pylint: disable=W0603
@@ -1643,6 +1654,9 @@ def benchmark(*args):
 		seed = timeSeed()
 		with open(opts.seedfile, 'w') as fseed:
 			fseed.write('{}\n'.format(seed))
+		# Reset the quality measures update request if any since the seed is new
+		# Note: the WARNING is not displayed since the update policy is default
+		opts.qupdate = False
 	else:
 		with open(opts.seedfile) as fseed:
 			seed = int(fseed.readline())
@@ -1685,7 +1699,7 @@ def benchmark(*args):
 	if opts.qmeasures is not None:
 		evalResults(qmsmodule=benchevals, qmeasures=opts.qmeasures, appsmodule=benchapps
 			, algorithms=opts.algorithms, datas=opts.datas, seed=seed, exectime=exectime
-			, timeout=opts.timeout, evaltimeout=opts.evaltimeout, update=opts.updqual)
+			, timeout=opts.timeout, evaltimeout=opts.evaltimeout, update=opts.qupdate)
 
 	if opts.aggrespaths:
 		aggEvaluations(opts.aggrespaths)
@@ -1779,7 +1793,10 @@ if __name__ == '__main__':
 			' application (<qmapp>) for the algorithms (specified with "-a") on the datasets (specified with "-i")'
 			' and form the aggregated final results. Default: MF1p, GNMI_max, OIx extrinsic and Q, f intrinsic measures'
 			' on all datasets. Available qmapps ({qmappsnum}): {qmapps}.',
-			'NOTE: Multiple quality measure applications can be specified with multiple -q options.',
+			'NOTE:',
+			'  - Multiple quality measure applications can be specified with multiple -q options.',
+			'  - Existent quality measures with the same seed are updated (extended with the lacking'
+			' evalations omitting the already existent) until --quality-revalue is specified.',
 			'Notations of the quality mesurements:',
 			' = Extrinsic Quality (Accuracy) Measures =',
 			'   - GNMI[_{{max,sqrt}}]  - Generalized Normalized Mutual Information for overlapping and multi-resolution clusterings'
@@ -1804,9 +1821,14 @@ if __name__ == '__main__':
 			'    m  - time in minutes',
 			'    h  - time in hours',
 			'    Examples: `-th=2.5` is the same as `-t=2h30m` and `--timeout=2h1800`',
-			'  --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and'
-			' stochastic algorithms, contains uint64_t value. Default: {seedfile}',
-			'NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seed.',
+			'  --quality-revalue  - revalue resulting clusterings with the quality measures from scratch'
+			' even if (some) evaluations with the same seed have been already performed.',
+			'  --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation,'
+			' stochastic algorithms and quality measures execution, contains uint64_t value. Default: {seedfile}.',
+			'NOTE:',
+			'  - The seed file is not used on shuffling, so the shuffles are DISTINCT for the same seed.',
+			'  - Each reexecution of the benchmarking reuses once created seed file, which is permanent'
+			' and can be updated manually.',
 			'',
 			'Advanced parameters:',
 			#'  --stderr-stamp  - output a time stamp to the stderr on the benchmarking start to separate multiple re-exectuions',

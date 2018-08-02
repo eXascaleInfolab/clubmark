@@ -17,7 +17,7 @@ import tempfile
 import shutil
 import tarfile
 from benchutils import SyncValue, nameVersion, tobackup, ORIGDIR, _BCKDIR
-from benchapps import preparePath
+# from benchapps import preparePath
 
 
 class TestUtils(unittest.TestCase):

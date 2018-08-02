@@ -40,7 +40,7 @@ try:
 except NameError:  # bytes are not defined in Python2
 	# For Python2
 	h5str = h5py.special_dtype(vlen=str)  # ASCII str, bytes
-	h5ustr = h5py.special_dtype(vlen=unicode)  # UTF8 str
+	h5ustr = h5py.special_dtype(vlen=unicode)  #pylint: disable=E0602;  # UTF8 str
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 RESDIR = 'results/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm, specified RELATIVE to ALGSDIR
@@ -55,6 +55,7 @@ EXTAGGRESEXT = '.resx'  # Extended aggregated results
 SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not apear in a file name, which can be part of job name)
 
 QMSRAFN = {}  # Soecific affinities of the quality measures;  qmsrAffinity
+QMSINTRIN = []  # Intrinsic quality measures requering input network instead of the ground-truth clustering
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
@@ -371,16 +372,21 @@ class QualitySaver(object):
 				raise
 
 
-def metainfo(afnmask=1):
+def metainfo(afnmask=AffinityMask(1), intrinsic=True):
 	"""Set some meta information for the executing evaluation measures
 
 	afnstep: AffinityMask  - affinity mask
+	intrinsic: bool  - whether the quality measure is intrinsic and requires input network
+		instead of the ground-truth clustering
 	"""
 	def decor(func):
 		"""Decorator returning the original function"""
-		assert isinstance(afnmask, AffinityMask), 'Unexpected type of the affinity mask: {}'.format(type(a).__name__)
+		assert isinstance(afnmask, AffinityMask), 'Unexpected type of the affinity mask: ' + type(afnmask).__name__
 		# QMSRAFN[funcToAppName(func)] = afnmask
-		QMSRAFN[func] = afnmask
+		if afnmask.afnstep != 1:  # Save only quality measures with non-default affinity
+			QMSRAFN[func] = afnmask
+		if intrinsic:
+			QMSINTRIN.append(func)
 		return func
 	return decor
 
@@ -400,6 +406,7 @@ def execOnmi(execpool, args, qualsaver, gtruth, asym, timeout, pathid='', workdi
 	pass
 
 
+@metainfo(intrinsic=True)
 def execImeasures(execpool, args, qualsaver, inpnet, asym, timeout, pathid='', workdir=ALGSDIR+'daoc/', seed=None):
 	"""Evaluate intrinsic quality measures using DAOC"""
 	pass

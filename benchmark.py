@@ -64,6 +64,7 @@ import glob
 import traceback  # Stacktrace
 import copy
 import time
+import numpy as np  # Required for the HDF5 operations
 # Consider time interface compatibility for Python before v3.3
 if not hasattr(time, 'perf_counter'):  #pylint: disable=C0413
 	time.perf_counter = time.time
@@ -72,11 +73,11 @@ from math import sqrt
 from multiprocessing import cpu_count  # Returns the number of logical CPU units (hw treads) if defined
 
 import benchapps  # Required for the functions name mapping to/from the app names
-import benchevals  # Required for the functions name mapping to/from the quality measures names
 from benchapps import PYEXEC, aggexec, funcToAppName, PREFEXEC  # , _EXTCLNODES, ALGSDIR
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsSec, secDhms \
  	, SEPPARS, SEPINST, SEPSHF, SEPPATHID, SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
+import benchevals  # Required for the functions name mapping to/from the quality measures names
 from benchevals import aggEvaluations, RESDIR, EXTEXECTIME, QualitySaver #, evaluators,
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
@@ -871,11 +872,11 @@ def basenetTasks(netname, pathidstr, basenets, rtasks):
 def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 	"""Process the specified path with the specified handler
 
-	popt  - processing path options (the path is directory of file, not a wildcard), PathOpts
-	handler  - handler to be called as handler(netfile, netshf, xargs, tasks),
+	popt: PathOpts  - processing path options (the path is directory of file, not a wildcard)
+	handler: callable  - handler to be called as handler(netfile, netshf, xargs, tasks),
 		netshf means that the processing networks is a shuffle in the non-flat dir structure
-	xargs  - extra arguments of the handler following after the processing network file
-	dflextfn  - function(asymflag) for the default extension of the input files in the path
+	xargs: dict(str, val)  - extra arguments of the handler following after the processing network file
+	dflextfn: callable  - function(asymflag) for the default extension of the input files in the path
 	tasks: list(tasks)  - root tasks per each algorithm
 	"""
 	# assert tasks is None or isinstance(tasks[0], Task), ('Unexpected task format: '
@@ -967,6 +968,55 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 			handler(path, False, xargs, tasks)
 
 
+def processNetworks(datas, handler, xargs={}, dflextfn=dflnetext, tasks=None, fpathids=None):  #pylint: disable=W0102
+	"""Process input networks specified by the path wildcards
+
+	datas: iterable(PathOpts)  - processing path options including the path wildcard
+	handler: callable  - handler to be called in the processPath() as handler(netfile, netshf, xargs, tasks),
+		netshf means that the processing networks is a shuffle in the non-flat dir structure
+	xargs: dict(str, val)  - extra arguments of the handler following after the processing network file
+	dflextfn: callable  - function(asymflag) for the default extension of the input files in the path
+	tasks: list(tasks)  - root tasks per each algorithm
+	fpathids: File  - path ids file opened for the writing or None
+
+	return netnames  - network names with the path id (without the basepath)
+	"""
+	# Track processed file names to resolve cases when files with the same name present in different input dirs
+	# Note: pathids are required at least to set concise job names to see what is executed in runtime
+	netnames = {}  # Name to pathid mapping: {Name: counter}
+	for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
+		xargs['asym'] = popt.asym
+		# Resolve wildcards
+		pcuropt = copy.copy(popt)  # Path options for the resolved .path wildcard
+		for path in glob.iglob(popt.path):  # Allow wildcards
+			if os.path.isdir(path):
+				# ATTENTION: required to process directories ending with '/' correctly
+				# Note: normpath() may change semantics in case symbolic link is used with parent dir:
+				# base/linkdir/../a -> base/a, which might be undesirable
+				mpath = path.rstrip('/')  # os.path.normpath(path)
+			else:
+				mpath = os.path.splitext(path)[0]
+			net = os.path.split(mpath)[1]
+			pathid = netnames.get(net)
+			if pathid is None:
+				netnames[net] = 0
+				xargs['pathidstr'] = ''
+			else:
+				pathid += 1
+				netnames[net] = pathid
+				nameid = SEPPATHID + str(pathid)
+				xargs['pathidstr'] = nameid
+				if fpathids is not None:
+					fpathids.write('{}\t{}\n'.format(net + nameid, mpath))
+			#if _DEBUG_TRACE >= 2:
+			#	print('  Processing "{}", net: {}, pathidstr: {}'.format(path, net, xargs['pathidstr']))
+			pcuropt.path = path
+			if _DEBUG_TRACE:
+				print('  Scheduling apps execution for the path options ({})'.format(str(pcuropt)))
+			processPath(pcuropt, handler, xargs=xargs, dflextfn=dflextfn, tasks=tasks)
+	return netnames
+
+
 def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout=30*60):  # 7, 30 min
 	"""Convert input networks to another formats
 
@@ -1054,8 +1104,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
 	algorithms  - list of the algorithms to be executed
-	datas  - input datasets, wildcards of files or directories containing files
-		of the default extensions .ns{{e,a}}, PathOpts
+	datas: iterable(PathOpts)  - input datasets, wildcards of files or directories containing files
+		of the default extensions .ns{{e,a}}
 	seed  - benchmark seed, natural number
 	exectime  - elapsed time since the benchmarking started
 	timeout  - timeout per each algorithm execution
@@ -1153,42 +1203,11 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 
 			xargs = {'asym': False,  # Asymmetric network
 				 'pathidstr': '',  # Id of the duplicated path shortcut to have the unique shortcut
-				 'jobsnum': 0,  # Number of the processed network jobs (can be several per each instance if shuffles exist)
-				 'netcount': 0}  # Number of converted network instances (includes multiple shuffles)
-			# Track processed file names to resolve cases when files with the same name present in different input dirs
-			# Note: pathids are required at least to set concise job names to see what is executed in runtime
-			netnames = {}  # Name to pathid mapping: {Name: counter}
+				 'jobsnum': 0,  # Number of the processing network jobs (can be several per each instance if shuffles exist)
+				 'netcount': 0}  # Number of processing network instances (includes multiple shuffles)
 			tasks = [Task(appname) for appname in algorithms]
-			for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
-				xargs['asym'] = popt.asym
-				# Resolve wildcards
-				pcuropt = copy.copy(popt)  # Path options for the resolved wildcard
-				for path in glob.iglob(popt.path):  # Allow wildcards
-					if os.path.isdir(path):
-						# ATTENTION: required to process directories ending with '/' correctly
-						# Note: normpath() may change semantics in case symbolic link is used with parent dir:
-						# base/linkdir/../a -> base/a, which might be undesirable
-						mpath = path.rstrip('/')  # os.path.normpath(path)
-					else:
-						mpath = os.path.splitext(path)[0]
-					net = os.path.split(mpath)[1]
-					pathid = netnames.get(net)
-					if pathid is None:
-						netnames[net] = 0
-						xargs['pathidstr'] = ''
-					else:
-						pathid += 1
-						netnames[net] = pathid
-						nameid = SEPPATHID + str(pathid)
-						xargs['pathidstr'] = nameid
-						fpathids.write('{}\t{}\n'.format(net + nameid, mpath))
-					#if _DEBUG_TRACE >= 2:
-					#	print('  Processing "{}", net: {}, pathidstr: {}'.format(path, net, xargs['pathidstr']))
-					pcuropt.path = path
-					if _DEBUG_TRACE:
-						print('  Scheduling apps execution for the path options ({})'.format(str(pcuropt)))
-					processPath(pcuropt, runner, xargs=xargs, tasks=tasks)
-			netnames = None  # Free memory from filenames
+			processNetworks(datas, runner, xargs=xargs, dflextfn=dflnetext, tasks=tasks, fpathids=fpathids)
+			# netnames = None  # Free memory from filenames
 		finally:
 			# Flush the formed fpathids
 			if fpathids:

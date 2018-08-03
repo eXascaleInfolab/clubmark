@@ -64,7 +64,6 @@ import glob
 import traceback  # Stacktrace
 import copy
 import time
-import numpy as np  # Required for the HDF5 operations
 # Consider time interface compatibility for Python before v3.3
 if not hasattr(time, 'perf_counter'):  #pylint: disable=C0413
 	time.perf_counter = time.time
@@ -1110,10 +1109,13 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	exectime  - elapsed time since the benchmarking started
 	timeout  - timeout per each algorithm execution
 	runtimeout  - timeout for all algorithms execution, >= 0, 0 means unlimited time
+
+	return  netnames: iterable(str) or None  - network names with path id and without the base direcotry
 	"""
+	netnames = None  # Network names with path id and without the base direcotry
 	if not datas:
 		print('WRANING runApps(), there are no input datasets specified to be clustered', file=sys.stderr)
-		return
+		return netnames
 	assert appsmodule and isinstance(datas[0], PathOpts) and exectime + 0 >= 0 and timeout + 0 >= 0, 'Invalid input arguments'
 	assert isinstance(seed, int) and seed >= 0, 'Seed value is invalid'
 
@@ -1206,7 +1208,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 				 'jobsnum': 0,  # Number of the processing network jobs (can be several per each instance if shuffles exist)
 				 'netcount': 0}  # Number of processing network instances (includes multiple shuffles)
 			tasks = [Task(appname) for appname in algorithms]
-			processNetworks(datas, runner, xargs=xargs, dflextfn=dflnetext, tasks=tasks, fpathids=fpathids)
+			netnames = processNetworks(datas, runner, xargs=xargs, dflextfn=dflnetext, tasks=tasks, fpathids=fpathids)
 			# netnames = None  # Free memory from filenames
 		finally:
 			# Flush the formed fpathids
@@ -1251,27 +1253,32 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	print('Aggregating execution statistics...')
 	aggexec(algorithms)
 	print('Execution statistics aggregated')
+	return netnames
 
 
 def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exectime, timeout  #pylint: disable=W0613
-, evaltimeout=14*24*60*60, update=False):  #pylint: disable=W0613
+, evaltimeout=14*24*60*60, update=False, netnames=None):  #pylint: disable=W0613
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
-	qmsmodule  - module with quality measures definitions to be run; sys.modules[__name__]
-	qmeasures  - evaluating quality measures with their parameters
-	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
-	algorithms  - list of the algorithms to be executed
-	datas  - input datasets, wildcards of files or directories containing files
+	qmsmodule: module  - module with quality measures definitions to be run; sys.modules[__name__]
+	qmeasures: iterable(str)  - evaluating quality measures with their parameters
+	appsmodule: module  - module with algorithms definitions to be run; sys.modules[__name__]
+	algorithms: iterable(str)  - algorithms to be executed
+	datas: iterable(PathOpts)  - input datasets, wildcards of files or directories containing files
 		of the default extensions .ns{{e,a}}
-	seed  - benchmark seed, natural number. Used to mark evaluations file via
+	seed: uint  - benchmark seed, natural number. Used to mark evaluations file via
 		the HDF5 user block.
 		ATTENTION: seed is not supported by [some] evaluation apps (gecmi)
 	exectime  - elapsed time since the benchmarking started
-	timeout  - timeout per each evaluation run, a single measure applied to the results
+	timeout: uint  - timeout per each evaluation run, a single measure applied to the results
 		of a single algorithm on a single network (all instances and shuffles), >= 0
-	evaltimeout  - timeout for all evaluations, >= 0, 0 means unlimited time
-	update  - update evaluations file or create a new one, anyway existed evaluations
+	evaltimeout: uint  - timeout for all evaluations, >= 0, 0 means unlimited time
+	update: bool  - update evaluations file or create a new one, anyway existed evaluations
 		are backed up.
+	netnames: iterable(str)  - input network names with path id and without the base path,
+		used to form meta data in the evaluation storage. Explicit specification is useful
+		if the netnames were been already formed on the clustering execution and
+		the intrinsic measures are not used (otherwise netnames are evalauted there).
 	"""
 	if not datas:
 		print('WRANING evalResults(), there are no input datasets specified to be clustered', file=sys.stderr)
@@ -1295,10 +1302,8 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 
-	netnames = []
-
 	# Prepare HDF5 evaluations store
-	with QualitySaver(algs=algorithms, qms=qmeasures, nets=netnames, seed=seed, update=update) as qualsaver:
+	with QualitySaver(algs=algorithms, qms=qmeasures, seed=seed, nets=netnames, update=update) as qualsaver:
 		# TODO: consider QMSRAFN, actual for Gnmi
 		tasks = [Task(qmname) for qmname in qmeasures]
 
@@ -1710,15 +1715,16 @@ def benchmark(*args):
 			, resdub=opts.convnets & 0b100, timeout1=7*60, convtimeout=45*60)  # 45 min
 
 	# Run the opts.algorithms and measure their resource consumption
+	netnames = None
 	if opts.runalgs:
-		runApps(appsmodule=benchapps, algorithms=opts.algorithms, datas=opts.datas, seed=seed
-			, exectime=exectime, timeout=opts.timeout, runtimeout=opts.runtimeout)
+		netnames = runApps(appsmodule=benchapps, algorithms=opts.algorithms, datas=opts.datas
+			, seed=seed, exectime=exectime, timeout=opts.timeout, runtimeout=opts.runtimeout)
 
 	# Evaluate results
 	if opts.qmeasures is not None:
 		evalResults(qmsmodule=benchevals, qmeasures=opts.qmeasures, appsmodule=benchapps
 			, algorithms=opts.algorithms, datas=opts.datas, seed=seed, exectime=exectime
-			, timeout=opts.timeout, evaltimeout=opts.evaltimeout, update=opts.qupdate)
+			, timeout=opts.timeout, evaltimeout=opts.evaltimeout, update=opts.qupdate, netnames=netnames)
 
 	if opts.aggrespaths:
 		aggEvaluations(opts.aggrespaths)

@@ -20,6 +20,7 @@ import sys
 import traceback  # Stacktrace
 import h5py  # HDF5 storage
 import time
+import numpy as np  # Required for the HDF5 operations
 
 # from collections import namedtuple
 from subprocess import PIPE
@@ -54,8 +55,9 @@ EXTAGGRES = '.res'  # Aggregated results
 EXTAGGRESEXT = '.resx'  # Extended aggregated results
 SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not apear in a file name, which can be part of job name)
 
-QMSRAFN = {}  # Soecific affinities of the quality measures;  qmsrAffinity
+QMSRAFN = {}  # Specific affinity steps of the quality measures;  qmsrAffinity
 QMSINTRIN = []  # Intrinsic quality measures requering input network instead of the ground-truth clustering
+QMSRUNS = {}  # Run these stochastic quality measures specified number of times
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
@@ -194,7 +196,7 @@ class QualitySaver(object):
 	# 			# pscan01 = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
 
 
-	def __init__(self, algs, qms, nets, seed, update=False):
+	def __init__(self, algs, qms, seed, nets=None, update=False):
 		"""Prepare for evaluations creating HDF5 storage
 
 		Check whether the storage exist, copy/move old storage to the backup and
@@ -203,8 +205,9 @@ class QualitySaver(object):
 		Arguments:
 			algs: iterable(str)  - evaluating clustering algorithms (names of the algorithms)
 			qms: iterable(str)  - computing quality measurs (names)
-			nets: iterable(str)  - input network names with pathid to be indexed
 			seed: uint64  - benchmarking seed, natural number
+			nets: iterable(str)  - input network names with pathid to be indexed or None, which means
+				the networks will be specified sequentially on the intrinsic measures computations
 			update: bool  - update existing storage creating if not exists, or create a new one backing up the existent
 
 		Members:
@@ -212,7 +215,7 @@ class QualitySaver(object):
 			mrescons: list(str)  - meta data of resource consumption
 			irescons: dict(resname: str, resindex: uint)  - back mapping of the resource consumption metadata
 		"""
-		assert (isinstance(algs[0], str) and isinstance(qms[0], str) and isinstance(nets[0], str)
+		assert (isinstance(algs[0], str) and isinstance(qms[0], str) and (nets is None or isinstance(nets[0], str))
 			and isinstance(seed, int)), ('Invalid data types, algs: {}, qms: {}, nets: {}, seed: {}'
 			.format(type(algs).__name__, type(qms).__name__, type(nets).__name__, type(seed).__name__, ))
 		# Open or init the HDF5 storage
@@ -293,7 +296,7 @@ class QualitySaver(object):
 		# rescons str to the index mapping
 		self.irescons = {s: i for i, s in enumerate(self.mrescons)}
 
-		self.nets = {net: self.storage.require_group('nets/' + net) for net in nets}
+		# self.nets = {net: self.storage.require_group('nets/' + net) for net in nets}
 		# rcrows0 = 64
 		# rccols = 6
 		self.algs = {alg: self.storage.require_group('algs/' + alg) for alg in algs}  # Datasets for each algorithm holding params
@@ -372,21 +375,25 @@ class QualitySaver(object):
 				raise
 
 
-def metainfo(afnmask=AffinityMask(1), intrinsic=True):
+def metainfo(afnmask=AffinityMask(1), intrinsic=False, multirun=1):
 	"""Set some meta information for the executing evaluation measures
 
 	afnstep: AffinityMask  - affinity mask
 	intrinsic: bool  - whether the quality measure is intrinsic and requires input network
 		instead of the ground-truth clustering
+	multirun: uint8, >= 1  - perform multiple runs of this stochastic quality measure
 	"""
 	def decor(func):
 		"""Decorator returning the original function"""
-		assert isinstance(afnmask, AffinityMask), 'Unexpected type of the affinity mask: ' + type(afnmask).__name__
+		assert isinstance(afnmask, AffinityMask) and multirun >= 1 and isinstance(multirun, int), (
+			'Invalid arguments, affinity mask type: {}, multirun: {}'.format(type(afnmask).__name__, multirun))
 		# QMSRAFN[funcToAppName(func)] = afnmask
 		if afnmask.afnstep != 1:  # Save only quality measures with non-default affinity
 			QMSRAFN[func] = afnmask
 		if intrinsic:
 			QMSINTRIN.append(func)
+		if multirun >= 2:
+			QMSRUNS[func] = multirun
 		return func
 	return decor
 
@@ -397,7 +404,7 @@ def execXmeasures(execpool, args, qualsaver, gtruth, asym, timeout, pathid='', w
 	pass
 
 
-@metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS))
+@metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS), multirun=3)
 def execGnmi(execpool, args, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
 	pass
 

@@ -77,7 +77,7 @@ from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsS
  	, SEPPARS, SEPINST, SEPSHF, SEPPATHID, SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
-from benchevals import aggEvaluations, RESDIR, EXTEXECTIME, QualitySaver #, evaluators,
+from benchevals import aggEvaluations, RESDIR, EXTEXECTIME, QMSRAFN, QualitySaver #, evaluators,
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
 from algorithms.utils.parser_nsl import asymnet, dflnetext
@@ -1098,25 +1098,61 @@ def appnames(appsmodule):
 	return [funcToAppName(func) for func in dir(appsmodule) if func.startswith(PREFEXEC)]
 
 
+def clarifyApps(appnames, appsmodule):
+	"""Validate and refine or forme appnames considering the appsmonule functions
+	and fetch the respecive executors
+
+	appnames: list(str)  - names of the apps to be clarified or formed if empty
+	appsmodule: module  - module with the respecive app functions staring with PREFEXEC
+
+	return
+		appfns: list(function)  - executor functions of the required apps
+	"""
+	assert isinstance(appnames, list) and appsmodule, ('Invalid arguments, appnames type: {}'
+		', appsmodule type: {}'.format(type(appnames).__name__), type(appsmodule).__name__)
+	if not appnames:
+		# Save app names to perform results aggregation after the execution
+		appnames.extend(appnames(appsmodule))  # alg.lower() for alg in appnames()
+	# Fetch app functions (executors) from the module
+	appfns = [getattr(appsmodule, PREFEXEC + name, None) for name in appnames]
+	# Ensure that all specified appnames correspond to the functions
+	invalapps = []  # Indexes of the applications having the invalid name (without the respective executor)
+	for i in range(len(appfns)):
+		if appfns[i] is None:
+			invalapps.append(i)
+	if invalapps:
+		print('WARNING, the specified appnames are omitted as not existent: '
+			, ' '.join([appnames[ia] for ia in invalapps]), file=sys.stderr)
+		while invalapps:
+			i = invalapps.pop()
+			del appnames[i]
+			del appfns[i]
+	assert len(appnames) == len(appfns), 'appfns are not synced with the appnames'
+	return appfns
+
+
 def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=10*24*60*60):  # 10 days
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
-	algorithms  - list of the algorithms to be executed
+	algorithms: list(str)  - list of the algorithms to be executed
 	datas: iterable(PathOpts)  - input datasets, wildcards of files or directories containing files
 		of the default extensions .ns{{e,a}}
 	seed  - benchmark seed, natural number
 	exectime  - elapsed time since the benchmarking started
 	timeout  - timeout per each algorithm execution
 	runtimeout  - timeout for all algorithms execution, >= 0, 0 means unlimited time
-
-	return  netnames: iterable(str) or None  - network names with path id and without the base direcotry
 	"""
-	netnames = None  # Network names with path id and without the base direcotry
+	# return  netnames: iterable(str) or None  - network names with path id and without the base direcotry
+	# netnames = None  # Network names with path id and without the base direcotry
 	if not datas:
 		print('WRANING runApps(), there are no input datasets specified to be clustered', file=sys.stderr)
-		return netnames
-	assert appsmodule and isinstance(datas[0], PathOpts) and exectime + 0 >= 0 and timeout + 0 >= 0, 'Invalid input arguments'
+		# return netnames
+		return
+	assert isinstance(algorithms, list) and appsmodule and isinstance(datas[0], PathOpts
+		) and exectime + 0 >= 0 and timeout + 0 >= 0, ('Invalid input arguments, algorithms type: {}'
+		', appsmodule type: {} datas type: {}, exectime: {}, timeout: {}'.format(type(algorithms).__name__
+		, type(appsmodule).__name__, type(datas).__name__, exectime, timeout))
 	assert isinstance(seed, int) and seed >= 0, 'Seed value is invalid'
 
 	stime = time.perf_counter()  # Procedure start time; ATTENTION: .perf_counter() should not be used, because it does not consider "sleep" time
@@ -1128,25 +1164,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		# Run all algs if not specified the concrete algorithms to be run
 		# # Algorithms callers
 		# execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(PREFEXEC)]
-		if not algorithms:
-			# Save algorithms names to perform results aggregation after the execution
-			algorithms = appnames(appsmodule)
-			#algorithms = [alg.lower() for alg in algorithms]
-		# Execute the specified algorithms
-		execalgs = [getattr(appsmodule, PREFEXEC + alg, None) for alg in algorithms]
-		# Ensure that all specified algorithms correspond to the functions
-		invalalgs = []
-		for i in range(len(execalgs)):
-			if execalgs[i] is None:
-				invalalgs.append(i)
-		if invalalgs:
-			print('WARNING, the specified algorithms are omitted as not existent: '
-				, ' '.join([algorithms[ia] for ia in invalalgs]), file=sys.stderr)
-			while invalalgs:
-				i = invalalgs.pop()
-				del algorithms[i]
-				del execalgs[i]
-		assert len(algorithms) == len(execalgs), 'execalgs are not synced with the algorithms'
+		execalgs = clarifyApps(algorithms, appsmodule)
 
 		def runapp(net, asym, netshf, pathid='', tasks=None):
 			"""Execute algorithms on the specified network counting number of ran jobs
@@ -1208,7 +1226,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 				 'jobsnum': 0,  # Number of the processing network jobs (can be several per each instance if shuffles exist)
 				 'netcount': 0}  # Number of processing network instances (includes multiple shuffles)
 			tasks = [Task(appname) for appname in algorithms]
-			netnames = processNetworks(datas, runner, xargs=xargs, dflextfn=dflnetext, tasks=tasks, fpathids=fpathids)
+			# netnames =
+			processNetworks(datas, runner, xargs=xargs, dflextfn=dflnetext, tasks=tasks, fpathids=fpathids)
 			# netnames = None  # Free memory from filenames
 		finally:
 			# Flush the formed fpathids
@@ -1253,7 +1272,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	print('Aggregating execution statistics...')
 	aggexec(algorithms)
 	print('Execution statistics aggregated')
-	return netnames
+	# return netnames
 
 
 def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exectime, timeout  #pylint: disable=W0613
@@ -1292,20 +1311,72 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 	stime = time.perf_counter()  # Procedure start time; ATTENTION: .perf_counter() should not be used, because it does not consider "sleep" time
 	print('Starting quality evaluations...')
 
-	# Run evaluations by all quality measures if not specified the concrete measures for the evaluation
-	if not qmeasures:
-		qmeasures = appnames(qmsmodule)
-	# Run evaluations for all algs if not specified the concrete algorithms to be run
-	if not algorithms:
-		algorithms = appnames(appsmodule)
+	# Refine and validate names of the algorithms and measures, form the respecive executors
+	clarifyApps(algorithms, appsmodule)  # execalgs =
+	exeqms = clarifyApps(qmeasures, qmsmodule)
 
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
-
 	# Prepare HDF5 evaluations store
-	with QualitySaver(algs=algorithms, qms=qmeasures, seed=seed, nets=netnames, update=update) as qualsaver:
-		# TODO: consider QMSRAFN, actual for Gnmi
-		tasks = [Task(qmname) for qmname in qmeasures]
+	with QualitySaver(seed=seed, update=update) as qualsaver:  # , nets=netnames
+		# Compute quality measures grouping them into batchies with the same affinity
+		# starting with the measures having the affinity step = 1
+		qmremained = {}
+		afncur = 1  # Current affinity step
+		afnrn = AffinityMask.CPUS  # Min affinity among the remained (postponed)
+		while qmeasures:
+			for iq, qm in enumerate(qmeasures):
+				afnstep = QMSRAFN.get(qm, 1)
+				if afnstep != afncur:
+					if afnrn > afnstep:
+						afnrn = afnstep
+					qmremained[qm] = iq
+					continue
+
+			# Perform quality evaluations
+			with ExecPool(_WPROCSMAX, afnmask=AffinityMask(afnstep), memlimit=_VMLIMIT
+			, name='runqms_as' + str(afnstep)), webuiapp=_webuiapp) as _execpool:
+				pass
+
+				xargs = {'asym': False,  # Asymmetric network
+						'pathidstr': '',  # Id of the duplicated path shortcut to have the unique shortcut
+						'jobsnum': 0,  # Number of the processing network jobs (can be several per each instance if shuffles exist)
+						'netcount': 0}  # Number of processing network instances (includes multiple shuffles)
+				# TODO: consider QMSRAFN, actual for Gnmi
+				tasks = [Task(qmname) for qmname in qmeasures]
+
+				if evaltimeout <= 0:
+					evaltimeout = timeout * xargs['jobsnum']
+				timelim = min(timeout * xargs['jobsnum'], evaltimeout)
+				print('Waiting for the quality evaluation on {} jobs from {} networks'
+					' with {} sec ({} h {} m {:.4f} s) timeout ...'
+					.format(xargs['jobsnum'], xargs['netcount'], timelim, *secondsToHms(timelim)))
+				# Note: all failed jobs of the ExecPool are hierarchically traced by the assigned tasks
+				# (on both completion and termination)
+				try:
+					_execpool.join(timelim)
+				except BaseException as err:  # Consider also system interruptions not captured by the Exception
+					print('WARNING, algorithms execution pool is interrupted by: {}. {}'
+						.format(err, traceback.format_exc(5)), file=sys.stderr)
+					raise
+
+
+			# Prepare for the evaluations with another affinity
+			if qmremained:
+				afnstep = afnrn
+				afnrn = AffinityMask.CPUS
+				qmeasures[:] = qmremained.keys()
+				exeqms[:] = [exeqms[iq] for iq in qmremained.values()]
+				assert len(qmeasures) == len(exeqms), ('Quality measure names and executors are not'
+					' synchronized: {} != {}'.format(len(qmeasures) == len(exeqms)))
+	# Clear execpool
+	_execpool = None
+	stime = time.perf_counter() - stime
+	print('The apps execution is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'
+	 .format(stime, *secondsToHms(stime)))
+	print('Aggregating execution statistics...')
+	aggexec(algorithms)
+	print('Execution statistics aggregated')
 
 # 		def evalquality(execpool, evalapps, net, asym, netshf, pathids=None):
 # 			"""Evaluate algorithms results on the specified network counting number of ran jobs

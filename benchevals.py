@@ -196,28 +196,33 @@ class QualitySaver(object):
 	# 			# pscan01 = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
 
 
-	def __init__(self, algs, qms, seed, nets=None, update=False):
-		"""Prepare for evaluations creating HDF5 storage
+	def __init__(self, seed, update=False):  # algs, qms, nets=None,
+		"""Creating or open HDF5 storage and prepare for the quality measures evaluations
 
-		Check whether the storage exist, copy/move old storage to the backup and
+		Check whether the storage exists, copy/move old storage to the backup and
 		create the new one if the storage is not exist.
 
 		Arguments:
-			algs: iterable(str)  - evaluating clustering algorithms (names of the algorithms)
-			qms: iterable(str)  - computing quality measurs (names)
 			seed: uint64  - benchmarking seed, natural number
-			nets: iterable(str)  - input network names with pathid to be indexed or None, which means
-				the networks will be specified sequentially on the intrinsic measures computations
 			update: bool  - update existing storage creating if not exists, or create a new one backing up the existent
 
 		Members:
 			storage: h5py.File  - HDF5 storage
 			mrescons: list(str)  - meta data of resource consumption
 			irescons: dict(resname: str, resindex: uint)  - back mapping of the resource consumption metadata
+			_active: bool  - the storage is operational (the requests can be processed)
 		"""
-		assert (isinstance(algs[0], str) and isinstance(qms[0], str) and (nets is None or isinstance(nets[0], str))
-			and isinstance(seed, int)), ('Invalid data types, algs: {}, qms: {}, nets: {}, seed: {}'
-			.format(type(algs).__name__, type(qms).__name__, type(nets).__name__, type(seed).__name__, ))
+		# algs: iterable(str)  - evaluating clustering algorithms (names of the algorithms)
+		# qms: iterable(str)  - computing quality measurs (names)
+		# nets: iterable(str)  - input network names with pathid to be indexed or None, which means
+		# 	the networks will be specified sequentially on the intrinsic measures computations
+		# assert (isinstance(algs[0], str) and isinstance(qms[0], str) and (nets is None or isinstance(nets[0], str))
+		# 	and isinstance(seed, int)), ('Invalid data types, algs: {}, qms: {}, nets: {}, seed: {}'
+		# 	.format(type(algs).__name__, type(qms).__name__, type(nets).__name__, type(seed).__name__, ))
+		# assert (isinstance(algs[0], str) and isinstance(qms[0], str) and (nets is None or isinstance(nets[0], str))
+		# 	and isinstance(seed, int)), ('Invalid data types, algs: {}, qms: {}, nets: {}, seed: {}'
+		# 	.format(type(algs).__name__, type(qms).__name__, type(nets).__name__, type(seed).__name__, ))
+		assert isinstance(seed, int), 'Invalid seed type: {}'.format(type(seed).__name__)
 		# Open or init the HDF5 storage
 		self.storage = None  # Persistent storage object (file)
 		timefmt = '%y%m%d-%H%M%S'  # Start time of the benchmarking, time format: YYMMDD_HHMMSS
@@ -266,11 +271,13 @@ class QualitySaver(object):
 			self.storage.close()
 			# Write the userblock
 			if (self.storage.userblock_size
-			and len(seedstr) + len(ublocksep) + len(timestamp) < self.storage.userblock_size):
+			and len(seedstr) + len(ublocksep) + len(timestamp) <= self.storage.userblock_size):
 				with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
 					fstore.write(seedstr)
 					fstore.write(ublocksep)  # Note: initially userblock is filled with 0
 					fstore.write(timestamp)
+					# Fill remained part with zeros to be sure that userblock is zeroized
+					fstore.write('\0' * (self.storage.userblock_size - (len(seedstr) + len(ublocksep) + len(timestamp))))
 			else:
 				raise RuntimeError('ERROR, the userblock creation failed in the {}, userblock_size: {}'
 					', initial data size: {} (seed: {}, sep: {}, timestamp:{})'.format(storage
@@ -296,10 +303,12 @@ class QualitySaver(object):
 		# rescons str to the index mapping
 		self.irescons = {s: i for i, s in enumerate(self.mrescons)}
 
-		# self.nets = {net: self.storage.require_group('nets/' + net) for net in nets}
+		self._active = True  # The storage is operational
+
+		# self.algs = {alg: self.storage.require_group('algs/' + alg) for alg in algs}  # Datasets for each algorithm holding params
+		# 
 		# rcrows0 = 64
 		# rccols = 6
-		self.algs = {alg: self.storage.require_group('algs/' + alg) for alg in algs}  # Datasets for each algorithm holding params
 		# appsdir = self.storage.require_group('apps')  # Applications / algorithms
 		# for app in apps:
 		# 	# Open or create dataset for each app

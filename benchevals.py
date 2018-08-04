@@ -4,7 +4,7 @@
 """
 :Description: Evaluation of results produced by each executed application.
 
-	Resulting cluster/community structure is evluated using extrinsic (NMI, NMI_s)
+	Resulting cluster/community structure is evaluated using extrinsic (NMI, NMI_s)
 	and intrinsic (Q - modularity) measures considering overlaps.
 
 :Authors: (c) Artem Lutov <artem@exascale.info>
@@ -17,21 +17,22 @@ import os
 import shutil
 import glob
 import sys
-import traceback  # Stacktrace
-import h5py  # HDF5 storage
+import traceback  # Stack trace
 import time
-import numpy as np  # Required for the HDF5 operations
-
 # from collections import namedtuple
 from subprocess import PIPE
-from multiprocessing import cpu_count, Process, Queue   # Required to asynchronously save evaluated quality measures to the persistent storage
+# Queue is required to asynchronously save evaluated quality measures to the persistent storage
+from multiprocessing import cpu_count, Process, Queue
+
+import h5py  # HDF5 storage
+import numpy as np  # Required for the HDF5 operations
+
 # from benchapps import  # funcToAppName,
 from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
 	escapePathWildcards, envVarDefined, SyncValue, tobackup, \
 	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, ALGSDIR, \
 	TIMESTAMP_START, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 from utils.mpepool import Task, Job, AffinityMask
-
 
 # Identify type of the Variable-length ASCII (bytes) / UTF8 types for the HDF5 storage
 try:

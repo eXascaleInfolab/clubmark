@@ -361,7 +361,7 @@ def parseParams(args):
 			opts.algorithms = arg[3 + inverse:].strip('"').strip("'").split()  # Note: argparse automatically performs this escaping
 			# Exclude algorithms if required
 			if opts.algorithms and inverse:
-				algs = appnames(benchapps)
+				algs = fetchAppnames(benchapps)
 				try:
 					for alg in opts.algorithms:
 						algs.remove(alg)
@@ -1001,6 +1001,8 @@ def processNetworks(datas, handler, xargs={}, dflextfn=dflnetext, tasks=None, fp
 				netnames[net] = 0
 				xargs['pathidstr'] = ''
 			else:
+				# TODO: To unify quality measures evaluation with the clustering and consider pathids everywhere,
+				# pathids dict should be used instead of the fpathids with pathid reading besiddes the writing.
 				pathid += 1
 				netnames[net] = pathid
 				nameid = SEPPATHID + str(pathid)
@@ -1089,7 +1091,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 	print('Networks ({}) conversion completed'.format(netsnum))
 
 
-def appnames(appsmodule):
+def fetchAppnames(appsmodule):
 	"""Get names of the executable applications from the module
 
 	appsmodule  - module that implements execution of the apps
@@ -1109,10 +1111,10 @@ def clarifyApps(appnames, appsmodule):
 		appfns: list(function)  - executor functions of the required apps
 	"""
 	assert isinstance(appnames, list) and appsmodule, ('Invalid arguments, appnames type: {}'
-		', appsmodule type: {}'.format(type(appnames).__name__), type(appsmodule).__name__)
+		', appsmodule type: {}'.format(type(appnames).__name__, type(appsmodule).__name__))
 	if not appnames:
 		# Save app names to perform results aggregation after the execution
-		appnames.extend(appnames(appsmodule))  # alg.lower() for alg in appnames()
+		appnames.extend(fetchAppnames(appsmodule))  # alg.lower() for alg in fetchAppnames()
 	# Fetch app functions (executors) from the module
 	appfns = [getattr(appsmodule, PREFEXEC + name, None) for name in appnames]
 	# Ensure that all specified appnames correspond to the functions
@@ -1276,7 +1278,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 
 
 def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exectime, timeout  #pylint: disable=W0613
-, evaltimeout=14*24*60*60, update=False, netnames=None):  #pylint: disable=W0613
+, evaltimeout=14*24*60*60, update=False):  #pylint: disable=W0613;  # , netnames=None
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
 	qmsmodule: module  - module with quality measures definitions to be run; sys.modules[__name__]
@@ -1294,11 +1296,11 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 	evaltimeout: uint  - timeout for all evaluations, >= 0, 0 means unlimited time
 	update: bool  - update evaluations file or create a new one, anyway existed evaluations
 		are backed up.
-	netnames: iterable(str)  - input network names with path id and without the base path,
-		used to form meta data in the evaluation storage. Explicit specification is useful
-		if the netnames were been already formed on the clustering execution and
-		the intrinsic measures are not used (otherwise netnames are evalauted there).
 	"""
+	# netnames: iterable(str)  - input network names with path id and without the base path,
+	# 	used to form meta data in the evaluation storage. Explicit specification is useful
+	# 	if the netnames were been already formed on the clustering execution and
+	# 	the intrinsic measures are not used (otherwise netnames are evalauted there).
 	if not datas:
 		print('WRANING evalResults(), there are no input datasets specified to be clustered', file=sys.stderr)
 		return
@@ -1321,29 +1323,75 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 	with QualitySaver(seed=seed, update=update) as qualsaver:  # , nets=netnames
 		# Compute quality measures grouping them into batchies with the same affinity
 		# starting with the measures having the affinity step = 1
-		qmremained = {}
+		afnrn = AffinityMask.CPUS  # Min affinity among the remained (postponed), <= AffinityMask.CPUS
 		afncur = 1  # Current affinity step
-		afnrn = AffinityMask.CPUS  # Min affinity among the remained (postponed)
-		while qmeasures:
-			for iq, qm in enumerate(qmeasures):
+		qmscur = copy.copy(qmeasures)  # Current qmeasures
+		while qmscur:
+			eqmsc = []  # Current exeqms
+			qmsrem = []  # Remained qms
+			qmstmp = []
+			for iq, qm in enumerate(qmscur):
 				afnstep = QMSRAFN.get(qm, 1)
 				if afnstep != afncur:
 					if afnrn > afnstep:
 						afnrn = afnstep
-					qmremained[qm] = iq
+					qmsrem.append(qm)
 					continue
+				qmstmp.append(qm)
+				eqmsc.append(exeqms[iq])
+			qmscur = qmstmp
+			assert len(qmscur) == len(eqmsc), ('Quality measure names and executors are not'
+				' synchronized: {} != {}'.format(len(qmscur), len(eqmsc)))
 
 			# Perform quality evaluations
 			with ExecPool(_WPROCSMAX, afnmask=AffinityMask(afnstep), memlimit=_VMLIMIT
-			, name='runqms_as' + str(afnstep)), webuiapp=_webuiapp) as _execpool:
-				pass
+			, name='runqms_afnst' + str(afnstep), webuiapp=_webuiapp) as _execpool:
+				def runapp(net, asym, netshf, pathid='', tasks=None):
+					"""Execute algorithms on the specified network counting number of ran jobs
+
+					net  - network to be processed
+					asym  - whether the network is asymmetric (directed), considered only for the non-standard network file extensions
+					netshf  - whether this network is a shuffle in the non-flat dir structure
+					pathid  - path id of the net to distinguish nets with the same name located in different dirs
+					tasks: list(Task)  - tasks associated with the running algorithms on the specified network
+
+					return
+						jobsnum  - the number of scheduled jobs, typically 1
+					"""
+					jobsnum = 0
+					netext = os.path.splitext(net)[1].lower()
+					for iqm, eqm in enumerate(eqmsc):
+						for alg in algorithms:
+							try:
+								jobsnum += eqm(_execpool, net, asym=asymnet(netext, asym), odir=netshf
+									, timeout=timeout, pathid=pathid, task=None if not tasks else tasks[iqm], seed=seed)
+							except Exception as err:  #pylint: disable=W0703
+								errexectime = time.perf_counter() - exectime
+								print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
+									.format(eqm.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
+								# traceback.print_stack(limit=5, file=sys.stderr)
+								traceback.print_exc(5)
+					return jobsnum
+
+				def runner(net, netshf, xargs, tasks=None):
+					"""Network runner helper
+
+					net  - network file name
+					netshf  - whether this network is a shuffle in the non-flat dir structure
+					xargs  - extra custom parameters
+					tasks: list(Task)  - tasks associated with the running algorithms on the specified network
+					"""
+					tnum = runapp(net, xargs['asym'], netshf, xargs['pathidstr'], tasks)
+					xargs['jobsnum'] += tnum
+					xargs['netcount'] += tnum != 0
 
 				xargs = {'asym': False,  # Asymmetric network
 						'pathidstr': '',  # Id of the duplicated path shortcut to have the unique shortcut
 						'jobsnum': 0,  # Number of the processing network jobs (can be several per each instance if shuffles exist)
 						'netcount': 0}  # Number of processing network instances (includes multiple shuffles)
-				# TODO: consider QMSRAFN, actual for Gnmi
-				tasks = [Task(qmname) for qmname in qmeasures]
+				tasks = [Task(qmname) for qmname in qmscur]
+
+				processNetworks(datas, runner, xargs=xargs, dflextfn=dflnetext, tasks=tasks)
 
 				if evaltimeout <= 0:
 					evaltimeout = timeout * xargs['jobsnum']
@@ -1360,15 +1408,11 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 						.format(err, traceback.format_exc(5)), file=sys.stderr)
 					raise
 
-
 			# Prepare for the evaluations with another affinity
-			if qmremained:
+			if qmsrem:
 				afnstep = afnrn
 				afnrn = AffinityMask.CPUS
-				qmeasures[:] = qmremained.keys()
-				exeqms[:] = [exeqms[iq] for iq in qmremained.values()]
-				assert len(qmeasures) == len(exeqms), ('Quality measure names and executors are not'
-					' synchronized: {} != {}'.format(len(qmeasures) == len(exeqms)))
+				qmscur = qmsrem
 	# Clear execpool
 	_execpool = None
 	stime = time.perf_counter() - stime
@@ -1642,7 +1686,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 # 			#
 # 			# 	if not algorithms:
 # 			# 		# Fetch available algorithms
-# 			# 		evalalgs = appnames(appsmodule)
+# 			# 		evalalgs = fetchAppnames(appsmodule)
 # 			# 	else:
 # 			# 		evalalgs = [alg for alg in algorithms]  # .lower()
 # 			# 	evalalgs = tuple(evalalgs)
@@ -1786,16 +1830,15 @@ def benchmark(*args):
 			, resdub=opts.convnets & 0b100, timeout1=7*60, convtimeout=45*60)  # 45 min
 
 	# Run the opts.algorithms and measure their resource consumption
-	netnames = None
 	if opts.runalgs:
-		netnames = runApps(appsmodule=benchapps, algorithms=opts.algorithms, datas=opts.datas
+		runApps(appsmodule=benchapps, algorithms=opts.algorithms, datas=opts.datas
 			, seed=seed, exectime=exectime, timeout=opts.timeout, runtimeout=opts.runtimeout)
 
 	# Evaluate results
 	if opts.qmeasures is not None:
 		evalResults(qmsmodule=benchevals, qmeasures=opts.qmeasures, appsmodule=benchapps
 			, algorithms=opts.algorithms, datas=opts.datas, seed=seed, exectime=exectime
-			, timeout=opts.timeout, evaltimeout=opts.evaltimeout, update=opts.qupdate, netnames=netnames)
+			, timeout=opts.timeout, evaltimeout=opts.evaltimeout, update=opts.qupdate)  # , netnames=netnames
 
 	if opts.aggrespaths:
 		aggEvaluations(opts.aggrespaths)
@@ -1834,8 +1877,8 @@ def terminationHandler(signal=None, frame=None, terminate=True):  #pylint: disab
 
 if __name__ == '__main__':
 	if len(sys.argv) <= 1 or (len(sys.argv) == 2 and sys.argv[1] in ('-h', '--help')):
-		apps = appnames(benchapps)
-		qmapps = appnames(benchevals)
+		apps = fetchAppnames(benchapps)
+		qmapps = fetchAppnames(benchevals)
 		print('\n'.join(('Usage:',
 			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
 			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'

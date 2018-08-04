@@ -30,6 +30,6 @@
         "html": "xml",
         "latex": "latex",
         "markdown": "markdown",
-        "python": "code"  // plain
+        "python": "plain"
     },
 }

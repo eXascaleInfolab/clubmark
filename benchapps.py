@@ -247,7 +247,9 @@ def prepareResDir(appname, taskname, odir, pathid):
 	if odir:
 		nameparts = parseName(taskname, True)
 		taskdir = ''.join((nameparts[0], nameparts[2], '/', taskname))  # Use base name and instance id
-	taskpath = ''.join((RESDIR, appname, '/', CLSDIR, taskdir, SEPPATHID, pathid))
+	taskpath = ''.join((RESDIR, appname, '/', CLSDIR, taskdir))
+	if pathid:
+		taskpath = SEPPATHID.join((taskpath, pathid))
 
 	preparePath(taskpath)
 	return taskpath

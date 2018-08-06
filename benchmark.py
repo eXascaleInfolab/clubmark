@@ -73,11 +73,11 @@ from multiprocessing import cpu_count  # Returns the number of logical CPU units
 
 import benchapps  # Required for the functions name mapping to/from the app names
 from benchapps import PYEXEC, aggexec, funcToAppName, PREFEXEC  # , _EXTCLNODES, ALGSDIR
-from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsSec, secDhms \
+from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsSec, secDhms, parseName \
  	, SEPPARS, SEPINST, SEPSHF, SEPPATHID, SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
-from benchevals import aggEvaluations, RESDIR, EXTEXECTIME, QMSRAFN, QMSINTRIN, QMSRUNS, QualitySaver, NetParams
+from benchevals import aggEvaluations, RESDIR, CLSDIR, EXTEXECTIME, QMSRAFN, QMSINTRIN, QMSRUNS, QualitySaver, NetParams
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
 from algorithms.utils.parser_nsl import asymnet, dflnetext
@@ -1280,16 +1280,24 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	# return netnames
 
 
-def clnames(net, alg):
+def clnames(net, odir, alg, pathid=''):
 	"""Clustering name by the network name
 
 	net: str  - input network name
 	alg: str  - algorithm name
+	pathid: str  - network path id
 
-	return  clnames: list(str)  - clustering file names
+	return  list(str)  - clustering file names
 	"""
-	res = []
-	return res
+	clpath = os.path.splitext(os.path.split(net)[1])[0]  # Part of the resulting path suffix
+	# Take base network name (without the shuffle id)
+	if odir:
+		nameparts = parseName(clpath, True)
+		clpath = ''.join((nameparts[0], nameparts[2], '/', clpath))  # Use base name and instance id
+	clpath = ''.join((RESDIR, alg, '/', CLSDIR, clpath))
+	if pathid:
+		clpath = SEPPATHID.join((clpath, pathid))
+	return [clp for clp in glob.iglob('/'.join((clpath, '*')))]
 
 
 def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exectime, timeout  #pylint: disable=W0613
@@ -1376,7 +1384,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									ifnames = [net]
 									netparams = NetParams(asymnet(netext, asym), pathid)
 								else:
-									ifnames = clnames(net, alg)
+									ifnames = clnames(net, netshf, alg=alg, pathid=pathid)
 									netparams = None
 								runs = QMSRUNS.get(eq, 1)  # The number of quality measure runs (subsequent evaluations)
 								for ifnm in ifnames:

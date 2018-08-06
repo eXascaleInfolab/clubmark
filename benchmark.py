@@ -72,7 +72,7 @@ from math import sqrt
 from multiprocessing import cpu_count  # Returns the number of logical CPU units (hw treads) if defined
 
 import benchapps  # Required for the functions name mapping to/from the app names
-from benchapps import PYEXEC, aggexec, funcToAppName, PREFEXEC  # , _EXTCLNODES, ALGSDIR
+from benchapps import PYEXEC, aggexec, funcToAppName, PREFEXEC, EXTCLNODES  # , ALGSDIR
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsSec, secDhms, parseName \
  	, SEPPARS, SEPINST, SEPSHF, SEPPATHID, SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
@@ -1287,17 +1287,26 @@ def clnames(net, odir, alg, pathid=''):
 	alg: str  - algorithm name
 	pathid: str  - network path id
 
-	return  list(str)  - clustering file names
+	return  cfnames: list(str)  - clustering file names
 	"""
 	clpath = os.path.splitext(os.path.split(net)[1])[0]  # Part of the resulting path suffix
+	# Consider the aggregated levels into a single file (required at least for DAOC)
+	# having the same name as the directory being aggregated
+	cbdir = ''.join((RESDIR, alg, '/', CLSDIR))
+	aggcl = ''.join((cbdir, clpath, '/', clpath, EXTCLNODES))
 	# Take base network name (without the shuffle id)
 	if odir:
 		nameparts = parseName(clpath, True)
 		clpath = ''.join((nameparts[0], nameparts[2], '/', clpath))  # Use base name and instance id
-	clpath = ''.join((RESDIR, alg, '/', CLSDIR, clpath))
+	clpath = cbdir + clpath
 	if pathid:
 		clpath = SEPPATHID.join((clpath, pathid))
-	return [clp for clp in glob.iglob('/'.join((clpath, '*')))]
+	# Reselting clustering file names
+	cfnames = [clp for clp in glob.iglob('/'.join((clpath, '*')))]
+	# Aggregated levels into the single clustering
+	if os.path.isfile(aggcl):
+		cfnames.append(aggcl)
+	return cfnames
 
 
 def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exectime, timeout  #pylint: disable=W0613

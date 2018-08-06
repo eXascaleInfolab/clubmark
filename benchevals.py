@@ -421,28 +421,53 @@ class NetParams(object):
 		self.asym = asym
 		self.pathid = pathid
 
+	def __str__(self):
+		"""String conversion"""
+		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
+
 
 # Note: default AffinityMask is 1 (logical CPUs, i.e. hardware threads)
-# inpfname is gtruth
 def execXmeasures(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
-	"""Evaluate extrinsic quality measures (accuracy)"""
+	"""Quality measure executor
+
+	execpool: ExecPool  - execution pool
+	args: list(str)  - quality measures arguments
+	qualsaver: QualitySaver  - quality results saver (persister)
+	inpfname: str  - input dataset file name (ground-truth / input network for the in/extrinsic quality measure)
+	timeout: uint  - execution timeout in seconds
+	netparams: NetParams  - network parameters, actual only if inpfname is the input network (for the intrinsic qmeasure)
+	irun: uint8  - run id (iteration)
+	workdir: str  - working directory of the quality measure (qmeasure location)
+	task: Task  - owner (super) task
+	seed: uint  - seed for the stochastic qmeasures
+
+	return jobsnum: uint  - the number of scheduled jobs
+	"""
+	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(inpfname, str) and timeout >= 0 and (
+		netparams is None or isinstance(netparams, NetParams)) and irun >= 0 and (
+		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
+		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tasym: {},\n\tqualsaver: {},\n\tinpfname: {}'
+		',\n\ttimeout: {},\n\tnetparams: {},\n\tirun: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
+		.format(execpool, args, qualsaver, inpfname, timeout, netparams, irun, workdir, task, seed))
+
 	pass
+	return 1
 
 
 @metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS, first=False), multirun=3)  # Note: multirun requires irun
 def execGnmi(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
-	"""[summary]
+	"""Quality measure executor
 
-	execpool ([type]): [description]
-	args ([type]): [description]
-	qualsaver ([type]): [description]
-	inpfname ([type]): [description]
-	timeout ([type]): [description]
-	netparams ([type], optional): Defaults to None. [description]
-	irun (int, optional): Defaults to 0. [description]
-	workdir ([type], optional): Defaults to UTILDIR. [description]
-	task ([type], optional): Defaults to None. [description]
-	seed ([type], optional): Defaults to None. [description]
+	execpool: ExecPool  - execution pool
+	args: list(str)  - quality measures arguments
+	qualsaver: QualitySaver  - quality results saver (persister)
+	inpfname: str  - input dataset file name (ground-truth / input network for the in/extrinsic quality measure)
+	timeout: uint  - execution timeout in seconds
+	netparams: NetParams  - network parameters, actual only if inpfname is the input network (for the intrinsic qmeasure)
+	irun: uint8  - run id (iteration)
+	workdir: str  - working directory of the quality measure (qmeasure location)
+	task: Task  - owner (super) task
+	seed: uint  - seed for the stochastic qmeasures
 
 	return jobsnum: uint  - the number of scheduled jobs
 	"""
@@ -450,12 +475,41 @@ def execGnmi(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=
 
 
 def execOnmi(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
+	"""Quality measure executor
+
+	execpool: ExecPool  - execution pool
+	args: list(str)  - quality measures arguments
+	qualsaver: QualitySaver  - quality results saver (persister)
+	inpfname: str  - input dataset file name (ground-truth / input network for the in/extrinsic quality measure)
+	timeout: uint  - execution timeout in seconds
+	netparams: NetParams  - network parameters, actual only if inpfname is the input network (for the intrinsic qmeasure)
+	irun: uint8  - run id (iteration)
+	workdir: str  - working directory of the quality measure (qmeasure location)
+	task: Task  - owner (super) task
+	seed: uint  - seed for the stochastic qmeasures
+
+	return jobsnum: uint  - the number of scheduled jobs
+	"""
 	pass
 
 
 @metainfo(intrinsic=True)  # Note: intrinsic causes interpretation of ifname as inpnet and reuqires netparams
 def execImeasures(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=0, workdir=ALGSDIR+'daoc/', task=None, seed=None):
-	"""Evaluate intrinsic quality measures using DAOC"""
+	"""Quality measure executor
+
+	execpool: ExecPool  - execution pool
+	args: list(str)  - quality measures arguments
+	qualsaver: QualitySaver  - quality results saver (persister)
+	inpfname: str  - input dataset file name (ground-truth / input network for the in/extrinsic quality measure)
+	timeout: uint  - execution timeout in seconds
+	netparams: NetParams  - network parameters, actual only if inpfname is the input network (for the intrinsic qmeasure)
+	irun: uint8  - run id (iteration)
+	workdir: str  - working directory of the quality measure (qmeasure location)
+	task: Task  - owner (super) task
+	seed: uint  - seed for the stochastic qmeasures
+
+	return jobsnum: uint  - the number of scheduled jobs
+	"""
 	pass
 
 

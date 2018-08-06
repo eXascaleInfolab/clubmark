@@ -63,7 +63,7 @@ _LEVSMAX = 10  # Use 10 scale levels as in Ganxis by default
 assert _LEVSMAX >= 10, 'The number of levels limitation should be addded to GANXiS and some others'
 _EXTLOG = '.log'  # Extension for the logs
 _EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
-_EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
+EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
 PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
 
 
@@ -767,7 +767,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALG
 	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
 		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 		, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
-		, '-lo', ''.join((relpath(taskpath), '/', taskname, _EXTCLNODES)), netfile)
+		, '-lo', ''.join((relpath(taskpath), '/', taskname, EXTCLNODES)), netfile)
 	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, stdout=os.devnull
 		, ondone=limlevs, params={'taskpath': taskpath, 'fetchLevId': fetchLevIdCnl}
@@ -865,7 +865,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, 
 
 		# scp.py netname k [start_linksnum end__linksnum numberofevaluations] [weight]
 		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ktaskname, pathid)), '-s=/etime_' + algname
-			, pybin, './scp.py', netfile, kstr, steps, ''.join((reltaskpath, '/', ktaskname, _EXTCLNODES)))
+			, pybin, './scp.py', netfile, kstr, steps, ''.join((reltaskpath, '/', ktaskname, EXTCLNODES)))
 
 		#print('> Starting job {} with args: {}'.format('_'.join((ktaskname, algname, kstrex)), args + [kstr]))
 		execpool.execute(Job(name=SEPNAMEPART.join((algname, ktaskname)), workdir=workdir, args=args, timeout=timeout
@@ -910,14 +910,14 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathid='', workdir=A
 	# Form name of the ground-truth file on base of the input network filename with the extension relpaced to '.cnl'
 	# Note: take base name if the instance of shuffle id components are present
 	originpbase = delPathSuffix(netfile)  # Note: netext is already split
-	if odir or not os.path.exists(originpbase + _EXTCLNODES):
+	if odir or not os.path.exists(originpbase + EXTCLNODES):
 		# Take file with the target name but in the upper dir
 		dirbase, namebase = os.path.split(originpbase)
 		dirbase = os.path.split(dirbase)[0]
 		if not dirbase:
 			dirbase = '..'
 		originpbase = '/'.join((dirbase, namebase))
-	gtfile = originpbase + _EXTCLNODES
+	gtfile = originpbase + EXTCLNODES
 	assert os.path.exists(gtfile), 'Ground-truth file should exist to apply randcommuns: ' + gtfile
 	# print('> Starting Randcommuns; odir: {}, asym: {}, netfile: {}, gtfile (exists: {}): {}'
 	# 	.format(odir, asym, netfile, os.path.exists(gtfile), gtfile))
@@ -1076,17 +1076,17 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathid='', workdi
 	# (with the header but without the share value)
 	# Note: there is not sence to apply ndsmin for the per-level output since all nodes are guaranted to be output
 	if opts.rlevout is not None:
-		args.append(''.join(('-cx', str(opts.rlevout).join(('l[:/', ']')), 's=', reltaskpath, _EXTCLNODES)))
+		args.append(''.join(('-cx', str(opts.rlevout).join(('l[:/', ']')), 's=', reltaskpath, EXTCLNODES)))
 	if opts.significance is not None:
 		# Output with the default significance policy
-		args.append(''.join(('-cx', 'ss=', reltaskpath, _EXTCLNODES)))
+		args.append(''.join(('-cx', 'ss=', reltaskpath, EXTCLNODES)))
 		# NOTE: output with the specific significance policy is commented as redundant
 		# # The significant clsters considering srweight are outputted into the dedicated file
 		# if opts.srweight is not None:
 		# 	srwstr = str(opts.srweight)
 		# 	ndsminstr = str(opts.ndsmin)
 		# 	args.append(''.join(('-cx', 's', opts.significance, '/', srwstr, '_', ndsminstr, 's='
-		# 		, reltaskpath, '-', srwstr, '-', ndsminstr, _EXTCLNODES)))
+		# 		, reltaskpath, '-', srwstr, '-', ndsminstr, EXTCLNODES)))
 	args.append(netfile)
 
 	# print(algname, 'called with args:', str(args), '\n\ttaskpath:', taskpath)
@@ -1406,7 +1406,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR
 		# ATTENTION: a single argument is k-clique size, specified later
 		# ./pscan -e 0.7 -o graph-e7.cnl -f NSE graph.nse
 		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ctaskname, pathid)), '-s=/etime_' + algname
-			, './pscan', '-e', prm, '-o', ''.join((taskpath, '/', ctaskname, _EXTCLNODES))
+			, './pscan', '-e', prm, '-o', ''.join((taskpath, '/', ctaskname, EXTCLNODES))
 			, '-f', 'NSA' if asym else 'NSE', netfile)
 
 		#print('> Starting job {} with args: {}'.format('_'.join((ctaskname, algname, prmex)), args + [prm]))
@@ -1460,7 +1460,7 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathid='', workdir=
 
 	# ./rgmc -a 2 -c tests/rgmc_2/email.nse.cnl -i e networks/email.nse.txt
 	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
-		, './rgmc', '-a', str(alg), '-c', ''.join((taskpath, '/', taskname, _EXTCLNODES))
+		, './rgmc', '-a', str(alg), '-c', ''.join((taskpath, '/', taskname, EXTCLNODES))
 		, '-i', 'a' if asym else 'e', netfile)
 	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
@@ -1532,7 +1532,7 @@ def execScd(execpool, netfile, asym, odir, timeout, pathid='', workdir=ALGSDIR, 
 		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskparname, pathid)), '-s=/etime_' + algname
 			, './scd', '-n', '1' # Use a single threaded implementation
 			, '-a', astr
-			, '-o', ''.join((taskpath, '/', taskparname, _EXTCLNODES)), '-f', netfile)
+			, '-o', ''.join((taskpath, '/', taskparname, EXTCLNODES)), '-f', netfile)
 		execpool.execute(Job(name=SEPNAMEPART.join((algname, taskparname)), workdir=workdir, args=args, timeout=timeout
 			#, ondone=postexec, stdout=os.devnull, stdout=logfile
 			, task=task, category=algname, size=netsize, stdout=os.devnull, stderr=errfile))

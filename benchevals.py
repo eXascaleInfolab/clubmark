@@ -56,8 +56,8 @@ EXTAGGRES = '.res'  # Aggregated results
 EXTAGGRESEXT = '.resx'  # Extended aggregated results
 SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not apear in a file name, which can be part of job name)
 
-QMSRAFN = {}  # Specific affinity steps of the quality measures;  qmsrAffinity
-QMSINTRIN = []  # Intrinsic quality measures requering input network instead of the ground-truth clustering
+QMSRAFN = {}  # Specific affinity mask of the quality measures: str, AffinityMask;  qmsrAffinity
+QMSINTRIN = set()  # Intrinsic quality measures requering input network instead of the ground-truth clustering
 QMSRUNS = {}  # Run these stochastic quality measures specified number of times
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
@@ -401,7 +401,7 @@ def metainfo(afnmask=AffinityMask(1), intrinsic=False, multirun=1):
 		if afnmask.afnstep != 1:  # Save only quality measures with non-default affinity
 			QMSRAFN[func] = afnmask
 		if intrinsic:
-			QMSINTRIN.append(func)
+			QMSINTRIN.add(func)
 		if multirun >= 2:
 			QMSRUNS[func] = multirun
 		return func
@@ -414,7 +414,7 @@ def execXmeasures(execpool, args, qualsaver, gtruth, asym, timeout, pathid='', w
 	pass
 
 
-@metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS), multirun=3)
+@metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS, first=False), multirun=3)
 def execGnmi(execpool, args, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
 	pass
 

@@ -77,7 +77,7 @@ from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsS
  	, SEPPARS, SEPINST, SEPSHF, SEPPATHID, SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
-from benchevals import aggEvaluations, RESDIR, EXTEXECTIME, QMSRAFN, QualitySaver #, evaluators,
+from benchevals import aggEvaluations, RESDIR, EXTEXECTIME, QMSRAFN, QMSINTRIN, QMSRUNS, QualitySaver #, evaluators,
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
 from algorithms.utils.parser_nsl import asymnet, dflnetext
@@ -175,7 +175,7 @@ class Params(object):
 
 		syntpo  - synthetic networks path options, SyntPathOpts
 		runalgs  - execute algorithm or not
-		qmeasures  - quality measures with their parameters to be evaluated
+		qmeasures: list(list(str))  - quality measures with their parameters to be evaluated
 			on the clustering results. None means do not evaluate.
 		qupdate  - update quality evaluations storage with the lacking evaluations
 			omitting the existent one, applicable only for the same seed.
@@ -192,8 +192,8 @@ class Params(object):
 				0b11 - force conversion (overwrite all)
 			0b100 - resolve duplicated links on conversion
 			TODO: replace with IntEnum like in mpewui
-		aggrespaths: iterable(str)  -  paths for the evaluated results aggregation (to be done for
-			already existent evaluations)
+		aggrespaths: iterable(str)  -  paths for the evaluated results aggregation
+			(to be done for already existent evaluations)
 			TODO: clarify and check availability in the latest version
 		host: str  - WebUI host, None to disable WebUI
 		port: int  - WebUI port
@@ -1100,23 +1100,26 @@ def fetchAppnames(appsmodule):
 	return [funcToAppName(func) for func in dir(appsmodule) if func.startswith(PREFEXEC)]
 
 
-def clarifyApps(appnames, appsmodule):
+def clarifyApps(appnames, appsmodule, namefn=None):
 	"""Validate and refine or forme appnames considering the appsmonule functions
 	and fetch the respecive executors
 
 	appnames: list(str)  - names of the apps to be clarified or formed if empty
 	appsmodule: module  - module with the respecive app functions staring with PREFEXEC
+	namefn: callable  - name extraction function if appnames is a list of (compound) objects
 
 	return
 		appfns: list(function)  - executor functions of the required apps
 	"""
-	assert isinstance(appnames, list) and appsmodule, ('Invalid arguments, appnames type: {}'
-		', appsmodule type: {}'.format(type(appnames).__name__, type(appsmodule).__name__))
+	assert isinstance(appnames, list) and appsmodule and (namefn is None or callable(namefn)
+		), ('Invalid arguments, appnames type: {}, appsmodule type: {}, namefn type: {}'.format(
+		type(appnames).__name__, type(appsmodule).__name__, type(namefn).__name__))
 	if not appnames:
 		# Save app names to perform results aggregation after the execution
 		appnames.extend(fetchAppnames(appsmodule))  # alg.lower() for alg in fetchAppnames()
 	# Fetch app functions (executors) from the module
-	appfns = [getattr(appsmodule, PREFEXEC + name, None) for name in appnames]
+	appfns = [getattr(appsmodule, PREFEXEC + name, None) for name in (
+		appnames if namefn is None else [namefn(an) for an in appnames])]
 	# Ensure that all specified appnames correspond to the functions
 	invalapps = []  # Indexes of the applications having the invalid name (without the respective executor)
 	for i in range(len(appfns)):
@@ -1282,7 +1285,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
 	qmsmodule: module  - module with quality measures definitions to be run; sys.modules[__name__]
-	qmeasures: iterable(str)  - evaluating quality measures with their parameters
+	qmeasures: list(list(str))  - evaluating quality measures with their parameters
 	appsmodule: module  - module with algorithms definitions to be run; sys.modules[__name__]
 	algorithms: iterable(str)  - algorithms to be executed
 	datas: iterable(PathOpts)  - input datasets, wildcards of files or directories containing files
@@ -1315,37 +1318,29 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 
 	# Refine and validate names of the algorithms and measures, form the respecive executors
 	clarifyApps(algorithms, appsmodule)  # execalgs =
-	exeqms = clarifyApps(qmeasures, qmsmodule)
+	exeqms = clarifyApps(qmeasures, qmsmodule, namefn=lambda qm: qm[0])
 
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Prepare HDF5 evaluations store
 	with QualitySaver(seed=seed, update=update) as qualsaver:  # , nets=netnames
-		# Compute quality measures grouping them into batchies with the same affinity
+		# Compute quality measures grouping them into batches with the same affinity
 		# starting with the measures having the affinity step = 1
-		afnrn = AffinityMask.CPUS  # Min affinity among the remained (postponed), <= AffinityMask.CPUS
-		afncur = 1  # Current affinity step
-		qmscur = copy.copy(qmeasures)  # Current qmeasures
-		while qmscur:
-			eqmsc = []  # Current exeqms
-			qmsrem = []  # Remained qms
-			qmstmp = []
-			for iq, qm in enumerate(qmscur):
-				afnstep = QMSRAFN.get(qm, 1)
-				if afnstep != afncur:
-					if afnrn > afnstep:
-						afnrn = afnstep
-					qmsrem.append(qm)
-					continue
-				qmstmp.append(qm)
-				eqmsc.append(exeqms[iq])
-			qmscur = qmstmp
-			assert len(qmscur) == len(eqmsc), ('Quality measure names and executors are not'
-				' synchronized: {} != {}'.format(len(qmscur), len(eqmsc)))
+		# Sort qmeasures with their executables having affinity step = 1 in the end for the pop()
+		qmeas = sorted(zip(qmeasures, exeqms, [QMSRAFN.get(eq) for eq in exeqms]), key=lambda qmea: qmea[2], reverse=True)
+		cqmes = []  # Currently processing qmes having the same affinity mask
+		tasks = []  # All tasks
+		while qmeas:
+			afn = qmeas[-1][2]
+			del cqmes[:]
+			while qmeas and qmeas[-1][2] == afn:
+				cqmes.append(qmeas.pop()[:2])
+			if afn is None:  # Note: QMSRAFN contains mandatory values only for the non-default AffinityMask
+				afn = AffinityMask(1)
 
 			# Perform quality evaluations
-			with ExecPool(_WPROCSMAX, afnmask=AffinityMask(afnstep), memlimit=_VMLIMIT
-			, name='runqms_afnst' + str(afnstep), webuiapp=_webuiapp) as _execpool:
+			with ExecPool(_WPROCSMAX, afnmask=afn, memlimit=_VMLIMIT
+			, name='runqms_' + str(afn.afnstep) + ('f' if afn.first else 'a'), webuiapp=_webuiapp) as _execpool:
 				def runapp(net, asym, netshf, pathid='', tasks=None):
 					"""Execute algorithms on the specified network counting number of ran jobs
 
@@ -1360,15 +1355,21 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					"""
 					jobsnum = 0
 					netext = os.path.splitext(net)[1].lower()
-					for iqm, eqm in enumerate(eqmsc):
-						for alg in algorithms:
+					# Apply all quality measures having the same affinity for all the algorithms on all networks,
+					# which benefits from the networks and clustering caching
+					for alg in algorithms:
+						for i, qm, eq in enumerate(cqmes):
 							try:
-								jobsnum += eqm(_execpool, net, asym=asymnet(netext, asym), odir=netshf
-									, timeout=timeout, pathid=pathid, task=None if not tasks else tasks[iqm], seed=seed)
+								inpnet = eq in QMSINTRIN  # Whether the input path is a network or a clustering
+								irun = QMSRUNS.get(eq, 1)  # Id of the quality measure execution (run)
+								while irun >= 1:
+									irun -= 1
+									jobsnum += eq(_execpool, net, asym=asymnet(netext, asym), odir=netshf
+										, timeout=timeout, pathid=pathid, task=None if not tasks else tasks[i], seed=seed)
 							except Exception as err:  #pylint: disable=W0703
 								errexectime = time.perf_counter() - exectime
 								print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
-									.format(eqm.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
+									.format(eq.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
 								# traceback.print_stack(limit=5, file=sys.stderr)
 								traceback.print_exc(5)
 					return jobsnum
@@ -1389,9 +1390,10 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 						'pathidstr': '',  # Id of the duplicated path shortcut to have the unique shortcut
 						'jobsnum': 0,  # Number of the processing network jobs (can be several per each instance if shuffles exist)
 						'netcount': 0}  # Number of processing network instances (includes multiple shuffles)
-				tasks = [Task(qmname) for qmname in qmscur]
+				ctasks = [Task(qme[0][0]) for qme in cqmes]  # Current tasks
+				tasks.extend(ctasks)
 
-				processNetworks(datas, runner, xargs=xargs, dflextfn=dflnetext, tasks=tasks)
+				processNetworks(datas, runner, xargs=xargs, dflextfn=dflnetext, tasks=ctasks)
 
 				if evaltimeout <= 0:
 					evaltimeout = timeout * xargs['jobsnum']
@@ -1407,12 +1409,6 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					print('WARNING, algorithms execution pool is interrupted by: {}. {}'
 						.format(err, traceback.format_exc(5)), file=sys.stderr)
 					raise
-
-			# Prepare for the evaluations with another affinity
-			if qmsrem:
-				afnstep = afnrn
-				afnrn = AffinityMask.CPUS
-				qmscur = qmsrem
 	# Clear execpool
 	_execpool = None
 	stime = time.perf_counter() - stime

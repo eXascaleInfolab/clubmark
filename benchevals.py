@@ -408,23 +408,53 @@ def metainfo(afnmask=AffinityMask(1), intrinsic=False, multirun=1):
 	return decor
 
 
+class NetParams(object):
+	__slots__ = ('asym', 'pathid')
+
+	def __init__(self, asym, pathid=''):
+		"""Parameters of the input network
+
+		asym: bool  - the input network might be assymetric (directed) and is specified by arcs ranther than edges
+		pathid: str  - network path id
+		"""
+		assert isinstance(pathid, str), 'Unexpected format of the pathid: ' + type(pathid).__name__
+		self.asym = asym
+		self.pathid = pathid
+
+
 # Note: default AffinityMask is 1 (logical CPUs, i.e. hardware threads)
-def execXmeasures(execpool, args, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
+# inpfname is gtruth
+def execXmeasures(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""Evaluate extrinsic quality measures (accuracy)"""
 	pass
 
 
-@metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS, first=False), multirun=3)
-def execGnmi(execpool, args, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
+@metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS, first=False), multirun=3)  # Note: multirun requires irun
+def execGnmi(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
+	"""[summary]
+
+	execpool ([type]): [description]
+	args ([type]): [description]
+	qualsaver ([type]): [description]
+	inpfname ([type]): [description]
+	timeout ([type]): [description]
+	netparams ([type], optional): Defaults to None. [description]
+	irun (int, optional): Defaults to 0. [description]
+	workdir ([type], optional): Defaults to UTILDIR. [description]
+	task ([type], optional): Defaults to None. [description]
+	seed ([type], optional): Defaults to None. [description]
+
+	return jobsnum: uint  - the number of scheduled jobs
+	"""
 	pass
 
 
-def execOnmi(execpool, args, qualsaver, gtruth, asym, timeout, pathid='', workdir=UTILDIR, seed=None):
+def execOnmi(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	pass
 
 
-@metainfo(intrinsic=True)
-def execImeasures(execpool, args, qualsaver, inpnet, asym, timeout, pathid='', workdir=ALGSDIR+'daoc/', seed=None):
+@metainfo(intrinsic=True)  # Note: intrinsic causes interpretation of ifname as inpnet and reuqires netparams
+def execImeasures(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=0, workdir=ALGSDIR+'daoc/', task=None, seed=None):
 	"""Evaluate intrinsic quality measures using DAOC"""
 	pass
 

@@ -77,7 +77,7 @@ from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsS
  	, SEPPARS, SEPINST, SEPSHF, SEPPATHID, SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
-from benchevals import aggEvaluations, RESDIR, EXTEXECTIME, QMSRAFN, QMSINTRIN, QMSRUNS, QualitySaver #, evaluators,
+from benchevals import aggEvaluations, RESDIR, EXTEXECTIME, QMSRAFN, QMSINTRIN, QMSRUNS, QualitySaver, NetParams
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
 from algorithms.utils.parser_nsl import asymnet, dflnetext
@@ -1280,6 +1280,18 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	# return netnames
 
 
+def clnames(net, alg):
+	"""Clustering name by the network name
+
+	net: str  - input network name
+	alg: str  - algorithm name
+
+	return  clnames: list(str)  - clustering file names
+	"""
+	res = []
+	return res
+
+
 def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exectime, timeout  #pylint: disable=W0613
 , evaltimeout=14*24*60*60, update=False):  #pylint: disable=W0613;  # , netnames=None
 	"""Run specified applications (clustering algorithms) on the specified datasets
@@ -1329,7 +1341,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 		# Sort qmeasures with their executables having affinity step = 1 in the end for the pop()
 		qmeas = sorted(zip(qmeasures, exeqms, [QMSRAFN.get(eq) for eq in exeqms]), key=lambda qmea: qmea[2], reverse=True)
 		cqmes = []  # Currently processing qmes having the same affinity mask
-		tasks = []  # All tasks
+		# tasks = []  # All tasks
 		while qmeas:
 			afn = qmeas[-1][2]
 			del cqmes[:]
@@ -1360,12 +1372,17 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					for alg in algorithms:
 						for i, qm, eq in enumerate(cqmes):
 							try:
-								inpnet = eq in QMSINTRIN  # Whether the input path is a network or a clustering
-								irun = QMSRUNS.get(eq, 1)  # Id of the quality measure execution (run)
-								while irun >= 1:
-									irun -= 1
-									jobsnum += eq(_execpool, net, asym=asymnet(netext, asym), odir=netshf
-										, timeout=timeout, pathid=pathid, task=None if not tasks else tasks[i], seed=seed)
+								if eq in QMSINTRIN:  # Whether the input path is a network or a clustering
+									ifnames = [net]
+									netparams = NetParams(asymnet(netext, asym), pathid)
+								else:
+									ifnames = clnames(net, alg)
+									netparams = None
+								runs = QMSRUNS.get(eq, 1)  # The number of quality measure runs (subsequent evaluations)
+								for ifnm in ifnames:
+									for irun in range(runs):
+										jobsnum += eq(_execpool, qm[1:], qualsaver, ifnm, timeout=timeout
+											, netparams=netparams, irun=irun, task=None if not tasks else tasks[i], seed=seed)
 							except Exception as err:  #pylint: disable=W0703
 								errexectime = time.perf_counter() - exectime
 								print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
@@ -1391,7 +1408,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 						'jobsnum': 0,  # Number of the processing network jobs (can be several per each instance if shuffles exist)
 						'netcount': 0}  # Number of processing network instances (includes multiple shuffles)
 				ctasks = [Task(qme[0][0]) for qme in cqmes]  # Current tasks
-				tasks.extend(ctasks)
+				# tasks.extend(ctasks)
 
 				processNetworks(datas, runner, xargs=xargs, dflextfn=dflnetext, tasks=ctasks)
 

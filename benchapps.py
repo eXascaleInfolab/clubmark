@@ -71,33 +71,33 @@ PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
-def aggexec(algs):
+def aggexec(apps):
 	"""Aggregate execution statistics
 
-	Aggregate execution results of all networks instances and shuffles and output average,
-	and avg, min, max values for each network type per each algorithm.
+	Aggregate execution results of all input datasets (considering instances and shuffles)
+	and output average, and avg, min, max values for each input dataset per each app.
 
 	Expected format of the aggregating files:
 	# ExecTime(sec)	CPU_time(sec)	CPU_usr(sec)	CPU_kern(sec)	RSS_RAM_peak(Mb)	TaskName
 	0.550262	0.526599	0.513438	0.013161	2.086	syntmix/1K10/1K10^1!k7.1#1
 	...
 
-	algs  - algorithms were executed, which resource consumption  should be aggregated
+	apps  - apps were executed, whose resource consumption  should be aggregated
 
 	#>>> aggexec(['scp', 'ganxis']) is None
 	#True
 	"""
-	#exectime = {}  # netname: [alg1_stat, alg2_stat, ...]
+	#exectime = {}  # inpname: [app1_stat, app2_stat, ...]
 	# ATTENTION: for the correct output memory must be the last one
 	mnames = ('exectime', 'cputime', 'rssmem')  # Measures names
 	measures = [{}, {}, {}]  # exectiem, cputime, rssmem
-	malgs = []  # Measured algs
-	ialg = 0  # Algorithm index
-	for alg in algs:
-		algesfile = ''.join((RESDIR, alg, '/', alg, EXTEXECTIME))
+	mapps = []  # Measured apps
+	iapp = 0  # Algorithm index
+	for app in apps:
+		appesfile = ''.join((RESDIR, app, '/', app, EXTEXECTIME))
 		try:
-			with open(algesfile, 'r') as aest:
-				malgs.append(alg)
+			with open(appesfile, 'r') as aest:
+				mapps.append(app)
 				for ln in aest:
 					# Strip leading spaces
 					ln = ln.lstrip()
@@ -109,30 +109,30 @@ def aggexec(algs):
 					# Note: empty and spaces strings were already excluded
 					# 6 fields in the old format withou the rcode
 					assert 6 <= len(fields) <= 7, (
-						'Invalid format of the resource consumption file "{}": {}'.format(algesfile, ln))
+						'Invalid format of the resource consumption file "{}": {}'.format(appesfile, ln))
 					# Fetch and accumulate measures
 					# Note: rstrip() is required, because fields[-1] can ends with '\n';  os.path.split(...)[1]
-					net = delPathSuffix(fields[-1].rstrip(), True)  # Note: name can't be a path here
-					#print('> net: >>>{}<<< from >{}<'.format(net, fields[5]), file=sys.stderr)
-					assert net, 'Network name must exist'
+					dataset = delPathSuffix(fields[-1].rstrip(), True)  # Note: name can't be a path here
+					#print('> dataset: >>>{}<<< from >{}<'.format(dataset, fields[5]), file=sys.stderr)
+					assert dataset, 'Dataset name must exist'
 					etime = float(fields[0])
 					ctime = float(fields[1])
 					rmem = float(fields[4])
 					#rcode = float(fields[5])  # Note: in the old format 5-th field is the last and is the app name
 					for imsr, val in enumerate((etime, ctime, rmem)):
-						netstats = measures[imsr].setdefault(net, [])
-						if len(netstats) <= ialg:
-							assert len(netstats) == ialg, ('Network statistics are not synced with algorithms:'
-								' ialg={}, net: {}, netstats: {}'.format(ialg, net, netstats))
-							netstats.append(ItemsStatistic('_'.join((alg, net)), val, val))
-						netstats[-1].add(val)
+						dstats = measures[imsr].setdefault(dataset, [])
+						if len(dstats) <= iapp:
+							assert len(dstats) == iapp, ('Network statistics are not synced with apps:'
+								' iapp={}, dataset: {}, dstats: {}'.format(iapp, dataset, dstats))
+							dstats.append(ItemsStatistic('_'.join((app, dataset)), val, val))
+						dstats[-1].add(val)
 		except IOError:
-			print('WARNING, execution results for "{}" do not exist, skipped.'.format(alg), file=sys.stderr)
+			print('WARNING, execution results for "{}" do not exist, skipped.'.format(app), file=sys.stderr)
 		else:
-			ialg += 1
-	# Check number of the algorithms to be outputted
-	if not malgs:
-		print('WARNING, there are no any algortihms execution results to be aggregated.', file=sys.stderr)
+			iapp += 1
+	# Check number of the apps to be outputted
+	if not mapps:
+		print('WARNING, there are no any apps execution results to be aggregated.', file=sys.stderr)
 		return
 	# Output results
 	for imsr, measure in enumerate(mnames):
@@ -143,28 +143,28 @@ def aggexec(algs):
 				# The header is unified for multiple outputs only for the outresx
 				if not os.fstat(outresx.fileno()).st_size:
 					# ExecTime(sec), ExecTime_avg(sec), ExecTime_min	ExecTime_max
-					outresx.write('# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n')
+					outresx.write('# <dataset>\n#\t<app1_outp>\n#\t<app2_outp>\n#\t...\n')
 				# Output timestamp
 				# Note: print() unlike .write() outputs also ending '\n'
 				print(TIMESTAMP_START_HEADER, file=outres)
 				print(TIMESTAMP_START_HEADER, file=outresx)
-				# Output header, which might differ for distinct runs by number of algs
-				outres.write('# <network>')
-				for alg in malgs:
-					outres.write('\t{}'.format(alg))
+				# Output header, which might differ for distinct runs by number of apps
+				outres.write('# <dataset>')
+				for app in mapps:
+					outres.write('\t{}'.format(app))
 				outres.write('\n')
-				# Output results for each network
-				for netname, netstats in viewitems(measures[imsr]):
-					outres.write(netname)
-					outresx.write(netname)
-					for ialg, stat in enumerate(netstats):
+				# Output results for each dataset
+				for dname, dstats in viewitems(measures[imsr]):
+					outres.write(dname)
+					outresx.write(dname)
+					for iapp, stat in enumerate(dstats):
 						if not stat.fixed:
 							stat.fix()
 						# Output sum for time, but avg for mem
 						val = stat.sum if imsr < len(mnames) - 1 else stat.avg
 						outres.write('\t{:.3f}'.format(val))
 						outresx.write('\n\t{}>\ttotal: {:.3f}, per_item: {:.6f} ({:.6f} .. {:.6f})'
-							.format(malgs[ialg], val, stat.avg, stat.min, stat.max))
+							.format(mapps[iapp], val, stat.avg, stat.min, stat.max))
 					outres.write('\n')
 					outresx.write('\n')
 		except IOError as err:

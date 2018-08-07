@@ -1281,19 +1281,23 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 
 
 def clnames(net, odir, alg, pathid=''):
-	"""Clustering name by the network name
+	"""Clustering names by the input network name
 
 	net: str  - input network name
+	odir: bool - whether the resulting clusterings are outputted to the dedicated dir named by the instance name,
+		which is typically used for shuffles with the non-flat structure
 	alg: str  - algorithm name
 	pathid: str  - network path id
 
-	return  cfnames: list(str)  - clustering file names
+	return
+		cfnames: list(str)  - clustering file names
+		mrclfname: str or Null  - multi-level (multi-resolution) clustering file name
 	"""
 	clpath = os.path.splitext(os.path.split(net)[1])[0]  # Part of the resulting path suffix
-	# Consider the aggregated levels into a single file (required at least for DAOC)
+	# Consider the multi-level clustering in a single file (required at least for DAOC)
 	# having the same name as the directory being aggregated
 	cbdir = ''.join((RESDIR, alg, '/', CLSDIR))
-	aggcl = ''.join((cbdir, clpath, '/', clpath, EXTCLNODES))
+	mrcl = ''.join((cbdir, clpath, '/', clpath, EXTCLNODES))
 	# Take base network name (without the shuffle id)
 	if odir:
 		nameparts = parseName(clpath, True)
@@ -1302,11 +1306,32 @@ def clnames(net, odir, alg, pathid=''):
 	if pathid:
 		clpath = SEPPATHID.join((clpath, pathid))
 	# Reselting clustering file names
-	cfnames = [clp for clp in glob.iglob('/'.join((clpath, '*')))]
-	# Aggregated levels into the single clustering
-	if os.path.isfile(aggcl):
-		cfnames.append(aggcl)
-	return cfnames
+	return ([clp for clp in glob.iglob('/'.join((clpath, '*'))) if os.path.isfile(clp)],
+		# Aggregated levels into the single clustering
+		None if not os.path.isfile(mrcl) else mrcl)
+
+
+def gtname(net, idir):
+	"""Ground-truth clustering name by the input network name
+
+	net: str  - input network name
+	idir: bool - whether the input network is given from the deducated directory of shuffles or
+		a flat structure is used where all networks are located in the same dir
+
+	return gfname: str  - ground-truth clustering file name
+	"""
+	if not idir:
+		bpath = os.path.splitext(net)[0]
+		gfname = bpath + EXTCLNODES
+		if os.path.isfile(gfname):
+			return gfname
+		print('WARNING, gtname() idir parameter does not correspond to the actual input structure.'
+			' Checking the ground-truth availability in the upper dir.', file=sys.stderr)
+	gfname = os.path.split(net)[0] + EXTCLNODES
+	if not os.path.isfile(gfname):
+		raise RuntimeError('Invalid structure of the input, the ground-truth clustering is not found for ' + net)
+	return gfname
+
 
 
 def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exectime, timeout  #pylint: disable=W0613
@@ -1384,22 +1409,28 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					"""
 					jobsnum = 0
 					netext = os.path.splitext(net)[1].lower()
+					gfname = gtname(net, netshf)  # GRound-truth file name by the network file name
+					npars = NetParams(asymnet(netext, asym), pathid)  # Input network parameters
 					# Apply all quality measures having the same affinity for all the algorithms on all networks,
 					# which benefits from the networks and clustering caching
 					for alg in algorithms:
 						for i, qm, eq in enumerate(cqmes):
 							try:
 								if eq in QMSINTRIN:  # Whether the input path is a network or a clustering
-									ifnames = [net]
-									netparams = NetParams(asymnet(netext, asym), pathid)
+									ifnm = net
+									netparams = npars
 								else:
-									ifnames = clnames(net, netshf, alg=alg, pathid=pathid)
+									# Get ground-truth clusering file name by the input network file name
+									ifnm = gfname
 									netparams = None
+								cfnames, mcfname = clnames(net, netshf, alg=alg, pathid=pathid)
 								runs = QMSRUNS.get(eq, 1)  # The number of quality measure runs (subsequent evaluations)
-								for ifnm in ifnames:
-									for irun in range(runs):
-										jobsnum += eq(_execpool, qm[1:], qualsaver, ifnm, timeout=timeout
-											, netparams=netparams, irun=irun, task=None if not tasks else tasks[i], seed=seed)
+								for inpcls, inpmres in ((cfnames, False), ([] if mcfname is None else [mcfname], True)):
+									for fcl in inpcls:
+										for irun in range(runs):
+											jobsnum += eq(_execpool, qm[1:], qualsaver, cfname=fcl, inpfname=ifnm
+												, timeout=timeout, cmres=inpmres, netparams=netparams, irun=irun
+												, task=None if not tasks else tasks[i], seed=seed)
 							except Exception as err:  #pylint: disable=W0703
 								errexectime = time.perf_counter() - exectime
 								print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'

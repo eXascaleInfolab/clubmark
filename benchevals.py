@@ -427,14 +427,17 @@ class NetParams(object):
 
 
 # Note: default AffinityMask is 1 (logical CPUs, i.e. hardware threads)
-def execXmeasures(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
+def execXmeasures(execpool, args, qualsaver, cfname, inpfname, timeout
+, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""Quality measure executor
 
 	execpool: ExecPool  - execution pool
 	args: list(str)  - quality measures arguments
 	qualsaver: QualitySaver  - quality results saver (persister)
-	inpfname: str  - input dataset file name (ground-truth / input network for the in/extrinsic quality measure)
+	cfname: str  - filename of the clustering to be evaluated
+	inpfname: str  - input dataset file name (ground-truth / input network for the ex/in-trinsic quality measure)
 	timeout: uint  - execution timeout in seconds
+	cmres: bool  - whether the cfname is a multi-resolution (multi-level) clusering
 	netparams: NetParams  - network parameters, actual only if inpfname is the input network (for the intrinsic qmeasure)
 	irun: uint8  - run id (iteration)
 	workdir: str  - working directory of the quality measure (qmeasure location)
@@ -443,7 +446,8 @@ def execXmeasures(execpool, args, qualsaver, inpfname, timeout, netparams=None, 
 
 	return jobsnum: uint  - the number of scheduled jobs
 	"""
-	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(inpfname, str) and timeout >= 0 and (
+	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(cfname, str
+		) and isinstance(inpfname, str) and timeout >= 0 and (
 		netparams is None or isinstance(netparams, NetParams)) and irun >= 0 and (
 		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tasym: {},\n\tqualsaver: {},\n\tinpfname: {}'
@@ -455,14 +459,17 @@ def execXmeasures(execpool, args, qualsaver, inpfname, timeout, netparams=None, 
 
 
 @metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS, first=False), multirun=3)  # Note: multirun requires irun
-def execGnmi(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
+def execGnmi(execpool, args, qualsaver, cfname, inpfname, timeout
+, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""Quality measure executor
 
 	execpool: ExecPool  - execution pool
 	args: list(str)  - quality measures arguments
 	qualsaver: QualitySaver  - quality results saver (persister)
-	inpfname: str  - input dataset file name (ground-truth / input network for the in/extrinsic quality measure)
+	cfname: str  - filename of the clustering to be evaluated
+	inpfname: str  - input dataset file name (ground-truth / input network for the ex/in-trinsic quality measure)
 	timeout: uint  - execution timeout in seconds
+	cmres: bool  - whether the cfname is a multi-resolution (multi-level) clusering
 	netparams: NetParams  - network parameters, actual only if inpfname is the input network (for the intrinsic qmeasure)
 	irun: uint8  - run id (iteration)
 	workdir: str  - working directory of the quality measure (qmeasure location)
@@ -474,14 +481,17 @@ def execGnmi(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=
 	pass
 
 
-def execOnmi(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
+def execOnmi(execpool, args, qualsaver, cfname, inpfname, timeout
+, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""Quality measure executor
 
 	execpool: ExecPool  - execution pool
 	args: list(str)  - quality measures arguments
 	qualsaver: QualitySaver  - quality results saver (persister)
-	inpfname: str  - input dataset file name (ground-truth / input network for the in/extrinsic quality measure)
+	cfname: str  - filename of the clustering to be evaluated
+	inpfname: str  - input dataset file name (ground-truth / input network for the ex/in-trinsic quality measure)
 	timeout: uint  - execution timeout in seconds
+	cmres: bool  - whether the cfname is a multi-resolution (multi-level) clusering
 	netparams: NetParams  - network parameters, actual only if inpfname is the input network (for the intrinsic qmeasure)
 	irun: uint8  - run id (iteration)
 	workdir: str  - working directory of the quality measure (qmeasure location)
@@ -494,14 +504,17 @@ def execOnmi(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=
 
 
 @metainfo(intrinsic=True)  # Note: intrinsic causes interpretation of ifname as inpnet and reuqires netparams
-def execImeasures(execpool, args, qualsaver, inpfname, timeout, netparams=None, irun=0, workdir=ALGSDIR+'daoc/', task=None, seed=None):
+def execImeasures(execpool, args, qualsaver, cfname, inpfname, timeout
+, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""Quality measure executor
 
 	execpool: ExecPool  - execution pool
 	args: list(str)  - quality measures arguments
 	qualsaver: QualitySaver  - quality results saver (persister)
-	inpfname: str  - input dataset file name (ground-truth / input network for the in/extrinsic quality measure)
+	cfname: str  - filename of the clustering to be evaluated
+	inpfname: str  - input dataset file name (ground-truth / input network for the ex/in-trinsic quality measure)
 	timeout: uint  - execution timeout in seconds
+	cmres: bool  - whether the cfname is a multi-resolution (multi-level) clusering
 	netparams: NetParams  - network parameters, actual only if inpfname is the input network (for the intrinsic qmeasure)
 	irun: uint8  - run id (iteration)
 	workdir: str  - working directory of the quality measure (qmeasure location)

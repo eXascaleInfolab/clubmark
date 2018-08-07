@@ -1447,7 +1447,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 											# task = Task(SEPSUBTASK.join((qm[0] if not tasks else tasks[i].name
 											# 	# Append irun to the task suffix
 											# 	, tasksuf if runs == 1 else 'r'.join((tasksuf, str(irun))))), task=task)
-											eq(_execpool, qm[1:], qualsaver, cfname=fcl, inpfname=ifnm
+											eq(_execpool, qm[1:], qualsaver.queue, cfname=fcl, inpfname=ifnm
 												, timeout=timeout, cmres=inpmres, netparams=netparams, irun=irun
 												, task=None if not tasks else tasks[i], seed=seed)
 											jobsnum += 1

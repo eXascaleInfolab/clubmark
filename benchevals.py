@@ -23,6 +23,11 @@ import time
 from subprocess import PIPE
 # Queue is required to asynchronously save evaluated quality measures to the persistent storage
 from multiprocessing import cpu_count, Process, Queue
+try:
+	import queue	# queue in Python3
+except ImportError:  # Queue in Python2
+	import Queue as queue
+
 
 import h5py  # HDF5 storage
 import numpy as np  # Required for the HDF5 operations
@@ -170,34 +175,93 @@ class QualityEntry(object):
 			', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__) if name != 'measures'])))
 
 
+# class DataPool(object):
+
+# 	def __init__(self, queue):
+# 		self._queue = queue
+# 		self._active = Value(ctypes.c_bool, True)
+
+
+# 	def save(self, qualentry, timeout=None):  # appname, appargs
+# 		"""Save evaluated quality measures to the persistent store
+
+# 		qualentry  - evaluated quality measures by the specified app on the
+# 			specified dataset to be saved
+# 		timeout  - blocking timeout if the queue is full, None or >= 0 sec;
+# 			None - wait forewer until the queue will have free slots
+# 		"""
+# 		assert isinstance(qualentry, QualityEntry), 'Unexpected type of the data'
+# 		if not self._active.value:
+# 			print('WARNING, the persistency layer is shutting down discarding'
+# 				' the saving for ({}).'.format(str(qualentry)), file=sys.stderr)
+# 			return
+# 		try:
+# 			self._queue.put(qualentry, timeout=timeout)  # Note: evaluators should not be delayed
+# 		except Exception as err:
+# 			print('WARNING, the quality entry ({}) saving is cancelled: {}'.format(str(qualentry), err))
+# 			# Rerase the exception if interruption is not by the timeout
+# 			if not (isinstance(err, queue.Full) or isinstance(err, AssertionError)):
+# 				raise
+
+
+# 	def deactivate(self):
+# 		self._active.value = False
+
+
+def saveQuality(qsqueue, qentry):
+	"""Save quality entry int the Quality Saver queue
+
+	Args:
+		qsqueue: Queue  - quality saver queue
+		qentry: QualityEntry  - quality entry to be saved
+	"""
+	assert isinstance(qsqueue, Queue) and isinstance(qentry, QualityEntry), 'Unexpected type of the arguments'
+	try:
+		qsqueue.put_nowait(qentry)  # Note: evaluators should not be delayed
+	except Exception as err:
+		print('WARNING, the quality entry ({}) saving is cancelled: {}'.format(str(qentry), err, file=sys.stderr))
+		# Rerase the exception if interruption is not by the full filling
+		# Note: IOError: Broken pipe is raised for the closed queue
+		if not isinstance(err, queue.Full):
+			raise
+
+
 class QualitySaver(object):
 	# Max number of the buffered items in the queue that have not been processed
 	# before blocking the caller on appending more items
 	# Should not be too much to save them into the persistent store on the
 	# program termination or any external interruptions
 	QUEUE_SIZEMAX = max(128, cpu_count() * 2)  # At least 128 or twice the number of the logical CPUs in the system
+	# LATENCY = 1  # Latency in seconds
 
-	# """Quality evaluations serializer to the persistent sotrage"""
-	# @staticmethod
-	# def _datasaver(qualsaver):
-	# 	"""Worker process function to save data to the persistent storage
-	#
-	# 	qualsaver  - quality saver wrapper containing the storage and queue
-	# 		of the evaluating measures
-	# 	"""
-	# 	while qualsaver._active or not qualsaver._dpool.empty():
-	# 		# TODO: fetch QualityEntry item, not just Measures
-	# 		qms = qualsaver._dpool.get()  # Measures to be stored
-	# 		assert isinstance(qms, Measures), 'Unexpected type of the measures'
-	# 		for qname, qval in viewitems(qms.__dict__):
-	# 			# Skip undefined quality measures nad store remained {qname: qval}
-	# 			if qval is None:
-	# 				continue
-	# 			# TODO: save data to HDF5
-	# 			# pscan01 = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
+	"""Quality evaluations serializer to the persistent sotrage"""
+	@staticmethod
+	def __datasaver(qualsaver):
+		"""Worker process function to save data to the persistent storage
+	
+		qualsaver  - quality saver wrapper containing the storage and queue
+			of the evaluating measures
+		"""
+		while qualsaver._active or not qualsaver.queue.empty():
+			# TODO: fetch QualityEntry item, not just Measures
+			try:
+				# qms = qualsaver.queue.get(True, LATENCY)  # Measures to be stored
+				qms = qualsaver.queue.get()  # Measures to be stored
+				assert isinstance(qms, QualityEntry), 'Unexpected type of the quality entry: ' + type(qms).__name__
+			# for qname, qval in viewitems(qms.__dict__):
+			# 	# Skip undefined quality measures nad store remained {qname: qval}
+			# 	if qval is None:
+			# 		continue
+			# 	# TODO: save data to HDF5
+			# 	# pscan01 = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
+			except Exception as err:
+				# Note: IOError: Broken pipe is raised for the closed queue
+				if not isinstance(err, queue.Empty):
+					raise
+				break
+				
 
-
-	def __init__(self, seed, update=False):  # algs, qms, nets=None,
+	def __init__(self, seed, update=False, timeout=None):  # algs, qms, nets=None,
 		"""Creating or open HDF5 storage and prepare for the quality measures evaluations
 
 		Check whether the storage exists, copy/move old storage to the backup and
@@ -206,8 +270,11 @@ class QualitySaver(object):
 		Arguments:
 			seed: uint64  - benchmarking seed, natural number
 			update: bool  - update existing storage creating if not exists, or create a new one backing up the existent
+			timeout: float  - global operational timeout in seconds, None means no timeout
 
 		Members:
+			_persister: Process  - persister worker process
+			queue: Queue  - multiprocess queue whose items are saved (persisted)
 			storage: h5py.File  - HDF5 storage
 			mrescons: list(str)  - meta data of resource consumption
 			irescons: dict(resname: str, resindex: uint)  - back mapping of the resource consumption metadata
@@ -223,8 +290,11 @@ class QualitySaver(object):
 		# assert (isinstance(algs[0], str) and isinstance(qms[0], str) and (nets is None or isinstance(nets[0], str))
 		# 	and isinstance(seed, int)), ('Invalid data types, algs: {}, qms: {}, nets: {}, seed: {}'
 		# 	.format(type(algs).__name__, type(qms).__name__, type(nets).__name__, type(seed).__name__, ))
-		assert isinstance(seed, int), 'Invalid seed type: {}'.format(type(seed).__name__)
+		assert isinstance(seed, int) and (timeout is None or timeout >= 0), 'Invalid seed type: {}'.format(type(seed).__name__)
 		# Open or init the HDF5 storage
+		self.timeout = timeout
+		self._persister = None
+		self.queue = None
 		self.storage = None  # Persistent storage object (file)
 		timefmt = '%y%m%d-%H%M%S'  # Start time of the benchmarking, time format: YYMMDD_HHMMSS
 		timestamp = time.strftime(timefmt, TIMESTAMP_START)  # Timestamp string
@@ -306,6 +376,8 @@ class QualitySaver(object):
 
 		self._active = True  # The storage is operational
 
+		self.queue = None  # Multiprocess queue is created on the enter
+
 		# self.algs = {alg: self.storage.require_group('algs/' + alg) for alg in algs}  # Datasets for each algorithm holding params
 		# 
 		# rcrows0 = 64
@@ -323,13 +395,13 @@ class QualitySaver(object):
 	def __del__(self):
 		"""Destructor"""
 		self._active = False
-		if not self._dpool.empty():
+		if not self.queue.empty():
 			print('WARNING, terminating the persistency layer with {} queued data entries, call stack: {}'
-				.format(self._dpool.qsize(), traceback.format_exc(5)), file=sys.stderr)
+				.format(self.queue.qsize(), traceback.format_exc(5)), file=sys.stderr)
 		try:
-			self._dpool.close()  # No more data can be put in the queue
-			self._dpool.join_thread()
-			self._persister.join()
+			self.queue.close()  # No more data can be put in the queue
+			self._persister.join(self.timeout)
+			self.queue.join_thread()
 		finally:
 			if self.storage is not None:
 				self.storage.close()
@@ -338,8 +410,8 @@ class QualitySaver(object):
 	def __enter__(self):
 		"""Context entrence"""
 		self._active = True
-		self._dpool = Queue(self.QUEUE_SIZEMAX)  # Qulity measures persistance queue, data pool
-		self._persister = Process(target=self._datasaver, args=(self,))
+		self.queue = Queue(self.QUEUE_SIZEMAX)  # Qulity measures persistance queue, data pool
+		self._persister = Process(target=self.__datasaver, args=(self,))
 		self._persister.start()
 		return self
 
@@ -355,34 +427,12 @@ class QualitySaver(object):
 		#self.storage.close()
 		self._active = False
 		try:
-			self._dpool.close()  # No more data can be put in the queue
-			self._dpool.join_thread()
-			self._persister.join()
+			self.queue.close()  # No more data can be put in the queue
+			self.queue.join_thread()
+			self._persister.join(self.timeout)
 		finally:
 			self.storage.flush()  # Allow to reuse the instance in several context managers
 		# Note: the exception (if any) is propagated if True is not returned here
-
-
-	def save(self, qualentry, timeout=None):  # appname, appargs
-		"""Save evaluated quality measures to the persistent store
-
-		qualentry  - evaluated quality measures by the specified app on the
-			specified dataset to be saved
-		timeout  - blocking timeout if the queue is full, None or >= 0 sec;
-			None - wait forewer until the queue will have free slots
-		"""
-		assert isinstance(qualentry, QualityEntry), 'Unexpected type of the data'
-		if not self._active:
-			print('WARNING, the persistency layer is shutting down discarding'
-				' the saving for ({}).'.format(str(qualentry)), file=sys.stderr)
-			return
-		try:
-			self._dpool.put(qualentry, timeout=timeout)  # Note: evaluators should not be delayed
-		except Exception as err:
-			print('WARNING, the quality entry ({}) saving is cancelled: {}'.format(str(qualentry), err))
-			# Rerase the exception if interruption is not by the timeout
-			if not (isinstance(err, Queue.Full) or isinstance(err, AssertionError)):
-				raise
 
 
 def metainfo(afnmask=AffinityMask(1), intrinsic=False, multirun=1):
@@ -427,13 +477,13 @@ class NetParams(object):
 
 
 # Note: default AffinityMask is 1 (logical CPUs, i.e. hardware threads)
-def execXmeasures(execpool, args, qualsaver, cfname, inpfname, timeout
+def execXmeasures(execpool, args, qsqueue, cfname, inpfname, timeout
 , cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""Quality measure executor
 
 	execpool: ExecPool  - execution pool
 	args: list(str)  - quality measures arguments
-	qualsaver: QualitySaver  - quality results saver (persister)
+	qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
 	cfname: str  - filename of the clustering to be evaluated
 	inpfname: str  - input dataset file name (ground-truth / input network for the ex/in-trinsic quality measure)
 	timeout: uint  - execution timeout in seconds
@@ -445,14 +495,14 @@ def execXmeasures(execpool, args, qualsaver, cfname, inpfname, timeout
 	seed: uint  - seed for the stochastic qmeasures
 	"""
 	#return jobsnum: uint  - the number of scheduled jobs
-	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(cfname, str
+	assert execpool and isinstance(qsqueue, Queue) and isinstance(cfname, str
 		) and isinstance(inpfname, str) and timeout >= 0 and (
 		netparams is None or isinstance(netparams, NetParams)) and irun >= 0 and (
 		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
-		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tqualsaver: {}'
+		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tqsqueue: {}'
 		',\n\tcfname: {},\n\tinpfname: {},\n\ttimeout: {},\n\tcmres: {},\n\tnetparams: {}'
 		',\n\tirun: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
-		.format(execpool, args, qualsaver, cfname, inpfname, timeout, cmres, netparams, irun, workdir, task, seed))
+		.format(execpool, args, qsqueue, cfname, inpfname, timeout, cmres, netparams, irun, workdir, task, seed))
 	pass
 
 

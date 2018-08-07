@@ -42,13 +42,9 @@ import sys
 import inspect  # To automatically fetch algorithm name
 import traceback  # Stacktrace
 import subprocess
-# import types  # Member methods definition for the JobTracer
-# import re
 
-# from multiprocessing import Lock  # For the JobTracer
 from numbers import Number  # To verify that a variable is a number (int or float)
 from sys import executable as PYEXEC  #pylint: disable=C0412;  # Full path to the current Python interpreter
-# from functools import wraps  # Decorating tools for the JobTracer
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty \
 	, tobackup, escapePathWildcards, UTILDIR, ALGSDIR, ORIGDIR, TIMESTAMP_START_HEADER \
 	, SEPPARS, SEPSUBTASK, SEPPATHID

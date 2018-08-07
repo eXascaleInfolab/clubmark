@@ -852,8 +852,10 @@ def basenetTasks(netname, pathidstr, basenets, rtasks):
 	basenets: dict(basenet: str, nettasks: list(Task))  - tasks for the basenet
 	rtasks: list(Task)  - root tasks for the running apps on all networks
 
-	return  nettasks: list(Task)  - tasks for the basenet of the specified netname
+	return  nettasks: list(Task) or None  - tasks for the basenet of the specified netname
 	"""
+	if not (rtasks and basenets):
+		return None
 	iename = netname.find(SEPINST)
 	if iename == -1:
 		basenet = os.path.splitext(netname)[0]  # Remove network extension if any
@@ -862,7 +864,7 @@ def basenetTasks(netname, pathidstr, basenets, rtasks):
 	if pathidstr:
 		basenet = SEPPATHID.join((basenet, pathidstr))
 	nettasks = basenets.get(basenet)
-	if not nettasks:
+	if not nettasks and rtasks:
 		nettasks = [Task(SEPSUBTASK.join((t.name, basenet)), task=t) for t in rtasks]
 		basenets[basenet] = nettasks
 	return nettasks
@@ -1407,10 +1409,24 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					return
 						jobsnum  - the number of scheduled jobs, typically 1
 					"""
+					# Supplied tasks: qmeasure / basenet for each net
 					jobsnum = 0
+					## Task suffix is the network name
+					# tasksuf, netext = os.path.splitext(os.path.split(net)[1])
+					# netext = netext.lower()
 					netext = os.path.splitext(net)[1].lower()
-					gfname = gtname(net, netshf)  # GRound-truth file name by the network file name
+					gfname = gtname(net, netshf)  # Ground-truth file name by the network file name
 					npars = NetParams(asymnet(netext, asym), pathid)  # Input network parameters
+					# # Form Measure [/ Basebneet] / Network tasks
+					# assert not tasks or len(tasks) == len(cqmes), 'Tasks are not synced with the quality measures'
+					# mntasks = []
+					# for i, qm, eq in enumerate(cqmes):
+					# 	runs = QMSRUNS.get(eq, 1)  # The number of quality measure runs (subsequent evaluations)
+					# 	mntasks.append(Task(SEPSUBTASK.join((qm[0] if not tasks else tasks[i].name
+					# 			# Append irun to the task suffix
+					# 			, tasksuf if runs == 1 else 'r'.join((tasksuf, str(irun)))))
+					# 		, task=None if not tasks else tasks[j]))
+					#
 					# Apply all quality measures having the same affinity for all the algorithms on all networks,
 					# which benefits from the networks and clustering caching
 					for alg in algorithms:
@@ -1428,9 +1444,13 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								for inpcls, inpmres in ((cfnames, False), ([] if mcfname is None else [mcfname], True)):
 									for fcl in inpcls:
 										for irun in range(runs):
-											jobsnum += eq(_execpool, qm[1:], qualsaver, cfname=fcl, inpfname=ifnm
+											# task = Task(SEPSUBTASK.join((qm[0] if not tasks else tasks[i].name
+											# 	# Append irun to the task suffix
+											# 	, tasksuf if runs == 1 else 'r'.join((tasksuf, str(irun))))), task=task)
+											eq(_execpool, qm[1:], qualsaver, cfname=fcl, inpfname=ifnm
 												, timeout=timeout, cmres=inpmres, netparams=netparams, irun=irun
 												, task=None if not tasks else tasks[i], seed=seed)
+											jobsnum += 1
 							except Exception as err:  #pylint: disable=W0703
 								errexectime = time.perf_counter() - exectime
 								print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
@@ -1458,6 +1478,9 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 				ctasks = [Task(qme[0][0]) for qme in cqmes]  # Current tasks
 				# tasks.extend(ctasks)
 
+				# Note: subtasks for each base networks are created automatically
+				## TODO: aggregate results for each quality measure with the fixed args on each base network
+				# onfinish=bestlev, params={...}
 				processNetworks(datas, runner, xargs=xargs, dflextfn=dflnetext, tasks=ctasks)
 
 				if evaltimeout <= 0:

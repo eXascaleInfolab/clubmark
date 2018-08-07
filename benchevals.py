@@ -443,19 +443,17 @@ def execXmeasures(execpool, args, qualsaver, cfname, inpfname, timeout
 	workdir: str  - working directory of the quality measure (qmeasure location)
 	task: Task  - owner (super) task
 	seed: uint  - seed for the stochastic qmeasures
-
-	return jobsnum: uint  - the number of scheduled jobs
 	"""
+	#return jobsnum: uint  - the number of scheduled jobs
 	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(cfname, str
 		) and isinstance(inpfname, str) and timeout >= 0 and (
 		netparams is None or isinstance(netparams, NetParams)) and irun >= 0 and (
 		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
-		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tasym: {},\n\tqualsaver: {},\n\tinpfname: {}'
-		',\n\ttimeout: {},\n\tnetparams: {},\n\tirun: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
-		.format(execpool, args, qualsaver, inpfname, timeout, netparams, irun, workdir, task, seed))
-
+		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tqualsaver: {}'
+		',\n\tcfname: {},\n\tinpfname: {},\n\ttimeout: {},\n\tcmres: {},\n\tnetparams: {}'
+		',\n\tirun: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
+		.format(execpool, args, qualsaver, cfname, inpfname, timeout, cmres, netparams, irun, workdir, task, seed))
 	pass
-	return 1
 
 
 @metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS, first=False), multirun=3)  # Note: multirun requires irun
@@ -475,10 +473,15 @@ def execGnmi(execpool, args, qualsaver, cfname, inpfname, timeout
 	workdir: str  - working directory of the quality measure (qmeasure location)
 	task: Task  - owner (super) task
 	seed: uint  - seed for the stochastic qmeasures
-
-	return jobsnum: uint  - the number of scheduled jobs
 	"""
-	pass
+	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(cfname, str
+		) and isinstance(inpfname, str) and timeout >= 0 and (
+		netparams is None or isinstance(netparams, NetParams)) and irun >= 0 and (
+		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
+		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tqualsaver: {}'
+		',\n\tcfname: {},\n\tinpfname: {},\n\ttimeout: {},\n\tcmres: {},\n\tnetparams: {}'
+		',\n\tirun: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
+		.format(execpool, args, qualsaver, cfname, inpfname, timeout, cmres, netparams, irun, workdir, task, seed))
 
 
 def execOnmi(execpool, args, qualsaver, cfname, inpfname, timeout
@@ -497,10 +500,15 @@ def execOnmi(execpool, args, qualsaver, cfname, inpfname, timeout
 	workdir: str  - working directory of the quality measure (qmeasure location)
 	task: Task  - owner (super) task
 	seed: uint  - seed for the stochastic qmeasures
-
-	return jobsnum: uint  - the number of scheduled jobs
 	"""
-	pass
+	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(cfname, str
+		) and isinstance(inpfname, str) and timeout >= 0 and (
+		netparams is None or isinstance(netparams, NetParams)) and irun >= 0 and (
+		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
+		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tqualsaver: {}'
+		',\n\tcfname: {},\n\tinpfname: {},\n\ttimeout: {},\n\tcmres: {},\n\tnetparams: {}'
+		',\n\tirun: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
+		.format(execpool, args, qualsaver, cfname, inpfname, timeout, cmres, netparams, irun, workdir, task, seed))
 
 
 @metainfo(intrinsic=True)  # Note: intrinsic causes interpretation of ifname as inpnet and reuqires netparams
@@ -520,10 +528,15 @@ def execImeasures(execpool, args, qualsaver, cfname, inpfname, timeout
 	workdir: str  - working directory of the quality measure (qmeasure location)
 	task: Task  - owner (super) task
 	seed: uint  - seed for the stochastic qmeasures
-
-	return jobsnum: uint  - the number of scheduled jobs
 	"""
-	pass
+	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(cfname, str
+		) and isinstance(inpfname, str) and timeout >= 0 and (
+		netparams is None or isinstance(netparams, NetParams)) and irun >= 0 and (
+		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
+		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tqualsaver: {}'
+		',\n\tcfname: {},\n\tinpfname: {},\n\ttimeout: {},\n\tcmres: {},\n\tnetparams: {}'
+		',\n\tirun: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
+		.format(execpool, args, qualsaver, cfname, inpfname, timeout, cmres, netparams, irun, workdir, task, seed))
 
 
 class ShufflesAgg(object):

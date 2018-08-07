@@ -175,39 +175,6 @@ class QualityEntry(object):
 			', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__) if name != 'measures'])))
 
 
-# class DataPool(object):
-
-# 	def __init__(self, queue):
-# 		self._queue = queue
-# 		self._active = Value(ctypes.c_bool, True)
-
-
-# 	def save(self, qualentry, timeout=None):  # appname, appargs
-# 		"""Save evaluated quality measures to the persistent store
-
-# 		qualentry  - evaluated quality measures by the specified app on the
-# 			specified dataset to be saved
-# 		timeout  - blocking timeout if the queue is full, None or >= 0 sec;
-# 			None - wait forewer until the queue will have free slots
-# 		"""
-# 		assert isinstance(qualentry, QualityEntry), 'Unexpected type of the data'
-# 		if not self._active.value:
-# 			print('WARNING, the persistency layer is shutting down discarding'
-# 				' the saving for ({}).'.format(str(qualentry)), file=sys.stderr)
-# 			return
-# 		try:
-# 			self._queue.put(qualentry, timeout=timeout)  # Note: evaluators should not be delayed
-# 		except Exception as err:
-# 			print('WARNING, the quality entry ({}) saving is cancelled: {}'.format(str(qualentry), err))
-# 			# Rerase the exception if interruption is not by the timeout
-# 			if not (isinstance(err, queue.Full) or isinstance(err, AssertionError)):
-# 				raise
-
-
-# 	def deactivate(self):
-# 		self._active.value = False
-
-
 def saveQuality(qsqueue, qentry):
 	"""Save quality entry int the Quality Saver queue
 
@@ -478,7 +445,7 @@ class NetParams(object):
 
 # Note: default AffinityMask is 1 (logical CPUs, i.e. hardware threads)
 def execXmeasures(execpool, args, qsqueue, cfname, inpfname, timeout
-, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
+, ilev=0, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""Quality measure executor
 
 	execpool: ExecPool  - execution pool
@@ -487,6 +454,7 @@ def execXmeasures(execpool, args, qsqueue, cfname, inpfname, timeout
 	cfname: str  - filename of the clustering to be evaluated
 	inpfname: str  - input dataset file name (ground-truth / input network for the ex/in-trinsic quality measure)
 	timeout: uint  - execution timeout in seconds
+	ilev: uint  - index of the clustering level
 	cmres: bool  - whether the cfname is a multi-resolution (multi-level) clusering
 	netparams: NetParams  - network parameters, actual only if inpfname is the input network (for the intrinsic qmeasure)
 	irun: uint8  - run id (iteration)
@@ -496,19 +464,29 @@ def execXmeasures(execpool, args, qsqueue, cfname, inpfname, timeout
 	"""
 	#return jobsnum: uint  - the number of scheduled jobs
 	assert execpool and isinstance(qsqueue, Queue) and isinstance(cfname, str
-		) and isinstance(inpfname, str) and timeout >= 0 and (
-		netparams is None or isinstance(netparams, NetParams)) and irun >= 0 and (
+		) and isinstance(inpfname, str) and timeout >= 0 and ilev >= 0 and isinstance(ilev, int
+		) and (netparams is None or isinstance(netparams, NetParams)) and irun >= 0 and (
 		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tqsqueue: {}'
 		',\n\tcfname: {},\n\tinpfname: {},\n\ttimeout: {},\n\tcmres: {},\n\tnetparams: {}'
 		',\n\tirun: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
 		.format(execpool, args, qsqueue, cfname, inpfname, timeout, cmres, netparams, irun, workdir, task, seed))
-	pass
+	# # ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
+	# args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
+	# 	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
+	# 	, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
+	# 	, '-lo', ''.join((relpath(taskpath), '/', taskname, EXTCLNODES)), netfile)
+	# execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
+	# 	#, stdout=os.devnull
+	# 	, ondone=limlevs, params={'taskpath': taskpath, 'fetchLevId': fetchLevIdCnl}
+	# 	, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))	
+	qentry = QualityEntry()
+	saveQuality(qsqueue, qentry)
 
 
 @metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS, first=False), multirun=3)  # Note: multirun requires irun
 def execGnmi(execpool, args, qualsaver, cfname, inpfname, timeout
-, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
+, ilev=0, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""Quality measure executor
 
 	execpool: ExecPool  - execution pool
@@ -535,7 +513,7 @@ def execGnmi(execpool, args, qualsaver, cfname, inpfname, timeout
 
 
 def execOnmi(execpool, args, qualsaver, cfname, inpfname, timeout
-, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
+, ilev=0, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""Quality measure executor
 
 	execpool: ExecPool  - execution pool
@@ -563,7 +541,7 @@ def execOnmi(execpool, args, qualsaver, cfname, inpfname, timeout
 
 @metainfo(intrinsic=True)  # Note: intrinsic causes interpretation of ifname as inpnet and reuqires netparams
 def execImeasures(execpool, args, qualsaver, cfname, inpfname, timeout
-, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
+, ilev=0, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""Quality measure executor
 
 	execpool: ExecPool  - execution pool

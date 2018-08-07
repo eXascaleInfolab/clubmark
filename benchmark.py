@@ -1440,16 +1440,20 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									ifnm = gfname
 									netparams = None
 								cfnames, mcfname = clnames(net, netshf, alg=alg, pathid=pathid)
+								# Sort the clustering file names to form thier clustering level ids in the same order
+								if len(cfnames) >= 2:
+									cfnames.sort()
 								runs = QMSRUNS.get(eq, 1)  # The number of quality measure runs (subsequent evaluations)
 								for inpcls, inpmres in ((cfnames, False), ([] if mcfname is None else [mcfname], True)):
-									for fcl in inpcls:
+									# ilev == ifc corresponds to the alphabetical ordering of the clustering levels file names
+									for ifc, fcl in enumerate(inpcls):
 										for irun in range(runs):
 											# task = Task(SEPSUBTASK.join((qm[0] if not tasks else tasks[i].name
 											# 	# Append irun to the task suffix
 											# 	, tasksuf if runs == 1 else 'r'.join((tasksuf, str(irun))))), task=task)
 											eq(_execpool, qm[1:], qualsaver.queue, cfname=fcl, inpfname=ifnm
-												, timeout=timeout, cmres=inpmres, netparams=netparams, irun=irun
-												, task=None if not tasks else tasks[i], seed=seed)
+												, timeout=timeout, ilev=ifc, cmres=inpmres, netparams=netparams
+												, irun=irun, task=None if not tasks else tasks[i], seed=seed)
 											jobsnum += 1
 							except Exception as err:  #pylint: disable=W0703
 								errexectime = time.perf_counter() - exectime

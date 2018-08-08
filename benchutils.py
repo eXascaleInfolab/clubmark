@@ -36,6 +36,7 @@ ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
 TIMESTAMP_START = time.gmtime()  # struct_time
 TIMESTAMP_START_STR = time.strftime('%Y-%m-%d %H:%M:%S', TIMESTAMP_START)
 TIMESTAMP_START_HEADER = ' '.join(('# ---', TIMESTAMP_START_STR, '-'*32))
+PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
 
 # Consider Python2
 if not hasattr(glob, 'escape'):
@@ -470,6 +471,17 @@ def envVarDefined(value, name=None, evar=None):
 		assert name, 'Environmental variable name must be specified if the value is not provided'
 		evar = os.environ.get(name, '')
 	return evar and re.search('^(.+:)?{}(:.*)?$'.format(re.escape(value)), evar) is not None
+
+
+def funcToAppName(funcname):
+	"""Fetch name of the execution application by the function name
+
+	funcname  - name of the executing function
+
+	returns  - name of the algorithm
+	"""
+	assert funcname.startswith(PREFEXEC), 'Executing appliation is expected instead of "{}"'.format(funcname)
+	return funcname[len(PREFEXEC):]  # .lower()
 
 
 def parseFloat(text):

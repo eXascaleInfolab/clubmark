@@ -45,7 +45,7 @@ import subprocess
 
 from numbers import Number  # To verify that a variable is a number (int or float)
 from sys import executable as PYEXEC  #pylint: disable=C0412;  # Full path to the current Python interpreter
-from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty \
+from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, funcToAppName \
 	, tobackup, escapePathWildcards, UTILDIR, ALGSDIR, ORIGDIR, TIMESTAMP_START_HEADER \
 	, SEPPARS, SEPSUBTASK, SEPPATHID
 from benchevals import SEPNAMEPART, RESDIR, CLSDIR, EXTEXECTIME, EXTAGGRES, EXTAGGRESEXT
@@ -60,7 +60,6 @@ assert _LEVSMAX >= 10, 'The number of levels limitation should be addded to GANX
 _EXTLOG = '.log'  # Extension for the logs
 _EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
 EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
-PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
 
 
 # reFirstDigits = re.compile(r'\d+')  # First digit regex
@@ -214,17 +213,6 @@ def preparePath(taskpath):  # , netshf=False
 #	# ATTENTION: for the correct execution algname must be always the same as func lower case name without the prefix "exec"
 #	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
 #	return 0
-
-
-def funcToAppName(funcname):
-	"""Fetch name of the execution application by the function name
-
-	funcname  - name of the executing function
-
-	returns  - name of the algorithm
-	"""
-	assert funcname.startswith(PREFEXEC), 'Executing appliation is expected instead of "{}"'.format(funcname)
-	return funcname[len(PREFEXEC):]  # .lower()
 
 
 def prepareResDir(appname, taskname, odir, pathid):

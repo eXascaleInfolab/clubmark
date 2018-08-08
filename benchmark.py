@@ -72,12 +72,14 @@ from math import sqrt
 from multiprocessing import cpu_count  # Returns the number of logical CPU units (hw treads) if defined
 
 import benchapps  # Required for the functions name mapping to/from the app names
-from benchapps import PYEXEC, aggexec, funcToAppName, PREFEXEC, EXTCLNODES  # , ALGSDIR
-from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsSec, secDhms, parseName \
- 	, SEPPARS, SEPINST, SEPSHF, SEPPATHID, SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
+from benchapps import PYEXEC, aggexec, EXTCLNODES  # , ALGSDIR
+from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsSec, \
+	secDhms, delPathSuffix, parseName, funcToAppName, PREFEXEC, SEPPARS, SEPINST, SEPSHF, SEPPATHID, \
+	SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
-from benchevals import aggEvaluations, RESDIR, CLSDIR, EXTEXECTIME, QMSRAFN, QMSINTRIN, QMSRUNS, QualitySaver, NetParams
+from benchevals import aggEvaluations, RESDIR, CLSDIR, EXTEXECTIME, QMSRAFN, QMSINTRIN, QMSRUNS, \
+	QualitySaver, NetParams, NetInfo
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
 from algorithms.utils.parser_nsl import asymnet, dflnetext
@@ -115,7 +117,7 @@ class PathOpts(object):
 	"""Paths parameters"""
 	__slots__ = ('path', 'flat', 'asym', 'shfnum')
 
-	def __init__(self, path, flat=False, asym=False, shfnum=0):
+	def __init__(self, path, flat=False, asym=False, shfnum=None):
 		"""Sets default values for the input parameters
 
 		path  - path (directory or file), a wildcard is allowed
@@ -125,7 +127,8 @@ class PathOpts(object):
 			only for the non-flat structure.
 		asym  - the network is asymmetric (specified by arcs rather than edges),
 			which is considered only for the non-standard file extensions (not .nsL)
-		shfnum  - the number of shuffles of each network instance to be produced, >= 0
+		shfnum  - the number of shuffles of each network instance to be produced, >= 0;
+			0 means do not produce any shuffles but process all existent
 		"""
 		# assert isinstance(path, str)
 		self.path = path
@@ -337,6 +340,8 @@ def parseParams(args):
 					popt.asym = True
 				elif arg[i] == _GENSEPSHF:
 					popt.shfnum = int(arg[i+1:pos])
+					if popt.shfnum < 0:
+						raise ValueError('Value is out of range:  shfnum: {} >= 0'.format(popt.shfnum))
 					break
 				else:
 					raise ValueError('Unexpected argument: ' + arg)
@@ -843,12 +848,12 @@ while True:
 		print('Networks ({}) shuffling completed. NOTE: random seed is not supported for the shuffling'.format(shufnets))
 
 
-def basenetTasks(netname, pathidstr, basenets, rtasks):
-	"""Fetch or make tasks for the specific base network name (with pathidstr
+def basenetTasks(netname, pathidsuf, basenets, rtasks):
+	"""Fetch or make tasks for the specific base network name (with pathidsuf
 	and whitout the instance and shuffle id)
 
 	netname: str  - network name, possibly includes instance but NOT shuffle id
-	pathidstr: str  - network path id in the string representation
+	pathidsuf: str  - network path id prepended with the path separator
 	basenets: dict(basenet: str, nettasks: list(Task))  - tasks for the basenet
 	rtasks: list(Task)  - root tasks for the running apps on all networks
 
@@ -856,13 +861,14 @@ def basenetTasks(netname, pathidstr, basenets, rtasks):
 	"""
 	if not (rtasks and basenets):
 		return None
+	assert not pathidsuf or pathidsuf.startswith(SEPPATHID), 'Ivalid pathidsuf: ' + pathidsuf
+
 	iename = netname.find(SEPINST)
 	if iename == -1:
 		basenet = os.path.splitext(netname)[0]  # Remove network extension if any
 	else:
 		basenet = netname[:iename]
-	if pathidstr:
-		basenet = SEPPATHID.join((basenet, pathidstr))
+	basenet += pathidsuf
 	nettasks = basenets.get(basenet)
 	if not nettasks and rtasks:
 		nettasks = [Task(SEPSUBTASK.join((t.name, basenet)), task=t) for t in rtasks]
@@ -870,7 +876,27 @@ def basenetTasks(netname, pathidstr, basenets, rtasks):
 	return nettasks
 
 
-def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
+def updateNetInfos(netinfs, net, pathidsuf='', shfnum=0):
+	"""Update networks info
+
+	netinfs: dict(str, NetInfo)  - network meta information for each base network to be formed if not None
+	net: str  - network file path
+	pathidsuf: str  - network path id prepended with the path separator
+	shfnum: uint  - the number of shuffles if specified excluding the origin
+	"""
+	assert not pathidsuf or pathidsuf.startswith(SEPPATHID), 'Ivalid pathidsuf: ' + pathidsuf
+	netnameps = parseName(os.path.splitext(os.path.split(net)[1])[0], True)
+	# Note: +1 to consider the origin
+	ntinf = netinfs.setdefault(netnameps[0] + pathidsuf, NetInfo(shfnum=shfnum+1))
+	# Evaluate the number of instances only if not specified explicitly
+	if netnameps[2]:
+		ntinf.insnum = max(ntinf.insnum, int(netnameps[2]) + 1)  # Note: +1 to form total number from id
+	# Evaluate the number of shuffles only if it is not specified explicitly (or specified as 0)
+	if not shfnum and netnameps[3]:
+		ntinf.shfnum = max(ntinf.shfnum, int(netnameps[3]) + 1)  # Note: +1 to form total number from id
+
+
+def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None, netinfs=None):
 	"""Process the specified path with the specified handler
 
 	popt: PathOpts  - processing path options (the path is directory of file, not a wildcard)
@@ -879,6 +905,7 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 	xargs: dict(str, val)  - extra arguments of the handler following after the processing network file
 	dflextfn: callable  - function(asymflag) for the default extension of the input files in the path
 	tasks: list(tasks)  - root tasks per each algorithm
+	netinfs: dict(str, NetInfo)  - network meta information for each base network to be formed if not None
 	"""
 	# assert tasks is None or isinstance(tasks[0], Task), ('Unexpected task format: '
 	# 	+ str(None) if not tasks else type(tasks[0]).__name__)
@@ -886,9 +913,21 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 	assert os.path.exists(popt.path), 'Target path should exist'
 	path = popt.path  # Assign path to a local variable to not corrupt the input data
 	dflext = dflextfn(popt.asym)  # dflnetext(popt.asym)  # Default network extension for files in dirs
+	pathidsuf = xargs['pathidsuf']
 	# Base networks with their tasks (netname with the pathid
 	# and without the instance and shuffle suffixes)
 	bnets = {}
+
+	def fetchNetInfo(path):
+		"""Fetch net info by the path
+
+		path: str  - network path
+
+		return netinf: NetInfo  - network meta information if available
+		"""
+		return None if netinfs is None else netinfs[
+			delPathSuffix(os.path.splitext(os.path.split(path)[1])[0], True) + pathidsuf]
+
 	if os.path.isdir(path):
 		# Traverse over the instances in the specified directory
 		# Use the same path separator on all OSs
@@ -898,6 +937,13 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 		# Note: the origin instance is mapped to the shuffles dir, so traverse only
 		# the directories with shuffles if exist
 		if not popt.flat:
+			# Only the instances should be considered here
+			if netinfs is not None:
+				for net in glob.iglob('*'.join((path, dflext))):
+					netname = os.path.split(net)[1]
+					if netname.find(SEPSHF) != -1:
+						continue
+					updateNetInfos(netinfs, netname, pathidsuf, popt.shfnum)
 			# Traverse over the networks instances
 			for net in glob.iglob('*'.join((path, dflext))):  # Allow wildcards
 				# Skip the shuffles if any to process only specified networks
@@ -906,28 +952,27 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 				if netname.find(SEPSHF) != -1:
 					continue
 				# Fetch base network name (whitout the instance and shuffle id)
-				nettasks = basenetTasks(netname, None if not xargs else xargs['pathidstr'], bnets, tasks)
-				# iename = netname.find(SEPINST)
-				# basenet = netname if iename == -1 else netname[:iename]
-				# if xargs and xargs['pathidstr']:
-				# 	basenet = SEPPATHID.join((basenet, xargs['pathidstr']))
-				# nettasks = bnets.get(basenet)
-				# if not nettasks:
-				# 	nettasks = [Task(SEPSUBTASK.join((t.name, basenet)), task=t) for t in tasks]
-				# 	bnets[basenet] = nettasks
-				# #if popt.shfnum:  # ATTENTNION: shfnum is not available for non-synthetic networks
+				nettasks = basenetTasks(netname, pathidsuf, bnets, tasks)
+				# #if popt.shfnum:  # ATTENTNION: shfnum may not be available for non-synthetic networks
 				# Process dedicated dir of shuffles for the specified network,
 				# the origin network itself is linked to the shuffles dir (inside it)
 				dirname, ext = os.path.splitext(net)
 				if os.path.isdir(dirname):
 					# Shuffles exist for this network and located in the subdir together with the copy of origin
+					# Update the number of shuffles if not specified, the netinfs entry is already creted by the caller
+					if netinfs and not popt.shfnum:
+						for desnet in glob.iglob('/*'.join((dirname, ext))):
+							updateNetInfos(netinfs, desnet, pathidsuf, popt.shfnum)
 					for desnet in glob.iglob('/*'.join((dirname, ext))):
 						handler(desnet, True, xargs, nettasks)  # True - shuffle is processed in the non-flat dir structure
 				else:
-					handler(net, False, xargs, tasks)  # Neither multiple instances nor shufles exist for this net
+					handler(net, False, xargs, tasks, netinf=fetchNetInfo(dirname))  # Shufles do not exist for this network instance
 		else:
-			# Both shuffles (if exist any) and network instances are located
-			# in the same dir, convert them
+			# Both shuffles (if exist any) and network instances are located in the same dir
+			# Form network meta information if required
+			if netinfs is not None:
+				for net in glob.iglob('*'.join((path, dflext))):
+					updateNetInfos(netinfs, net, pathidsuf, popt.shfnum)
 			for net in glob.iglob('*'.join((path, dflext))):
 				# Note: typically, shuffles and instances do not exist in the flat structure
 				# or their number is small
@@ -940,13 +985,12 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 				# iename = basenet.find(SEPSHF)
 				# if iename != -1:
 				# 	basenet = basenet[:iename]
-				# if xargs and xargs['pathidstr']:
-				# 	basenet = SEPPATHID.join((basenet, xargs['pathidstr']))
+				# basenet += pathidsuf
 				# nettasks = bnets.get(basenet)
 				# if not nettasks:
 				# 	nettasks = [Task(SEPSUBTASK.join((t.name, basenet)), task=t) for t in tasks]
 				# 	bnets[basenet] = nettasks
-				handler(net, False, xargs, tasks)
+				handler(net, False, xargs, tasks, netinf=fetchNetInfo(net))
 	else:
 		if not popt.flat:
 			# Skip the shuffles if any to process only specified networks
@@ -955,69 +999,83 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None):
 			if netname.find(SEPSHF) != -1:
 				return
 			# Fetch base network name (whitout the instance and shuffle id)
-			nettasks = basenetTasks(netname, None if not xargs else xargs['pathidstr'], bnets, tasks)
+			nettasks = basenetTasks(netname, pathidsuf, bnets, tasks)
 			#if popt.shfnum:  # ATTENTNION: shfnum is not available for non-synthetic networks
 			# Process dedicated dir of shuffles for the specified network,
 			# the origin network itself is linked to the shuffles dir (inside it)
 			dirname, ext = os.path.splitext(path)
 			if os.path.isdir(dirname):
+				# Update the number of shuffles if not specified, the netinfs entry is already creted by the caller
+				if netinfs and not popt.shfnum:
+					for desnet in glob.iglob('/*'.join((dirname, ext))):
+						updateNetInfos(netinfs, desnet, pathidsuf, popt.shfnum)
 				for desnet in glob.iglob('/*'.join((dirname, ext))):
-					handler(desnet, True, xargs, nettasks)  # True - shuffle is processed in the non-flat dir structure
+					# True - shuffle is processed in the non-flat dir structure
+					handler(desnet, True, xargs, nettasks, netinf=fetchNetInfo(desnet))
 			else:
-				handler(path, False, xargs, tasks)
+				handler(path, False, xargs, tasks, netinf=fetchNetInfo(dirname))
 		else:
-			handler(path, False, xargs, tasks)
+			handler(path, False, xargs, tasks, netinf=fetchNetInfo(path))
 
 
-def processNetworks(datas, handler, xargs={}, dflextfn=dflnetext, tasks=None, fpathids=None):  #pylint: disable=W0102
+def processNetworks(datas, handler, xargs={}, dflextfn=dflnetext, tasks=None, fpathids=None, metainf=False):  #pylint: disable=W0102
 	"""Process input networks specified by the path wildcards
 
 	datas: iterable(PathOpts)  - processing path options including the path wildcard
-	handler: callable  - handler to be called in the processPath() as handler(netfile, netshf, xargs, tasks),
+	handler: callable  - handler to be called in the processPath() as handler(netfile, netshf, xargs, tasks, netinf),
 		netshf means that the processing networks is a shuffle in the non-flat dir structure
 	xargs: dict(str, val)  - extra arguments of the handler following after the processing network file
 	dflextfn: callable  - function(asymflag) for the default extension of the input files in the path
-	tasks: list(tasks)  - root tasks per each algorithm
+	tasks: list(tasks)  - root tasks per each executing application
 	fpathids: File  - path ids file opened for the writing or None
-
-	return netnames  - network names with the path id (without the basepath)
+	metainf: bool  - extract meta information about the processing networks
 	"""
 	# Track processed file names to resolve cases when files with the same name present in different input dirs
 	# Note: pathids are required at least to set concise job names to see what is executed in runtime
-	netnames = {}  # Name to pathid mapping: {Name: counter}
+	netsNameCtr = {}  # Net base name to counter mapping: {net base name: counter}
+	netinfs = {}  # Base network name to network meta informaiton (the number of shuffles, instances, etc.) mapping
 	for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
 		xargs['asym'] = popt.asym
 		# Resolve wildcards
 		pcuropt = copy.copy(popt)  # Path options for the resolved .path wildcard
-		for path in glob.iglob(popt.path):  # Allow wildcards
-			if os.path.isdir(path):
-				# ATTENTION: required to process directories ending with '/' correctly
-				# Note: normpath() may change semantics in case symbolic link is used with parent dir:
-				# base/linkdir/../a -> base/a, which might be undesirable
-				mpath = path.rstrip('/')  # os.path.normpath(path)
-			else:
-				mpath = os.path.splitext(path)[0]
-			net = os.path.split(mpath)[1]
-			pathid = netnames.get(net)
-			if pathid is None:
-				netnames[net] = 0
-				xargs['pathidstr'] = ''
-			else:
-				# TODO: To unify quality measures evaluation with the clustering and consider pathids everywhere,
-				# pathids dict should be used instead of the fpathids with pathid reading besides the writing.
-				pathid += 1
-				netnames[net] = pathid
-				nameid = SEPPATHID + str(pathid)
-				xargs['pathidstr'] = nameid
-				if fpathids is not None:
-					fpathids.write('{}\t{}\n'.format(net + nameid, mpath))
-			#if _DEBUG_TRACE >= 2:
-			#	print('  Processing "{}", net: {}, pathidstr: {}'.format(path, net, xargs['pathidstr']))
-			pcuropt.path = path
-			if _DEBUG_TRACE:
-				print('  Scheduling apps execution for the path options ({})'.format(str(pcuropt)))
-			processPath(pcuropt, handler, xargs=xargs, dflextfn=dflextfn, tasks=tasks)
-	return netnames
+		# Note: each path (wildcard) here is associated with distinct set(s) of instances and shuffles ids
+		for im in range(1 + metainf):
+			for path in glob.iglob(popt.path):  # Allow wildcards
+				# Form pathid mapping as netsNameCtr only when im == 0
+				if not im:
+					if os.path.isdir(path):
+						# ATTENTION: required to process directories ending with '/' correctly
+						# Note: normpath() may change semantics in case symbolic link is used with parent dir:
+						# base/linkdir/../a -> base/a, which might be undesirable
+						mpath = path.rstrip('/')  # os.path.normpath(path)
+					else:
+						mpath = os.path.splitext(path)[0]
+					net = os.path.split(mpath)[1]
+					pathid = netsNameCtr.get(net)
+					if pathid is None:
+						netsNameCtr[net] = 0
+						xargs['pathidsuf'] = ''
+					else:
+						# TODO: To unify quality measures evaluation with the clustering and consider pathids everywhere,
+						# pathids dict should be used instead of the fpathids with pathid reading besides the writing.
+						pathid += 1
+						netsNameCtr[net] = pathid
+						nameid = SEPPATHID + str(pathid)
+						xargs['pathidsuf'] = nameid
+						if fpathids is not None:
+							fpathids.write('{}\t{}\n'.format(net + nameid, mpath))
+					#if _DEBUG_TRACE >= 2:
+					#	print('  Processing "{}", net: {}, pathidsuf: {}'.format(path, net, xargs['pathidsuf']))
+				#  Process path only on the last iteration, i.e. im == metainf
+				if im == metainf:
+					pcuropt.path = path
+					if _DEBUG_TRACE:
+						print('  Scheduling apps execution for the path options ({})'.format(str(pcuropt)))
+					processPath(pcuropt, handler, xargs=xargs, dflextfn=dflextfn, tasks=tasks
+						, netinfs=None if not metainf else netinfs)
+				elif not os.path.isdir(path):  # Update netinfs only for the files of the path
+					# Both shuffles (if exist any) and network instances are located in the same dir
+					updateNetInfos(netinfs, path, xargs['pathidsuf'], popt.shfnum)
 
 
 def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout=30*60):  # 7, 30 min
@@ -1173,7 +1231,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		# execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(PREFEXEC)]
 		execalgs = clarifyApps(algorithms, appsmodule)
 
-		def runapp(net, asym, netshf, pathid='', tasks=None):
+		def runapp(net, asym, netshf, pathid='', tasks=None, netinf=None):
 			"""Execute algorithms on the specified network counting number of ran jobs
 
 			net  - network to be processed
@@ -1181,6 +1239,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			netshf  - whether this network is a shuffle in the non-flat dir structure
 			pathid  - path id of the net to distinguish nets with the same name located in different dirs
 			tasks: list(Task)  - tasks associated with the running algorithms on the specified network
+			netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
 
 			return
 				jobsnum  - the number of scheduled jobs, typically 1
@@ -1199,15 +1258,16 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 					traceback.print_exc(5)
 			return jobsnum
 
-		def runner(net, netshf, xargs, tasks=None):
+		def runner(net, netshf, xargs, tasks=None, netinf=None):
 			"""Network runner helper
 
 			net  - network file name
 			netshf  - whether this network is a shuffle in the non-flat dir structure
 			xargs  - extra custom parameters
 			tasks: list(Task)  - tasks associated with the running algorithms on the specified network
+			netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
 			"""
-			tnum = runapp(net, xargs['asym'], netshf, xargs['pathidstr'], tasks)
+			tnum = runapp(net, xargs['asym'], netshf, xargs['pathidsuf'], tasks, netinf)
 			xargs['jobsnum'] += tnum
 			xargs['netcount'] += tnum != 0
 
@@ -1229,7 +1289,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			fpathids.write('# --- {time} (seed: {seed}) ---\n'.format(time=TIMESTAMP_START_STR, seed=seed))  # Write timestamp
 
 			xargs = {'asym': False,  # Asymmetric network
-				 'pathidstr': '',  # Id of the duplicated path shortcut to have the unique shortcut
+				 'pathidsuf': '',  # Network path id prepended with the path separator, used to deduplicate the network name shortcut
 				 'jobsnum': 0,  # Number of the processing network jobs (can be several per each instance if shuffles exist)
 				 'netcount': 0}  # Number of processing network instances (includes multiple shuffles)
 			tasks = [Task(appname) for appname in algorithms]
@@ -1397,7 +1457,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 			# Perform quality evaluations
 			with ExecPool(_WPROCSMAX, afnmask=afn, memlimit=_VMLIMIT
 			, name='runqms_' + str(afn.afnstep) + ('f' if afn.first else 'a'), webuiapp=_webuiapp) as _execpool:
-				def runapp(net, asym, netshf, pathid='', tasks=None):
+				def runapp(net, asym, netshf, pathid='', tasks=None, netinf=None):
 					"""Execute algorithms on the specified network counting number of ran jobs
 
 					net  - network to be processed
@@ -1405,10 +1465,13 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					netshf  - whether this network is a shuffle in the non-flat dir structure
 					pathid  - path id of the net to distinguish nets with the same name located in different dirs
 					tasks: list(Task)  - tasks associated with the running algorithms on the specified network
+					netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
 
 					return
 						jobsnum  - the number of scheduled jobs, typically 1
 					"""
+					# Note: netinf is mandatory for this callback
+					assert isinstance(netinf, NetInfo), 'Ivalid argument: ' + netinf
 					# Supplied tasks: qmeasure / basenet for each net
 					jobsnum = 0
 					## Task suffix is the network name
@@ -1451,10 +1514,9 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 											# task = Task(SEPSUBTASK.join((qm[0] if not tasks else tasks[i].name
 											# 	# Append irun to the task suffix
 											# 	, tasksuf if runs == 1 else 'r'.join((tasksuf, str(irun))))), task=task)
-											eq(_execpool, qm[1:], qualsaver.queue, cfname=fcl, inpfname=ifnm
-												, timeout=timeout, ilev=ifc, cmres=inpmres, netparams=netparams
+											jobsnum += eq(_execpool, qm[1:], qualsaver, cfname=fcl, inpfname=ifnm, alg=alg
+												, netinf=netinf, timeout=timeout, ilev=ifc, cmres=inpmres, netparams=netparams
 												, irun=irun, task=None if not tasks else tasks[i], seed=seed)
-											jobsnum += 1
 							except Exception as err:  #pylint: disable=W0703
 								errexectime = time.perf_counter() - exectime
 								print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
@@ -1463,20 +1525,21 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								traceback.print_exc(5)
 					return jobsnum
 
-				def runner(net, netshf, xargs, tasks=None):
+				def runner(net, netshf, xargs, tasks=None, netinf=None):
 					"""Network runner helper
 
 					net  - network file name
 					netshf  - whether this network is a shuffle in the non-flat dir structure
 					xargs  - extra custom parameters
 					tasks: list(Task)  - tasks associated with the running algorithms on the specified network
+					netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
 					"""
-					tnum = runapp(net, xargs['asym'], netshf, xargs['pathidstr'], tasks)
+					tnum = runapp(net, xargs['asym'], netshf, xargs['pathidsuf'], tasks, netinf)
 					xargs['jobsnum'] += tnum
 					xargs['netcount'] += tnum != 0
 
 				xargs = {'asym': False,  # Asymmetric network
-						'pathidstr': '',  # Id of the duplicated path shortcut to have the unique shortcut
+						'pathidsuf': '',  # Network path id prepended with the path separator, used to deduplicate the network name shortcut
 						'jobsnum': 0,  # Number of the processing network jobs (can be several per each instance if shuffles exist)
 						'netcount': 0}  # Number of processing network instances (includes multiple shuffles)
 				ctasks = [Task(qme[0][0]) for qme in cqmes]  # Current tasks
@@ -1485,7 +1548,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 				# Note: subtasks for each base networks are created automatically
 				## TODO: aggregate results for each quality measure with the fixed args on each base network
 				# onfinish=bestlev, params={...}
-				processNetworks(datas, runner, xargs=xargs, dflextfn=dflnetext, tasks=ctasks)
+				processNetworks(datas, runner, xargs=xargs, dflextfn=dflnetext, tasks=ctasks, metainf=True)
 
 				if evaltimeout <= 0:
 					evaltimeout = timeout * xargs['jobsnum']

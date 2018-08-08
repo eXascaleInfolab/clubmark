@@ -34,7 +34,7 @@ import numpy as np  # Required for the HDF5 operations
 
 # from benchapps import  # funcToAppName,
 from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
-	escapePathWildcards, envVarDefined, SyncValue, tobackup, \
+	escapePathWildcards, envVarDefined, SyncValue, tobackup, funcToAppName, \
 	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, ALGSDIR, \
 	TIMESTAMP_START, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 from utils.mpepool import Task, Job, AffinityMask
@@ -44,10 +44,12 @@ try:
 	# For Python3
 	h5str = h5py.special_dtype(vlen=bytes)  # ASCII str, bytes
 	h5ustr = h5py.special_dtype(vlen=str)  # UTF8 str
+	# Note: str.encode() convers str to bytes, str.decode() converts bytes to (unicode) str
 except NameError:  # bytes are not defined in Python2
 	# For Python2
 	h5str = h5py.special_dtype(vlen=str)  # ASCII str, bytes
 	h5ustr = h5py.special_dtype(vlen=unicode)  #pylint: disable=E0602;  # UTF8 str
+	# Note: str.decode() convers bytes to unicode str, str.encode() converts (unicode) str to bytes
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 RESDIR = 'results/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm, specified RELATIVE to ALGSDIR
@@ -443,16 +445,38 @@ class NetParams(object):
 		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
 
 
+class NetInfo(object):
+	__slots__ = ('insnum', 'shfnum')
+
+	def __init__(self, insnum=1, shfnum=1):
+		"""Network metainformation
+
+		insnum: uint8 >= 1  - the number of instances including the origin
+		shfnum: uint8 >= 1  - the number of shuffles including the origin
+		"""
+		assert insnum >= 1 and isinstance(insnum, int) and shfnum >= 1 and isinstance(shfnum, int
+			), 'Invalid arguments  insnum: {}, shfnum: {}'.format(insnum, shfnum)
+		self.insnum = insnum
+		self.shfnum = shfnum
+
+	def __str__(self):
+		"""String conversion"""
+		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
+
+
 # Note: default AffinityMask is 1 (logical CPUs, i.e. hardware threads)
-def execXmeasures(execpool, args, qsqueue, cfname, inpfname, timeout
+def execXmeasures(execpool, args, qualsaver, cfname, inpfname, alg, netinf, timeout
 , ilev=0, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""Quality measure executor
 
 	execpool: ExecPool  - execution pool
 	args: list(str)  - quality measures arguments
-	qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
+	qualsaver: QualitySaver  - quality results saver (persister)
+	# qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
 	cfname: str  - filename of the clustering to be evaluated
 	inpfname: str  - input dataset file name (ground-truth / input network for the ex/in-trinsic quality measure)
+	alg: str  - algorithm name, required to only to structure (order) the output results
+	netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
 	timeout: uint  - execution timeout in seconds
 	ilev: uint  - index of the clustering level
 	cmres: bool  - whether the cfname is a multi-resolution (multi-level) clusering
@@ -461,27 +485,46 @@ def execXmeasures(execpool, args, qsqueue, cfname, inpfname, timeout
 	workdir: str  - working directory of the quality measure (qmeasure location)
 	task: Task  - owner (super) task
 	seed: uint  - seed for the stochastic qmeasures
+
+	return jobsnum: uint  - the number of started jobs
 	"""
 	#return jobsnum: uint  - the number of scheduled jobs
-	assert execpool and isinstance(qsqueue, Queue) and isinstance(cfname, str
-		) and isinstance(inpfname, str) and timeout >= 0 and ilev >= 0 and isinstance(ilev, int
-		) and (netparams is None or isinstance(netparams, NetParams)) and irun >= 0 and (
+	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(cfname, str
+		) and isinstance(inpfname, str) and isinstance(alg, str
+		) and timeout >= 0 and ilev >= 0 and isinstance(ilev, int) and (
+			netparams is None or isinstance(netparams, NetParams)) and irun >= 0 and (
 		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
-		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tqsqueue: {}'
-		',\n\tcfname: {},\n\tinpfname: {},\n\ttimeout: {},\n\tcmres: {},\n\tnetparams: {}'
+		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tqualsaver: {}'
+		',\n\tcfname: {},\n\tinpfname: {},\n\talg: {},\n\ttimeout: {},\n\tcmres: {},\n\tnetparams: {}'
 		',\n\tirun: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
-		.format(execpool, args, qsqueue, cfname, inpfname, timeout, cmres, netparams, irun, workdir, task, seed))
+		.format(execpool, args, qualsaver, cfname, inpfname, alg, timeout
+		, cmres, netparams, irun, workdir, task, seed))
+	# Check whether the job should be created or such evaluation already exist in the dataset
+	qmfn = sys._getframe().f_code.co_name  # This function
+	qmname = funcToAppName(qmfn)  # Quality measure name
+	# Fetch evaluating metrics from the args
+	metrics = []
+
+	if qualsaver.entryExists(qmname):
+		return 0
+
+	# Evaluate relative paths
+	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	# Evaluate relative paths
+	xtimebin = relpath(UTILDIR + 'exectime')
+	qmbin = relpath(UTILDIR + 'xmeasures')
 	# # ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
-	# args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + algname
+	# args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + alg
 	# 	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 	# 	, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
 	# 	, '-lo', ''.join((relpath(taskpath), '/', taskname, EXTCLNODES)), netfile)
-	# execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
+	# execpool.execute(Job(name=SEPNAMEPART.join((alg, taskname)), workdir=workdir, args=args, timeout=timeout
 	# 	#, stdout=os.devnull
 	# 	, ondone=limlevs, params={'taskpath': taskpath, 'fetchLevId': fetchLevIdCnl}
-	# 	, task=task, category=algname, size=netsize, stdout=logfile, stderr=errfile))	
-	qentry = QualityEntry()
-	saveQuality(qsqueue, qentry)
+	# 	, task=task, category=alg, size=netsize, stdout=logfile, stderr=errfile))	
+	# qentry = QualityEntry()
+	# saveQuality(qsqueue, qentry)
+	return 1
 
 
 @metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS, first=False), multirun=3)  # Note: multirun requires irun

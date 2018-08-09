@@ -428,17 +428,18 @@ def metainfo(afnmask=AffinityMask(1), intrinsic=False, multirun=1):
 
 
 class NetParams(object):
-	__slots__ = ('asym', 'pathid')
+	__slots__ = ('asym', 'pathidsuf')
 
-	def __init__(self, asym, pathid=''):
+	def __init__(self, asym, pathidsuf=''):
 		"""Parameters of the input network
 
 		asym: bool  - the input network might be assymetric (directed) and is specified by arcs ranther than edges
-		pathid: str  - network path id
+		pathidsuf: str  - network path id prepended with the path separator, used to distinguish nets
+			with the same name located in different dirs
 		"""
-		assert isinstance(pathid, str), 'Unexpected format of the pathid: ' + type(pathid).__name__
+		assert not pathidsuf or pathidsuf.startswith(SEPPATHID), 'Ivalid pathidsuf: ' + pathidsuf
 		self.asym = asym
-		self.pathid = pathid
+		self.pathidsuf = pathidsuf
 
 	def __str__(self):
 		"""String conversion"""
@@ -514,7 +515,7 @@ def execXmeasures(execpool, args, qualsaver, cfname, inpfname, alg, netinf, time
 	xtimebin = relpath(UTILDIR + 'exectime')
 	qmbin = relpath(UTILDIR + 'xmeasures')
 	# # ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
-	# args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathid)), '-s=/etime_' + alg
+	# args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathidsuf)), '-s=/etime_' + alg
 	# 	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 	# 	, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
 	# 	, '-lo', ''.join((relpath(taskpath), '/', taskname, EXTCLNODES)), netfile)
@@ -746,6 +747,7 @@ class EvalsAgg(object):
 			measure, algname, netname = inst.name.split(SEPNAMEPART)
 			#print('Final aggregate over net: {}, pathid: {}'.format(netname, pathid))
 			# Remove instance id if exists (initial name does not contain params and pathid)
+			# ATTENTION: fetched ids from the name include prefixes
 			netname, apars, insid, shid, pathid = parseName(netname, True)
 			assert not shid, 'Shuffles should already be aggregated'
 			# Take average over instances and shuffles for each set of alg params
@@ -917,7 +919,7 @@ def aggEvaluations(respaths):
 	print('Evaluation results aggregation is finished.')
 
 
-def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob, resagg, pathid='', tidy=True):
+def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob, resagg, pathidsuf='', tidy=True):
 	"""Generic evaluation on the specified file
 	NOTE: all paths are given relative to the root benchmark directory.
 
@@ -931,12 +933,11 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 	evaljob  - evaluatoin job to be performed on the evaluating file, signature:
 		evaljob(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logsbase)
 	resagg  - results aggregator
-	pathid  - path id of the basefile to distinguish files with the same name located in different dirs.
-		Note: pathid includes pathid separator
+	pathidsuf: str  - network path id prepended with the path separator
 	tidy  - delete previously existent results. Must be False if a few apps output results into the same dir
 	"""
 	assert execpool and basefile and measure and algname, 'Parameters must be defined'
-	assert not pathid or pathid[0] == SEPPATHID, 'pathid must include pathid separator'
+	assert not pathidsuf or pathidsuf[0] == SEPPATHID, 'pathidsuf must include separator'
 	# Fetch the task name and chose correct network filename
 	taskcapt = os.path.splitext(os.path.split(basefile)[1])[0]  # Name of the basefile (network or ground-truth clusters)
 	ishuf = None if taskcapt.find(SEPSHF) == -1 else taskcapt.rsplit(SEPSHF, 1)[1]  # Separate shuffling index (with possible pathid) if exists
@@ -944,7 +945,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 		taskcapt, ishuf)
 	# Define index of the task suffix (identifier) start
 	tcapLen = len(taskcapt)  # Note: it never contains pathid
-	#print('Processing {}, pathid: {}'.format(taskcapt, pathid))
+	#print('Processing {}, pathidsuf: {}'.format(taskcapt, pathidsuf))
 
 	# Resource consumption profile file name
 	rcpoutp = ''.join((RESDIR, algname, '/', measure, EXTEXECTIME))
@@ -959,10 +960,10 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 		clsnameLen = len(clsname)
 
 		# Skip cases when processing clusters does not have expected pathid
-		if pathid and not clsname.endswith(pathid):
+		if pathidsuf and not clsname.endswith(pathidsuf):
 			continue
-		# Skip cases whtn processing clusters have unexpected pathid
-		elif not pathid:
+		# Skip cases when processing clusters have unexpected pathidsuf
+		elif not pathidsuf:
 			icnpid = clsname.rfind(SEPPATHID)  # Index of pathid in clsname
 			if icnpid != -1 and icnpid + 1 < clsnameLen:
 				# Validate pathid
@@ -976,7 +977,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 				else:
 					# Skip this clusters having unexpected pathid
 					continue
-		icnpid = clsnameLen - len(pathid)  # Index of pathid in clsname
+		icnpid = clsnameLen - len(pathidsuf)  # Index of pathid in clsname
 
 		# Filter out unexpected instances of the network (when then instance without id is processed)
 		if clsnameLen > tcapLen and clsname[tcapLen] == SEPINST:
@@ -1008,14 +1009,14 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 		taskoutp = logsbase
 		if shuffle:
 			taskoutp = taskoutp.rsplit(SEPSHF, 1)[0]
-			# Recover lost pathid if required
-			if pathid:
-				taskoutp += pathid
+			# Recover lost pathidsuf if required
+			if pathidsuf:
+				taskoutp += pathidsuf
 		taskoutp = '.'.join((taskoutp, measure))  # evalext  # Name of the file with modularity values for each level
 		if tidy and os.path.exists(taskoutp):
 			os.remove(taskoutp)
 
-		#shuffagg = ShufflesAgg(resagg, name=SEPNAMEPART.join((measure, algname, taskcapt, pathid)))  # Note: taskcapt here without alg params
+		#shuffagg = ShufflesAgg(resagg, name=SEPNAMEPART.join((measure, algname, taskcapt, pathidsuf)))  # Note: taskcapt here without alg params
 		taskname = os.path.splitext(os.path.split(taskoutp)[1])[0]
 		shagg = ShufflesAgg(resagg, SEPNAMEPART.join((measure, algname, taskname)))
 		task = Task(name=taskname, params=shagg, ondone=shagg.fix)  # , params=EvalState(taskcapt, )
@@ -1034,8 +1035,8 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 			if pos == -1:
 				pos = 0
 				jbasename = '_'.join((clsname[:icnpid], jbasename))  # Note: pathid is already included into clsname
-			#elif pathid:
-			#	jbasename += pathid
+			#elif pathidsuf:
+			#	jbasename += pathidsuf
 			clslev = jbasename[pos + icnpid:].lstrip('_-.')  # Note: clslev can be empty if jbasename == clsname[:icnpid]
 			#print('Lev naming: clslev = {}, jbasename = {}'.format(clslev, jbasename))
 			# Note: it is better to path clsname and shuffle separately to avoid redundant cut on evaluations processing
@@ -1059,7 +1060,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 			.format(algname, basefile), file=sys.stderr)
 
 
-def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=''):
+def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathidsuf=''):
 	"""Evaluate the algorithm by the specified measure.
 	NOTE: all paths are given relative to the root benchmark directory.
 
@@ -1069,10 +1070,9 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 	measure  - target measure to be evaluated: {nmi, nmi_s, mod}
 	timeout  - execution timeout for this task
 	resagg  - results aggregator
-	pathid  - path id of the basefile to distinguish files with the same name located in different dirs
-		Note: pathid includes pathid separator
+	pathidsuf: str  - network path id prepended with the path separator
 	"""
-	assert not pathid or pathid[0] == SEPPATHID, 'pathid must include pathid separator'
+	assert not pathidsuf or pathidsuf.startswith(SEPPATHID), 'Ivalid pathidsuf: ' + pathidsuf
 	if _DEBUG_TRACE:
 		print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
 
@@ -1252,10 +1252,10 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathid=
 
 
 	if measure == 'mod':
-		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, evaljobMod, resagg, pathid)
+		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, evaljobMod, resagg, pathidsuf)
 	elif measure == 'nmi':
-		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, evaljobNmi, resagg, pathid)
+		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, evaljobNmi, resagg, pathidsuf)
 	elif measure == 'nmi_s':
-		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, evaljobNmiS, resagg, pathid, tidy=False)
+		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, evaljobNmiS, resagg, pathidsuf, tidy=False)
 	else:
 		raise ValueError('Unexpected measure: ' + measure)

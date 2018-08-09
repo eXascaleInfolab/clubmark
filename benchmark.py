@@ -890,10 +890,10 @@ def updateNetInfos(netinfs, net, pathidsuf='', shfnum=0):
 	ntinf = netinfs.setdefault(netnameps[0] + pathidsuf, NetInfo(shfnum=shfnum+1))
 	# Evaluate the number of instances only if not specified explicitly
 	if netnameps[2]:
-		ntinf.insnum = max(ntinf.insnum, int(netnameps[2]) + 1)  # Note: +1 to form total number from id
+		ntinf.insnum = max(ntinf.insnum, int(netnameps[2][len(SEPINST):]) + 1)  # Note: +1 to form total number from id
 	# Evaluate the number of shuffles only if it is not specified explicitly (or specified as 0)
 	if not shfnum and netnameps[3]:
-		ntinf.shfnum = max(ntinf.shfnum, int(netnameps[3]) + 1)  # Note: +1 to form total number from id
+		ntinf.shfnum = max(ntinf.shfnum, int(netnameps[3][len(SEPSHF):]) + 1)  # Note: +1 to form total number from id
 
 
 def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None, netinfs=None):
@@ -1231,13 +1231,15 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		# execalgs = [getattr(appsmodule, func) for func in dir(appsmodule) if func.startswith(PREFEXEC)]
 		execalgs = clarifyApps(algorithms, appsmodule)
 
-		def runapp(net, asym, netshf, pathid='', tasks=None, netinf=None):
+		def runapp(net, asym, netshf, pathidsuf='', tasks=None, netinf=None):
 			"""Execute algorithms on the specified network counting number of ran jobs
 
 			net  - network to be processed
-			asym  - whether the network is asymmetric (directed), considered only for the non-standard network file extensions
+			asym  - whether the network is asymmetric (directed), considered only for the
+				non-standard network file extensions
 			netshf  - whether this network is a shuffle in the non-flat dir structure
-			pathid  - path id of the net to distinguish nets with the same name located in different dirs
+			pathidsuf: str  - network path id prepended with the path separator, used to distinguish nets
+				with the same name located in different dirs
 			tasks: list(Task)  - tasks associated with the running algorithms on the specified network
 			netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
 
@@ -1249,7 +1251,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			for ia, ealg in enumerate(execalgs):
 				try:
 					jobsnum += ealg(_execpool, net, asym=asymnet(netext, asym), odir=netshf
-						, timeout=timeout, pathid=pathid, task=None if not tasks else tasks[ia], seed=seed)
+						, timeout=timeout, pathidsuf=pathidsuf, task=None if not tasks else tasks[ia], seed=seed)
 				except Exception as err:  #pylint: disable=W0703
 					errexectime = time.perf_counter() - exectime
 					print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
@@ -1342,19 +1344,21 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	# return netnames
 
 
-def clnames(net, odir, alg, pathid=''):
+def clnames(net, odir, alg, pathidsuf=''):
 	"""Clustering names by the input network name
 
 	net: str  - input network name
 	odir: bool - whether the resulting clusterings are outputted to the dedicated dir named by the instance name,
 		which is typically used for shuffles with the non-flat structure
 	alg: str  - algorithm name
-	pathid: str  - network path id
+	pathidsuf: str  - network path id prepended with the path separator, used to distinguish nets
+		with the same name located in different dirs
 
 	return
 		cfnames: list(str)  - clustering file names
 		mrclfname: str or Null  - multi-level (multi-resolution) clustering file name
 	"""
+	assert not pathidsuf or pathidsuf.startswith(SEPPATHID), 'Ivalid pathidsuf: ' + pathidsuf
 	clpath = os.path.splitext(os.path.split(net)[1])[0]  # Part of the resulting path suffix
 	# Consider the multi-level clustering in a single file (required at least for DAOC)
 	# having the same name as the directory being aggregated
@@ -1364,9 +1368,7 @@ def clnames(net, odir, alg, pathid=''):
 	if odir:
 		nameparts = parseName(clpath, True)
 		clpath = ''.join((nameparts[0], nameparts[2], '/', clpath))  # Use base name and instance id
-	clpath = cbdir + clpath
-	if pathid:
-		clpath = SEPPATHID.join((clpath, pathid))
+	clpath = clpath.join((cbdir, pathidsuf))
 	# Reselting clustering file names
 	return ([clp for clp in glob.iglob('/'.join((clpath, '*'))) if os.path.isfile(clp)],
 		# Aggregated levels into the single clustering
@@ -1457,13 +1459,13 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 			# Perform quality evaluations
 			with ExecPool(_WPROCSMAX, afnmask=afn, memlimit=_VMLIMIT
 			, name='runqms_' + str(afn.afnstep) + ('f' if afn.first else 'a'), webuiapp=_webuiapp) as _execpool:
-				def runapp(net, asym, netshf, pathid='', tasks=None, netinf=None):
+				def runapp(net, asym, netshf, pathidsuf='', tasks=None, netinf=None):
 					"""Execute algorithms on the specified network counting number of ran jobs
 
 					net  - network to be processed
 					asym  - whether the network is asymmetric (directed), considered only for the non-standard network file extensions
 					netshf  - whether this network is a shuffle in the non-flat dir structure
-					pathid  - path id of the net to distinguish nets with the same name located in different dirs
+					pathidsuf  - path id of the net to distinguish nets with the same name located in different dirs
 					tasks: list(Task)  - tasks associated with the running algorithms on the specified network
 					netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
 
@@ -1479,7 +1481,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					# netext = netext.lower()
 					netext = os.path.splitext(net)[1].lower()
 					gfname = gtname(net, netshf)  # Ground-truth file name by the network file name
-					npars = NetParams(asymnet(netext, asym), pathid)  # Input network parameters
+					npars = NetParams(asymnet(netext, asym), pathidsuf)  # Input network parameters
 					# # Form Measure [/ Basebneet] / Network tasks
 					# assert not tasks or len(tasks) == len(cqmes), 'Tasks are not synced with the quality measures'
 					# mntasks = []
@@ -1502,7 +1504,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									# Get ground-truth clusering file name by the input network file name
 									ifnm = gfname
 									netparams = None
-								cfnames, mcfname = clnames(net, netshf, alg=alg, pathid=pathid)
+								cfnames, mcfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
 								# Sort the clustering file names to form thier clustering level ids in the same order
 								if len(cfnames) >= 2:
 									cfnames.sort()

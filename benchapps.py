@@ -46,16 +46,14 @@ from numbers import Number  # To verify that a variable is a number (int or floa
 from sys import executable as PYEXEC  #pylint: disable=C0412;  # Full path to the current Python interpreter
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, funcToAppName \
 	, tobackup, escapePathWildcards, UTILDIR, ALGSDIR, ORIGDIR, TIMESTAMP_START_HEADER \
-	, SEPPARS, SEPSUBTASK, SEPPATHID
+	, SEPPARS, SEPSUBTASK, SEPPATHID, ALEVSMAX, ALGLEVS
 from benchevals import SEPNAMEPART, RESDIR, CLSDIR, EXTEXECTIME, EXTAGGRES, EXTAGGRESEXT
 from utils.mpepool import Job, Task
 from algorithms.utils.parser_nsl import parseHeaderNslFile  #, asymnet
 
 
-# Maximal number of the levels considered for the evaluation in the multi-scale or hierarchihal clustering
-_LEVSMAX = 10  # Use 10 scale levels as in Ganxis by default
 # Note: currently the output level are limited only for the algorithms that may produce more than 10 levels
-assert _LEVSMAX >= 10, 'The number of levels limitation should be addded to GANXiS and some others'
+assert ALEVSMAX >= 10, 'The number of levels limitation should be addded to GANXiS and some others'
 _EXTLOG = '.log'  # Extension for the logs
 _EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
 EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
@@ -417,7 +415,7 @@ def reduceLevels(levs, num, root0):
 
 
 def limlevs(job):
-	"""Limit the number of output level to fit _LEVSMAX (unified for all algorithms).
+	"""Limit the number of output level to fit ALEVSMAX (unified for all algorithms).
 
 	Limit the number of hierarchy levels in the output by moving the original output
 	to the dedivated directory and uniformly linking the required number of levels it
@@ -430,7 +428,7 @@ def limlevs(job):
 		as in the shell) to fetch levels among other files, for example: 'tp*'.
 		Required at least for Oslom.
 	"""
-	lmax = _LEVSMAX  # Max number of the output levels for the network
+	lmax = ALEVSMAX  # Max number of the output levels for the network
 	# Check the number of output levels and restructure the output if required saving the original one
 	taskpath = job.params['taskpath']
 	fetchLevId = job.params['fetchLevId']
@@ -519,7 +517,7 @@ def uniflevs(task):
 		print('WARNING, no any output levels are reported for the unification in the super task: ', task.name)
 		return
 	# print('> uniflevs() of {} started'.format(task.name), file=sys.stderr)
-	lmax = _LEVSMAX  # Max number of the output levels for the network
+	lmax = ALEVSMAX  # Max number of the output levels for the network
 	# Check the number of output levels and restructure the output if required saving the original one
 	levsnum = 0  # Total number of the (valid) output levels for all alg. parameters
 	bpath = None  # Base path
@@ -652,6 +650,21 @@ def fetchLevIdCnl(name):
 		print('WARNING, Cnl files should be named with the .cnl extension:', name, file=sys.stderr)
 		iide = len(name)
 	return int(name[iid:iide])
+
+
+def metainfo(levsmax=ALEVSMAX):
+	"""Set some meta information for the executing algorithms
+
+	levsmax: uint16  - expected max number of resolution level files (excluding the aggregated/multires output)
+	"""
+	def decor(func):
+		"""Decorator returning the original function"""
+		assert levsmax >= 1 and isinstance(levsmax, int), ('Invalid arguments, levsmax: {}'.format(levsmax))
+		# QMSRAFN[funcToAppName(func)] = afnmask
+		if levsmax != ALEVSMAX:  # Save only quality measures with non-default affinity
+			ALGLEVS[funcToAppName(func.__name__)] = levsmax
+		return func
+	return decor
 
 
 # Louvain
@@ -827,7 +840,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDI
 		, task=task, onfinish=uniflevs, params={'outpname': aggtname, 'fetchLevId': fetchLevIdCnl})
 	kmin = 3  # Min clique size to be used for the communities identificaiton
 	kmax = 7  # Max clique size (~ min node degree to be considered)
-	steps = str(_LEVSMAX)  # Use 10 scale levels as in Ganxis
+	steps = str(ALEVSMAX)  # Use 10 scale levels as in Ganxis
 	# Power rario to consider non-linear memory complexity increase depending on k
 	pratio = (1 + 5 ** 0.5) * 0.5  # Golden section const: 1.618  # 2.718  # exp(1)
 	# Run for range of clique sizes
@@ -1367,7 +1380,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGS
 
 	eps = 0.05  # Min epsilon (similarity threshold)
 	epsMax = 0.9  # Max epsilon (similarity threshold)
-	steps = _LEVSMAX  # The number of steps (similarity thresholds). Use 10 scale levels as in Ganxis.
+	steps = ALEVSMAX  # The number of steps (similarity thresholds). Use 10 scale levels as in Ganxis.
 	# Run for range of eps
 	# Epsilon delta for each step; -1 is used because of the inclusive range
 	if steps >= 2:
@@ -1450,12 +1463,14 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathidsuf='', workd
 
 
 # CGGC_RG (rgmc -a 2)
+@metainfo(levsmax=1)  # Note: rgmcAlg parameters are not easily adjustable, see the executor
 def execCggcRg(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR, task=None, seed=None):  #pylint: disable=C0111
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggcRg'
 	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, alg=2)
 
 
 # CGGCi_RG (rgmc -a 3)
+@metainfo(levsmax=1)  # Note: rgmcAlg parameters are not easily adjustable, see the executor
 def execCggciRg(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR, task=None, seed=None):  #pylint: disable=C0111
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggciRg'
 	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, alg=3)
@@ -1496,7 +1511,7 @@ def execScd(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDI
 
 	alfa = 0.25  # Min value of "alfa"
 	amax = 1.  # Max value of "alfa", default
-	steps = _LEVSMAX  # The number of steps (similarity thresholds). Use 10 scale levels as in Ganxis.
+	steps = ALEVSMAX  # The number of steps (similarity thresholds). Use 10 scale levels as in Ganxis.
 	if steps >= 2:
 		da = (amax - alfa) / (steps - 1)
 		# print('>> steps: {}, da: {:.2f}'.format(steps, da))

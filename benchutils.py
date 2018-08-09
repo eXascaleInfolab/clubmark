@@ -37,6 +37,9 @@ TIMESTAMP_START = time.gmtime()  # struct_time
 TIMESTAMP_START_STR = time.strftime('%Y-%m-%d %H:%M:%S', TIMESTAMP_START)
 TIMESTAMP_START_HEADER = ' '.join(('# ---', TIMESTAMP_START_STR, '-'*32))
 PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
+# Maximal number of the levels considered for the evaluation in the multi-scale or hierarchihal clustering
+ALEVSMAX = 10  # Use 10 scale levels as in Ganxis by default
+ALGLEVS = {}  # Max number of levels for the algorithm if does not correspond to the ALEVSMAX, dict(str: uint16)
 
 # Consider Python2
 if not hasattr(glob, 'escape'):

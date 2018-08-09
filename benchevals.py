@@ -507,7 +507,9 @@ def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, time
 		, cmres, irun, asym, workdir, task, seed))
 	# Check whether the job should be created or such evaluation already exist in the dataset
 	# Form network name with path id
-	netname = os.path.splitext(os.path.split(inpfpath)[1])[0]
+	bnetname = os.path.splitext(os.path.split(inpfpath)[1])[0] + pathidsuf
+	# Validate group attributes
+
 	qmfn = sys._getframe().f_code.co_name  # This function
 	qmname = funcToAppName(qmfn)  # Quality measure name
 	# Fetch evaluating metrics from the args

@@ -1030,6 +1030,15 @@ def processNetworks(datas, handler, xargs={}, dflextfn=dflnetext, tasks=None, fp
 	fpathids: File  - path ids file opened for the writing or None
 	metainf: bool  - extract meta information about the processing networks
 	"""
+	def procPath(pcuropt, path):
+		"""Process path given the current path options"""
+		# Assign resolved path from the wildcard
+		pcuropt.path = path
+		if _DEBUG_TRACE:
+			print('  Scheduling apps execution for the path options ({})'.format(str(pcuropt)))
+		processPath(pcuropt, handler, xargs=xargs, dflextfn=dflextfn, tasks=tasks
+			, netinfs=None if not metainf else netinfs)
+
 	# Track processed file names to resolve cases when files with the same name present in different input dirs
 	# Note: pathids are required at least to set concise job names to see what is executed in runtime
 	netsNameCtr = {}  # Net base name to counter mapping: {net base name: counter}
@@ -1039,43 +1048,42 @@ def processNetworks(datas, handler, xargs={}, dflextfn=dflnetext, tasks=None, fp
 		# Resolve wildcards
 		pcuropt = copy.copy(popt)  # Path options for the resolved .path wildcard
 		# Note: each path (wildcard) here is associated with distinct set(s) of instances and shuffles ids
-		for im in range(1 + metainf):
+		# for im in range(1 + metainf):
+		for path in glob.iglob(popt.path):  # Allow wildcards
+			# Form pathid mapping as netsNameCtr
+			if os.path.isdir(path):
+				# ATTENTION: required to process directories ending with '/' correctly
+				# Note: normpath() may change semantics in case symbolic link is used with parent dir:
+				# base/linkdir/../a -> base/a, which might be undesirable
+				mpath = path.rstrip('/')  # os.path.normpath(path)
+			else:
+				mpath = os.path.splitext(path)[0]
+			net = os.path.split(mpath)[1]
+			pathid = netsNameCtr.get(net)
+			if pathid is None:
+				netsNameCtr[net] = 0
+				xargs['pathidsuf'] = ''
+			else:
+				# TODO: To unify quality measures evaluation with the clustering and consider pathids everywhere,
+				# pathids dict should be used instead of the fpathids with pathid reading besides the writing.
+				pathid += 1
+				netsNameCtr[net] = pathid
+				nameid = SEPPATHID + str(pathid)
+				xargs['pathidsuf'] = nameid
+				if fpathids is not None:
+					fpathids.write('{}\t{}\n'.format(net + nameid, mpath))
+			#if _DEBUG_TRACE >= 2:
+			#	print('  Processing "{}", net: {}, pathidsuf: {}'.format(path, net, xargs['pathidsuf']))
+			#  Process path if metainf formation is not required
+			if not metainf:
+				procPath(pcuropt, path)
+			elif not os.path.isdir(path):  # Update netinfs only for the files of the path
+				# Both shuffles (if exist any) and network instances are located in the same dir
+				updateNetInfos(netinfs, path, xargs['pathidsuf'], popt.shfnum)
+		# Process paths if have not been done yet because of the the meta information construction
+		if metainf:	
 			for path in glob.iglob(popt.path):  # Allow wildcards
-				# Form pathid mapping as netsNameCtr only when im == 0
-				if not im:
-					if os.path.isdir(path):
-						# ATTENTION: required to process directories ending with '/' correctly
-						# Note: normpath() may change semantics in case symbolic link is used with parent dir:
-						# base/linkdir/../a -> base/a, which might be undesirable
-						mpath = path.rstrip('/')  # os.path.normpath(path)
-					else:
-						mpath = os.path.splitext(path)[0]
-					net = os.path.split(mpath)[1]
-					pathid = netsNameCtr.get(net)
-					if pathid is None:
-						netsNameCtr[net] = 0
-						xargs['pathidsuf'] = ''
-					else:
-						# TODO: To unify quality measures evaluation with the clustering and consider pathids everywhere,
-						# pathids dict should be used instead of the fpathids with pathid reading besides the writing.
-						pathid += 1
-						netsNameCtr[net] = pathid
-						nameid = SEPPATHID + str(pathid)
-						xargs['pathidsuf'] = nameid
-						if fpathids is not None:
-							fpathids.write('{}\t{}\n'.format(net + nameid, mpath))
-					#if _DEBUG_TRACE >= 2:
-					#	print('  Processing "{}", net: {}, pathidsuf: {}'.format(path, net, xargs['pathidsuf']))
-				#  Process path only on the last iteration, i.e. im == metainf
-				if im == metainf:
-					pcuropt.path = path
-					if _DEBUG_TRACE:
-						print('  Scheduling apps execution for the path options ({})'.format(str(pcuropt)))
-					processPath(pcuropt, handler, xargs=xargs, dflextfn=dflextfn, tasks=tasks
-						, netinfs=None if not metainf else netinfs)
-				elif not os.path.isdir(path):  # Update netinfs only for the files of the path
-					# Both shuffles (if exist any) and network instances are located in the same dir
-					updateNetInfos(netinfs, path, xargs['pathidsuf'], popt.shfnum)
+				procPath(pcuropt, path)
 
 
 def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout=30*60):  # 7, 30 min

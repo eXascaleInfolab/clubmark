@@ -468,7 +468,7 @@ class NetInfo(object):
 
 
 # Note: default AffinityMask is 1 (logical CPUs, i.e. hardware threads)
-def execXmeasures(execpool, args, qualsaver, cfname, inpfname, alg, netinf, timeout, pathidsuf=''
+def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, timeout, pathidsuf=''
 , ilev=0, cmres=False, irun=0, asym=False, workdir=UTILDIR, task=None, seed=None):
 	"""Quality measure executor
 
@@ -478,14 +478,14 @@ def execXmeasures(execpool, args, qualsaver, cfname, inpfname, alg, netinf, time
 	args: list(str)  - quality measures arguments
 	qualsaver: QualitySaver  - quality results saver (persister)
 	# qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
-	cfname: str  - filename of the clustering to be evaluated
-	inpfname: str  - input dataset file name (ground-truth / input network for the ex/in-trinsic quality measure)
+	cfpath: str  - file path of the clustering to be evaluated
+	inpfpath: str  - input dataset file path (ground-truth / input network for the ex/in-trinsic quality measure)
 	alg: str  - algorithm name, required to only to structure (order) the output results
 	netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
 	timeout: uint  - execution timeout in seconds
 	pathidsuf: str  - network path id prepended with the path separator
 	ilev: uint  - index of the clustering level
-	cmres: bool  - whether the cfname is a multi-resolution (multi-level) clusering file
+	cmres: bool  - whether the cfpath is a multi-resolution (multi-level) clusering file
 	irun: uint8  - run id (iteration)
 	asym: bool  - whether the input network is asymmetric (directed, specified by arcs)
 	workdir: str  - working directory of the quality measure (qmeasure location)
@@ -495,17 +495,19 @@ def execXmeasures(execpool, args, qualsaver, cfname, inpfname, alg, netinf, time
 	return jobsnum: uint  - the number of started jobs
 	"""
 	#return jobsnum: uint  - the number of scheduled jobs
-	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(cfname, str
-		) and isinstance(inpfname, str) and isinstance(alg, str) and isinstance(netinf, NetInfo
+	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(cfpath, str
+		) and isinstance(inpfpath, str) and isinstance(alg, str) and isinstance(netinf, NetInfo
 		) and timeout >= 0 and (not pathidsuf or pathidsuf.startswith(SEPPATHID)
 		) and ilev >= 0 and isinstance(ilev, int) and irun >= 0 and (
 		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tqualsaver: {}'
 		',\n\tcfname: {},\n\tinpfname: {},\n\talg: {},\n\tnetinf: {},\n\ttimeout: {},\n\tpathidsuf: {}'
 		',\n\tcmres: {},\n\tirun: {},\n\tasym: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
-		.format(execpool, args, qualsaver, cfname, inpfname, alg, netinf, timeout, pathidsuf
+		.format(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, timeout, pathidsuf
 		, cmres, irun, asym, workdir, task, seed))
 	# Check whether the job should be created or such evaluation already exist in the dataset
+	# Form network name with path id
+	netname = os.path.splitext(os.path.split(inpfpath)[1])[0]
 	qmfn = sys._getframe().f_code.co_name  # This function
 	qmname = funcToAppName(qmfn)  # Quality measure name
 	# Fetch evaluating metrics from the args
@@ -534,20 +536,20 @@ def execXmeasures(execpool, args, qualsaver, cfname, inpfname, alg, netinf, time
 
 
 @metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS, first=False), multirun=3)  # Note: multirun requires irun
-def execGnmi(execpool, args, qualsaver, cfname, inpfname, timeout
+def execGnmi(execpool, args, qualsaver, cfpath, inpfpath, timeout
 , ilev=0, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""gnmi (gecmi)  - Generalized Normalized Mutual Information"""
 	pass
 
 
-def execOnmi(execpool, args, qualsaver, cfname, inpfname, timeout
+def execOnmi(execpool, args, qualsaver, cfpath, inpfpath, timeout
 , ilev=0, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""onmi  - Overlapping NMI"""
 	pass
 
 
 @metainfo(intrinsic=True)  # Note: intrinsic causes interpretation of ifname as inpnet and reuqires netparams
-def execImeasures(execpool, args, qualsaver, cfname, inpfname, timeout
+def execImeasures(execpool, args, qualsaver, cfpath, inpfpath, timeout
 , ilev=0, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""imeasures (proxy for DAOC)  - some intrinsic quality measures"""
 	pass

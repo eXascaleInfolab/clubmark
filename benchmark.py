@@ -1383,26 +1383,27 @@ def clnames(net, odir, alg, pathidsuf=''):
 		None if not os.path.isfile(mrcl) else mrcl)
 
 
-def gtname(net, idir):
-	"""Ground-truth clustering name by the input network name
+def gtpath(net, idir):
+	"""Ground-truth clustering file path by the input network file path
 
-	net: str  - input network name
-	idir: bool - whether the input network is given from the deducated directory of shuffles or
+	net: str  - input network path, may include instace and shuffle suffixes
+	idir: bool - whether the input network is given from the dedicated directory of shuffles or
 		a flat structure is used where all networks are located in the same dir
 
-	return gfname: str  - ground-truth clustering file name
+	return gfpath: str  - ground-truth clustering file path
 	"""
 	if not idir:
-		bpath = os.path.splitext(net)[0]
-		gfname = bpath + EXTCLNODES
-		if os.path.isfile(gfname):
-			return gfname
-		print('WARNING, gtname() idir parameter does not correspond to the actual input structure.'
+		gfpath = delPathSuffix(os.path.splitext(net)[0]) + EXTCLNODES
+		if os.path.isfile(gfpath):
+			return gfpath
+		print('WARNING, gtpath() idir parameter does not correspond to the actual input structure.'
 			' Checking the ground-truth availability in the upper dir.', file=sys.stderr)
-	gfname = os.path.split(net)[0] + EXTCLNODES
-	if not os.path.isfile(gfname):
+	path, name = os.path.split(net)
+	# Check the ground-truth file in the parent directory
+	gfpath = delPathSuffix(os.path.splitext(name)[0], True).join((os.path.split(path)[0], EXTCLNODES))
+	if not os.path.isfile(gfpath):
 		raise RuntimeError('Invalid structure of the input, the ground-truth clustering is not found for ' + net)
-	return gfname
+	return gfpath
 
 
 
@@ -1488,7 +1489,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					# tasksuf, netext = os.path.splitext(os.path.split(net)[1])
 					# netext = netext.lower()
 					netext = os.path.splitext(net)[1].lower()
-					gfname = gtname(net, netshf)  # Ground-truth file name by the network file name
+					gfpath = gtpath(net, netshf)  # Ground-truth file name by the network file name (with full path)
 					# # Form Measure [/ Basebneet] / Network tasks
 					# assert not tasks or len(tasks) == len(cqmes), 'Tasks are not synced with the quality measures'
 					# mntasks = []
@@ -1512,7 +1513,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								)
 							try:
 								# Whether the input path is a network or a clustering
-								ifnm = net if eq in QMSINTRIN else gfname
+								ifpath = net if eq in QMSINTRIN else gfpath
 								cfnames, mcfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
 								# Sort the clustering file names to form thier clustering level ids in the same order
 								if len(cfnames) >= 2:
@@ -1522,7 +1523,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									# ilev == ifc corresponds to the alphabetical ordering of the clustering levels file names
 									for ifc, fcl in enumerate(inpcls):
 										for irun in range(runs):
-											jobsnum += eq(_execpool, qm[1:], qualsaver, cfname=fcl, inpfname=ifnm
+											jobsnum += eq(_execpool, qm[1:], qualsaver, cfpath=fcl, inpfpath=ifpath
 												, alg=alg, netinf=netinf, timeout=timeout, pathidsuf=pathidsuf, ilev=ifc
 												, cmres=inpmres, irun=irun, asym=asym, task=task, seed=seed)
 							except Exception as err:  #pylint: disable=W0703

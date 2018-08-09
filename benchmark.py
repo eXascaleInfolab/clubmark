@@ -887,13 +887,13 @@ def updateNetInfos(netinfs, net, pathidsuf='', shfnum=0):
 	assert not pathidsuf or pathidsuf.startswith(SEPPATHID), 'Ivalid pathidsuf: ' + pathidsuf
 	netnameps = parseName(os.path.splitext(os.path.split(net)[1])[0], True)
 	# Note: +1 to consider the origin
-	ntinf = netinfs.setdefault(netnameps[0] + pathidsuf, NetInfo(shfnum=shfnum+1))
+	ntinf = netinfs.setdefault(netnameps[0] + pathidsuf, NetInfo(nshf=shfnum+1))
 	# Evaluate the number of instances only if not specified explicitly
 	if netnameps[2]:
-		ntinf.insnum = max(ntinf.insnum, int(netnameps[2][len(SEPINST):]) + 1)  # Note: +1 to form total number from id
+		ntinf.nins = max(ntinf.insnum, int(netnameps[2][len(SEPINST):]) + 1)  # Note: +1 to form total number from id
 	# Evaluate the number of shuffles only if it is not specified explicitly (or specified as 0)
 	if not shfnum and netnameps[3]:
-		ntinf.shfnum = max(ntinf.shfnum, int(netnameps[3][len(SEPSHF):]) + 1)  # Note: +1 to form total number from id
+		ntinf.nshf = max(ntinf.shfnum, int(netnameps[3][len(SEPSHF):]) + 1)  # Note: +1 to form total number from id
 
 
 def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None, netinfs=None):

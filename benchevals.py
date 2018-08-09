@@ -246,8 +246,8 @@ class QualitySaver(object):
 			_persister: Process  - persister worker process
 			queue: Queue  - multiprocess queue whose items are saved (persisted)
 			storage: h5py.File  - HDF5 storage
-			mrescons: list(str)  - meta data of resource consumption
-			irescons: dict(resname: str, resindex: uint)  - back mapping of the resource consumption metadata
+			# mrescons: list(str)  - meta data of resource consumption
+			# irescons: dict(resname: str, resindex: uint)  - back mapping of the resource consumption metadata
 			_active: bool  - the storage is operational (the requests can be processed)
 		"""
 		# algs: iterable(str)  - evaluating clustering algorithms (names of the algorithms)
@@ -328,25 +328,25 @@ class QualitySaver(object):
 		# Note: append mode is the default one; core driver is a memory-mapped file, block_size is default (64 Kb)
 		self.storage = h5py.File(storage, mode='a', driver='core', libver='latest', userblock_size=ublocksize)
 		# Initialize or update metadata and groups
-		# rescons meta data (h5str array)
-		try:
-			self.mrescons = [b.encode() for b in self.storage['rescons.inf'][()]]
-		except IndexError:
-			self.mrescons = ['ExecTime', 'CPU_time', 'RSS_peak']
-			# Note: None in maxshape means resizable, fletcher32 used for the checksum
-			self.storage.create_dataset('rescons.inf', shape=(len(self.mrescons),)
-				, dtype=h5str, data=[s.decode() for s in self.mrescons], fletcher32=True)  # fillvalue=''
-		# # Note: None in maxshape means resizable, fletcher32 used for the checksum,
-		# # exact used torequire shape and type to match exactly
-		# metares = self.storage.require_dataset('rescons.meta', shape=(len(self.mrescons),), dtype=h5str
-		# 	, data=self.mrescons, exact=True, fletcher32=True)  # fillvalue=''
-		#
-		# rescons str to the index mapping
-		self.irescons = {s: i for i, s in enumerate(self.mrescons)}
+		# # rescons meta data (h5str array)
+		# try:
+		# 	self.mrescons = [b.encode() for b in self.storage['rescons.inf'][()]]
+		# except IndexError:
+		# 	self.mrescons = ['ExecTime', 'CPU_time', 'RSS_peak']
+		# 	# Note: None in maxshape means resizable, fletcher32 used for the checksum
+		# 	self.storage.create_dataset('rescons.inf', shape=(len(self.mrescons),)
+		# 		, dtype=h5str, data=[s.decode() for s in self.mrescons], fletcher32=True)  # fillvalue=''
+		# # # Note: None in maxshape means resizable, fletcher32 used for the checksum,
+		# # # exact used torequire shape and type to match exactly
+		# # metares = self.storage.require_dataset('rescons.meta', shape=(len(self.mrescons),), dtype=h5str
+		# # 	, data=self.mrescons, exact=True, fletcher32=True)  # fillvalue=''
+		# #
+		# # rescons str to the index mapping
+		# self.irescons = {s: i for i, s in enumerate(self.mrescons)}
 
 		self._active = True  # The storage is operational
 
-		self.queue = None  # Multiprocess queue is created on the enter
+		self.queue = None  # Note: the multiprocess queue is created on the enter
 
 		# self.algs = {alg: self.storage.require_group('algs/' + alg) for alg in algs}  # Datasets for each algorithm holding params
 		#
@@ -449,18 +449,18 @@ def metainfo(afnmask=AffinityMask(1), intrinsic=False, multirun=1):
 
 class NetInfo(object):
 	"""Network Metainformation"""
-	__slots__ = ('insnum', 'shfnum')
+	__slots__ = ('nins', 'nshf')
 
-	def __init__(self, insnum=1, shfnum=1):
+	def __init__(self, nins=1, nshf=1):
 		"""Network metainformation
 
-		insnum: uint8 >= 1  - the number of instances including the origin
-		shfnum: uint8 >= 1  - the number of shuffles including the origin
+		nins: uint8 >= 1  - the number of instances including the origin
+		nshf: uint8 >= 1  - the number of shuffles including the origin
 		"""
-		assert insnum >= 1 and isinstance(insnum, int) and shfnum >= 1 and isinstance(shfnum, int
-			), 'Invalid arguments  insnum: {}, shfnum: {}'.format(insnum, shfnum)
-		self.insnum = insnum
-		self.shfnum = shfnum
+		assert nins >= 1 and isinstance(nins, int) and nshf >= 1 and isinstance(nshf, int
+			), 'Invalid arguments  nins: {}, nshf: {}'.format(nins, nshf)
+		self.nins = nins
+		self.nshf = nshf
 
 	def __str__(self):
 		"""String conversion"""
@@ -509,6 +509,16 @@ def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, time
 	# Form network name with path id
 	bnetname = os.path.splitext(os.path.split(inpfpath)[1])[0] + pathidsuf
 	# Validate group attributes
+	algnet = qualsaver.storage.require_group('/'.join((alg, bnetname)))
+	# Check the number of instances
+	nins = algnet.attrs['nins'].get('nins')
+	assert nins is None or nins == netinf.nins, (
+		'The number of network instances does not correspond to the persisted value: {} != {}'.format(netinf.nins, nins))
+	if nins is None:
+		algnet.create('nins', netinf.nins, shape=(1,), dtype='B')
+	# Check the number of shuffles
+
+		algnet.attrs['nins'] = netinf.nins
 
 	qmfn = sys._getframe().f_code.co_name  # This function
 	qmname = funcToAppName(qmfn)  # Quality measure name

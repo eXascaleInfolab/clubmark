@@ -79,7 +79,7 @@ from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsS
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
 from benchevals import aggEvaluations, RESDIR, CLSDIR, EXTEXECTIME, QMSRAFN, QMSINTRIN, QMSRUNS, \
-	QualitySaver, NetParams, NetInfo
+	QualitySaver, NetInfo
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
 from algorithms.utils.parser_nsl import asymnet, dflnetext
@@ -1481,7 +1481,6 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					# netext = netext.lower()
 					netext = os.path.splitext(net)[1].lower()
 					gfname = gtname(net, netshf)  # Ground-truth file name by the network file name
-					npars = NetParams(asymnet(netext, asym), pathidsuf)  # Input network parameters
 					# # Form Measure [/ Basebneet] / Network tasks
 					# assert not tasks or len(tasks) == len(cqmes), 'Tasks are not synced with the quality measures'
 					# mntasks = []
@@ -1497,13 +1496,8 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					for alg in algorithms:
 						for i, qm, eq in enumerate(cqmes):
 							try:
-								if eq in QMSINTRIN:  # Whether the input path is a network or a clustering
-									ifnm = net
-									netparams = npars
-								else:
-									# Get ground-truth clusering file name by the input network file name
-									ifnm = gfname
-									netparams = None
+								# Whether the input path is a network or a clustering
+								ifnm = net if eq in QMSINTRIN else gfname
 								cfnames, mcfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
 								# Sort the clustering file names to form thier clustering level ids in the same order
 								if len(cfnames) >= 2:
@@ -1517,8 +1511,8 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 											# 	# Append irun to the task suffix
 											# 	, tasksuf if runs == 1 else 'r'.join((tasksuf, str(irun))))), task=task)
 											jobsnum += eq(_execpool, qm[1:], qualsaver, cfname=fcl, inpfname=ifnm, alg=alg
-												, netinf=netinf, timeout=timeout, ilev=ifc, cmres=inpmres, netparams=netparams
-												, irun=irun, task=None if not tasks else tasks[i], seed=seed)
+												, netinf=netinf, timeout=timeout, pathidsuf=pathidsuf, ilev=ifc, cmres=inpmres
+												, irun=irun, asym=asym, task=None if not tasks else tasks[i], seed=seed)
 							except Exception as err:  #pylint: disable=W0703
 								errexectime = time.perf_counter() - exectime
 								print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'

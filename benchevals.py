@@ -70,7 +70,7 @@ QMSRUNS = {}  # Run these stochastic quality measures specified number of times
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 
-# # Accessory Routines ----------------------------------------------------------- 
+# # Accessory Routines -----------------------------------------------------------
 # def toH5str(text):
 # 	"""Convert text to the h5str
 #
@@ -196,6 +196,7 @@ def saveQuality(qsqueue, qentry):
 
 
 class QualitySaver(object):
+	"""Quality evaluations saver to the persistent storage"""
 	# Max number of the buffered items in the queue that have not been processed
 	# before blocking the caller on appending more items
 	# Should not be too much to save them into the persistent store on the
@@ -207,7 +208,7 @@ class QualitySaver(object):
 	@staticmethod
 	def __datasaver(qualsaver):
 		"""Worker process function to save data to the persistent storage
-	
+
 		qualsaver  - quality saver wrapper containing the storage and queue
 			of the evaluating measures
 		"""
@@ -228,7 +229,7 @@ class QualitySaver(object):
 				if not isinstance(err, queue.Empty):
 					raise
 				break
-				
+
 
 	def __init__(self, seed, update=False, timeout=None):  # algs, qms, nets=None,
 		"""Creating or open HDF5 storage and prepare for the quality measures evaluations
@@ -348,7 +349,7 @@ class QualitySaver(object):
 		self.queue = None  # Multiprocess queue is created on the enter
 
 		# self.algs = {alg: self.storage.require_group('algs/' + alg) for alg in algs}  # Datasets for each algorithm holding params
-		# 
+		#
 		# rcrows0 = 64
 		# rccols = 6
 		# appsdir = self.storage.require_group('apps')  # Applications / algorithms
@@ -447,6 +448,7 @@ def metainfo(afnmask=AffinityMask(1), intrinsic=False, multirun=1):
 
 
 class NetInfo(object):
+	"""Network Metainformation"""
 	__slots__ = ('insnum', 'shfnum')
 
 	def __init__(self, insnum=1, shfnum=1):
@@ -469,7 +471,7 @@ class NetInfo(object):
 def execXmeasures(execpool, args, qualsaver, cfname, inpfname, alg, netinf, timeout, pathidsuf=''
 , ilev=0, cmres=False, irun=0, asym=False, workdir=UTILDIR, task=None, seed=None):
 	"""Quality measure executor
-	
+
 	xmeasures  - various extrinsic quality measures
 
 	execpool: ExecPool  - execution pool
@@ -494,14 +496,14 @@ def execXmeasures(execpool, args, qualsaver, cfname, inpfname, alg, netinf, time
 	"""
 	#return jobsnum: uint  - the number of scheduled jobs
 	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(cfname, str
-		) and isinstance(inpfname, str) and isinstance(alg, str
+		) and isinstance(inpfname, str) and isinstance(alg, str) and isinstance(netinf, NetInfo
 		) and timeout >= 0 and (not pathidsuf or pathidsuf.startswith(SEPPATHID)
 		) and ilev >= 0 and isinstance(ilev, int) and irun >= 0 and (
 		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
 		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tqualsaver: {}'
-		',\n\tcfname: {},\n\tinpfname: {},\n\talg: {},\n\ttimeout: {},\n\tpathidsuf: {},\n\tcmres: {}'
-		',\n\tirun: {},\n\tasym: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
-		.format(execpool, args, qualsaver, cfname, inpfname, alg, timeout, pathidsuf
+		',\n\tcfname: {},\n\tinpfname: {},\n\talg: {},\n\tnetinf: {},\n\ttimeout: {},\n\tpathidsuf: {}'
+		',\n\tcmres: {},\n\tirun: {},\n\tasym: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
+		.format(execpool, args, qualsaver, cfname, inpfname, alg, netinf, timeout, pathidsuf
 		, cmres, irun, asym, workdir, task, seed))
 	# Check whether the job should be created or such evaluation already exist in the dataset
 	qmfn = sys._getframe().f_code.co_name  # This function
@@ -525,7 +527,7 @@ def execXmeasures(execpool, args, qualsaver, cfname, inpfname, alg, netinf, time
 	# execpool.execute(Job(name=SEPNAMEPART.join((alg, taskname)), workdir=workdir, args=args, timeout=timeout
 	# 	#, stdout=os.devnull
 	# 	, ondone=limlevs, params={'taskpath': taskpath, 'fetchLevId': fetchLevIdCnl}
-	# 	, task=task, category=alg, size=netsize, stdout=logfile, stderr=errfile))	
+	# 	, task=task, category=alg, size=netsize, stdout=logfile, stderr=errfile))
 	# qentry = QualityEntry()
 	# saveQuality(qsqueue, qentry)
 	return 1

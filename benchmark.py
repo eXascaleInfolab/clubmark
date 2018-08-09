@@ -1081,7 +1081,7 @@ def processNetworks(datas, handler, xargs={}, dflextfn=dflnetext, tasks=None, fp
 				# Both shuffles (if exist any) and network instances are located in the same dir
 				updateNetInfos(netinfs, path, xargs['pathidsuf'], popt.shfnum)
 		# Process paths if have not been done yet because of the the meta information construction
-		if metainf:	
+		if metainf:
 			for path in glob.iglob(popt.path):  # Allow wildcards
 				procPath(pcuropt, path)
 
@@ -1503,6 +1503,13 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					# which benefits from the networks and clustering caching
 					for alg in algorithms:
 						for i, qm, eq in enumerate(cqmes):
+							# Append algortihm-indicating subtask: QMeasure / BaseNet / Alg
+							task = None if not tasks else tasks[i]
+							if task:
+								task = Task(SEPSUBTASK.join((task.name, alg)), task=task
+									# TODO: Aggregate quality evaluations of each algorithm on each network
+									#, onfinish=aggAlgQevals, params=_execpool
+								)
 							try:
 								# Whether the input path is a network or a clustering
 								ifnm = net if eq in QMSINTRIN else gfname
@@ -1515,12 +1522,9 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									# ilev == ifc corresponds to the alphabetical ordering of the clustering levels file names
 									for ifc, fcl in enumerate(inpcls):
 										for irun in range(runs):
-											# task = Task(SEPSUBTASK.join((qm[0] if not tasks else tasks[i].name
-											# 	# Append irun to the task suffix
-											# 	, tasksuf if runs == 1 else 'r'.join((tasksuf, str(irun))))), task=task)
-											jobsnum += eq(_execpool, qm[1:], qualsaver, cfname=fcl, inpfname=ifnm, alg=alg
-												, netinf=netinf, timeout=timeout, pathidsuf=pathidsuf, ilev=ifc, cmres=inpmres
-												, irun=irun, asym=asym, task=None if not tasks else tasks[i], seed=seed)
+											jobsnum += eq(_execpool, qm[1:], qualsaver, cfname=fcl, inpfname=ifnm
+												, alg=alg, netinf=netinf, timeout=timeout, pathidsuf=pathidsuf, ilev=ifc
+												, cmres=inpmres, irun=irun, asym=asym, task=task, seed=seed)
 							except Exception as err:  #pylint: disable=W0703
 								errexectime = time.perf_counter() - exectime
 								print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'

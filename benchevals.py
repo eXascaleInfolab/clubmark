@@ -509,16 +509,38 @@ def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, time
 	# Form network name with path id
 	bnetname = os.path.splitext(os.path.split(inpfpath)[1])[0] + pathidsuf
 	# Validate group attributes
-	algnet = qualsaver.storage.require_group('/'.join((alg, bnetname)))
-	# Check the number of instances
-	nins = algnet.attrs['nins'].get('nins')
-	assert nins is None or nins == netinf.nins, (
-		'The number of network instances does not correspond to the persisted value: {} != {}'.format(netinf.nins, nins))
-	if nins is None:
-		algnet.create('nins', netinf.nins, shape=(1,), dtype='B')
-	# Check the number of shuffles
+	def validateDim(vactual, group, vname, vtype='B'):
+		"""Validate dimension value creating a scalar attribute if required
 
-		algnet.attrs['nins'] = netinf.nins
+		vactual: uint >= 1  - actual current value provided by the called
+		group: hdf5.Group  - opened group
+		vname: str or None  - name of the stored attribute if exists
+		vtype: str or ctype  - type of the attribute
+
+		return vstored: uint  - the attribute value in the dataset (>= vactual)
+		"""
+		assert vactual >= 1 and isinstance(vactual, int) and group and (vname is None or isinstance(vname, str)
+			), 'Invalid arguments  vactual: {}, group type: {}, vname: {}'.format(vactual, type(group).__name__, vname)
+		vstored = group.get(vname)
+		if vstored != vactual and vstored is not None:
+			# Warn and use the persisted value if it is larger otherwise raise an error requiring a new storage
+			# since the dimensions should be permanent in the persisted storage
+			if vactual < vstored:
+				print('WARNING execXmeasures(), processing {} {} < {} persisted dimension size'  # The non-filled values will remain NaN
+					.format(vname, vactual, vstored))
+			else:
+				raise ValueError('Processing {} {} > {} persisted. A new dedicated storage is required'.format(vname, vactual, vstored))
+		if vstored is None:
+			group.create(vname, vactual, shape=(1,), dtype=vtype)
+		return vstored
+
+	# Validate algorithm levels
+	group = qualsaver.storage.require_group(alg)
+	nlev = validateDim(ALGLEVS.get(alg, ALEVSMAX), group, 'nlev')
+	# Validate network instances and shuffles
+	group = qualsaver.storage.require_group(bnetname)
+	nins = validateDim(netinf.nins, group, 'nins')
+	nshf = validateDim(netinf.nshf, group, 'nshf')
 
 	qmfn = sys._getframe().f_code.co_name  # This function
 	qmname = funcToAppName(qmfn)  # Quality measure name

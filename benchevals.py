@@ -35,7 +35,7 @@ import numpy as np  # Required for the HDF5 operations
 # from benchapps import  # funcToAppName,
 from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
 	escapePathWildcards, envVarDefined, SyncValue, tobackup, funcToAppName, \
-	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, ALGSDIR, \
+	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, ALGSDIR, ALEVSMAX, ALGLEVS \
 	TIMESTAMP_START, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 from utils.mpepool import Task, Job, AffinityMask
 
@@ -505,9 +505,7 @@ def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, time
 		',\n\tcmres: {},\n\tirun: {},\n\tasym: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
 		.format(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, timeout, pathidsuf
 		, cmres, irun, asym, workdir, task, seed))
-	# Check whether the job should be created or such evaluation already exist in the dataset
-	# Form network name with path id
-	bnetname = os.path.splitext(os.path.split(inpfpath)[1])[0] + pathidsuf
+	# TODO: consider batch attribute validations in the caller
 	# Validate group attributes
 	def validateDim(vactual, group, vname, vtype='B'):
 		"""Validate dimension value creating a scalar attribute if required
@@ -538,17 +536,39 @@ def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, time
 	group = qualsaver.storage.require_group(alg)
 	nlev = validateDim(ALGLEVS.get(alg, ALEVSMAX), group, 'nlev')
 	# Validate network instances and shuffles
-	group = qualsaver.storage.require_group(bnetname)
+	# Form network name with path id
+	bnetname = os.path.splitext(os.path.split(inpfpath)[1])[0] + pathidsuf
+	group = group.require_group(bnetname)
 	nins = validateDim(netinf.nins, group, 'nins')
 	nshf = validateDim(netinf.nshf, group, 'nshf')
 
-	qmfn = sys._getframe().f_code.co_name  # This function
-	qmname = funcToAppName(qmfn)  # Quality measure name
+	# Form dataset name
+	# qmfname = sys._getframe().f_code.co_name  # This function name
+	qmname = funcToAppName(sys._getframe().f_code.co_name)  # Quality measure name
 	# Fetch evaluating metrics from the args
 	metrics = []
-
-	if qualsaver.entryExists(qmname):
-		return 0
+	# ...
+	metrics.append('MF1h_w')  # TODO: Hardcoded to be replaced
+	SEPMTR = ':'
+	SUFMRS = '+m'  # Multiresolution suffix (includes the flag prefix)
+	for mtr in metrics
+		dsname = SEPMTR.join((qmname, mtr))  # dataset name
+		if cmres:
+			dsname += SUFMRS
+		# TODO: to fetch the number of runs either QMSRUNS should accept name of the function, or
+		# it worth to create all datasets in advance by the caller before filling them !!!
+		dataset = group.require_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qmfname, None), 1)
+			, dtype='f4', fletcher32=True)  # TODO: consider initial filling with NaN
+		# 	# Note: None in maxshape means resizable, fletcher32 used for the checksum
+		# 	self.storage.create_dataset('rescons.inf', shape=(len(self.mrescons),)
+		# 		, dtype=h5str, data=[s.decode() for s in self.mrescons], fletcher32=True)  # fillvalue=''
+		# # # Note: None in maxshape means resizable, fletcher32 used for the checksum,
+		# # # exact used torequire shape and type to match exactly
+		# # metares = self.storage.require_dataset('rescons.meta', shape=(len(self.mrescons),), dtype=h5str
+		# # 	, data=self.mrescons, exact=True, fletcher32=True)  # fillvalue=''
+		# Check whether the job should be created or such evaluation already exist in the dataset
+		if dataset.entryExists(qmname):
+			return 0
 
 	# Evaluate relative paths
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir

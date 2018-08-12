@@ -35,7 +35,7 @@ import numpy as np  # Required for the HDF5 operations
 # from benchapps import  # funcToAppName,
 from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
 	escapePathWildcards, envVarDefined, SyncValue, tobackup, funcToAppName, \
-	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, ALGSDIR, ALEVSMAX, ALGLEVS \
+	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, ALGSDIR, ALEVSMAX, ALGLEVS, \
 	TIMESTAMP_START, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 from utils.mpepool import Task, Job, AffinityMask
 
@@ -225,7 +225,7 @@ class QualitySaver(object):
 			# 	# TODO: save data to HDF5
 			# 	# pscan01 = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
 			except Exception as err:
-				# Note: IOError: Broken pipe is raised for the closed queue
+				# Note: IOError: Broken pipe is raised for the closed
 				if not isinstance(err, queue.Empty):
 					raise
 				break
@@ -269,7 +269,8 @@ class QualitySaver(object):
 		timefmt = '%y%m%d-%H%M%S'  # Start time of the benchmarking, time format: YYMMDD_HHMMSS
 		timestamp = time.strftime(timefmt, TIMESTAMP_START)  # Timestamp string
 		seedstr = str(seed)
-		storage = '/'.join((RESDIR, 'measures_', seedstr, '.h5'))  # File name of the HDF5.storage
+		# HDF5 Storage: qmeasures_<seed>.h5
+		storage = '/'.join((RESDIR, 'qmeasures_', seedstr, '.h5'))  # File name of the HDF5.storage
 		ublocksize = 512  # Userblock size in bytes
 		ublocksep = ':'  # Userblock vals separator
 		if os.path.isfile(storage):
@@ -347,14 +348,6 @@ class QualitySaver(object):
 		self._active = True  # The storage is operational
 
 		self.queue = None  # Note: the multiprocess queue is created on the enter
-
-		# self.algs = {alg: self.storage.require_group('algs/' + alg) for alg in algs}  # Datasets for each algorithm holding params
-		#
-		# rcrows0 = 64
-		# rccols = 6
-		# appsdir = self.storage.require_group('apps')  # Applications / algorithms
-		# for app in apps:
-		# 	# Open or create dataset for each app
 		# 	# Allocate chunks of 10 items starting with empty dataset and with possibility
 		# 	# to resize up to 500 items (params combinations)
 		# 	self.apps[app] = appsdir.require_dataset(app, shape=(0,), dtype=h5py.special_dtype(vlen=_h5str)
@@ -505,42 +498,6 @@ def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, time
 		',\n\tcmres: {},\n\tirun: {},\n\tasym: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
 		.format(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, timeout, pathidsuf
 		, cmres, irun, asym, workdir, task, seed))
-	# TODO: consider batch attribute validations in the caller
-	# Validate group attributes
-	def validateDim(vactual, group, vname, vtype='B'):
-		"""Validate dimension value creating a scalar attribute if required
-
-		vactual: uint >= 1  - actual current value provided by the called
-		group: hdf5.Group  - opened group
-		vname: str or None  - name of the stored attribute if exists
-		vtype: str or ctype  - type of the attribute
-
-		return vstored: uint  - the attribute value in the dataset (>= vactual)
-		"""
-		assert vactual >= 1 and isinstance(vactual, int) and group and (vname is None or isinstance(vname, str)
-			), 'Invalid arguments  vactual: {}, group type: {}, vname: {}'.format(vactual, type(group).__name__, vname)
-		vstored = group.get(vname)
-		if vstored != vactual and vstored is not None:
-			# Warn and use the persisted value if it is larger otherwise raise an error requiring a new storage
-			# since the dimensions should be permanent in the persisted storage
-			if vactual < vstored:
-				print('WARNING execXmeasures(), processing {} {} < {} persisted dimension size'  # The non-filled values will remain NaN
-					.format(vname, vactual, vstored))
-			else:
-				raise ValueError('Processing {} {} > {} persisted. A new dedicated storage is required'.format(vname, vactual, vstored))
-		if vstored is None:
-			group.create(vname, vactual, shape=(1,), dtype=vtype)
-		return vstored
-
-	# Validate algorithm levels
-	group = qualsaver.storage.require_group(alg)
-	nlev = validateDim(ALGLEVS.get(alg, ALEVSMAX), group, 'nlev')
-	# Validate network instances and shuffles
-	# Form network name with path id
-	bnetname = os.path.splitext(os.path.split(inpfpath)[1])[0] + pathidsuf
-	group = group.require_group(bnetname)
-	nins = validateDim(netinf.nins, group, 'nins')
-	nshf = validateDim(netinf.nshf, group, 'nshf')
 
 	# Form dataset name
 	# qmfname = sys._getframe().f_code.co_name  # This function name
@@ -551,7 +508,7 @@ def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, time
 	metrics.append('MF1h_w')  # TODO: Hardcoded to be replaced
 	SEPMTR = ':'
 	SUFMRS = '+m'  # Multiresolution suffix (includes the flag prefix)
-	for mtr in metrics
+	for mtr in metrics:
 		dsname = SEPMTR.join((qmname, mtr))  # dataset name
 		if cmres:
 			dsname += SUFMRS

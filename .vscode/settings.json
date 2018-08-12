@@ -30,6 +30,7 @@
         "html": "xml",
         "latex": "latex",
         "markdown": "markdown",
-        "python": "plain"
+        "python": "code"
     },
+    // "spellright.useDocumentSymbolsInCode": true
 }

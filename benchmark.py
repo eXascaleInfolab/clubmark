@@ -75,7 +75,7 @@ import benchapps  # Required for the functions name mapping to/from the app name
 from benchapps import PYEXEC, aggexec, EXTCLNODES  # , ALGSDIR
 from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsSec, \
 	secDhms, delPathSuffix, parseName, funcToAppName, PREFEXEC, SEPPARS, SEPINST, SEPSHF, SEPPATHID, \
-	SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
+	SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER, ALEVSMAX, ALGLEVS
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
 from benchevals import aggEvaluations, RESDIR, CLSDIR, EXTEXECTIME, QMSRAFN, QMSINTRIN, QMSRUNS, \
@@ -1030,6 +1030,11 @@ def processNetworks(datas, handler, xargs={}, dflextfn=dflnetext, tasks=None, fp
 	fpathids: File  - path ids file opened for the writing or None
 	metainf: bool  - extract meta information about the processing networks
 	"""
+	# Track processed file names to resolve cases when files with the same name present in different input dirs
+	# Note: pathids are required at least to set concise job names to see what is executed in runtime
+	netsNameCtr = {}  # Net base name to counter mapping: {net base name: counter}
+	netinfs = {}  # Base network name (with pathid) to network meta information (the number of shuffles, instances, etc.) mapping
+
 	def procPath(pcuropt, path):
 		"""Process path given the current path options"""
 		# Assign resolved path from the wildcard
@@ -1039,10 +1044,6 @@ def processNetworks(datas, handler, xargs={}, dflextfn=dflnetext, tasks=None, fp
 		processPath(pcuropt, handler, xargs=xargs, dflextfn=dflextfn, tasks=tasks
 			, netinfs=None if not metainf else netinfs)
 
-	# Track processed file names to resolve cases when files with the same name present in different input dirs
-	# Note: pathids are required at least to set concise job names to see what is executed in runtime
-	netsNameCtr = {}  # Net base name to counter mapping: {net base name: counter}
-	netinfs = {}  # Base network name to network meta informaiton (the number of shuffles, instances, etc.) mapping
 	for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
 		xargs['asym'] = popt.asym
 		# Resolve wildcards
@@ -1440,6 +1441,32 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 	assert qmsmodule and appsmodule and isinstance(datas[0], PathOpts) and exectime + 0 >= 0 and timeout + 0 >= 0, 'Invalid input arguments'
 	assert isinstance(seed, int) and seed >= 0, 'Seed value is invalid'
 
+	# Validate group attributes
+	def validateDim(vactual, group, vname, vtype='B'):
+		"""Validate dimension value creating a scalar attribute if required
+
+		vactual: uint >= 1  - actual current value provided by the called
+		group: hdf5.Group  - opened group
+		vname: str or None  - name of the stored attribute if exists
+		vtype: str or ctype  - type of the attribute
+
+		return vstored: uint  - the attribute value in the dataset (>= vactual)
+		"""
+		assert vactual >= 1 and isinstance(vactual, int) and group and (vname is None or isinstance(vname, str)
+			), 'Invalid arguments  vactual: {}, group type: {}, vname: {}'.format(vactual, type(group).__name__, vname)
+		vstored = group.get(vname)
+		if vstored != vactual and vstored is not None:
+			# Warn and use the persisted value if it is larger otherwise raise an error requiring a new storage
+			# since the dimensions should be permanent in the persisted storage
+			if vactual < vstored:
+				print('WARNING execXmeasures(), processing {} {} < {} persisted dimension size'  # The non-filled values will remain NaN
+					.format(vname, vactual, vstored))
+			else:
+				raise ValueError('Processing {} {} > {} persisted. A new dedicated storage is required'.format(vname, vactual, vstored))
+		if vstored is None:
+			group.create(vname, vactual, shape=(1,), dtype=vtype)
+		return vstored
+
 	stime = time.perf_counter()  # Procedure start time; ATTENTION: .perf_counter() should not be used, because it does not consider "sleep" time
 	print('Starting quality evaluations...')
 
@@ -1451,6 +1478,62 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Prepare HDF5 evaluations store
 	with QualitySaver(seed=seed, update=update) as qualsaver:  # , nets=netnames
+		# Validate algorithm group attributes
+		alevs = {}  # The actual number of levels in each algorithm in the storage
+		for alg in algorithms:
+			group = qualsaver.storage.require_group(alg)
+			alevs[alg] = validateDim(ALGLEVS.get(alg, ALEVSMAX), group, 'nlev')
+
+		def validateDataset(alg, inpfpath, pathidsuf, netinf, cmres):
+			"""Validate dataset metainformation create the non-existent one
+
+			alg: str  - algorithm name, required to only to structure (order) the output results
+			inpfpath: str  - input dataset file path (ground-truth / input network for the ex/in-trinsic quality measure)
+			pathidsuf: str  - network path id prepended with the path separator
+			netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
+			cmres: bool  - whether the clustering file is a single level with multi-resolution clusers
+
+			return dataset: h5py.Dataset  - opened dataset descriptor
+			"""
+			# # Validate algorithm levels
+			# group = qualsaver.storage.require_group(alg)
+			# nlev = validateDim(ALGLEVS.get(alg, ALEVSMAX), group, 'nlev')
+
+			# Validate network instances and shuffles
+			# Form network name with path id
+			bnetname = os.path.splitext(os.path.split(inpfpath)[1])[0] + pathidsuf
+			group = qualsaver.storage.require_group(''.join(('/', alg, '/', bnetname)))
+			nins = validateDim(netinf.nins, group, 'nins')
+			nshf = validateDim(netinf.nshf, group, 'nshf')
+
+			# # Form dataset name
+			# # qmfname = sys._getframe().f_code.co_name  # This function name
+			# qmname = funcToAppName(sys._getframe().f_code.co_name)  # Quality measure name
+			# # Fetch evaluating metrics from the args
+			# metrics = []
+			# # ...
+			# metrics.append('MF1h_w')  # TODO: Hardcoded to be replaced
+			# SEPMTR = ':'
+			# SUFMRS = '+m'  # Multiresolution suffix (includes the flag prefix)
+			# for mtr in metrics:
+			# 	dsname = SEPMTR.join((qmname, mtr))  # dataset name
+			# 	if cmres:
+			# 		dsname += SUFMRS
+			# 	# TODO: to fetch the number of runs either QMSRUNS should accept name of the function, or
+			# 	# it worth to create all datasets in advance by the caller before filling them !!!
+			# 	dataset = group.require_dataset(dsname, shape=(nins, nshf, alevs[alg], QMSRUNS.get(qmfname, None), 1)
+			# 		, dtype='f4', fletcher32=True)  # TODO: consider initial filling with NaN
+			# 	# 	# Note: None in maxshape means resizable, fletcher32 used for the checksum
+			# 	# 	self.storage.create_dataset('rescons.inf', shape=(len(self.mrescons),)
+			# 	# 		, dtype=h5str, data=[s.decode() for s in self.mrescons], fletcher32=True)  # fillvalue=''
+			# 	# # # Note: None in maxshape means resizable, fletcher32 used for the checksum,
+			# 	# # # exact used torequire shape and type to match exactly
+			# 	# # metares = self.storage.require_dataset('rescons.meta', shape=(len(self.mrescons),), dtype=h5str
+			# 	# # 	, data=self.mrescons, exact=True, fletcher32=True)  # fillvalue=''
+			# 	# Check whether the job should be created or such evaluation already exist in the dataset
+			# 	if dataset.entryExists(qmname):
+			# 		return 0
+
 		# Compute quality measures grouping them into batches with the same affinity
 		# starting with the measures having the affinity step = 1
 		# Sort qmeasures with their executables having affinity step = 1 in the end for the pop()
@@ -1515,6 +1598,13 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								# Whether the input path is a network or a clustering
 								ifpath = net if eq in QMSINTRIN else gfpath
 								cfnames, mcfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
+								# Create or open the respective datasets
+								# Dataset with multiple cluster levels, typically each having clusters on a single resolution
+								if cfnames:
+									pass
+								# Dataset with a single level containing multi-resolution clusters 
+								if mcfname:
+									pass
 								# Sort the clustering file names to form thier clustering level ids in the same order
 								if len(cfnames) >= 2:
 									cfnames.sort()

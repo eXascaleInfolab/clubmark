@@ -1454,7 +1454,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 		"""
 		assert vactual >= 1 and isinstance(vactual, int) and group and (vname is None or isinstance(vname, str)
 			), 'Invalid arguments  vactual: {}, group type: {}, vname: {}'.format(vactual, type(group).__name__, vname)
-		vstored = group.get(vname)
+		vstored = group.attrs.get(vname)
 		if vstored != vactual and vstored is not None:
 			# Warn and use the persisted value if it is larger otherwise raise an error requiring a new storage
 			# since the dimensions should be permanent in the persisted storage
@@ -1464,8 +1464,9 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 			else:
 				raise ValueError('Processing {} {} > {} persisted. A new dedicated storage is required'.format(vname, vactual, vstored))
 		if vstored is None:
-			group.create(vname, vactual, shape=(1,), dtype=vtype)
-		return vstored
+			group.attrs.create(vname, vactual, shape=(1,), dtype=vtype)
+			return vactual  # The same as new vstored
+		return vstored  # >= vactual
 
 	stime = time.perf_counter()  # Procedure start time; ATTENTION: .perf_counter() should not be used, because it does not consider "sleep" time
 	print('Starting quality evaluations...')
@@ -1478,61 +1479,20 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 	assert _execpool is None, 'The global execution pool should not exist'
 	# Prepare HDF5 evaluations store
 	with QualitySaver(seed=seed, update=update) as qualsaver:  # , nets=netnames
-		# Validate algorithm group attributes
-		alevs = {}  # The actual number of levels in each algorithm in the storage
-		for alg in algorithms:
-			group = qualsaver.storage.require_group(alg)
-			alevs[alg] = validateDim(ALGLEVS.get(alg, ALEVSMAX), group, 'nlev')
-
-		def validateDataset(alg, inpfpath, pathidsuf, netinf, cmres):
-			"""Validate dataset metainformation create the non-existent one
-
-			alg: str  - algorithm name, required to only to structure (order) the output results
-			inpfpath: str  - input dataset file path (ground-truth / input network for the ex/in-trinsic quality measure)
-			pathidsuf: str  - network path id prepended with the path separator
-			netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
-			cmres: bool  - whether the clustering file is a single level with multi-resolution clusers
-
-			return dataset: h5py.Dataset  - opened dataset descriptor
-			"""
-			# # Validate algorithm levels
-			# group = qualsaver.storage.require_group(alg)
-			# nlev = validateDim(ALGLEVS.get(alg, ALEVSMAX), group, 'nlev')
-
-			# Validate network instances and shuffles
-			# Form network name with path id
-			bnetname = os.path.splitext(os.path.split(inpfpath)[1])[0] + pathidsuf
-			group = qualsaver.storage.require_group(''.join(('/', alg, '/', bnetname)))
-			nins = validateDim(netinf.nins, group, 'nins')
-			nshf = validateDim(netinf.nshf, group, 'nshf')
-
-			# # Form dataset name
-			# # qmfname = sys._getframe().f_code.co_name  # This function name
-			# qmname = funcToAppName(sys._getframe().f_code.co_name)  # Quality measure name
-			# # Fetch evaluating metrics from the args
-			# metrics = []
-			# # ...
-			# metrics.append('MF1h_w')  # TODO: Hardcoded to be replaced
-			# SEPMTR = ':'
-			# SUFMRS = '+m'  # Multiresolution suffix (includes the flag prefix)
-			# for mtr in metrics:
-			# 	dsname = SEPMTR.join((qmname, mtr))  # dataset name
-			# 	if cmres:
-			# 		dsname += SUFMRS
-			# 	# TODO: to fetch the number of runs either QMSRUNS should accept name of the function, or
-			# 	# it worth to create all datasets in advance by the caller before filling them !!!
-			# 	dataset = group.require_dataset(dsname, shape=(nins, nshf, alevs[alg], QMSRUNS.get(qmfname, None), 1)
-			# 		, dtype='f4', fletcher32=True)  # TODO: consider initial filling with NaN
-			# 	# 	# Note: None in maxshape means resizable, fletcher32 used for the checksum
-			# 	# 	self.storage.create_dataset('rescons.inf', shape=(len(self.mrescons),)
-			# 	# 		, dtype=h5str, data=[s.decode() for s in self.mrescons], fletcher32=True)  # fillvalue=''
-			# 	# # # Note: None in maxshape means resizable, fletcher32 used for the checksum,
-			# 	# # # exact used torequire shape and type to match exactly
-			# 	# # metares = self.storage.require_dataset('rescons.meta', shape=(len(self.mrescons),), dtype=h5str
-			# 	# # 	, data=self.mrescons, exact=True, fletcher32=True)  # fillvalue=''
-			# 	# Check whether the job should be created or such evaluation already exist in the dataset
-			# 	if dataset.entryExists(qmname):
-			# 		return 0
+		# Validate algorithm HDF5 group attributes (nlev)
+		# alevs = {}  # The actual number of levels in each algorithm in the storage
+		try:
+			for alg in algorithms:
+				group = qualsaver.storage.require_group(alg)
+				# alevs[alg] =
+				validateDim(ALGLEVS.get(alg, ALEVSMAX), group, 'nlev')
+		except Exception as err:  #pylint: disable=W0703
+			errexectime = time.perf_counter() - exectime
+			print('ERROR, quality evaluations are interrupted by the exception:'
+				' {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
+				.format(errexectime, *secondsToHms(errexectime)), file=sys.stderr)
+			# traceback.print_stack(limit=5, file=sys.stderr)
+			traceback.print_exc(5)
 
 		# Compute quality measures grouping them into batches with the same affinity
 		# starting with the measures having the affinity step = 1
@@ -1566,12 +1526,10 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					"""
 					# Note: netinf is mandatory for this callback
 					assert isinstance(netinf, NetInfo), 'Ivalid argument: ' + netinf
-					# Supplied tasks: qmeasure / basenet for each net
+					# Scheduled tasks: qmeasure / basenet for each net
 					jobsnum = 0
 					## Task suffix is the network name
 					# tasksuf, netext = os.path.splitext(os.path.split(net)[1])
-					# netext = netext.lower()
-					netext = os.path.splitext(net)[1].lower()
 					gfpath = gtpath(net, netshf)  # Ground-truth file name by the network file name (with full path)
 					# # Form Measure [/ Basebneet] / Network tasks
 					# assert not tasks or len(tasks) == len(cqmes), 'Tasks are not synced with the quality measures'
@@ -1586,6 +1544,27 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					# Apply all quality measures having the same affinity for all the algorithms on all networks,
 					# which benefits from the networks and clustering caching
 					for alg in algorithms:
+						# Validate network HDF5 group attributes (instances and shuffles) if required
+						if not netinf.gvld:
+							netname, netext = os.path.splitext(os.path.split(net)[1])
+							try:
+								netext = netext.lower()
+								group = qualsaver.storage.require_group(''.join(('/', alg, '/'
+									# Form network name with path id
+									, delPathSuffix(netname, True) + pathidsuf)))
+								# nins =
+								validateDim(netinf.nins, group, 'nins')
+								# nshf =
+								validateDim(netinf.nshf, group, 'nshf')
+								netinf.gvld = True
+							except Exception as err:  #pylint: disable=W0703
+								print('ERROR, quality evaluation of "{}" is interrupted by the exception: {}, call stack:'
+									.format(netname + pathidsuf, err), file=sys.stderr)
+								traceback.print_exc(5)
+								return jobsnum
+						else:
+							netext = os.path.splitext(net)[1].lower()
+
 						for i, qm, eq in enumerate(cqmes):
 							# Append algortihm-indicating subtask: QMeasure / BaseNet / Alg
 							task = None if not tasks else tasks[i]
@@ -1602,7 +1581,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								# Dataset with multiple cluster levels, typically each having clusters on a single resolution
 								if cfnames:
 									pass
-								# Dataset with a single level containing multi-resolution clusters 
+								# Dataset with a single level containing multi-resolution clusters
 								if mcfname:
 									pass
 								# Sort the clustering file names to form thier clustering level ids in the same order

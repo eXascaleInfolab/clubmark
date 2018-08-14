@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-:Description: A modular benchmark, which optionally generates and preprocesses
+:Description: A modular benchmark, which optionally generates and pre-processes
 	(shuffles, i.e. reorder nodes in the networks) datasets using specified
 	executable, optionally executes specified applications (clustering algorithms)
 	with specified parameters on the specified datasets, and optionally evaluates
@@ -55,7 +55,7 @@ except ImportError:
 		range = xrange
 	except NameError:
 		pass  # xrange is not defined in Python3, which is fine
-import atexit  # At exit termination handleing
+import atexit  # At exit termination handling
 import sys
 import os
 import shutil
@@ -69,7 +69,7 @@ if not hasattr(time, 'perf_counter'):  #pylint: disable=C0413
 	time.perf_counter = time.time
 
 from math import sqrt
-from multiprocessing import cpu_count  # Returns the number of logical CPU units (hw treads) if defined
+from multiprocessing import cpu_count  # Returns the number of logical CPU units (HW treads) if defined
 
 import benchapps  # Required for the functions name mapping to/from the app names
 from benchapps import PYEXEC, aggexec, EXTCLNODES  # , ALGSDIR
@@ -200,7 +200,7 @@ class Params(object):
 			TODO: clarify and check availability in the latest version
 		host: str  - WebUI host, None to disable WebUI
 		port: int  - WebUI port
-		runtimeout: uint  - clustering algoritims execution timeout
+		runtimeout: uint  - clustering algorithms execution timeout
 		evaltimeout: uint  - resulting clusterings evaluations timeout
 		"""
 		self.syntpo = None  # SyntPathOpts()
@@ -330,7 +330,7 @@ def parseParams(args):
 			if pos == -1 or arg[2] not in 'fa=' + _GENSEPSHF or len(arg) == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
 			# flat  - Use flat derivatives or generate the dedicated dir for the derivatives of this network(s)
-			# aysm  - asymmetric (directed): None - not specified (symmetric is assumed), False - symmetric, True - asymmetric
+			# asym  - asymmetric (directed): None - not specified (symmetric is assumed), False - symmetric, True - asymmetric
 			# shfnum  - the number of shuffles
 			popt = PathOpts(arg[pos+1:].strip('"\''), flat=False, asym=False, shfnum=0)  # Remove quotes if exist
 			for i in range(2, pos):
@@ -442,7 +442,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 	insnum  - the number of instances of each network to be generated, >= 1
 	asym  - generate asymmetric (specified by arcs, directed) instead of undirected networks
 	basedir  - base directory where data will be generated
-	netsdir  - relative directory for the synthetic networks, contains subdirs,
+	netsdir  - relative directory for the synthetic networks, contains subdir-s,
 		each contains all instances of each network and all shuffles of each instance
 	overwrite  - whether to overwrite existing networks or use them
 	seedfile  - seed file name
@@ -601,7 +601,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 		# insnum*2 to consider all smaller networks
 		try:
 			_execpool.join(min(gentimeout, insnum*2*netgenTimeout))
-		except BaseException as err:  # Consider also system iteruptions not captured by the Exception
+		except BaseException as err:  # Consider also system interruptions not captured by the Exception
 			print('WARNING, network generation execution pool is interrupted by: {}. {}'
 				.format(err, traceback.format_exc(5)), file=sys.stderr)
 			raise
@@ -610,7 +610,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 
 
 def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
-	"""Shuffle specified networks backing up and updating exsinting shuffles.
+	"""Shuffle specified networks backing up and updating existent shuffles.
 	Existing shuffles with the target name are skipped, redundant are deleted,
 	lacked are formed.
 
@@ -624,7 +624,7 @@ def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
 	assert isinstance(datas[0], PathOpts), 'datas must be a container of PathOpts'
 	assert timeout1 + 0 >= 0, 'Non-negative shuffling timeout is expected'
 
-	# Check whether the shufflng is required at all
+	# Check whether the shuffling is required at all
 	noshuf = True
 	for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
 		# Skip paths that do not require any shuffling
@@ -637,7 +637,7 @@ def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
 	global _execpool
 	assert _execpool is None, 'The global execution pool should not exist'
 	shufnets = 0  # The number of shuffled networks
-	# Note: afnstep = 1 because the processes are not cache-intencive, not None, because the workers are single-threaded
+	# Note: afnstep = 1 because the processes are not cache-intensive, not None, because the workers are single-threaded
 	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='shufnets') as _execpool:
 		def shuffle(job):
 			"""Shuffle network instance specified by the job"""
@@ -763,7 +763,7 @@ while True:
 
 			wildcard: str  - path wildcard
 
-			return: bool  - path existance
+			return: bool  - path existence
 			"""
 			try:
 				next(glob.iglob(wildcard))
@@ -794,7 +794,7 @@ while True:
 							netname = os.path.split(net)[1]
 							if netname.find(SEPSHF) != -1:
 								continue
-							# Whether the shuffles will be modified and need to be backuped
+							# Whether the shuffles will be modified and need to be backed up
 							backup = xpathExists(''.join((path, os.path.splitext(netname)[0]
 								, '*', SEPSHF, str(popt.shfnum + 1), '*', dflext)))
 							# Backup existed dir (path, not just a name)
@@ -811,7 +811,7 @@ while True:
 							# netname = os.path.split(net)[1]
 							# if netname.find(SEPSHF) != -1:
 							# 	continue
-							# # Whether the shuffles will be modified and need to be backuped
+							# # Whether the shuffles will be modified and need to be backed up
 							# backup = xpathExists(''.join((path, os.path.splitext(netname)[0]
 							# 	, '*', SEPSHF, str(popt.shfnum + 1), '*', dflext)))
 							# if backup and notbacked:
@@ -827,14 +827,14 @@ while True:
 					dirpath = os.path.splitext(path)[0]
 					basename = os.path.splitext(netname)[0]
 					if not popt.flat:
-						# Whether the shuffles will be modified and need to be backuped
+						# Whether the shuffles will be modified and need to be backed up
 						backup = xpathExists(''.join((dirpath, '/', basename
 							, '*', SEPSHF, str(popt.shfnum + 1), '*', dflext)))
 						shuf0 = prepareDir(dirpath, path, backup, bcksuffix)
 						shfnum += shuffleNet(shuf0, popt.shfnum)
 					else:
 						# Backup existing flat shuffles if any (expanding the base path), which will be updated the subsequent shuffling
-						# Whether the shuffles will be modified and need to be backuped
+						# Whether the shuffles will be modified and need to be backed up
 						if xpathExists('*'.join((dirpath, SEPSHF + str(popt.shfnum + 1), dflext))):
 							tobackup(os.path.split(path)[0], True, bcksuffix, move=False)  # Copy to the backup
 						shfnum += shuffleNet(path, popt.shfnum)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
@@ -850,7 +850,7 @@ while True:
 
 def basenetTasks(netname, pathidsuf, basenets, rtasks):
 	"""Fetch or make tasks for the specific base network name (with pathidsuf
-	and whitout the instance and shuffle id)
+	and without the instance and shuffle id)
 
 	netname: str  - network name, possibly includes instance but NOT shuffle id
 	pathidsuf: str  - network path id prepended with the path separator
@@ -951,7 +951,7 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None, netin
 				netname = os.path.split(net)[1]
 				if netname.find(SEPSHF) != -1:
 					continue
-				# Fetch base network name (whitout the instance and shuffle id)
+				# Fetch base network name (without the instance and shuffle id)
 				nettasks = basenetTasks(netname, pathidsuf, bnets, tasks)
 				# #if popt.shfnum:  # ATTENTNION: shfnum may not be available for non-synthetic networks
 				# Process dedicated dir of shuffles for the specified network,
@@ -959,7 +959,7 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None, netin
 				dirname, ext = os.path.splitext(net)
 				if os.path.isdir(dirname):
 					# Shuffles exist for this network and located in the subdir together with the copy of origin
-					# Update the number of shuffles if not specified, the netinfs entry is already creted by the caller
+					# Update the number of shuffles if not specified, the netinfs entry is already created by the caller
 					if netinfs and not popt.shfnum:
 						for desnet in glob.iglob('/*'.join((dirname, ext))):
 							updateNetInfos(netinfs, desnet, pathidsuf, popt.shfnum)
@@ -977,7 +977,7 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None, netin
 				# Note: typically, shuffles and instances do not exist in the flat structure
 				# or their number is small
 				#
-				# # Fetch base network name (whitout instance and shuffle id)
+				# # Fetch base network name (without instance and shuffle id)
 				# basenet = os.path.split(net)[1]
 				# iename = basenet.find(SEPINST)
 				# if iename != -1:
@@ -998,14 +998,14 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None, netin
 			netname = os.path.split(path)[1]
 			if netname.find(SEPSHF) != -1:
 				return
-			# Fetch base network name (whitout the instance and shuffle id)
+			# Fetch base network name (without the instance and shuffle id)
 			nettasks = basenetTasks(netname, pathidsuf, bnets, tasks)
 			#if popt.shfnum:  # ATTENTNION: shfnum is not available for non-synthetic networks
 			# Process dedicated dir of shuffles for the specified network,
 			# the origin network itself is linked to the shuffles dir (inside it)
 			dirname, ext = os.path.splitext(path)
 			if os.path.isdir(dirname):
-				# Update the number of shuffles if not specified, the netinfs entry is already creted by the caller
+				# Update the number of shuffles if not specified, the netinfs entry is already created by the caller
 				if netinfs and not popt.shfnum:
 					for desnet in glob.iglob('/*'.join((dirname, ext))):
 						updateNetInfos(netinfs, desnet, pathidsuf, popt.shfnum)
@@ -1170,11 +1170,11 @@ def fetchAppnames(appsmodule):
 
 
 def clarifyApps(appnames, appsmodule, namefn=None):
-	"""Validate and refine or forme appnames considering the appsmonule functions
-	and fetch the respecive executors
+	"""Validate and refine or form appnames considering the appsmonule functions
+	and fetch the respective executors
 
 	appnames: list(str)  - names of the apps to be clarified or formed if empty
-	appsmodule: module  - module with the respecive app functions staring with PREFEXEC
+	appsmodule: module  - module with the respective app functions staring with PREFEXEC
 	namefn: callable  - name extraction function if appnames is a list of (compound) objects
 
 	return
@@ -1217,8 +1217,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	timeout  - timeout per each algorithm execution
 	runtimeout  - timeout for all algorithms execution, >= 0, 0 means unlimited time
 	"""
-	# return  netnames: iterable(str) or None  - network names with path id and without the base direcotry
-	# netnames = None  # Network names with path id and without the base direcotry
+	# return  netnames: iterable(str) or None  - network names with path id and without the base directory
+	# netnames = None  # Network names with path id and without the base directory
 	if not datas:
 		print('WRANING runApps(), there are no input datasets specified to be clustered', file=sys.stderr)
 		# return netnames
@@ -1471,7 +1471,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 	stime = time.perf_counter()  # Procedure start time; ATTENTION: .perf_counter() should not be used, because it does not consider "sleep" time
 	print('Starting quality evaluations...')
 
-	# Refine and validate names of the algorithms and measures, form the respecive executors
+	# Refine and validate names of the algorithms and measures, form the respective executors
 	clarifyApps(algorithms, appsmodule)  # execalgs =
 	exeqms = clarifyApps(qmeasures, qmsmodule, namefn=lambda qm: qm[0])
 
@@ -1584,7 +1584,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								# Dataset with a single level containing multi-resolution clusters
 								if mcfname:
 									pass
-								# Sort the clustering file names to form thier clustering level ids in the same order
+								# Sort the clustering file names to form their clustering level ids in the same order
 								if len(cfnames) >= 2:
 									cfnames.sort()
 								runs = QMSRUNS.get(eq, 1)  # The number of quality measure runs (subsequent evaluations)
@@ -1831,7 +1831,7 @@ if __name__ == '__main__':
 			'  - The following symbols in the path name have specific semantic and processed respectively: {rsvpathsmb}.',
 			'  - Paths may contain wildcards: *, ?, +.',
 			'  - Multiple directories and files wildcards can be specified with multiple -i options.',
-			'  - Existent shuffles are backed up if reduced, the existend shuffles are RETAINED and only the additional'
+			'  - Existent shuffles are backed up if reduced, the existent shuffles are RETAINED and only the additional'
 			' shuffles are generated if required.',
 			'  - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]',
 			'  - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions)'
@@ -1849,8 +1849,8 @@ if __name__ == '__main__':
 			'NOTE:',
 			'  - Multiple quality measure applications can be specified with multiple -q options.',
 			'  - Existent quality measures with the same seed are updated (extended with the lacking'
-			' evalations omitting the already existent) until --quality-revalue is specified.',
-			'Notations of the quality mesurements:',
+			' evaluations omitting the already existent) until --quality-revalue is specified.',
+			'Notations of the quality measurements:',
 			' = Extrinsic Quality (Accuracy) Measures =',
 			'   - GNMI[_{{max,sqrt}}]  - Generalized Normalized Mutual Information for overlapping and multi-resolution clusterings'
 			' (collections of clusters), equals to the standard NMI when applied to the non-overlapping single-resolution clusterings.',
@@ -1859,13 +1859,13 @@ if __name__ == '__main__':
 			'   - OI[x]  - [x - extended] Omega Index for the overlapping clusterings, non-extended version equals to the'
 			' Adjusted Rand Index when applied to the non-overlapping single-resolution clusterings.',
 			' --- Less Indicative Extrinsic Quality Measures ---',
-			'   - F1{{p,h}}_[{{w,u}}]  - perform labelling of the evaluating clusters with the specified ground-truth'
+			'   - F1{{p,h}}_[{{w,u}}]  - perform labeling of the evaluating clusters with the specified ground-truth'
 			' and evaluate F1-measure of the labeled clusters',
-			'   - ONMI[_{{max,sqrt,avg,lfk}}]  - Ovelapping NMI suitable for a single-resolution clusterins having light overlaps,'
-			' the resulting values are not compatible with the standard NMI when applied to the non-overlapping clsuters.',
-			# '   - NMI[_{{max,sqrt,avg,min}}]  - standart NMI for the non-overlapping (disjoint) clusters only.',
+			'   - ONMI[_{{max,sqrt,avg,lfk}}]  - Ovelapping NMI suitable for a single-resolution clusterings having light overlaps,'
+			' the resulting values are not compatible with the standard NMI when applied to the non-overlapping clusters.',
+			# '   - NMI[_{{max,sqrt,avg,min}}]  - standard NMI for the non-overlapping (disjoint) clusters only.',
 			' = Intrinsic Quality Measures =',
-			'   - Cdt  - conducance f for the overlapping clustering.',  # Cdt, Cds, f
+			'   - Cdt  - conductance f for the overlapping clustering.',  # Cdt, Cds, f
 			'   - Q[a]  - [autoscaled] modularity for the overlapping clustering, non-autoscaled equals to the standard modularity',
 			' when applied to the non-overlapping single-resolution clustering.',
 			'  --timeout, -t=[<days:int>d][<hours:int>h][<minutes:int>m][<seconds:float>] | -t[X]=<float>  - timeout for each'
@@ -1880,11 +1880,11 @@ if __name__ == '__main__':
 			' stochastic algorithms and quality measures execution, contains uint64_t value. Default: {seedfile}.',
 			'NOTE:',
 			'  - The seed file is not used on shuffling, so the shuffles are DISTINCT for the same seed.',
-			'  - Each reexecution of the benchmarking reuses once created seed file, which is permanent'
+			'  - Each re-execution of the benchmarking reuses once created seed file, which is permanent'
 			' and can be updated manually.',
 			'',
 			'Advanced parameters:',
-			#'  --stderr-stamp  - output a time stamp to the stderr on the benchmarking start to separate multiple re-exectuions',
+			#'  --stderr-stamp  - output a time stamp to the stderr on the benchmarking start to separate multiple re-executions',
 			'  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.), deprecated',
 			'    f  - force the conversion even when the data is already exist',
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
@@ -1892,9 +1892,9 @@ if __name__ == '__main__':
 			', which is useful to include external manual evaluations into the final summarized results',
 			'ATTENTION: <resval_path> should include the algorithm name and target measure.',
 			'  --webaddr, -w  - run WebUI on the specified <webui_addr> in the format <host>[:<port>], default port={port}.',
-			'  --runtimeout  - global clustrering algorithms execution timeout in the'
+			'  --runtimeout  - global clustering algorithms execution timeout in the'
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {runtimeout}.',
-			'  --evaltimeout  - global clustrering algorithms execution timeout in the'
+			'  --evaltimeout  - global clustering algorithms execution timeout in the'
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {evaltimeout}.',
 			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=SEPINST, seppars=SEPPARS, sepshf=SEPSHF, rsvpathsmb=(SEPPARS, SEPINST, SEPSHF, SEPPATHID)

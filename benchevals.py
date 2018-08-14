@@ -44,12 +44,12 @@ try:
 	# For Python3
 	h5str = h5py.special_dtype(vlen=bytes)  # ASCII str, bytes
 	h5ustr = h5py.special_dtype(vlen=str)  # UTF8 str
-	# Note: str.encode() convers str to bytes, str.decode() converts bytes to (unicode) str
+	# Note: str.encode() converts str to bytes, str.decode() converts bytes to (Unicode) str
 except NameError:  # bytes are not defined in Python2
 	# For Python2
 	h5str = h5py.special_dtype(vlen=str)  # ASCII str, bytes
 	h5ustr = h5py.special_dtype(vlen=unicode)  #pylint: disable=E0602;  # UTF8 str
-	# Note: str.decode() convers bytes to unicode str, str.encode() converts (unicode) str to bytes
+	# Note: str.decode() converts bytes to Unicode str, str.encode() converts (Unicode) str to bytes
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 RESDIR = 'results/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm, specified RELATIVE to ALGSDIR
@@ -61,10 +61,10 @@ _EXTERR = '.err'
 EXTEXECTIME = '.rcp'  # Resource Consumption Profile
 EXTAGGRES = '.res'  # Aggregated results
 EXTAGGRESEXT = '.resx'  # Extended aggregated results
-SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not apear in a file name, which can be part of job name)
+SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not appear in a file name, which can be part of job name)
 
 QMSRAFN = {}  # Specific affinity mask of the quality measures: str, AffinityMask;  qmsrAffinity
-QMSINTRIN = set()  # Intrinsic quality measures requering input network instead of the ground-truth clustering
+QMSINTRIN = set()  # Intrinsic quality measures requiring input network instead of the ground-truth clustering
 QMSRUNS = {}  # Run these stochastic quality measures specified number of times
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
@@ -99,8 +99,8 @@ _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 #
 # 		eval_num  - number/id of the evaluation to take average over multiple (re)evaluations
 # 			(NMI from gecmi provides stochastic results), uint8 or None
-# 		nmi_max  - NMI multiresolution overlapping (gecmi) normalized by max (default)
-# 		nmi_sqrt  - NMI multiresolution overlapping (gecmi) normalized by sqrt
+# 		nmi_max  - NMI multi-resolution overlapping (gecmi) normalized by max (default)
+# 		nmi_sqrt  - NMI multi-resolution overlapping (gecmi) normalized by sqrt
 # 		onmi_max  - Overlapping nonstandard NMI (onmi) normalized by max (default)
 # 		onmi_sqrt  - Overlapping nonstandard NMI (onmi) normalized by sqrt
 # 		f1p  - F1p measure (harmonic mean of partial probabilities)
@@ -144,7 +144,7 @@ class QualityEntry(object):
 		inpnet: str  - full network (dataset) name
 		clsname: str:  - the file name of the evaluated clustering (including alg params, net inst, shuf, etc.)
 		"""
-		# appargs: str  - non-deault application parameters packed into ASCII encoded str if any
+		# appargs: str  - non-default application parameters packed into ASCII encoded str if any
 		# level: uint32  - index of the level to distinguish clustering hierarchy levels if any.
 		# 	NOTE: For some algorithms levels are defined by the parameter(s) variation,
 		# 	for example Ganxis varies r = 0.01 .. 0.5 by default
@@ -318,7 +318,7 @@ class QualitySaver(object):
 					fstore.write(seedstr)
 					fstore.write(ublocksep)  # Note: initially userblock is filled with 0
 					fstore.write(timestamp)
-					# Fill remained part with zeros to be sure that userblock is zeroized
+					# Fill remained part with zeros to be sure that userblock is zeroed
 					fstore.write('\0' * (self.storage.userblock_size - (len(seedstr) + len(ublocksep) + len(timestamp))))
 			else:
 				raise RuntimeError('ERROR, the userblock creation failed in the {}, userblock_size: {}'
@@ -338,7 +338,7 @@ class QualitySaver(object):
 		# 	self.storage.create_dataset('rescons.inf', shape=(len(self.mrescons),)
 		# 		, dtype=h5str, data=[s.decode() for s in self.mrescons], fletcher32=True)  # fillvalue=''
 		# # # Note: None in maxshape means resizable, fletcher32 used for the checksum,
-		# # # exact used torequire shape and type to match exactly
+		# # # exact used to require shape and type to match exactly
 		# # metares = self.storage.require_dataset('rescons.meta', shape=(len(self.mrescons),), dtype=h5str
 		# # 	, data=self.mrescons, exact=True, fletcher32=True)  # fillvalue=''
 		# #
@@ -373,7 +373,7 @@ class QualitySaver(object):
 	def __enter__(self):
 		"""Context entrence"""
 		self._active = True
-		self.queue = Queue(self.QUEUE_SIZEMAX)  # Qulity measures persistance queue, data pool
+		self.queue = Queue(self.QUEUE_SIZEMAX)  # Qulity measures persistence queue, data pool
 		self._persister = Process(target=self.__datasaver, args=(self,))
 		self._persister.start()
 		return self
@@ -427,7 +427,7 @@ def metainfo(afnmask=AffinityMask(1), intrinsic=False, multirun=1):
 # 	def __init__(self, asym, pathidsuf=''):
 # 		"""Parameters of the input network
 
-# 		asym: bool  - the input network might be assymetric (directed) and is specified by arcs ranther than edges
+# 		asym: bool  - the input network might be asymmetric (directed) and is specified by arcs rather than edges
 # 		pathidsuf: str  - network path id prepended with the path separator, used to distinguish nets
 # 			with the same name located in different dirs
 # 		"""
@@ -502,7 +502,13 @@ def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, time
 		.format(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, timeout, pathidsuf
 		, cmres, irun, asym, workdir, task, seed))
 
-	# Form dataset name
+	# TODO: Perform preliminary check of the existence of the evaluating value in the dataset and
+	# skip such evaluations, which requires in advance knowledge of the evaluating metrics by the
+	# arguments. This is possible when either the evaluating measure has a single metric or provides
+	# an interface to fetch the evaluating metrics before their actual evaluation, i.e. functor with
+	# accessory functions instead of the function should be used for the executors implementation
+
+	# Form dataset name sdf
 	# qmfname = sys._getframe().f_code.co_name  # This function name
 	qmname = funcToAppName(sys._getframe().f_code.co_name)  # Quality measure name
 	# Fetch evaluating metrics from the args
@@ -523,7 +529,7 @@ def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, time
 		# 	self.storage.create_dataset('rescons.inf', shape=(len(self.mrescons),)
 		# 		, dtype=h5str, data=[s.decode() for s in self.mrescons], fletcher32=True)  # fillvalue=''
 		# # # Note: None in maxshape means resizable, fletcher32 used for the checksum,
-		# # # exact used torequire shape and type to match exactly
+		# # # exact used to require shape and type to match exactly
 		# # metares = self.storage.require_dataset('rescons.meta', shape=(len(self.mrescons),), dtype=h5str
 		# # 	, data=self.mrescons, exact=True, fletcher32=True)  # fillvalue=''
 		# Check whether the job should be created or such evaluation already exist in the dataset
@@ -562,7 +568,7 @@ def execOnmi(execpool, args, qualsaver, cfpath, inpfpath, timeout
 	pass
 
 
-@metainfo(intrinsic=True)  # Note: intrinsic causes interpretation of ifname as inpnet and reuqires netparams
+@metainfo(intrinsic=True)  # Note: intrinsic causes interpretation of ifname as inpnet and requires netparams
 def execImeasures(execpool, args, qualsaver, cfpath, inpfpath, timeout
 , ilev=0, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""imeasures (proxy for DAOC)  - some intrinsic quality measures"""
@@ -589,7 +595,7 @@ class ShufflesAgg(object):
 		fixed  - whether all items are aggregated and summarization is performed
 		bestlev  - cluster level with the best value, defined for the finalized evaluations
 		"""
-		assert name.count(SEPNAMEPART) == 2, 'Name format validatoin failed: ' + name
+		assert name.count(SEPNAMEPART) == 2, 'Name format validation failed: ' + name
 		self.name = name
 		# Aggregation data
 		self.levels = {}  # Name: LevelStat
@@ -609,7 +615,7 @@ class ShufflesAgg(object):
 		val  - the real value to be aggregated
 		"""
 		# Aggregate over cluster levels by shuffles distinguishing each set of algorithm params (if exists)
-		# [Evaluate max avg among the aggregated level and transfer it to teh instagg as final result]
+		# [Evaluate max avg among the aggregated level and transfer it to the instagg as final result]
 		assert not self.fixed, 'Only non-fixed aggregator can be modified'
 		# Validate lev to guarantee it does not contain shuffle part
 		assert lev.find(SEPNAMEPART) == -1, 'Level name should not contain shuffle part'
@@ -629,7 +635,7 @@ class ShufflesAgg(object):
 			else:
 				ipe = len(taskname)
 			algpars = taskname[ipb:ipe]
-		# Update statiscit
+		# Update statistics
 		levname = lev
 		if algpars:
 			levname = SEPNAMEPART.join((levname, algpars))  # Note: SEPNAMEPART never occurs in the filename, levname
@@ -695,7 +701,7 @@ class EvalsAgg(object):
 		# Show warning for all non-fixed registered instances over what the aggregation is performed.
 		# Evaluate max among all avg value among instances of each network with particular params. - 3rd element of the task name
 		# Evaluate avg and range over all network instances with the same base name (and params),
-		# #x and ^x are processed similary as instances.
+		# #x and ^x are processed similarly as instances.
 		nameps = False  # Parameters are used in the name
 		for inst in self.partaggs:
 			if not inst.fixed:
@@ -802,7 +808,7 @@ class EvalsAgg(object):
 							else:
 								napars = None
 							# Q is taken as weighted average for best values per each instance,
-							# where best is defined as higest average value among all levels in the shuffles.
+							# where best is defined as highest average value among all levels in the shuffles.
 							# Min is min best avg among shuffles for each instance, max is max best avg.
 							# ATTENTION: values that can be None can't be represented as .6f, but can be as .6
 							fmeasevx.write('\n\t{}>\tQ: {:.6f} ({:.6f} .. {:.6f}), s: {:.6}, count: {}, fails: {},'
@@ -931,7 +937,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 					# This is not the pathid, or this pathid has invalid format
 					print('WARNING, invalid suffix or the separator "{}" represents part of the path "{}", exception: {}. Skipped.'
 					.format(SEPPATHID, clsname, err), file=sys.stderr)
-					# Continue processing as ordinary clusters wthout pathid
+					# Continue processing as ordinary clusters without pathid
 				else:
 					# Skip this clusters having unexpected pathid
 					continue
@@ -944,7 +950,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 		# Fetch shuffling index if exists
 		ish = clsname[:icnpid].rfind(SEPSHF) + 1  # Note: reverse direction to skip possible separator symbols in the name itself
 		shuffle = clsname[ish:icnpid] if ish else ''
-		# Validate shufflng index
+		# Validate shuffling index
 		if shuffle:
 			try:
 				int(shuffle)
@@ -983,7 +989,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 			if os.path.isdir(cfile):  # Skip dirs among the resulting clusters (extra/, generated by OSLOM)
 				continue
 			# Extract base name of the evaluating clusters level
-			# Note: benchmarking algortihm output file names are not controllable and can be any, unlike the embracing folders
+			# Note: benchmarking algorithm output file names are not controllable and can be any, unlike the embracing folders
 			jbasename = os.path.splitext(os.path.split(cfile)[1])[0]
 			assert jbasename, 'The clusters name should exists'
 			# Extand job caption with the executing task if not already contains and update the caption index
@@ -1056,7 +1062,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathids
 		# Processing is performed from the algorithms dir
 		args = ('./hirecs', '-e=../' + cfile, '../' + basefile)
 
-		# Job postprocessing
+		# Job post-processing
 		def aggLevs(job):
 			"""Aggregate results over all levels, appending final value for each level to the dedicated file"""
 			result = job.proc.communicate()[0]  # Read buffered stdout
@@ -1131,7 +1137,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathids
 		jobname = SEPSHF.join((task.name, shuffle))  # Name of the creating job
 		args = ('../exectime', '-o=../' + rcpoutp, '-n=' + jobname, './gecmi', '../' + basefile, '../' + cfile)
 
-		# Job postprocessing
+		# Job post-processing
 		def aggLevs(job):
 			"""Aggregate results over all levels, appending final value for each level to the dedicated file"""
 			try:
@@ -1179,7 +1185,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathids
 		jobname = SEPSHF.join((task.name, shuffle))  # Name of the creating job
 		args = ('../exectime', '-o=../' + rcpoutp, '-n=' + jobname, './onmi_sum', '../' + basefile, '../' + cfile)
 
-		# Job postprocessing
+		# Job post-processing
 		def aggLevs(job):
 			"""Aggregate results over all levels, appending final value for each level to the dedicated file"""
 			try:

@@ -31,13 +31,13 @@ SEPINST = '^'  # Network instances separator, must be a char
 SEPSHF = '%'  # Network shuffles separator, must be a char; ~
 SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
 SEPSUBTASK = '>'  # Sub-task separator
-UTILDIR = 'utils/'  # Utilities directory with external applicaions for quality evaluation and other things
+UTILDIR = 'utils/'  # Utilities directory with external applications for quality evaluation and other things
 ALGSDIR = 'algorithms/'  # Default directory of the benchmarking algorithms
 TIMESTAMP_START = time.gmtime()  # struct_time
 TIMESTAMP_START_STR = time.strftime('%Y-%m-%d %H:%M:%S', TIMESTAMP_START)
 TIMESTAMP_START_HEADER = ' '.join(('# ---', TIMESTAMP_START_STR, '-'*32))
 PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
-# Maximal number of the levels considered for the evaluation in the multi-scale or hierarchihal clustering
+# Maximal number of the levels considered for the evaluation in the multi-scale or hierarchical clustering
 ALEVSMAX = 10  # Use 10 scale levels as in Ganxis by default
 ALGLEVS = {}  # Max number of levels for the algorithm if does not correspond to the ALEVSMAX, dict(str: uint16)
 
@@ -98,7 +98,7 @@ except ImportError:
 def secDhms(seconds):
 	"""Convert seconds to duration of days/hours/minuts/secs in the string format
 
-	seconds: ufloat  - seconds to be converted
+	seconds: float, >=0  - seconds to be converted
 
 	return  duration: str  - resulting duration in the format:
 		[<days:int>d][<hours:int>h][<minutes:int>m][<seconds:float>]
@@ -364,7 +364,7 @@ class ItemsStatistic(object):
 		max  - max value
 		count  - number of valid values
 		invals  - number of invalid values
-		invstats  - number of invaled statistical aggregations
+		invstats  - number of invalid statistical aggregations
 
 		fixed  - whether all items are aggregated and summarization is performed
 		avg  - average value for the finalized evaluations
@@ -483,7 +483,7 @@ def funcToAppName(funcname):
 
 	returns  - name of the algorithm
 	"""
-	assert funcname.startswith(PREFEXEC), 'Executing appliation is expected instead of "{}"'.format(funcname)
+	assert funcname.startswith(PREFEXEC), 'Executing application is expected instead of "{}"'.format(funcname)
 	return funcname[len(PREFEXEC):]  # .lower()
 
 
@@ -701,7 +701,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	# Create the backup if required
 	basedir, srcname = os.path.split(basepath)  # ATTENTION: basedir might be empty
 	# Consider relative path to current dir to not write to the root (/)
-	if not basedir:  # ATTENTION: recuired independently on the value of relpath
+	if not basedir:  # ATTENTION: required independently on the value of relpath
 		basedir = '.'
 		basepath = './' + basepath
 	# origdir = ORIGDIR if not basedir else '/'.join((basedir, ORIGDIR))
@@ -737,7 +737,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 		with tarfile.open(archname, 'w:gz', bufsize=128*1024, compresslevel=6) as tar:
 			for basesrc in basepaths:
 				for path in glob.iglob(basesrc + ('*' if expand else '')):
-					# Skip empty dirs, which shoul be RETAINED (not moved) as they might be
+					# Skip empty dirs, which should be RETAINED (not moved) as they might be
 					# just created for the batch backup of other paths
 					if os.path.isdir(path) and dirempty(path):
 						continue
@@ -774,7 +774,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 		sbasedir = os.path.split(basepath)[0]  # Base src dir
 		for basesrc in basepaths:
 			for path in glob.iglob(basesrc + ('*' if expand else '')):
-				# Skip empty dirs, which shoul be RETAINED (not moved) as they might be
+				# Skip empty dirs, which should be RETAINED (not moved) as they might be
 				# just created for the batch backup of other paths
 				if os.path.isdir(path) and dirempty(path):
 					continue

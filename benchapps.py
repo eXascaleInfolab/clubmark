@@ -53,7 +53,7 @@ from algorithms.utils.parser_nsl import parseHeaderNslFile  #, asymnet
 
 
 # Note: currently the output level are limited only for the algorithms that may produce more than 10 levels
-assert ALEVSMAX >= 10, 'The number of levels limitation should be addded to GANXiS and some others'
+assert ALEVSMAX >= 10, 'The number of levels limitation should be added to GANXiS and some others'
 _EXTLOG = '.log'  # Extension for the logs
 _EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
 EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
@@ -82,7 +82,7 @@ def aggexec(apps):
 	#exectime = {}  # inpname: [app1_stat, app2_stat, ...]
 	# ATTENTION: for the correct output memory must be the last one
 	mnames = ('exectime', 'cputime', 'rssmem')  # Measures names
-	measures = [{}, {}, {}]  # exectiem, cputime, rssmem
+	measures = [{}, {}, {}]  # execitem, cputime, rssmem
 	mapps = []  # Measured apps
 	iapp = 0  # Algorithm index
 	for app in apps:
@@ -99,7 +99,7 @@ def aggexec(apps):
 					# Parse the content
 					fields = ln.split(None, 6)
 					# Note: empty and spaces strings were already excluded
-					# 6 fields in the old format withou the rcode
+					# 6 fields in the old format without the rcode
 					assert 6 <= len(fields) <= 7, (
 						'Invalid format of the resource consumption file "{}": {}'.format(appesfile, ln))
 					# Fetch and accumulate measures
@@ -166,7 +166,7 @@ def aggexec(apps):
 
 def preparePath(taskpath):  # , netshf=False
 	"""Create the path if required, otherwise move existent data to backup.
-	All itnstances and shuffles of each network are handled all together and only once,
+	All instances and shuffles of each network are handled all together and only once,
 	even on calling this function for each shuffle.
 	NOTE: To process files starting with taskpath, it should not contain '/' in the end
 
@@ -188,7 +188,7 @@ def preparePath(taskpath):  # , netshf=False
 		os.mkdir(taskpath)
 
 
-# ATTENTION: this function should not be defined to not beight automatically executed
+# ATTENTION: this function should not be defined to not being automatically executed
 #def execAlgorithm(execpool, netfile, asym, odir, timeout, pathidsuf='', selfexec=False, **kwargs):
 #	"""Execute the algorithm (stub)
 #
@@ -198,7 +198,7 @@ def preparePath(taskpath):  # , netshf=False
 #	timeout  - execution timeout for this task
 #	pathidsuf: str  - network path id prepended with the path separator
 #	selfexec=False  - current execution is the external or internal self call
-#	kwargs  - optional algorithm-specific keyword agguments
+#	kwargs  - optional algorithm-specific keyword arguments
 #
 #	return  - number of executions (executed jobs)
 #	"""
@@ -223,7 +223,7 @@ def prepareResDir(appname, taskname, odir, pathidsuf):
 	return resulting directory without the ending '/' terminator
 	"""
 	# Preapare resulting directory
-	taskdir = taskname  # Relative task directory withouth the ending '/'
+	taskdir = taskname  # Relative task directory without the ending '/'
 	if odir:
 		nameparts = parseName(taskname, True)
 		taskdir = ''.join((nameparts[0], nameparts[2], '/', taskname))  # Use base name and instance id
@@ -248,7 +248,7 @@ class PyBin(object):
 			# 'python -V' (but works for the 'python -h')
 			# pyverstr = subprocess.check_output([PYEXEC, '-V']).decode()  # Note: Xcoding is required for Python3
 			##pyverstr = subprocess.Popen((PYEXEC, '-V'), stdout=subprocess.PIPE).communicate()[0].decode()
-			# pyver = int(reFirstDigits.search(pyverstr).group())  # Take the first digits, i.e. the magor version
+			# pyver = int(reFirstDigits.search(pyverstr).group())  # Take the first digits, i.e. the major version
 			# pybin = 'python' if pyver >= 3 else PYEXEC
 			#
 			# Check for the pypy interpreter/JIT in the system if required
@@ -272,7 +272,7 @@ class PyBin(object):
 			except OSError:
 				pass
 	except IOError:
-		# Note: the required interpreter existance in the system can't be checked here,
+		# Note: the required interpreter existence in the system can't be checked here,
 		# only 'python' is assumed to be present by default.
 		pass
 
@@ -548,7 +548,7 @@ def uniflevs(task):
 						os.mkdir(origdir)
 				# newdir = origdir + oname + '/'
 				levnames = os.listdir(taskpath)  # Note: only file names without the path are returned
-				# Check existance of the dest path, which causes exception in shutil.move()
+				# Check existence of the dest path, which causes exception in shutil.move()
 				dstpath = origdir + os.path.split(taskpath)[1]
 				if os.path.exists(dstpath):
 					try:
@@ -564,7 +564,7 @@ def uniflevs(task):
 					levsnum += len(levnames)
 					# Sort levnames in a way to start from the root (the most coarse-grained) level
 					levnames.sort(key=fetchLevId, reverse=not root0)
-					pouts.append((outname, levnames))  # Output dir name without the path and correponding levels
+					pouts.append((outname, levnames))  # Output dir name without the path and corresponding levels
 					# print('> pout added: {} {} levs ({} .. {})'.format(outname, len(levnames), levnames[0], levnames[-1]), file=sys.stderr)
 			except Exception as err:  #pylint: disable=W0703
 				print('ERROR, {} subtask output levels aggregating unification failed'
@@ -601,11 +601,11 @@ def uniflevs(task):
 	if numouts < lmax:
 		# rlevs = levsnum - numouts
 		lmax -= numouts  # Remained limit considering the reserved levels from each output
-		levsnum -= numouts  # The number of levels besideds the reserved
+		levsnum -= numouts  # The number of levels besides the reserved
 		for i in range(0, numouts):
 			outname, levs = pouts[i]
 			# Evaluate current number of the processing levels, take at least one
-			# in addition to the already reserved becaise the number of levels in
+			# in addition to the already reserved because the number of levels in
 			# the begin of pouts is maximal
 			levnames = None
 			if levsnum:
@@ -624,7 +624,7 @@ def uniflevs(task):
 			for lname in levnames:
 				os.symlink(os.path.relpath(''.join((origdir, outname, '/', lname)), unidir)
 					, '/'.join((unidir, lname)))
-		assert lmax >= 0, 'lmax levels at most shuld be outputted'
+		assert lmax >= 0, 'lmax levels at most should be outputted'
 	else:
 		# Link a single network from as many subsequent pouts as possible
 		for i in range(0, lmax):
@@ -737,7 +737,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=
 
 	# ATTENTION: for the correct execution algname must be always the same as func name without the prefix "exec"
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
-	# Backup prepated the resulting dir and back up the previous results if exist
+	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
 	# print('> execLouvainIg(), taskpath exists:', os.path.exists(taskpath))
 
@@ -804,7 +804,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDI
 		netinfo = parseHeaderNslFile(finp, asym)
 		asym = netinfo.directed
 		if not netinfo.lnsnum:
-			# Use network size if the number of links is not availbale
+			# Use network size if the number of links is not available
 			size = os.fstat(finp.fileno()).st_size * (1 + (not asym))  # Multiply by 2 for the symmetric (undirected) network
 			avgnls = None
 		else:
@@ -838,10 +838,10 @@ def execScp(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDI
 	aggtname = taskname + pathidsuf
 	task = Task(aggtname if task is None else SEPSUBTASK.join((task.name, tasksuf))
 		, task=task, onfinish=uniflevs, params={'outpname': aggtname, 'fetchLevId': fetchLevIdCnl})
-	kmin = 3  # Min clique size to be used for the communities identificaiton
+	kmin = 3  # Min clique size to be used for the communities identification
 	kmax = 7  # Max clique size (~ min node degree to be considered)
 	steps = str(ALEVSMAX)  # Use 10 scale levels as in Ganxis
-	# Power rario to consider non-linear memory complexity increase depending on k
+	# Power ratio to consider non-linear memory complexity increase depending on k
 	pratio = (1 + 5 ** 0.5) * 0.5  # Golden section const: 1.618  # 2.718  # exp(1)
 	# Run for range of clique sizes
 	for k in range(kmin, kmax + 1):
@@ -850,14 +850,14 @@ def execScp(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDI
 		kstrex = 'k' + kstr
 		# Embed params into the task name
 		ktaskname = ''.join((taskbasex, SEPPARS, kstrex, tasksuf))
-		# Backup prepated the resulting dir and back up the previous results if exist
+		# Backup prepared the resulting dir and back up the previous results if exist
 		taskpath = prepareResDir(algname, ktaskname, odir, pathidsuf)
 		errfile = taskpath + _EXTELOG
 		logfile = taskpath + _EXTLOG
 		# Evaluate relative paths dependent of the alg params
 		reltaskpath = relpath(taskpath)
 
-		# scp.py netname k [start_linksnum end__linksnum numberofevaluations] [weight]
+		# scp.py netname k [start_linksnum end_linksnum number_of_evaluations] [weight]
 		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ktaskname, pathidsuf)), '-s=/etime_' + algname
 			, pybin, './scp.py', netfile, kstr, steps, ''.join((reltaskpath, '/', ktaskname, EXTCLNODES)))
 
@@ -896,7 +896,7 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathidsuf='', workdi
 	taskname = os.path.split(netfile)[1]  # Base name of the network
 	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
-	# Backup prepated the resulting dir and back up the previous results if exist
+	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
@@ -942,7 +942,7 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout, pathidsuf='', workdi
 
 	return 1
 
-# Daoc shuld be executed for:
+# Daoc should be executed for:
 # - gamma = 1 and automatic gamma:  -g={-1, 1}
 # - with/out the [default=medium] input links reduction:  -r
 # - with/out the representative clusters output (default: sa). Consider levels output: -cxl[:/0.8]s
@@ -977,7 +977,7 @@ class DaocOpts(object):
 			ad  - all direct owners
 			sh  - single (one any of) direct upper hierarchy of owners (senseless being too mild)
 			ah  - all upper hierarchy of owners (maximizes precision)
-			''  - default policy for the significant clasters:
+			''  - default policy for the significant clusters:
 				sd with default* srweight[=1-e^-2~=0.865] and minclsize[=3]
 		srweight  - weight step ratio for the significant clusters output to avoid output of the large clusters
 			that differ only a bit in weight, multiplier, (0, 1]. Recommended: 0.75 .. 0.9.
@@ -1041,7 +1041,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf='', wor
 	# Fetch the task name and chose correct network filename
 	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension; , netext
 	assert taskname, 'The network name should exists'
-	# Backup prepated the resulting dir and back up the previous results if exist
+	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)  # Base name of the resulting clusters output
 	errfile = taskpath + _EXTELOG  # Errors log + lib tracing including modularity value and clustering summary
 	logfile = taskpath + _EXTLOG   # Tracing to stdout, contains timings
@@ -1065,17 +1065,17 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf='', wor
 	if opts.exclude is not None:
 		args.append('-x' + opts.exclude)
 
-	# Clusters optput options
+	# Clusters output options
 	# Output only max shares, per-level clusters output with step 0.8 in the simple format
 	# (with the header but without the share value)
-	# Note: there is not sence to apply ndsmin for the per-level output since all nodes are guaranted to be output
+	# Note: there is no sense to apply ndsmin for the per-level output since all nodes are guaranteed to be output
 	if opts.rlevout is not None:
 		args.append(''.join(('-cx', str(opts.rlevout).join(('l[:/', ']')), 's=', reltaskpath, EXTCLNODES)))
 	if opts.significance is not None:
 		# Output with the default significance policy
 		args.append(''.join(('-cx', 'ss=', reltaskpath, EXTCLNODES)))
 		# NOTE: output with the specific significance policy is commented as redundant
-		# # The significant clsters considering srweight are outputted into the dedicated file
+		# # The significant clusters considering srweight are outputted into the dedicated file
 		# if opts.srweight is not None:
 		# 	srwstr = str(opts.srweight)
 		# 	ndsminstr = str(opts.ndsmin)
@@ -1091,7 +1091,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf='', wor
 	return 1
 
 
-# DAOC (using standard modularity as an optimization function, non-generelized)
+# DAOC (using standard modularity as an optimization function, non-generalized)
 def execDaoc(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1)):
 	"""DAOC with static gamma=1"""
@@ -1099,7 +1099,7 @@ def execDaoc(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSD
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using standard modularity as an optimization function, non-generelized)
+# DAOC (using standard modularity as an optimization function, non-generalized)
 def execDaocB(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, gband='r0.005')):
 	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as a ratio of MMG"""
@@ -1107,7 +1107,7 @@ def execDaocB(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGS
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using standard modularity as an optimization function, non-generelized)
+# DAOC (using standard modularity as an optimization function, non-generalized)
 def execDaocB1(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, gband='r0.01')):
 	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as 1% of MMG"""
@@ -1115,7 +1115,7 @@ def execDaocB1(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALG
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using standard modularity as an optimization function, non-generelized)
+# DAOC (using standard modularity as an optimization function, non-generalized)
 def execDaocB5(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, gband='r0.05')):
 	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as 1% of MMG"""
@@ -1123,7 +1123,7 @@ def execDaocB5(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALG
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using standard modularity as an optimization function, non-generelized)
+# DAOC (using standard modularity as an optimization function, non-generalized)
 def execDaocR(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, reduction='m')):
 	"""DAOC with the static gamma=1 and a medium reduction policy of the insignificant links"""
@@ -1131,7 +1131,7 @@ def execDaocR(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGS
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using standard modularity as an optimization function, non-generelized)
+# DAOC (using standard modularity as an optimization function, non-generalized)
 def execDaocX(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, exclude='a')):
 	"""DAOC with the static gamma=1 and exclusion of the aggregating hashing being
@@ -1140,7 +1140,7 @@ def execDaocX(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGS
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using standard modularity as an optimization function, non-generelized)
+# DAOC (using standard modularity as an optimization function, non-generalized)
 # Note: Expected to be the fastest among DAOC versions
 def execDaocRB(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.005')):
@@ -1150,7 +1150,7 @@ def execDaocRB(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALG
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using standard modularity as an optimization function, non-generelized)
+# DAOC (using standard modularity as an optimization function, non-generalized)
 # Note: Expected to be the fastest among DAOC versions
 def execDaocRB1(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.01')):
@@ -1160,7 +1160,7 @@ def execDaocRB1(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=AL
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using standard modularity as an optimization function, non-generelized)
+# DAOC (using standard modularity as an optimization function, non-generalized)
 # Note: Expected to be the fastest among DAOC versions
 def execDaocRB5(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.05')):
@@ -1170,7 +1170,7 @@ def execDaocRB5(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=AL
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using standard modularity as an optimization function, non-generelized)
+# DAOC (using standard modularity as an optimization function, non-generalized)
 def execDaocRBX(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.005', exclude='a')):
 	"""DAOC with the static gamma=1, a medium reduction policy, an MMG band
@@ -1179,7 +1179,7 @@ def execDaocRBX(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=AL
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
+# DAOC (using automatic adjusting of the resolution parameter, generalized modularity)
 def execDaocA(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=-1)):
 	"""DAOC with an automatic dynamic gamma"""
@@ -1187,7 +1187,7 @@ def execDaocA(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGS
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
+# DAOC (using automatic adjusting of the resolution parameter, generalized modularity)
 def execDaocAR(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=-1, reduction='m')):  # Note: '' values mean use default
 	"""DAOC with an automatic dynamic gamma, a medium reduction policy and an MMG band"""
@@ -1195,7 +1195,7 @@ def execDaocAR(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALG
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
+# DAOC (using automatic adjusting of the resolution parameter, generalized modularity)
 # Note: Expected to be pretty fast and accurate
 def execDaocARB(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=-1, reduction='m', gband='r0.005')):  # Note: '' values mean use default
@@ -1204,7 +1204,7 @@ def execDaocARB(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=AL
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
+# DAOC (using automatic adjusting of the resolution parameter, generalized modularity)
 # Note: Expected to be pretty fast and accurate
 def execDaocARB1(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=-1, reduction='m', gband='r0.01')):  # Note: '' values mean use default
@@ -1213,7 +1213,7 @@ def execDaocARB1(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=A
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
 
 
-# DAOC (using automatic adjusting of the resolution parameter, generelized modularity)
+# DAOC (using automatic adjusting of the resolution parameter, generalized modularity)
 # Note: Expected to be pretty fast and accurate
 def execDaocARB5(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
 , seed=None, opts=DaocOpts(gamma=-1, reduction='m', gband='r0.05')):  # Note: '' values mean use default
@@ -1238,7 +1238,7 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALG
 	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension; , netext
 	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Ganxis'
-	# Backup prepated the resulting dir and back up the previous results if exist
+	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
@@ -1294,7 +1294,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALG
 	taskname, netext = os.path.splitext(taskname)  # Separate file name and extension
 	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Oslom2'
-	# Backup prepated the resulting dir and back up the previous results if exist
+	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
@@ -1311,7 +1311,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALG
 		"""
 		return 0 if levname == 'tp' else int(levname[2:])
 
-	# Move final results to the required dir on postprocessing and clear up
+	# Move final results to the required dir on post-processing and clear up
 	def postexec(job):  #pylint: disable=W0613
 		"""Refine the output"""
 		# Move communities output from the original location to the target one
@@ -1366,7 +1366,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGS
 	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network;  , netext
 	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Pscan'
-	# Backup prepated the resulting dir and back up the previous results if exist
+	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
 	errfile = taskpath + _EXTELOG
 	# logfile = taskpath + _EXTLOG
@@ -1407,7 +1407,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGS
 		execpool.execute(Job(name=SEPNAMEPART.join((algname, ctaskname)), workdir=workdir, args=args, timeout=timeout
 			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
 			#, stdout=logfile  # Skip standard log, because there are too many files, which does not contain useful information
-			# Note: eps has not monotonous impact mainly on the exectution time, not large impact and the clustring is fast anyway
+			# Note: eps has not monotonous impact mainly on the execution time, not large impact and the clustering is fast anyway
 			 #, category='_'.join((algname, prmex))
 			, task=task, category=algname, size=netsize, stdout=os.devnull, stderr=errfile))
 		eps += deps
@@ -1440,7 +1440,7 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathidsuf='', workd
 	# Fetch the task name and chose correct network filename
 	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension;  , netext
 	assert taskname, 'The network name should exists'
-	# Backup prepated the resulting dir and back up the previous results if exist
+	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
 	errfile = taskpath + _EXTELOG
 	logfile = taskpath + _EXTLOG
@@ -1482,7 +1482,7 @@ def execScd(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDI
 	Note: SCD os applicable only for the undirected unweighted networks, it skips the weight
 	in the weighted network.
 	"""
-	# Note: -a parameter controls cohension of the communities, E (0, 1] and can be thought
+	# Note: -a parameter controls cohesion of the communities, E (0, 1] and can be thought
 	# as a resolution (scale) parameter, but is not presented in the documentation.
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
 		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
@@ -1497,7 +1497,7 @@ def execScd(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDI
 	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension;  , netext
 	assert taskname, 'The network name should exists'
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'scd'
-	# Backup prepated the resulting dir and back up the previous results if exist
+	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
 	errfile = taskpath + _EXTELOG
 	# logfile = taskpath + _EXTLOG

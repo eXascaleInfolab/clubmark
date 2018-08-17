@@ -1268,7 +1268,7 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			for ia, ealg in enumerate(execalgs):
 				try:
 					jobsnum += ealg(_execpool, net, asym=asymnet(netext, asym), odir=netshf
-						, timeout=timeout, pathidsuf=pathidsuf, task=None if not tasks else tasks[ia], seed=seed)
+						, timeout=timeout, seed=seed, task=None if not tasks else tasks[ia], pathidsuf=pathidsuf)
 				except Exception as err:  #pylint: disable=W0703
 					errexectime = time.perf_counter() - exectime
 					print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
@@ -1373,7 +1373,8 @@ def clnames(net, odir, alg, pathidsuf=''):
 
 	return
 		cfnames: list(str)  - clustering file names
-		mrclfname: str or Null  - multi-level (multi-resolution) clustering file name
+		uclfname: str or Null  - a multi-resolution clustering file name, which consists of
+			the SINGLE (unified) level containing (representative) clusters from ALL (multiple) resolutions
 	"""
 	assert not pathidsuf or pathidsuf.startswith(SEPPATHID), 'Ivalid pathidsuf: ' + pathidsuf
 	clpath = os.path.splitext(os.path.split(net)[1])[0]  # Part of the resulting path suffix
@@ -1594,19 +1595,19 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 							try:
 								# Whether the input path is a network or a clustering
 								ifpath = net if eq in QMSINTRIN else gfpath
-								cfnames, mcfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
+								cfnames, uclfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
 								# Create or open the respective datasets
 								# Dataset with multiple cluster levels, typically each having clusters on a single resolution
 								if cfnames:
 									pass
 								# Dataset with a single level containing multi-resolution clusters
-								if mcfname:
+								if uclfname:
 									pass
 								# Sort the clustering file names to form their clustering level ids in the same order
 								if len(cfnames) >= 2:
 									cfnames.sort()
 								runs = QMSRUNS.get(eq, 1)  # The number of quality measure runs (subsequent evaluations)
-								for inpcls, ulev in ((cfnames, False), ([] if mcfname is None else [mcfname], True)):
+								for inpcls, ulev in ((cfnames, False), ([] if uclfname is None else [uclfname], True)):
 									# ilev == ifc corresponds to the alphabetical ordering of the clustering levels file names
 									for ifc, fcl in enumerate(inpcls):
 										for irun in range(runs):

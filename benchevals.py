@@ -7,6 +7,33 @@
 	Resulting cluster/community structure is evaluated using extrinsic (NMI, NMI_s)
 	and intrinsic (Q - modularity) measures considering overlaps.
 
+
+	def execQmeasure(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=False
+	, timeout=0, seed=None, task=None, workdir=UTILDIR, revalue=True):
+		Quality measure executor (stub)
+
+		xmeasures  - various extrinsic quality measures
+
+		execpool: ExecPool  - execution pool
+		qualsaver: QualitySaver  - quality results saver (persister)
+		smeta: SMeta - serialization meta data
+		qparams: iterable(str)  - quality measures parameters (arguments excluding the clustering and network files)
+		cfpath: str  - file path of the clustering to be evaluated
+		inpfpath: str  - input dataset file path (ground-truth / input network for the ex/in-trinsic quality measure)
+		asym: bool  - whether the input network is asymmetric (directed, specified by arcs)
+		timeout: uint  - execution timeout in seconds, 0 means infinity
+		seed: uint  - seed for the stochastic qmeasures
+		task: Task  - owner (super) task
+		workdir: str  - working directory of the quality measure (qmeasure location)
+		revalue: bool  - whether to revalue the existent results or omit such evaluations
+			calculating and saving only the values which are not present in the dataset.
+			NOTE: The default value is True because of the straight forward out of the box implementation.
+			ATTENTION: Not all quality measure implementations might support early omission
+				of the calculations on revalue=False, in which case a warning should be issued.
+
+		return  jobsnum: uint  - the number of started jobs
+
+
 :Authors: (c) Artem Lutov <artem@exascale.info>
 :Organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>
 :Date: 2015-12
@@ -34,7 +61,7 @@ import numpy as np  # Required for the HDF5 operations
 
 # from benchapps import  # funcToAppName,
 from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
-	escapePathWildcards, envVarDefined, SyncValue, tobackup, funcToAppName, \
+	escapePathWildcards, envVarDefined, SyncValue, tobackup, funcToAppName, staticTrace, \
 	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, ALGSDIR, ALEVSMAX, ALGLEVS, \
 	TIMESTAMP_START, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 from utils.mpepool import Task, Job, AffinityMask
@@ -65,7 +92,9 @@ SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, beca
 
 QMSRAFN = {}  # Specific affinity mask of the quality measures: str, AffinityMask;  qmsrAffinity
 QMSINTRIN = set()  # Intrinsic quality measures requiring input network instead of the ground-truth clustering
-QMSRUNS = {}  # Run these stochastic quality measures specified number of times
+QMSRUNS = {}  # Run the respective stochastic quality measures specified number of times
+# Note: the metrics producing by the measure can be defined by the execution arguments
+# QMSMTS = {}  # Metrics of the respective quality measures, omission means availability of the single metric with same name as the measuring executor
 
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
@@ -250,6 +279,8 @@ class QualitySaver(object):
 			# irescons: dict(resname: str, resindex: uint)  - back mapping of the resource consumption metadata
 			_active: bool  - the storage is operational (the requests can be processed)
 		"""
+		# revalue: bool  - whether to revalue the existent results or omit such evaluations
+		# 	calculating and saving only the values which are not present in the dataset
 		# algs: iterable(str)  - evaluating clustering algorithms (names of the algorithms)
 		# qms: iterable(str)  - computing quality measurs (names)
 		# nets: iterable(str)  - input network names with pathid to be indexed or None, which means
@@ -398,7 +429,7 @@ class QualitySaver(object):
 		# Note: the exception (if any) is propagated if True is not returned here
 
 
-def metainfo(afnmask=AffinityMask(1), intrinsic=False, multirun=1):
+def metainfo(afnmask=None, intrinsic=False, multirun=1):
 	"""Set some meta information for the executing evaluation measures
 
 	afnstep: AffinityMask  - affinity mask
@@ -406,12 +437,15 @@ def metainfo(afnmask=AffinityMask(1), intrinsic=False, multirun=1):
 		instead of the ground-truth clustering
 	multirun: uint8, >= 1  - perform multiple runs of this stochastic quality measure
 	"""
+	# Note: the metrics producing by the measure can be defined by the execution arguments
+	# metrics: list(str)  - quality metrics producing by the measure
 	def decor(func):
 		"""Decorator returning the original function"""
-		assert isinstance(afnmask, AffinityMask) and multirun >= 1 and isinstance(multirun, int), (
+		assert (afnmask is None or isinstance(afnmask, AffinityMask)
+			) and multirun >= 1 and isinstance(multirun, int), (
 			'Invalid arguments, affinity mask type: {}, multirun: {}'.format(type(afnmask).__name__, multirun))
 		# QMSRAFN[funcToAppName(func)] = afnmask
-		if afnmask.afnstep != 1:  # Save only quality measures with non-default affinity
+		if afnmask is not None and afnmask.afnstep != 1:  # Save only quality measures with non-default affinity
 			QMSRAFN[func] = afnmask
 		if intrinsic:
 			QMSINTRIN.add(func)
@@ -463,44 +497,88 @@ class NetInfo(object):
 		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
 
 
+class SMeta(object):
+	"""Serialization meta information (data cell location)"""
+	__slots__ = ('group', 'measure', 'ulev', 'iins', 'ishf', 'ilev', 'irun')
+
+	def __init__(self, group, measure, ulev, iins, ishf, ilev=0, irun=0):
+		"""Serialization meta information (location in the storage)
+		
+		group: h5py.Group  - group where the target dataset is located
+		measure: str  - name of the serializing evaluation measure
+		ulev: bool  - unified levels, the clustering consists of the SINGLE (unified) level containing
+			(representative) clusters from ALL (multiple) resolutions
+		netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
+		pathidsuf: str  - network path id prepended with the path separator
+		ilev: uint  - index of the clustering level
+		irun: uint8  - run id (iteration)
+		"""
+		# alg: str  - algorithm name, required to only to structure (order) the output results
+		
+		assert isinstance(group, h5py.Group) and isinstance(measure, str
+			) and iins >= 0 and isinstance(iins, int) and ishf >= 0 and isinstance(ishf, int
+			) and ilev >= 0 and isinstance(ilev, int) and irun >= 0 and isinstance(irun, int
+			), ('Invalid arguments:\n\tgroup: {group}\n\tmeasure: {measure}\n\tulev: {ulev}\n\t'
+			'iins: {iins}\n\tishuf: {ishf}\n\tilev: {ilev}\n\tirun: {irun}'.format(
+				group=group, measure=measure, ulev=ulev, iins=iins, ishf=ishf, ilev=ilev, irun=irun))
+		self.group = group
+		self.measure = measure
+		self.ulev = ulev
+		self.iins = iins
+		self.ishf = ishf
+		self.ilev = ilev
+		self.irun = irun
+
+	def __str__(self):
+		"""String conversion"""
+		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
+
+
 # Note: default AffinityMask is 1 (logical CPUs, i.e. hardware threads)
-def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, timeout, pathidsuf=''
-, ilev=0, cmres=False, irun=0, asym=False, workdir=UTILDIR, task=None, seed=None):
+def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=False
+, timeout=0, seed=None, task=None, workdir=UTILDIR, revalue=True):
 	"""Quality measure executor
 
 	xmeasures  - various extrinsic quality measures
 
 	execpool: ExecPool  - execution pool
-	args: list(str)  - quality measures arguments
 	qualsaver: QualitySaver  - quality results saver (persister)
-	# qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
+	smeta: SMeta - serialization meta data
+	qparams: iterable(str)  - quality measures parameters (arguments excluding the clustering and network files)
 	cfpath: str  - file path of the clustering to be evaluated
 	inpfpath: str  - input dataset file path (ground-truth / input network for the ex/in-trinsic quality measure)
-	alg: str  - algorithm name, required to only to structure (order) the output results
-	netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
-	timeout: uint  - execution timeout in seconds
-	pathidsuf: str  - network path id prepended with the path separator
-	ilev: uint  - index of the clustering level
-	cmres: bool  - whether the cfpath is a multi-resolution (multi-level) clusering file
-	irun: uint8  - run id (iteration)
 	asym: bool  - whether the input network is asymmetric (directed, specified by arcs)
-	workdir: str  - working directory of the quality measure (qmeasure location)
-	task: Task  - owner (super) task
+	timeout: uint  - execution timeout in seconds, 0 means infinity
 	seed: uint  - seed for the stochastic qmeasures
+	task: Task  - owner (super) task
+	workdir: str  - working directory of the quality measure (qmeasure location)
+	revalue: bool  - whether to revalue the existent results or omit such evaluations
+		calculating and saving only the values which are not present in the dataset.
+		NOTE: The default value is True because of the straight forward out of the box implementation.
+		ATTENTION: Not all quality measure implementations might support early omission
+			of the calculations on revalue=False, in which case a warning should be issued.
+
 
 	return jobsnum: uint  - the number of started jobs
 	"""
+	if not revalue:
+		staticTrace('execXmeasures', 'omission of the existent results is not supported yet')
+
+	# qualsaver.valueExists(smeta, metrics)
+	# qualsaver.queue.add(QEntry(smeta, data))
+
+
+	# qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
 	#return jobsnum: uint  - the number of scheduled jobs
-	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(cfpath, str
-		) and isinstance(inpfpath, str) and isinstance(alg, str) and isinstance(netinf, NetInfo
-		) and timeout >= 0 and (not pathidsuf or pathidsuf.startswith(SEPPATHID)
-		) and ilev >= 0 and isinstance(ilev, int) and irun >= 0 and (
-		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
-		'Invalid input parameters:\n\texecpool: {},\n\targs: {},\n\tqualsaver: {}'
-		',\n\tcfname: {},\n\tinpfname: {},\n\talg: {},\n\tnetinf: {},\n\ttimeout: {},\n\tpathidsuf: {}'
-		',\n\tcmres: {},\n\tirun: {},\n\tasym: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
-		.format(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, timeout, pathidsuf
-		, cmres, irun, asym, workdir, task, seed))
+	assert execpool and isinstance(inpfpath, str) and isinstance(qualsaver, QualitySaver
+		) and isinstance(smeta, SMeta) and isinstance(cfpath, str) and isinstance(inpfpath, str)
+		
+		# ), (
+		# 'Invalid input parameters:\n\texecpool: {},\n\tqparams: {},\n\tqualsaver: {}'
+		# ',\n\tcfname: {},\n\tinpfname: {},\n\talg: {},\n\tnetinf: {},\n\ttimeout: {},\n\tpathidsuf: {}'
+		# ',\n\tcmres: {},\n\tirun: {},\n\tasym: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
+		# .format(execpool, qparams, qualsaver, cfpath, inpfpath, alg, netinf, timeout, pathidsuf
+		# , ulev, irun, asym, workdir, task, seed))
 
 	# TODO: Perform preliminary check of the existence of the evaluating value in the dataset and
 	# skip such evaluations, which requires in advance knowledge of the evaluating metrics by the
@@ -511,7 +589,7 @@ def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, time
 	# Form dataset name sdf
 	# qmfname = sys._getframe().f_code.co_name  # This function name
 	qmname = funcToAppName(sys._getframe().f_code.co_name)  # Quality measure name
-	# Fetch evaluating metrics from the args
+	# Fetch evaluating metrics from the qparams
 	metrics = []
 	# ...
 	metrics.append('MF1h_w')  # TODO: Hardcoded to be replaced
@@ -519,7 +597,7 @@ def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, time
 	SUFMRS = '+m'  # Multiresolution suffix (includes the flag prefix)
 	for mtr in metrics:
 		dsname = SEPMTR.join((qmname, mtr))  # dataset name
-		if cmres:
+		if smeta.ulev:
 			dsname += SUFMRS
 		# TODO: to fetch the number of runs either QMSRUNS should accept name of the function, or
 		# it worth to create all datasets in advance by the caller before filling them !!!
@@ -557,20 +635,20 @@ def execXmeasures(execpool, args, qualsaver, cfpath, inpfpath, alg, netinf, time
 
 @metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS, first=False), multirun=3)  # Note: multirun requires irun
 def execGnmi(execpool, args, qualsaver, cfpath, inpfpath, timeout
-, ilev=0, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
+, ilev=0, ulev=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""gnmi (gecmi)  - Generalized Normalized Mutual Information"""
 	pass
 
 
 def execOnmi(execpool, args, qualsaver, cfpath, inpfpath, timeout
-, ilev=0, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
+, ilev=0, ulev=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""onmi  - Overlapping NMI"""
 	pass
 
 
 @metainfo(intrinsic=True)  # Note: intrinsic causes interpretation of ifname as inpnet and requires netparams
 def execImeasures(execpool, args, qualsaver, cfpath, inpfpath, timeout
-, ilev=0, cmres=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
+, ilev=0, ulev=False, netparams=None, irun=0, workdir=UTILDIR, task=None, seed=None):
 	"""imeasures (proxy for DAOC)  - some intrinsic quality measures"""
 	pass
 

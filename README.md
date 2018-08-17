@@ -166,7 +166,7 @@ $ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/clubmark luaxi/clubmark-e
 and call `./benchmark.py` with the required parameters there.
 > $UID might not be defined in the non-bash shell (sh, etc), then use `id -u $USER` instead.  
 `` `pwd` `` projects to `<CLUBMARK_REPOSITORY_PATH>`, which is the current directory and the working directory of the benchmarking.  
-`/opt/clubmark` or any other local directory denotes th e dirctory in the CONTAINER where the benchmarking results and traces are stored, which is mapped to the current host directory (`` `pwd` ``).  
+`/opt/clubmark` or any other local directory denotes th e directory in the CONTAINER where the benchmarking results and traces are stored, which is mapped to the current host directory (`` `pwd` ``).  
 See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-with-examples).
 
 See the [Usage](#usage) section to learn more about the benchmark execution and results structure.
@@ -415,18 +415,21 @@ Expected structure of the input real-world networks with generating shuffles:
 To add custom apps / algorithms to be benchmarked just add corresponding function for "myalgorithm" app to `benchapps.py`:
 
 ```python
-def execMyalgorithm(execpool, netfile, asym, timeout, pathid='', selfexec=False)
+def execMyalgorithm(execpool, netfile, asym, odir, timeout, seed=None, task=None, pathidsuf='', workdir=ALGSDIR)
   """Execute the algorithm (stub)
 
-  execpool  - execution pool to perform execution of current task
-  netfile  -  input network to be processed
-  asym  - network links weights are asymmetric (in/outbound weights can be different)
-  timeout  - execution timeout for this task
-  pathid  - path id of the net to distinguish nets with the same name located in different dirs.
-    Note: pathid is prepended with the separator symbol
-  selfexec  - current execution is the external or internal self call
+  execpool: ExecPool  - execution pool of worker processes
+  netfile: str  - the input network to be clustered
+  asym: bool  - whether the input network is asymmetric (directed, specified by arcs)
+  odir: bool  - whether to output results to the dedicated dir named by the network instance name,
+    which is actual for the shuffles with non-flat structure
+  timeout: ufloat32  - processing (clustering) timeout of the input file, 0 means infinity
+  seed: uint64 or None  - random seed, uint64_t
+  task: Task  - owner task
+  pathidsuf: str  - network path id prepended with the path separator
+  workdir: str  - relative working directory of the app, actual when the app contains libs
 
-  return  - number of executions (jobs) made
+  return  njobs: uint  - number of performed executions (started jobs)
   """
 ```
 

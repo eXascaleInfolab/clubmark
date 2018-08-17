@@ -40,6 +40,7 @@ PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
 # Maximal number of the levels considered for the evaluation in the multi-scale or hierarchical clustering
 ALEVSMAX = 10  # Use 10 scale levels as in Ganxis by default
 ALGLEVS = {}  # Max number of levels for the algorithm if does not correspond to the ALEVSMAX, dict(str: uint16)
+_STATIC_TRACE = set()  # A set of markers for the static tracing (once per multiple calls)
 
 # Consider Python2
 if not hasattr(glob, 'escape'):
@@ -93,6 +94,25 @@ except ImportError:
 	viewitems = lambda dct: viewMethod(dct, 'items')()  #pylint: disable=W0611
 	viewkeys = lambda dct: viewMethod(dct, 'keys')()  #pylint: disable=W0611
 	viewvalues = lambda dct: viewMethod(dct, 'values')()  #pylint: disable=W0611
+
+
+def staticTrace(func, msg, marker=None, fout=sys.stdout):
+	"""Trace the message once independently on the number of calls for each marker
+
+	ATTENTION: If several functions share a marker then only a single trace will be issues for all of them.
+		So, typically, a marker should either include the function name or have the default value.
+
+	msg: str  - message to be prepended with the WARNING prefix and traced to the fout
+	func: str  - name of the function, which issued this message
+	marker  - a marker for the unique tracing, only once a message with each marker is shown,
+		None value is automatically replaced with the value of func to have a single trace per each function
+	fout: file  - output file
+	"""
+	if marker is None:
+		marker = func
+	if marker not in _STATIC_TRACE:
+		print('WARNING {}(), {}'.format(func, msg), file=fout)
+		_STATIC_TRACE.add(marker)
 
 
 def secDhms(seconds):

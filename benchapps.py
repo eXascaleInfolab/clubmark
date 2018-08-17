@@ -6,24 +6,21 @@
 
 	Execution function for each algorithm must be named "exec<Algname>" and have the following signature:
 
-	def execAlgorithm(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf='', workdir=ALGSDIR):
+	def execAlgorithm(execpool, netfile, asym, odir, timeout, seed=None, task=None, pathidsuf='', workdir=ALGSDIR):
 		Execute the algorithm (stub)
 
-		Mandatory arguments:
 		execpool: ExecPool  - execution pool of worker processes
 		netfile: str  - the input network to be clustered
 		asym: bool  - whether the input network is asymmetric (directed, specified by arcs)
-		odir: bool  - whether to output results to the dedicated dir named by the instance name,
+		odir: bool  - whether to output results to the dedicated dir named by the network instance name,
 			which is actual for the shuffles with non-flat structure
-
-		Optiononal arguments:
 		timeout: ufloat32  - processing (clustering) timeout of the input file, 0 means infinity
 		seed: uint64 or None  - random seed, uint64_t
 		task: Task  - owner task
 		pathidsuf: str  - network path id prepended with the path separator
 		workdir: str  - relative working directory of the app, actual when the app contains libs
 
-		return  - number of executions (jobs) made or None (means 0)
+		return  njobs: uint  - number of performed executions (started jobs)
 
 :Authors: (c) Artem Lutov <artem@exascale.info>
 :Organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>,

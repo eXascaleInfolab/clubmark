@@ -6,17 +6,24 @@
 
 	Execution function for each algorithm must be named "exec<Algname>" and have the following signature:
 
-	def execAlgorithm(execpool, netfile, asym, odir, timeout, pathidsuf='', selfexec=False):
+	def execAlgorithm(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf='', workdir=ALGSDIR):
 		Execute the algorithm (stub)
 
-		execpool: ExecPool  - execution pool to perform execution of current task
-		netfile: str  -  file name of the input network to be processed
-		asym: bool  - network links weights are asymmetric (in/outbound weights can be different)
-		timeout: number >= 0  - execution timeout for this task
-		pathidsuf: str  - network path id prepended with the path separator
-		selfexec: bool  - current execution is the external or internal self call
+		Mandatory arguments:
+		execpool: ExecPool  - execution pool of worker processes
+		netfile: str  - the input network to be clustered
+		asym: bool  - whether the input network is asymmetric (directed, specified by arcs)
+		odir: bool  - whether to output results to the dedicated dir named by the instance name,
+			which is actual for the shuffles with non-flat structure
 
-		return  - number of executions (jobs) made
+		Optiononal arguments:
+		timeout: ufloat32  - processing (clustering) timeout of the input file, 0 means infinity
+		seed: uint64 or None  - random seed, uint64_t
+		task: Task  - owner task
+		pathidsuf: str  - network path id prepended with the path separator
+		workdir: str  - relative working directory of the app, actual when the app contains libs
+
+		return  - number of executions (jobs) made or None (means 0)
 
 :Authors: (c) Artem Lutov <artem@exascale.info>
 :Organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>,
@@ -186,29 +193,6 @@ def preparePath(taskpath):  # , netshf=False
 		mainpath = delPathSuffix(taskpath)
 		tobackup(mainpath, True, move=True)  # Move to the backup (old results can't be reused in the forming results)
 		os.mkdir(taskpath)
-
-
-# ATTENTION: this function should not be defined to not being automatically executed
-#def execAlgorithm(execpool, netfile, asym, odir, timeout, pathidsuf='', selfexec=False, **kwargs):
-#	"""Execute the algorithm (stub)
-#
-#	execpool  - execution pool to perform execution of current task
-#	netfile  -  input network to be processed
-#	asym  - network links weights are asymmetric (in/outbound weights can be different)
-#	timeout  - execution timeout for this task
-#	pathidsuf: str  - network path id prepended with the path separator
-#	selfexec=False  - current execution is the external or internal self call
-#	kwargs  - optional algorithm-specific keyword arguments
-#
-#	return  - number of executions (executed jobs)
-#	"""
-#	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
-# 		jobtracer is None or isinstance(JobTracer)) , (
-#		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {}'
-#		.format(execpool, netfile, asym, timeout))
-#	# ATTENTION: for the correct execution algname must be always the same as func lower case name without the prefix "exec"
-#	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
-#	return 0
 
 
 def prepareResDir(appname, taskname, odir, pathidsuf):
@@ -669,7 +653,7 @@ def metainfo(levsmax=ALEVSMAX):
 
 # Louvain
 ## Original Louvain
-#def execLouvain(execpool, netfile, asym, odir, timeout, pathidsuf='', tasknum=0, task=None):
+#def execLouvain(execpool, netfile, asym, odir, timeout=0, pathidsuf='', tasknum=0, task=None):
 #	"""Execute Louvain
 #	Results are not stable => multiple execution is desirable.
 #
@@ -702,20 +686,23 @@ def metainfo(levsmax=ALEVSMAX):
 #	return
 
 
-def execLouvainIg(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR, task=None, seed=None):  # , selfexec=False  - whether to call self recursively
+def execLouvainIg(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  # , selfexec=False  - whether to call self recursively
 	"""Execute Louvain using the igraph library
 	Note: Louvain produces not stable results => multiple executions are desirable.
 
-	execpool  - execution pool of worker processes
-	netfile  - the input network to be clustered
-	asym  - whether the input network is asymmetric (directed, specified by arcs)
-	odir  - whether to output results to the dedicated dir named by the instance name,
+	Mandatory arguments:
+	execpool: ExecPool  - execution pool of worker processes
+	netfile: str  - the input network to be clustered
+	asym: bool  - whether the input network is asymmetric (directed, specified by arcs)
+	odir: bool  - whether to output results to the dedicated dir named by the instance name,
 		which is actual for the shuffles with non-flat structure
-	timeout  - processing (clustering) timeout of the input file
-	pathidsuf: str  - network path id prepended with the path separator
-	workdir  - relative working directory of the app, actual when the app contains libs
-	task: Task  - owner task
+
+	Optiononal arguments:
+	timeout: ufloat32  - processing (clustering) timeout of the input file, 0 means infinity
 	seed: uint64  - random seed, uint64_t
+	task: Task  - owner task
+	pathidsuf: str  - network path id prepended with the path separator
+	workdir: str  - relative working directory of the app, actual when the app contains libs
 
 	returns  - the number of executions or None
 	"""
@@ -785,7 +772,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=
 
 # SCP (Sequential algorithm for fast clique percolation)
 # Note: it is desirable to have a dedicated task for each type of networks or even for each network for this algorithm
-def execScp(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR, task=None, seed=None):  #pylint: disable=W0613
+def execScp(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  #pylint: disable=W0613
 	"""SCP algorithm
 
 	return uint: the number of scheduled jobs
@@ -874,7 +861,7 @@ def execScp(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDI
 	return kmax + 1 - kmin
 
 
-def execRandcommuns(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR, task=None, seed=None, instances=5):  # _netshuffles + 1
+def execRandcommuns(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf='', workdir=ALGSDIR, instances=5):  # _netshuffles + 1
 	"""Execute Randcommuns, Random Disjoint Clustering
 	Results are not stable => multiple execution is desirable.
 
@@ -1014,8 +1001,8 @@ class DaocOpts(object):
 
 
 # DAOC wit parameterized gamma
-def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/'
-, task=None, seed=None, opts=DaocOpts()):  #pylint: disable=W0613
+def daocGamma(algname, execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts()):  #pylint: disable=W0613
 	"""Execute DAOC, Deterministic (including input order independent) Agglomerative Overlapping Clustering
 	using standard modularity as optimization function.
 	The output levels are enumerated starting from the bottom of the hierarchy having index 0
@@ -1092,138 +1079,138 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf='', wor
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
-def execDaoc(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=1)):
+def execDaoc(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1)):
 	"""DAOC with static gamma=1"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
-def execDaocB(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=1, gband='r0.005')):
+def execDaocB(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, gband='r0.005')):
 	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as a ratio of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
-def execDaocB1(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=1, gband='r0.01')):
+def execDaocB1(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, gband='r0.01')):
 	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as 1% of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
-def execDaocB5(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=1, gband='r0.05')):
+def execDaocB5(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, gband='r0.05')):
 	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as 1% of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
-def execDaocR(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=1, reduction='m')):
+def execDaocR(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, reduction='m')):
 	"""DAOC with the static gamma=1 and a medium reduction policy of the insignificant links"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
-def execDaocX(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=1, exclude='a')):
+def execDaocX(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, exclude='a')):
 	"""DAOC with the static gamma=1 and exclusion of the aggregating hashing being
 	used for the fast match of the fully mutual mcands"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
 # Note: Expected to be the fastest among DAOC versions
-def execDaocRB(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.005')):
+def execDaocRB(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, reduction='m', gband='r0.005')):
 	"""DAOC with the static gamma=1, medium reduction policy and a band for the
 	mutual maximal gain taken as a ratio of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
 # Note: Expected to be the fastest among DAOC versions
-def execDaocRB1(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.01')):
+def execDaocRB1(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, reduction='m', gband='r0.01')):
 	"""DAOC with the static gamma=1, medium reduction policy and a band for the
 	mutual maximal gain taken as 1% of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
 # Note: Expected to be the fastest among DAOC versions
-def execDaocRB5(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.05')):
+def execDaocRB5(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, reduction='m', gband='r0.05')):
 	"""DAOC with the static gamma=1, medium reduction policy and a band for the
 	mutual maximal gain taken as 1% of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
-def execDaocRBX(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=1, reduction='m', gband='r0.005', exclude='a')):
+def execDaocRBX(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, reduction='m', gband='r0.005', exclude='a')):
 	"""DAOC with the static gamma=1, a medium reduction policy, an MMG band
 	and exclusion of the aggregting hashing application"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generalized modularity)
-def execDaocA(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=-1)):
+def execDaocA(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=-1)):
 	"""DAOC with an automatic dynamic gamma"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generalized modularity)
-def execDaocAR(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=-1, reduction='m')):  # Note: '' values mean use default
+def execDaocAR(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=-1, reduction='m')):  # Note: '' values mean use default
 	"""DAOC with an automatic dynamic gamma, a medium reduction policy and an MMG band"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocAR'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generalized modularity)
 # Note: Expected to be pretty fast and accurate
-def execDaocARB(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=-1, reduction='m', gband='r0.005')):  # Note: '' values mean use default
+def execDaocARB(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=-1, reduction='m', gband='r0.005')):  # Note: '' values mean use default
 	"""DAOC with an automatic dynamic gamma, a medium reduction policy and an MMG band"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocAR'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generalized modularity)
 # Note: Expected to be pretty fast and accurate
-def execDaocARB1(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=-1, reduction='m', gband='r0.01')):  # Note: '' values mean use default
+def execDaocARB1(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=-1, reduction='m', gband='r0.01')):  # Note: '' values mean use default
 	"""DAOC with an automatic dynamic gamma, a medium reduction policy and an MMG band of 1%"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocAR'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generalized modularity)
 # Note: Expected to be pretty fast and accurate
-def execDaocARB5(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'daoc/', task=None
-, seed=None, opts=DaocOpts(gamma=-1, reduction='m', gband='r0.05')):  # Note: '' values mean use default
+def execDaocARB5(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=-1, reduction='m', gband='r0.05')):  # Note: '' values mean use default
 	"""DAOC with an automatic dynamic gamma, a medium reduction policy and an MMG band of 1%"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocAR'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 
 
 # Ganxis (SLPA)
-def execGanxis(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR+'ganxis/', task=None, seed=None):
+def execGanxis(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf='', workdir=ALGSDIR+'ganxis/'):
 	"""GANXiS/SLPA algorithm"""
 	assert execpool and netfile and (asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
 		task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
@@ -1272,7 +1259,7 @@ def execGanxis(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALG
 
 
 # Oslom2
-def execOslom2(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR, task=None, seed=None):
+def execOslom2(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf='', workdir=ALGSDIR):
 	"""OSLOM v2 algorithm
 	The output levels are enumerated from the most fine-grained (tp) having max number of clusters
 	of the smallest size up to the most coarse-grained (tpN with N haing the maximal index)
@@ -1347,7 +1334,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALG
 
 
 # pSCAN (Fast and Exact Structural Graph Clustering)
-def execPscan(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR, task=None, seed=None):  #pylint: disable=W0613
+def execPscan(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  #pylint: disable=W0613
 	"""pScan algorithm
 
 	return uint: the number of scheduled jobs
@@ -1416,7 +1403,7 @@ def execPscan(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGS
 
 
 # rgmc algorithms family: 1: RG, 2: CGGC_RG, 3: CGGCi_RG
-def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR, task=None, seed=None, alg=None):
+def rgmcAlg(algname, execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf='', workdir=ALGSDIR, alg=None):
 	"""Rgmc algorithms family
 
 	algname  - name of the executing algorithm to be traced
@@ -1464,20 +1451,20 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathidsuf='', workd
 
 # CGGC_RG (rgmc -a 2)
 @metainfo(levsmax=1)  # Note: rgmcAlg parameters are not easily adjustable, see the executor
-def execCggcRg(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR, task=None, seed=None):  #pylint: disable=C0111
+def execCggcRg(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  #pylint: disable=C0111
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggcRg'
-	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, alg=2)
+	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, alg=2)
 
 
 # CGGCi_RG (rgmc -a 3)
 @metainfo(levsmax=1)  # Note: rgmcAlg parameters are not easily adjustable, see the executor
-def execCggciRg(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR, task=None, seed=None):  #pylint: disable=C0111
+def execCggciRg(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  #pylint: disable=C0111
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggciRg'
-	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, pathidsuf, workdir, task, seed, alg=3)
+	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, alg=3)
 
 
 # SCD
-def execScd(execpool, netfile, asym, odir, timeout, pathidsuf='', workdir=ALGSDIR, task=None, seed=None):
+def execScd(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf='', workdir=ALGSDIR):
 	"""Scalable Community Detection (SCD)
 	Note: SCD os applicable only for the undirected unweighted networks, it skips the weight
 	in the weighted network.

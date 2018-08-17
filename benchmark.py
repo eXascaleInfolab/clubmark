@@ -79,7 +79,7 @@ from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsS
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
 from benchevals import aggEvaluations, RESDIR, CLSDIR, EXTEXECTIME, QMSRAFN, QMSINTRIN, QMSRUNS, \
-	QualitySaver, NetInfo
+	QualitySaver, NetInfo, SMeta
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
 from algorithms.utils.parser_nsl import asymnet, dflnetext
@@ -180,8 +180,13 @@ class Params(object):
 		runalgs  - execute algorithm or not
 		qmeasures: list(list(str))  - quality measures with their parameters to be evaluated
 			on the clustering results. None means do not evaluate.
-		qupdate  - update quality evaluations storage with the lacking evaluations
-			omitting the existent one, applicable only for the same seed.
+		qupdate  - update quality evaluations storage (update with the lacking evaluations
+			omitting the existent one until qrevalue is set) instead of creating a new storage
+			for the quality measures evaluation, applicable only for the same seed.
+			Otherwise a new storage is created and the existent is backed up.
+		qrevalue  - revalue all values from scratch instead of leaving the existent values
+			and (evaluating and) adding only the non-existent (lacking values), makes sense
+			only if qupdate otherwise all values are computed anyway.
 		datas: PathOpts  - list of datasets to be run with asym flag (asymmetric
 			/ symmetric links weights):
 			[PathOpts, ...] , where path is either dir or file [wildcard]
@@ -207,6 +212,7 @@ class Params(object):
 		self.runalgs = False
 		self.qmeasures = None  # Evaluating quality measures with their parameters
 		self.qupdate = True
+		self.qrevalue = False
 		self.datas = []  # Input datasets, list of PathOpts, where path is either dir or file wildcard
 		self.timeout = _TIMEOUT
 		self.algorithms = []
@@ -267,8 +273,10 @@ def parseParams(args):
 			elif arg.startswith('--webaddr'):
 				arg = '-w' + arg[len('--webaddr'):]
 			# Exclusive long options
-			elif arg.startswith('--quality-revalue '):
+			elif arg.startswith('--quality-noupdate'):
 				opts.qupdate = False
+			elif arg.startswith('--quality-revalue'):
+				opts.qrevalue = True
 			elif arg.startswith('--runtimeout'):
 				nend = len('--runtimeout')
 				if len(arg) <= nend + 1 or arg[nend] != '=':
@@ -1409,7 +1417,7 @@ def gtpath(net, idir):
 
 
 def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exectime, timeout  #pylint: disable=W0613
-, evaltimeout=14*24*60*60, update=False):  #pylint: disable=W0613;  # , netnames=None
+, evaltimeout=14*24*60*60, update=True, revalue=False):  #pylint: disable=W0613;  # , netnames=None
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
 	qmsmodule: module  - module with quality measures definitions to be run; sys.modules[__name__]
@@ -1425,8 +1433,11 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 	timeout: uint  - timeout per each evaluation run, a single measure applied to the results
 		of a single algorithm on a single network (all instances and shuffles), >= 0
 	evaltimeout: uint  - timeout for all evaluations, >= 0, 0 means unlimited time
-	update: bool  - update evaluations file or create a new one, anyway existed evaluations
-		are backed up.
+	update: bool  - update evaluations file (storage of datasets) or create a new one,
+		anyway existed evaluations are backed up
+	revalue: bool  - whether to revalue the existent results or omit such evaluations
+		calculating and saving only the values being not present in the dataset,
+		actual only for the update flag set
 	"""
 	# netnames: iterable(str)  - input network names with path id and without the base path,
 	# 	used to form meta data in the evaluation storage. Explicit specification is useful
@@ -1540,13 +1551,20 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					# 			# Append irun to the task suffix
 					# 			, tasksuf if runs == 1 else 'r'.join((tasksuf, str(irun)))))
 					# 		, task=None if not tasks else tasks[j]))
-					#
+					
 					# Apply all quality measures having the same affinity for all the algorithms on all networks,
-					# which benefits from the networks and clustering caching
+					# such traversing benefits from both the networks and clusterings caching
+					#
+					# Fetch base network name and its attributes
+					netname, netext = os.path.splitext(os.path.split(net)[1])
+					# Note: the input network name does not contain the paid id, which is added during the processing
+					netname, _aparams, inst, shuf, _pid  = parseName(netname, True)
+					iinst = 0 if not inst else int(inst[len(SEPINST):])  # Instance id
+					ishuf = 0 if not shuf else int(shuf[len(SEPSHF):])  # Shuffle id
 					for alg in algorithms:
 						# Validate network HDF5 group attributes (instances and shuffles) if required
+						group = None
 						if not netinf.gvld:
-							netname, netext = os.path.splitext(os.path.split(net)[1])
 							try:
 								netext = netext.lower()
 								group = qualsaver.storage.require_group(''.join(('/', alg, '/'
@@ -1588,13 +1606,14 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								if len(cfnames) >= 2:
 									cfnames.sort()
 								runs = QMSRUNS.get(eq, 1)  # The number of quality measure runs (subsequent evaluations)
-								for inpcls, inpmres in ((cfnames, False), ([] if mcfname is None else [mcfname], True)):
+								for inpcls, ulev in ((cfnames, False), ([] if mcfname is None else [mcfname], True)):
 									# ilev == ifc corresponds to the alphabetical ordering of the clustering levels file names
 									for ifc, fcl in enumerate(inpcls):
 										for irun in range(runs):
-											jobsnum += eq(_execpool, qm[1:], qualsaver, cfpath=fcl, inpfpath=ifpath
-												, alg=alg, netinf=netinf, timeout=timeout, pathidsuf=pathidsuf, ilev=ifc
-												, cmres=inpmres, irun=irun, asym=asym, task=task, seed=seed)
+											smeta = SMeta(group=group, measure=qm[0], ulev=ulev,
+												iins=iinst, ishf=ishuf, ilev=ifc, irun=irun)
+											jobsnum += eq(_execpool, qualsaver, smeta, qm[1:], cfpath=fcl, inpfpath=ifpath,
+												asym=asym, timeout=timeout, seed=seed, task=task, revalue=revalue)
 							except Exception as err:  #pylint: disable=W0703
 								errexectime = time.perf_counter() - exectime
 								print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
@@ -1675,11 +1694,11 @@ def benchmark(*args):
 
 	opts = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tsyntpo: "{}"\n\tconvnets: 0b{:b}'
-		'\n\trunalgs: {}\n\talgorithms: {}\n\tquality measures: {}\n\tqupdate: {}\n\tdatas: {}'
+		'\n\trunalgs: {}\n\talgorithms: {}\n\tquality measures: {}\n\tqupdate: {}\n\tqrevalue: {}\n\tdatas: {}'
 		'\n\taggrespaths: {}\n\twebui: {}\n\ttimeout: {} h {} m {:.4f} sec'
 	 .format(opts.syntpo, opts.convnets, opts.runalgs
 		, ', '.join(opts.algorithms) if opts.algorithms else ''
-		, None if opts.qmeasures is None else ' '.join([qm[0] for qm in opts.qmeasures]), opts.qupdate
+		, None if opts.qmeasures is None else ' '.join([qm[0] for qm in opts.qmeasures]), opts.qupdate, opts.qrevalue
 		, '; '.join([str(pathopts) for pathopts in opts.datas])  # Note: ';' because internal separator is ','
 		, ', '.join(opts.aggrespaths) if opts.aggrespaths else ''
 		, None if opts.host is None else '{}:{}'.format(opts.host, opts.port)
@@ -1710,6 +1729,7 @@ def benchmark(*args):
 		# Reset the quality measures update request if any since the seed is new
 		# Note: the WARNING is not displayed since the update policy is default
 		opts.qupdate = False
+		opts.qrevalue = True  # qrevalue equal to False actual only if qupdate
 	else:
 		with open(opts.seedfile) as fseed:
 			seed = int(fseed.readline())
@@ -1752,7 +1772,8 @@ def benchmark(*args):
 	if opts.qmeasures is not None:
 		evalResults(qmsmodule=benchevals, qmeasures=opts.qmeasures, appsmodule=benchapps
 			, algorithms=opts.algorithms, datas=opts.datas, seed=seed, exectime=exectime
-			, timeout=opts.timeout, evaltimeout=opts.evaltimeout, update=opts.qupdate)  # , netnames=netnames
+			, timeout=opts.timeout, evaltimeout=opts.evaltimeout, update=opts.qupdate, revalue=opts.qrevalue)
+			# , netnames=netnames
 
 	if opts.aggrespaths:
 		aggEvaluations(opts.aggrespaths)
@@ -1874,8 +1895,11 @@ if __name__ == '__main__':
 			'    m  - time in minutes',
 			'    h  - time in hours',
 			'    Examples: `-th=2.5` is the same as `-t=2h30m` and `--timeout=2h1800`',
-			'  --quality-revalue  - revalue resulting clusterings with the quality measures from scratch'
-			' even if (some) evaluations with the same seed have been already performed.',
+			'  --quality-noupdate  - always create a new storage file for the quality measure evaluations'
+			' instead of updating the existent one.',
+			'  --quality-revalue  - evaluate resulting clusterings with the quality measures from scratch'
+			' instead of retaining the existent values (for the same seed) and adding only the non-existent.',
+			'NOTE: actual (makes sense) only when --quality-noupdate is NOT applied.',
 			'  --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation,'
 			' stochastic algorithms and quality measures execution, contains uint64_t value. Default: {seedfile}.',
 			'NOTE:',

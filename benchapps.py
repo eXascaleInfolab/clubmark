@@ -317,7 +317,7 @@ def reduceLevels(levs, num, root0):
 		level of the hierarchy having the highest (most fine-grained resolution) and the
 		last level in the list is the root level having the most coarse-grained resolution
 	num: uint >= 1  - target number of levels to be fetched uniformly
-	root0: bool  - whether the root (most coarse-crained) level has zero or maximal index
+	root0: bool  - whether the root (most coarse-grained) level has zero or maximal index
 
 	return  rlevs: list, tuple  - list of the reduced levels
 
@@ -399,7 +399,7 @@ def limlevs(job):
 	"""Limit the number of output level to fit ALEVSMAX (unified for all algorithms).
 
 	Limit the number of hierarchy levels in the output by moving the original output
-	to the dedivated directory and uniformly linking the required number of levels it
+	to the dedicated directory and uniformly linking the required number of levels it
 	to the expected output path.
 
 	Job params:
@@ -454,7 +454,7 @@ def limlevs(job):
 def subuniflevs(job):
 	"""Subtask of the levels output unification.
 	Aggregates output levels from the parameterized job and reports them to the
-	task to unify resutls for all parameterized jobs of the algorithm on the
+	task to unify results for all parameterized jobs of the algorithm on the
 	current network (input dataset).
 	Required at least for Scp.
 
@@ -476,11 +476,11 @@ def subuniflevs(job):
 def uniflevs(task):
 	"""Unify representation of the output levels.
 	Aggregates levels from each parameter in a uniform way limiting their number
-	to the requrired amount.
+	to the required amount.
 
 	At least one level is taken from the levels output corresponding to each parameter.
-	The output levels of each parameter should be boun to task, which should pass
-	aggregated values to this task on successfull completion. Note that some
+	The output levels of each parameter should be bound to task, which should pass
+	aggregated values to this task on successful completion. Note that some
 	subtasks might be failed but this task should perform the final aggregation
 	till at least any subtask completed and provided required data.
 
@@ -720,7 +720,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout=0, seed=None, task=None
 	#	taskname = '_'.join((taskname, str(tasknum)))
 
 	# ATTENTION: for the correct execution algname must be always the same as func name without the prefix "exec"
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain_igraph'
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'LouvainIg'
 	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
 	# print('> execLouvainIg(), taskpath exists:', os.path.exists(taskpath))
@@ -760,7 +760,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout=0, seed=None, task=None
 	#	if not netdir:
 	#		netdir = .
 	#	netdir += '/'
-	#	#print('Netdir: ', netdir)sdf
+	#	#print('Netdir: ', netdir)
 	#	for netfile in glob.iglob(''.join((escapePathWildcards(netdir), escapePathWildcards(taskname), '/*', netext))):
 	#		execLouvain_ig(execpool, netfile, asym, odir, timeout, selfexec)
 	#		execnum += 1

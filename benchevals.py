@@ -89,6 +89,7 @@ EXTEXECTIME = '.rcp'  # Resource Consumption Profile
 EXTAGGRES = '.res'  # Aggregated results
 EXTAGGRESEXT = '.resx'  # Extended aggregated results
 SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not appear in a file name, which can be part of job name)
+_SEPQARGS = '_'  # Separator for the quality measure arguments to be shown in the monitoring and results
 
 QMSRAFN = {}  # Specific affinity mask of the quality measures: str, AffinityMask;  qmsrAffinity
 QMSINTRIN = set()  # Intrinsic quality measures requiring input network instead of the ground-truth clustering
@@ -562,74 +563,58 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 	return jobsnum: uint  - the number of started jobs
 	"""
 	if not revalue:
-		staticTrace('execXmeasures', 'omission of the existent results is not supported yet')
-
-	# qualsaver.valueExists(smeta, metrics)
+		# TODO: implement early exit on qualsaver.valueExists(smeta, metrics),
+		# where metrics are provided by the quality measure app by it's qparams
+		staticTrace('execXmeasures', 'Omission of the existent results is not supported yet')
 	# qualsaver.queue.add(QEntry(smeta, data))
-
-
 	# qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
-	#return jobsnum: uint  - the number of scheduled jobs
-	assert execpool and isinstance(inpfpath, str) and isinstance(qualsaver, QualitySaver
-		) and isinstance(smeta, SMeta) and isinstance(cfpath, str) and isinstance(inpfpath, str)
-		
-		# ), (
-		# 'Invalid input parameters:\n\texecpool: {},\n\tqparams: {},\n\tqualsaver: {}'
-		# ',\n\tcfname: {},\n\tinpfname: {},\n\talg: {},\n\tnetinf: {},\n\ttimeout: {},\n\tpathidsuf: {}'
-		# ',\n\tcmres: {},\n\tirun: {},\n\tasym: {},\n\tworkdir: {},\n\ttask: {},\n\tseed: {}'
-		# .format(execpool, qparams, qualsaver, cfpath, inpfpath, alg, netinf, timeout, pathidsuf
-		# , ulev, irun, asym, workdir, task, seed))
+	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(smeta, SMeta
+		) and isinstance(cfpath, str) and isinstance(inpfpath, str) and (seed is None
+		or isinstance(seed, int)) and (task is None or isinstance(task, Task)), (
+		'Invalid arguments, execpool type: {}, qualsaver type: {}, smeta type: {}, cfpath type: {},'
+		' inpfpath type: {}, timeout: {}, seed: {}, task type: {}'.format(type(execpool).__name__,
+		type(qualsaver).__name__, type(smeta).__name__, type(cfpath).__name__, type(inpfpath).__name__,
+		timeout, seed, type(task).__name__))
 
-	# TODO: Perform preliminary check of the existence of the evaluating value in the dataset and
-	# skip such evaluations, which requires in advance knowledge of the evaluating metrics by the
-	# arguments. This is possible when either the evaluating measure has a single metric or provides
-	# an interface to fetch the evaluating metrics before their actual evaluation, i.e. functor with
-	# accessory functions instead of the function should be used for the executors implementation
+	def saveEvals(job):
+		pass
 
-	# Form dataset name sdf
-	# qmfname = sys._getframe().f_code.co_name  # This function name
-	qmname = funcToAppName(sys._getframe().f_code.co_name)  # Quality measure name
-	# Fetch evaluating metrics from the qparams
-	metrics = []
-	# ...
-	metrics.append('MF1h_w')  # TODO: Hardcoded to be replaced
-	SEPMTR = ':'
-	SUFMRS = '+m'  # Multiresolution suffix (includes the flag prefix)
-	for mtr in metrics:
-		dsname = SEPMTR.join((qmname, mtr))  # dataset name
-		if smeta.ulev:
-			dsname += SUFMRS
-		# TODO: to fetch the number of runs either QMSRUNS should accept name of the function, or
-		# it worth to create all datasets in advance by the caller before filling them !!!
-		dataset = group.require_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qmfname, None), 1)
-			, dtype='f4', fletcher32=True)  # TODO: consider initial filling with NaN
-		# 	# Note: None in maxshape means resizable, fletcher32 used for the checksum
-		# 	self.storage.create_dataset('rescons.inf', shape=(len(self.mrescons),)
-		# 		, dtype=h5str, data=[s.decode() for s in self.mrescons], fletcher32=True)  # fillvalue=''
-		# # # Note: None in maxshape means resizable, fletcher32 used for the checksum,
-		# # # exact used to require shape and type to match exactly
-		# # metares = self.storage.require_dataset('rescons.meta', shape=(len(self.mrescons),), dtype=h5str
-		# # 	, data=self.mrescons, exact=True, fletcher32=True)  # fillvalue=''
-		# Check whether the job should be created or such evaluation already exist in the dataset
-		if dataset.entryExists(qmname):
-			return 0
+	# Note: the task argument name already includes: QMeasure / BaseNet / Alg
+	# so here smeta and qparams should form the job name
+	algname = smeta.group.name[:smeta.group.name.find('/')]  # First component of the group is the algorithm name
+	cfname = os.path.splitext(os.path.split(cfpath)[1])[0]
+	measurep = SEPPARS.join((smeta.measure, _SEPQARGS.join(qparams)))  # Quality measure suffixed with its parameters
+	taskname = SEPNAMEPART.join((cfname, measurep))
 
-	# Evaluate relative paths
+	# Evaluate relative size of the clusterings
+	# Note: xmeasures takes inpfpath as the ground-truth clustering, so the asym parameter is not actual here
+	clsize = os.path.getsize(cfpath) + os.path.getsize(inpfpath)
+
+	# Define path to the logs relative to the root dir of the benchmark
+	# TODO: log to files
+	# errfile = taskpath + _EXTELOG
+	# logfile = taskpath + _EXTLOG
+	errfile = sys.stderr
+	logfile = sys.stdout
+
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
-	qmbin = relpath(UTILDIR + 'xmeasures')
-	# # ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
-	# args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathidsuf)), '-s=/etime_' + alg
-	# 	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
-	# 	, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
-	# 	, '-lo', ''.join((relpath(taskpath), '/', taskname, EXTCLNODES)), netfile)
-	# execpool.execute(Job(name=SEPNAMEPART.join((alg, taskname)), workdir=workdir, args=args, timeout=timeout
-	# 	#, stdout=os.devnull
-	# 	, ondone=limlevs, params={'taskpath': taskpath, 'fetchLevId': fetchLevIdCnl}
-	# 	, task=task, category=alg, size=netsize, stdout=logfile, stderr=errfile))
-	# qentry = QualityEntry()
-	# saveQuality(qsqueue, qentry)
+	# TODO: ? save measures logs in the dedicated evals dir ? <<<<<<
+	xtimeres = relpath(''.join((RESDIR, algname, '/', smeta.measure, EXTEXECTIME)))
+
+	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
+	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname)), '-s=/etime_' + algname
+		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
+		, './xmeasures')
+	if qparams:
+		args += qparams
+	args += (cfpath, inpfpath)
+	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
+		#, stdout=os.devnull
+		# Note: logfile in params indicates the output log file that should be formed from the PIPE output
+		, ondone=saveEvals, params={'qsqueue': qualsaver.queue, 'smeta': smeta, 'logfile': logfile}
+		, task=task, category=measurep, size=clsize, stdout=PIPE, stderr=errfile, poutlog=logfile))
 	return 1
 
 

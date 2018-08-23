@@ -60,7 +60,7 @@ import h5py  # HDF5 storage
 import numpy as np  # Required for the HDF5 operations
 
 # from benchapps import  # funcToAppName,
-from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, preparePath, \
+from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
 	escapePathWildcards, envVarDefined, SyncValue, tobackup, funcToAppName, staticTrace, \
 	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, ALGSDIR, ALEVSMAX, ALGLEVS, \
 	TIMESTAMP_START, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
@@ -91,6 +91,7 @@ EXTAGGRES = '.res'  # Aggregated results
 EXTAGGRESEXT = '.resx'  # Extended aggregated results
 SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not appear in a file name, which can be part of job name)
 _SEPQARGS = '_'  # Separator for the quality measure arguments to be shown in the monitoring and results
+_SEPQMS = ';'  # Separetor for the quality measure from the processing file name. It is used for the file names and should follow restrictions on the allowed symbols
 
 QMSRAFN = {}  # Specific affinity mask of the quality measures: str, AffinityMask;  qmsrAffinity
 QMSINTRIN = set()  # Intrinsic quality measures requiring input network instead of the ground-truth clustering
@@ -583,9 +584,10 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 	# The task argument name already includes: QMeasure / BaseNet#PathId / Alg,
 	# so here smeta parts and qparams should form the job name for the full identification of the executing job
 	algname, basenetp = smeta.group.name.split('/')  # basenetp includes pathid
-	cfname = os.path.splitext(os.path.split(cfpath)[1])[0]  # Evaluating base file name
+	# Note that evaluating file name might significantly differ from the network name, for example `tp<id>` produced by OSLOM
+	cfname = os.path.splitext(os.path.split(cfpath)[1])[0]  # Evaluating file name (without the extension)
 	measurep = SEPPARS.join((smeta.measure, _SEPQARGS.join(qparams)))  # Quality measure suffixed with its parameters
-	taskname = SEPNAMEPART.join((cfname, measurep))
+	taskname = _SEPQMS.join((cfname, measurep))
 
 	# Evaluate relative size of the clusterings
 	# Note: xmeasures takes inpfpath as the ground-truth clustering, so the asym parameter is not actual here
@@ -593,7 +595,11 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 
 	# Define path to the logs relative to the root dir of the benchmark
 	logsdir = ''.join((RESDIR, algname, '/', _QMSDIR, basenetp, '/'))
-	preparePath(logsdir)
+	# Note: backup is not performed since it should be performed at most once for all logs in the logsdir
+	# (staticExec could be used) and only if the logs are rewriting but they are appended.
+	# The backup is not convenient here for multiple runs on various networks to get aggregated results
+	if not os.path.exists(logsdir):
+		os.makedirs(logsdir)
 	errfile = taskname.join((logsdir, EXTERR))
 	logfile = taskname.join((logsdir, EXTLOG))
 
@@ -602,17 +608,15 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 	xtimebin = relpath(UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((RESDIR, algname, '/', _QMSDIR, measurep, EXTEXECTIME)))
 
-	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
-	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname)), '-s=/etime_' + algname
-		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
-		, './xmeasures')
+	# The task argument name already includes: QMeasure / BaseNet#PathId / Alg
+	# Note: xtimeres does not include the base network name, so it should be included into the listed taskname,
+	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', basenetp, SEPNAMEPART, cfname)), '-s=/etime_' + measurep, './xmeasures']
 	if qparams:
 		args += qparams
 	args += (cfpath, inpfpath)
-	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
-		#, stdout=os.devnull
-		# Note: logfile in params indicates the output log file that should be formed from the PIPE output
+	execpool.execute(Job(name=taskname, workdir=workdir, args=args, timeout=timeout
 		, ondone=saveEvals, params={'qsqueue': qualsaver.queue, 'smeta': smeta, 'logfile': logfile}
+		# Note: poutlog indicates the output log file that should be formed from the PIPE output
 		, task=task, category=measurep, size=clsize, stdout=PIPE, stderr=errfile, poutlog=logfile))
 	return 1
 

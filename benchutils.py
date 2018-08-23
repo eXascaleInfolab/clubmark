@@ -369,29 +369,6 @@ def parseName(path, nameonly=False):
 	return (basename if not pdir else '/'.join((pdir, basename)), apars, insid, shid, pathid)
 
 
-def preparePath(taskpath):  # , netshf=False
-	"""Create the path if required, otherwise move existent data to backup.
-	All instances and shuffles of each network are handled all together and only once,
-	even on calling this function for each shuffle.
-
-	taskpath  - the path to be prepared
-	"""
-	# netshf  - whether the task is a shuffle processing in the non-flat dir structure
-	#
-	# Backup existent files & dirs with such base only if this path exists and is not empty
-	# ATTENTION: do not use only basePathExists(taskpath) here to avoid movement to the backup
-	# processing paths when xxx.mod.net is processed before the xxx.net (has the same base)
-	# Create target path if not exists
-	# print('> preparePath(), for: {}'.format(taskpath))
-	if not os.path.exists(taskpath):
-		os.makedirs(taskpath)
-	elif not dirempty(taskpath):  # Back up all instances and shuffles once per execution in a single archive
-		# print('> preparePath(), backing up: {}, content: {}'.format(taskpath, os.listdir(taskpath)))
-		mainpath = delPathSuffix(taskpath)
-		tobackup(mainpath, True, move=True)  # Move to the backup (old results can't be reused in the forming results)
-		os.mkdir(taskpath)
-
-
 class ItemsStatistic(object):
 	"""Accumulates statistics over the added items of real values or their accumulated statistics"""
 	def __init__(self, name, min0=1, max0=-1):

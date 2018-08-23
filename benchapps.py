@@ -49,7 +49,7 @@ import subprocess
 from numbers import Number  # To verify that a variable is a number (int or float)
 from sys import executable as PYEXEC  #pylint: disable=C0412;  # Full path to the current Python interpreter
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, funcToAppName \
-	, tobackup, preparePath, escapePathWildcards, UTILDIR, ALGSDIR, ORIGDIR, TIMESTAMP_START_HEADER \
+	, tobackup, escapePathWildcards, UTILDIR, ALGSDIR, ORIGDIR, TIMESTAMP_START_HEADER \
 	, SEPPARS, SEPSUBTASK, SEPPATHID, ALEVSMAX, ALGLEVS
 from benchevals import SEPNAMEPART, RESDIR, CLSDIR, EXTEXECTIME, EXTLOG, EXTERR, EXTAGGRES, EXTAGGRESEXT
 from utils.mpepool import Job, Task
@@ -162,6 +162,29 @@ def aggexec(apps):
 		except IOError as err:
 			print('ERROR, "{}" resources consumption output is failed: {}. {}'
 				.format(measure, err, traceback.format_exc(5)), file=sys.stderr)
+
+
+def preparePath(taskpath):  # , netshf=False
+	"""Create the path if required, otherwise move existent data to backup.
+	All instances and shuffles of each network are handled all together and only once,
+	even on calling this function for each shuffle.
+
+	taskpath  - the path to be prepared
+	"""
+	# netshf  - whether the task is a shuffle processing in the non-flat dir structure
+	#
+	# Backup existent files & dirs with such base only if this path exists and is not empty
+	# ATTENTION: do not use only basePathExists(taskpath) here to avoid movement to the backup
+	# processing paths when xxx.mod.net is processed before the xxx.net (has the same base)
+	# Create target path if not exists
+	# print('> preparePath(), for: {}'.format(taskpath))
+	if not os.path.exists(taskpath):
+		os.makedirs(taskpath)
+	elif not dirempty(taskpath):  # Back up all instances and shuffles once per execution in a single archive
+		# print('> preparePath(), backing up: {}, content: {}'.format(taskpath, os.listdir(taskpath)))
+		mainpath = delPathSuffix(taskpath)
+		tobackup(mainpath, True, move=True)  # Move to the backup (old results can't be reused in the forming results)
+		os.mkdir(taskpath)
 
 
 def prepareResDir(appname, taskname, odir, pathidsuf):

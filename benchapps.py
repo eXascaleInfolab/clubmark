@@ -49,20 +49,16 @@ import subprocess
 from numbers import Number  # To verify that a variable is a number (int or float)
 from sys import executable as PYEXEC  #pylint: disable=C0412;  # Full path to the current Python interpreter
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, funcToAppName \
-	, tobackup, escapePathWildcards, UTILDIR, ALGSDIR, ORIGDIR, TIMESTAMP_START_HEADER \
+	, tobackup, preparePath, escapePathWildcards, UTILDIR, ALGSDIR, ORIGDIR, TIMESTAMP_START_HEADER \
 	, SEPPARS, SEPSUBTASK, SEPPATHID, ALEVSMAX, ALGLEVS
-from benchevals import SEPNAMEPART, RESDIR, CLSDIR, EXTEXECTIME, EXTAGGRES, EXTAGGRESEXT
+from benchevals import SEPNAMEPART, RESDIR, CLSDIR, EXTEXECTIME, EXTLOG, EXTERR, EXTAGGRES, EXTAGGRESEXT
 from utils.mpepool import Job, Task
 from algorithms.utils.parser_nsl import parseHeaderNslFile  #, asymnet
 
 
 # Note: currently the output level are limited only for the algorithms that may produce more than 10 levels
 assert ALEVSMAX >= 10, 'The number of levels limitation should be added to GANXiS and some others'
-_EXTLOG = '.log'  # Extension for the logs
-_EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
 EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
-
-
 # reFirstDigits = re.compile(r'\d+')  # First digit regex
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
@@ -166,30 +162,6 @@ def aggexec(apps):
 		except IOError as err:
 			print('ERROR, "{}" resources consumption output is failed: {}. {}'
 				.format(measure, err, traceback.format_exc(5)), file=sys.stderr)
-
-
-def preparePath(taskpath):  # , netshf=False
-	"""Create the path if required, otherwise move existent data to backup.
-	All instances and shuffles of each network are handled all together and only once,
-	even on calling this function for each shuffle.
-	NOTE: To process files starting with taskpath, it should not contain '/' in the end
-
-	taskpath  - the path to be prepared
-	"""
-	# netshf  - whether the task is a shuffle processing in the non-flat dir structure
-	#
-	# Backup existent files & dirs with such base only if this path exists and is not empty
-	# ATTENTION: do not use only basePathExists(taskpath) here to avoid movement to the backup
-	# processing paths when xxx.mod.net is processed before the xxx.net (has the same base)
-	# Create target path if not exists
-	# print('> preparePath(), for: {}'.format(taskpath))
-	if not os.path.exists(taskpath):
-		os.makedirs(taskpath)
-	elif not dirempty(taskpath):  # Back up all instances and shuffles once per execution in a single archive
-		# print('> preparePath(), backing up: {}, content: {}'.format(taskpath, os.listdir(taskpath)))
-		mainpath = delPathSuffix(taskpath)
-		tobackup(mainpath, True, move=True)  # Move to the backup (old results can't be reused in the forming results)
-		os.mkdir(taskpath)
 
 
 def prepareResDir(appname, taskname, odir, pathidsuf):
@@ -675,7 +647,7 @@ def metainfo(levsmax=ALEVSMAX):
 #		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
 #	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=ALGSDIR, args=args
 #		, timeout=timeout, stdout=''.join((RESDIR, algname, '/', taskname, '.loc'))
-#		, task=task, category=algname, size=netsize, stderr=''.join((RESDIR, algname, '/', taskname, _EXTLOG))))
+#		, task=task, category=algname, size=netsize, stderr=''.join((RESDIR, algname, '/', taskname, EXTLOG))))
 #	return 1
 #
 #
@@ -728,8 +700,8 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout=0, seed=None, task=None
 	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 	pybin = PyBin.bestof(pypy=False, v3=True)
 	# Note: Louvain_igraph creates the output dir if it has not been existed, but not the exectime app
-	errfile = taskpath + _EXTELOG
-	logfile = taskpath + _EXTLOG
+	errfile = taskpath + EXTERR
+	logfile = taskpath + EXTLOG
 
 	# def relpath(path, basedir=workdir):
 	# 	"""Relative path to the specified basedir"""
@@ -836,8 +808,8 @@ def execScp(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, path
 		ktaskname = ''.join((taskbasex, SEPPARS, kstrex, tasksuf))
 		# Backup prepared the resulting dir and back up the previous results if exist
 		taskpath = prepareResDir(algname, ktaskname, odir, pathidsuf)
-		errfile = taskpath + _EXTELOG
-		logfile = taskpath + _EXTLOG
+		errfile = taskpath + EXTERR
+		logfile = taskpath + EXTLOG
 		# Evaluate relative paths dependent of the alg params
 		reltaskpath = relpath(taskpath)
 
@@ -882,8 +854,8 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout=0, seed=None, task=No
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'randcommuns'
 	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
-	errfile = taskpath + _EXTELOG
-	logfile = taskpath + _EXTLOG
+	errfile = taskpath + EXTERR
+	logfile = taskpath + EXTLOG
 
 	# Form name of the ground-truth file on base of the input network filename with the extension relpaced to '.cnl'
 	# Note: take base name if the instance of shuffle id components are present
@@ -1027,8 +999,8 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout=0, seed=None, task
 	assert taskname, 'The network name should exists'
 	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)  # Base name of the resulting clusters output
-	errfile = taskpath + _EXTELOG  # Errors log + lib tracing including modularity value and clustering summary
-	logfile = taskpath + _EXTLOG   # Tracing to stdout, contains timings
+	errfile = taskpath + EXTERR  # Errors log + lib tracing including modularity value and clustering summary
+	logfile = taskpath + EXTLOG   # Tracing to stdout, contains timings
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
@@ -1224,8 +1196,8 @@ def execGanxis(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, p
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Ganxis'
 	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
-	errfile = taskpath + _EXTELOG
-	logfile = taskpath + _EXTLOG
+	errfile = taskpath + EXTERR
+	logfile = taskpath + EXTLOG
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
@@ -1280,8 +1252,8 @@ def execOslom2(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, p
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Oslom2'
 	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
-	errfile = taskpath + _EXTELOG
-	logfile = taskpath + _EXTLOG
+	errfile = taskpath + EXTERR
+	logfile = taskpath + EXTLOG
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
@@ -1352,8 +1324,8 @@ def execPscan(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pa
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Pscan'
 	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
-	errfile = taskpath + _EXTELOG
-	# logfile = taskpath + _EXTLOG
+	errfile = taskpath + EXTERR
+	# logfile = taskpath + EXTLOG
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
@@ -1426,8 +1398,8 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout=0, seed=None, task=N
 	assert taskname, 'The network name should exists'
 	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
-	errfile = taskpath + _EXTELOG
-	logfile = taskpath + _EXTLOG
+	errfile = taskpath + EXTERR
+	logfile = taskpath + EXTLOG
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
@@ -1483,8 +1455,8 @@ def execScd(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, path
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'scd'
 	# Backup prepared the resulting dir and back up the previous results if exist
 	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
-	errfile = taskpath + _EXTELOG
-	# logfile = taskpath + _EXTLOG
+	errfile = taskpath + EXTERR
+	# logfile = taskpath + EXTLOG
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths

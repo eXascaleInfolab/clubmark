@@ -60,7 +60,7 @@ import h5py  # HDF5 storage
 import numpy as np  # Required for the HDF5 operations
 
 # from benchapps import  # funcToAppName,
-from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
+from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, preparePath, \
 	escapePathWildcards, envVarDefined, SyncValue, tobackup, funcToAppName, staticTrace, \
 	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, ALGSDIR, ALEVSMAX, ALGLEVS, \
 	TIMESTAMP_START, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
@@ -81,10 +81,11 @@ except NameError:  # bytes are not defined in Python2
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 RESDIR = 'results/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm, specified RELATIVE to ALGSDIR
 CLSDIR = 'clusters/'  # Clusters directory for the resulting clusters of algorithms execution
+_QMSDIR = 'qmeasures/'  # Quality measures standard output and logs directory (_QMSDIR/<basenet>/*.{log,err})
 # _QUALITY_STORAGE = 'quality.h5'  # Quality evaluation storage file name
-_EXTERR = '.err'
-#_EXTLOG = '.log'  # Extension for the logs
-#_EXTELOG = '.elog'  # Extension for the unbuffered (typically error) logs
+EXTLOG = '.log'  # Extension for the logs (stdout redirection and notifications)
+EXTERR = '.err'  # Extension for the errors (stderr redirection and errors tracing)
+#_EXTERR = '.elog'  # Extension for the unbuffered (typically error) logs
 EXTEXECTIME = '.rcp'  # Resource Consumption Profile
 EXTAGGRES = '.res'  # Aggregated results
 EXTAGGRESEXT = '.resx'  # Extended aggregated results
@@ -505,7 +506,7 @@ class SMeta(object):
 	def __init__(self, group, measure, ulev, iins, ishf, ilev=0, irun=0):
 		"""Serialization meta information (location in the storage)
 		
-		group: h5py.Group  - group where the target dataset is located
+		group: h5py.Group  - group where the target dataset is located: <algname>/<basenet><pathid>/
 		measure: str  - name of the serializing evaluation measure
 		ulev: bool  - unified levels, the clustering consists of the SINGLE (unified) level containing
 			(representative) clusters from ALL (multiple) resolutions
@@ -579,10 +580,10 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 	def saveEvals(job):
 		pass
 
-	# Note: the task argument name already includes: QMeasure / BaseNet / Alg
-	# so here smeta and qparams should form the job name
-	algname = smeta.group.name[:smeta.group.name.find('/')]  # First component of the group is the algorithm name
-	cfname = os.path.splitext(os.path.split(cfpath)[1])[0]
+	# The task argument name already includes: QMeasure / BaseNet#PathId / Alg,
+	# so here smeta parts and qparams should form the job name for the full identification of the executing job
+	algname, basenetp = smeta.group.name.split('/')  # basenetp includes pathid
+	cfname = os.path.splitext(os.path.split(cfpath)[1])[0]  # Evaluating base file name
 	measurep = SEPPARS.join((smeta.measure, _SEPQARGS.join(qparams)))  # Quality measure suffixed with its parameters
 	taskname = SEPNAMEPART.join((cfname, measurep))
 
@@ -591,17 +592,15 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 	clsize = os.path.getsize(cfpath) + os.path.getsize(inpfpath)
 
 	# Define path to the logs relative to the root dir of the benchmark
-	# TODO: log to files
-	# errfile = taskpath + _EXTELOG
-	# logfile = taskpath + _EXTLOG
-	errfile = sys.stderr
-	logfile = sys.stdout
+	logsdir = ''.join((RESDIR, algname, '/', _QMSDIR, basenetp, '/'))
+	preparePath(logsdir)
+	errfile = taskname.join((logsdir, EXTERR))
+	logfile = taskname.join((logsdir, EXTLOG))
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
-	# TODO: ? save measures logs in the dedicated evals dir ? <<<<<<
-	xtimeres = relpath(''.join((RESDIR, algname, '/', smeta.measure, EXTEXECTIME)))
+	xtimeres = relpath(''.join((RESDIR, algname, '/', _QMSDIR, measurep, EXTEXECTIME)))
 
 	# ./louvain_igraph.py -i=../syntnets/1K5.nsa -o=louvain_igoutp/1K5/1K5.cnl -l
 	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname)), '-s=/etime_' + algname
@@ -1156,7 +1155,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathids
 		return Job(name=SEPSHF.join((task.name, shuffle)), workdir=ALGSDIR, args=args, timeout=timeout
 			, ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle}
 			# Output modularity to the proc PIPE buffer to be aggregated on postexec to avoid redundant files
-			, stdout=PIPE, stderr=logsbase + _EXTERR)
+			, stdout=PIPE, stderr=logsbase + EXTERR)
 
 
 	def evaljobNmi(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logsbase):
@@ -1227,7 +1226,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathids
 
 		return Job(name=jobname, task=task, workdir=ALGSDIR, args=args, timeout=timeout
 			, ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle}
-			, stdout=PIPE, stderr=logsbase + _EXTERR)
+			, stdout=PIPE, stderr=logsbase + EXTERR)
 
 
 	def evaljobNmiS(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logsbase):
@@ -1275,7 +1274,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathids
 
 		return Job(name=jobname, task=task, workdir=ALGSDIR, args=args, timeout=timeout
 			, ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle}
-			, stdout=PIPE, stderr=logsbase + _EXTERR)
+			, stdout=PIPE, stderr=logsbase + EXTERR)
 
 
 	if measure == 'mod':

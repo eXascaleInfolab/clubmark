@@ -172,14 +172,15 @@ def randcommuns(*args):
 		# Output resulting clusters
 		with open('/'.join((prm.outdir, ''.join((prm.outname, '_', str(prm.outnum), prm.outext)))), 'w') as fout:
 			for cl in clusters:
-				fout.write(' '.join(cl))
-				fout.write('\n')
+				# Note: print() unlike fout.write() appends the newline
+				print(' '.join(cl), file=fout)
 
 	# Output randseed used for the generated clusterings
 	# Output to the dir above if possible to not mix cluster levels with rand seed
 	if prm.outpseed:
 		with open('/'.join((prm.outdir, (os.path.splitext(prm.outname)[0] + '.seed'))), 'w') as fout:
-			fout.write(prm.randseed)
+			# Note: print() unlike fout.write() appends the newline
+			print(prm.randseed, file=fout)
 	print('Random clusterings are successfully generated')
 
 

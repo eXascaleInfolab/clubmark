@@ -397,66 +397,78 @@ class QualitySaver(object):
 		timefmt = '%y%m%d-%H%M%S'  # Start time of the benchmarking, time format: YYMMDD_HHMMSS
 		timestamp = time.strftime(timefmt, TIMESTAMP_START)  # Timestamp string
 		seedstr = str(seed)
+		qmsdir = RESDIR + _QMSDIR  # Quality measures directory
+		if not os.path.exists(qmsdir):
+			os.makedirs(qmsdir)
 		# HDF5 Storage: qmeasures_<seed>.h5
-		storage = '/'.join((RESDIR, 'qmeasures_', seedstr, '.h5'))  # File name of the HDF5.storage
+		storage = ''.join((qmsdir, 'qmeasures_', seedstr, '.h5'))  # File name of the HDF5.storage
 		ublocksize = 512  # Userblock size in bytes
 		ublocksep = ':'  # Userblock vals separator
-		if os.path.isfile(storage):
-			# Read userblock: seed and timestamps, validate new seed and estimate whether
-			# there is enought space for one more timestamp
-			if update:
-				with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
-					# Note: userblock contains '<seed>:<timestamp1>:<timestamp2>...',
-					# where timestamp has timefmt
-					ublocksize = fstore.userblock_size
-					ublock = fstore.read(ublocksize).rstrip('\0')
-					ubparts = ublock.split(ublocksep)
-					if len(ubparts) < 2:
-						update = False
-						print('ERROR, {} userblock should contain at least 2 items (seed and 1+ timestamp): {}.'
-							' The new store will be created.'.format(storage, ublock), file=sys.stderr)
-					if update and int(ubparts[0]) != seed:
-						update = False
-						print('WARNING, update is supported only for the same seed.'
-							' Specified seed {} != {} storage seed. New storage will be created.'
-							.format(seed, ubparts[0]), file=sys.stderr)
-					# Update userblock if possible
-					if update:
-						if len(ublock) + len(ublocksep) + len(timestamp) <= ublocksize:
-							fstore.seek(len(ublock))
-							fstore.write(ublocksep)  # Note: initially userblock is filled with 0
-							fstore.write(timestamp)
-						else:
+		try:
+			if os.path.isfile(storage):
+				# Read userblock: seed and timestamps, validate new seed and estimate whether
+				# there is enought space for one more timestamp
+				bcksftime = None
+				if update:
+					fstorage = h5py.File(storage, mode='r', driver='core', libver='latest')
+					ublocksize = fstorage.userblock_size
+					fstorage.close()
+					with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
+						# Note: userblock contains '<seed>:<timestamp1>:<timestamp2>...',
+						# where timestamp has timefmt
+						ublock = fstore.read(ublocksize).decode().rstrip('\0')
+						ubparts = ublock.split(ublocksep)
+						if len(ubparts) < 2:
 							update = False
-							print('WARNING, {} can not be updated because the userblock is already full.'
-								' A new storage will be created.'.format(storage), file=sys.stderr)
-			bcksftime = SyncValue(ubparts[-1])  # Use last benchmarking start time
-			tobackup(storage, False, synctime=bcksftime, move=not update)  # Copy/move to the backup
-		elif update:
-			update = False
-			print('WARNING, the storage does not exist and can not be updated, created:', storage, file=sys.stderr)
-		# Create HFD5 storage if required
-		if not update:
-			# Create the storage, fail if exists ('w-' or 'x')
-			fstorage = h5py.File(storage, mode='w-', driver='core', libver='latest', userblock_size=ublocksize)
-			fstorage.close()
-			# Write the userblock
-			if (fstorage.userblock_size
-			and len(seedstr) + len(ublocksep) + len(timestamp) <= fstorage.userblock_size):
-				with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
-					fstore.write(seedstr)
-					fstore.write(ublocksep)  # Note: initially userblock is filled with 0
-					fstore.write(timestamp)
-					# Fill remained part with zeros to be sure that userblock is zeroed
-					fstore.write('\0' * (fstorage.userblock_size - (len(seedstr) + len(ublocksep) + len(timestamp))))
-			else:
-				raise RuntimeError('ERROR, the userblock creation failed in the {}, userblock_size: {}'
-					', initial data size: {} (seed: {}, sep: {}, timestamp:{})'.format(storage
-					, fstorage.userblock_size, len(seedstr) + len(ublocksep) + len(timestamp)
-					, len(seedstr), len(ublocksep), len(timestamp)))
-		# Note: append mode is the default one; core driver is a memory-mapped file, block_size is default (64 Kb)
-		# Persistent storage object (file)
-		self.storage = SyncValue(h5py.File(storage, mode='a', driver='core', libver='latest', userblock_size=ublocksize))
+							print('ERROR, {} userblock should contain at least 2 items (seed and 1+ timestamp): {}.'
+								' The new store will be created.'.format(storage, ublock), file=sys.stderr)
+						if update and int(ubparts[0]) != seed:
+							update = False
+							print('WARNING, update is supported only for the same seed.'
+								' Specified seed {} != {} storage seed. New storage will be created.'
+								.format(seed, ubparts[0]), file=sys.stderr)
+						# Update userblock if possible
+						if update:
+							if len(ublock) + len(ublocksep) + len(timestamp) <= ublocksize:
+								fstore.seek(len(ublock))
+								# Note: .encode() is required for the byte stream in Python3
+								fstore.write(ublocksep.encode())  # Note: initially userblock is filled with 0
+								fstore.write(timestamp.encode())
+							else:
+								update = False
+								print('WARNING, {} can not be updated because the userblock is already full.'
+									' A new storage will be created.'.format(storage), file=sys.stderr)
+						bcksftime = SyncValue(time.strptime(ubparts[-1], timefmt))  # Use last benchmarking start time
+				tobackup(storage, False, synctime=bcksftime, move=not update)  # Copy/move to the backup
+			elif update:
+				update = False
+				print('WARNING, the storage does not exist and can not be updated, created:', storage)
+			# Create HFD5 storage if required
+			if not update:
+				# Create the storage, fail if exists ('w-' or 'x')
+				fstorage = h5py.File(storage, mode='w-', driver='core', libver='latest', userblock_size=ublocksize)
+				ubsize = fstorage.userblock_size  # Actual user block size of the storage
+				fstorage.close()
+				# Write the userblock
+				if (ubsize
+				and len(seedstr) + len(ublocksep) + len(timestamp) <= ubsize):
+					with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
+						fstore.write(seedstr.encode())  # Note: .encode() is required for the byte stream in Python3
+						fstore.write(ublocksep.encode())  # Note: initially userblock is filled with 0
+						fstore.write(timestamp.encode())
+						# Fill remained part with zeros to be sure that userblock is zeroed
+						fstore.write(('\0' * (ubsize - (len(seedstr) + len(ublocksep) + len(timestamp)))).encode())
+				else:
+					raise RuntimeError('ERROR, the userblock creation failed in the {}, userblock_size: {}'
+						', initial data size: {} (seed: {}, sep: {}, timestamp:{})'.format(storage
+						, ubsize, len(seedstr) + len(ublocksep) + len(timestamp)
+						, len(seedstr), len(ublocksep), len(timestamp)))
+				#print('> HDF5 storage userblock created: ', seedstr, ublocksep, timestamp)
+			# Note: append mode is the default one; core driver is a memory-mapped file, block_size is default (64 Kb)
+			# Persistent storage object (file)
+			self.storage = SyncValue(h5py.File(storage, mode='a', driver='core', libver='latest', userblock_size=ublocksize))
+		except Exception as err:
+			print('ERROR, HDF5 storage creation failed: {}. {}'.format(err, traceback.format_exc(5)), file=sys.stderr)
 		# Initialize or update metadata and groups
 		# # rescons meta data (h5str array)
 		# try:

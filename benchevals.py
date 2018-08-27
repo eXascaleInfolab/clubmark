@@ -90,12 +90,19 @@ _QMSDIR = 'qmeasures/'  # Quality measures standard output and logs directory (_
 EXTLOG = '.log'  # Extension for the logs (stdout redirection and notifications)
 EXTERR = '.err'  # Extension for the errors (stderr redirection and errors tracing)
 #_EXTERR = '.elog'  # Extension for the unbuffered (typically error) logs
-EXTEXECTIME = '.rcp'  # Resource Consumption Profile
-EXTAGGRES = '.res'  # Aggregated results
-EXTAGGRESEXT = '.resx'  # Extended aggregated results
-SEPNAMEPART = '/'  # Job/Task name parts separator ('/' is the best choice, because it can not appear in a file name, which can be part of job name)
+EXTEXECTIME = '.rcp'  # Extension for the Resource Consumption Profile
+EXTAGGRES = '.res'  # Extension for the aggregated results
+EXTAGGRESEXT = '.resx'  # Extension for the extended aggregated results
+_EXTQDATASET = '.dat'  # Extension for the HDF5 datasets
+# Job/Task name parts separator ('/' is the best choice because it can not appear in a file name,
+# which can be part of job name)
+SEPNAMEPART = '/'
 _SEPQARGS = '_'  # Separator for the quality measure arguments to be shown in the monitoring and results
-_SEPQMS = ';'  # Separetor for the quality measure from the processing file name. It is used for the file names and should follow restrictions on the allowed symbols
+# Separetor for the quality measure from the processing file name.
+# It is used for the file names and should follow restrictions on the allowed symbols.
+_SEPQMS = ';'
+_SUFULEV = '+u'  # Unified levels suffix of the HDF5 dataset (actual for DAOC)
+_PREFMETR = ':'  # Metric prefix in the HDF5 dataset name
 
 QMSRAFN = {}  # Specific affinity mask of the quality measures: str, AffinityMask;  qmsrAffinity
 QMSINTRIN = set()  # Intrinsic quality measures requiring input network instead of the ground-truth clustering
@@ -297,33 +304,71 @@ class QualitySaver(object):
 
 		tstart = None if not timeout else time.perf_counter()  # Global start time
 		tcur = tstart  # Start of the current iteration
-		try:
-			while (active.value and (tstart is None or tcur - tstart < timeout)):
-				# Fetch and serialize items from the queue limiting their number
-				# (can be added in parallel) to avoid large latency
-				i = 0
-				while not qsqueue.empty() and i < QualitySaver.QUEUE_SIZEMAX:
-					i += 1
-					# qm = qsqueue.get(True, timeout=latency)  # Measures to be stored
-					qm = qsqueue.get_nowait()
-					assert isinstance(qm, QEntry), 'Unexpected type of the quality entry: ' + type(qm).__name__
-					# TODO: save data to HDF5
-					# pscan01 = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
-				# Prepare for the next iteration considering the processing latency to reduce CPU loading
-				duration = time.perf_counter() - tcur
-				if duration < latency:
-					time.sleep(latency - duration)
-					duration = latency
-				tcur += duration
-		except queue.Empty as err:
-			assert False, 'queue.Empty exception should not occur in the fetchAndSave()'
+		while (active.value and (tstart is None or tcur - tstart < timeout)):
+			# Fetch and serialize items from the queue limiting their number
+			# (can be added in parallel) to avoid large latency
+			i = 0
+			while not qsqueue.empty() and i < QualitySaver.QUEUE_SIZEMAX:
+				i += 1
+				# qm = qsqueue.get(True, timeout=latency)  # Measures to be stored
+				qm = qsqueue.get_nowait()
+				assert isinstance(qm, QEntry), 'Unexpected type of the quality entry: ' + type(qm).__name__
+				# Save data elements (entries)
+				for metric, mval in  viewitems(qm.data):
+					try:
+						# Metric is  str (or can be unicode in Python2)
+						assert isinstance(mval, float), 'Invalid data type, metric: {}, value: {}'.format(
+							type(metric).__name__, type(mval).__name__)
+						# Construct dataset name based on the quality measure binary name and its metric name
+						# (in case of multiple metrics are evaluated by the executing app)
+						dsname = qm.smeta.measure if not metric else _PREFMETR.join((qm.smeta.measure, metric))
+						if qm.smeta.ulev:
+							dsname += _SUFULEV
+						dsname += _EXTQDATASET
+						# Open or create the required dataset
+						qmdata = None
+						try:
+							qmdata = qm.smeta.group[dsname]
+						except KeyError:
+							# Such dataset does not exist, create it
+							nins = 1
+							nshf = 1
+							nlev = 1
+							if not qm.smeta.ulev:
+								nins = qm.smeta.group.attrs['nins']
+								nshf = qm.smeta.group.attrs['nshf']
+								nlev = qm.smeta.group.parent.attrs['nlev']
+							qmdata = qm.smeta.group.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
+								# 32-bit floating number, checksum (fletcher32)
+								dtype='f4', fletcher32=True, fillvalue=np.dtype('NA[f4,NaN]'), track_times=True)
+								# Numpy NaNs (https://docs.scipy.org/doc/numpy-1.14.0/neps/missing-data.html):
+								# np.NA,  dtype='NA[f4]', dtype='NA', np.dtype('NA[f4,NaN]')
+						# Save data to the storage
+						qmdata[qm.smeta.iins][qm.smeta.ishf][qm.smeta.ilev][qm.smeta.irun] = mval
+					except Exception as err:  #pylint: disable=W0703;  # queue.Empty as err:  # TypeError (HDF5), KeyError
+						print('ERROR, saving of {} in {}{}{} failed: {}. {}'.format(mval, qm.smeta.measure,
+							'' if not metric else _PREFMETR + metric, '' if not qm.smeta.ulev else _SUFULEV,
+							err, traceback.format_exc(5)), file=sys.stderr)
+					# alg = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
+					# 	# Allocate chunks of 10 items starting with empty dataset and with possibility
+					# 	# to resize up to 500 items (params combinations)
+					# 	self.apps[app] = appsdir.require_dataset(app, shape=(0,), dtype=h5py.special_dtype(vlen=_h5str)
+					# 		, chunks=(10,), maxshape=(500,))  # , maxshape=(None,), fletcher32=True
+					# self.evals = self.storage.value.require_group('evals')  # Quality evaluations dir (group)
+			# Prepare for the next iteration considering the processing latency to reduce CPU loading
+			duration = time.perf_counter() - tcur
+			if duration < latency:
+				time.sleep(latency - duration)
+				duration = latency
+			tcur += duration
+		active.value = False
 		if not qsqueue.empty():
 			try:
 				print('WARNING QualitySaver, {} items remained unsaved in the terminating queue'
 					.format(qsqueue.qsize()))
 			except NotImplementedError:
 				print('WARNING QualitySaver, some items remained unsaved in the terminating queue')
-		qsqueue.close()
+		qsqueue.close()  # Close queue to prevent scheduling another tasks
 
 
 	def __init__(self, seed, update=False, timeout=None):  # algs, qms, nets=None,
@@ -345,6 +390,7 @@ class QualitySaver(object):
 		"""
 		assert isinstance(seed, int) and (timeout is None or timeout >= 0), 'Invalid seed type: {}'.format(type(seed).__name__)
 		# Open or init the HDF5 storage
+		self._tstart = time.perf_counter()
 		self.timeout = timeout
 		self._persister = None
 		self.queue = None
@@ -415,7 +461,7 @@ class QualitySaver(object):
 		# # rescons meta data (h5str array)
 		# try:
 		# 	self.mrescons = [b.encode() for b in self.storage.value['rescons.inf'][()]]
-		# except IndexError:
+		# except KeyError:  # IndexError
 		# 	self.mrescons = ['ExecTime', 'CPU_time', 'RSS_peak']
 		# 	# Note: None in maxshape means resizable, fletcher32 used for the checksum
 		# 	self.storage.value.create_dataset('rescons.inf', shape=(len(self.mrescons),)
@@ -428,13 +474,9 @@ class QualitySaver(object):
 		# # rescons str to the index mapping
 		# self.irescons = {s: i for i, s in enumerate(self.mrescons)}
 
-		self._active = Value('B', True)  # The storage is operational
 		self.queue = None  # Note: the multiprocess queue is created in the enter blocks
-		# 	# Allocate chunks of 10 items starting with empty dataset and with possibility
-		# 	# to resize up to 500 items (params combinations)
-		# 	self.apps[app] = appsdir.require_dataset(app, shape=(0,), dtype=h5py.special_dtype(vlen=_h5str)
-		# 		, chunks=(10,), maxshape=(500,))  # , maxshape=(None,), fletcher32=True
-		# self.evals = self.storage.value.require_group('evals')  # Quality evaluations dir (group)
+		# The storage is not operational until the queue is created
+		self._active = Value('B', False)
 
 
 	def __del__(self):
@@ -445,8 +487,8 @@ class QualitySaver(object):
 				.format(self.queue.qsize(), traceback.format_exc(5)), file=sys.stderr)
 		try:
 			self.queue.close()  # No more data can be put in the queue
-			self._persister.join(self.timeout)
 			self.queue.join_thread()
+			self._persister.join(0)  # Note: timeout is 0 to avoid destructor blocking
 		finally:
 			with self.storage:
 				if self.storage.value is not None:
@@ -455,8 +497,8 @@ class QualitySaver(object):
 
 	def __enter__(self):
 		"""Context entrence"""
-		self._active.value = True
 		self.queue = Queue(self.QUEUE_SIZEMAX)  # Qulity measures persistence queue, data pool
+		self._active.value = True
 		self._persister = Process(target=self.__datasaver, args=(self,))
 		self._persister.start()
 		return self
@@ -469,16 +511,14 @@ class QualitySaver(object):
 		evalue  - exception value
 		tracebk  - exception traceback
 		"""
-		#self.apps.clear()
-		#self.storage.close()
 		self._active.value = False
 		try:
 			self.queue.close()  # No more data can be put in the queue
 			self.queue.join_thread()
-			self._persister.join(self.timeout)
+			self._persister.join(None if self.timeout is None else self.timeout - self._tstart)
 		finally:
 			with self.storage:
-				self.storage.flush()  # Allow to reuse the instance in several context managers
+				self.storage.value.flush()  # Allow to reuse the instance in several context managers
 		# Note: the exception (if any) is propagated if True is not returned here
 
 
@@ -503,7 +543,8 @@ def metainfo(afnmask=None, intrinsic=False, multirun=1):
 		if intrinsic:
 			QMSINTRIN.add(func)
 		if multirun >= 2:
-			QMSRUNS[func] = multirun
+			# ATTENTION: function name is used to retrieve it from the value from the persister by the qmeasure name
+			QMSRUNS[funcToAppName(func.__name__)] = multirun
 		return func
 	return decor
 
@@ -583,7 +624,8 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 		#
 		# Define the number of strings in the output counting the number of words in the last string
 		if len(job.pipedout[-1].split(None, 1)) == 1:
-			metric = job.pipedout[-2].split(None, 1)[0]
+			# Metric name is None (the same as binary name) if not specified explicitly
+			metric = None if len(job.pipedout) == 1 else job.pipedout[-2].split(None, 1)[0].rstrip(':')  # Omit ending ':' if any
 			mval = job.pipedout[-1]
 			try:
 				# qsqueue.put(QEntry(smeta, {metric: float(mval)}))
@@ -610,7 +652,9 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 
 	# The task argument name already includes: QMeasure / BaseNet#PathId / Alg,
 	# so here smeta parts and qparams should form the job name for the full identification of the executing job
-	algname, basenetp = smeta.group.name.split('/')  # basenetp includes pathid
+	# Note: HDF5 uses Unicode for the file name and ASCII/Unicode for the group names;
+	# ASCII/byte stream requires conversion to utf-8 in Python3.
+	algname, basenetp = smeta.group.name.decode()[1:].split('/')  # Omit the leading '/'; basenetp includes pathid
 	# Note that evaluating file name might significantly differ from the network name, for example `tp<id>` produced by OSLOM
 	cfname = os.path.splitext(os.path.split(cfpath)[1])[0]  # Evaluating file name (without the extension)
 	measurep = SEPPARS.join((smeta.measure, _SEPQARGS.join(qparams)))  # Quality measure suffixed with its parameters
@@ -1158,7 +1202,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathids
 		# Job post-processing
 		def aggLevs(job):
 			"""Aggregate results over all levels, appending final value for each level to the dedicated file"""
-			result = job.proc.communicate()[0]  # Read buffered stdout
+			result = job.proc.communicate()[0].decode()  # Read buffered stdout
 			# Find require value to be aggregated
 			targpref = 'mod: '
 			# Match float number
@@ -1234,7 +1278,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathids
 		def aggLevs(job):
 			"""Aggregate results over all levels, appending final value for each level to the dedicated file"""
 			try:
-				result = job.proc.communicate()[0]
+				result = job.proc.communicate()[0].decode()
 				nmi = float(result)  # Read buffered stdout
 			except ValueError:
 				print('ERROR, nmi evaluation failed for the job "{}": {}'
@@ -1282,7 +1326,7 @@ def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathids
 		def aggLevs(job):
 			"""Aggregate results over all levels, appending final value for each level to the dedicated file"""
 			try:
-				result = job.proc.communicate()[0]
+				result = job.proc.communicate()[0].decode()
 				nmi = float(result)  # Read buffered stdout
 			except ValueError:
 				print('ERROR, nmi_s evaluation failed for the job "{}": {}'

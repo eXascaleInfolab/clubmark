@@ -393,6 +393,7 @@ def parseParams(args):
 			# Note: this option can be supplied multiple time with various values
 			if opts.qmeasures is None:
 				opts.qmeasures = []
+			# Note: each argument is stored as an array item, which is either a parameter or its value
 			opts.qmeasures.append(arg[3:].strip('"').strip("'").split())
 		elif arg[1] == 's':
 			if len(arg) <= 3 or arg[2] != '=':
@@ -1548,7 +1549,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					# assert not tasks or len(tasks) == len(cqmes), 'Tasks are not synced with the quality measures'
 					# mntasks = []
 					# for i, qm, eq in enumerate(cqmes):
-					# 	runs = QMSRUNS.get(eq, 1)  # The number of quality measure runs (subsequent evaluations)
+					# 	runs = QMSRUNS.get(qm[0], 1)  # The number of quality measure runs (subsequent evaluations)
 					# 	mntasks.append(Task(SEPSUBTASK.join((qm[0] if not tasks else tasks[i].name
 					# 			# Append irun to the task suffix
 					# 			, tasksuf if runs == 1 else 'r'.join((tasksuf, str(irun)))))
@@ -1608,7 +1609,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									# Sort the clustering file names to form their clustering level ids in the same order
 									if len(cfnames) >= 2:
 										cfnames.sort()
-									runs = QMSRUNS.get(eq, 1)  # The number of quality measure runs (subsequent evaluations)
+									runs = QMSRUNS.get(qm[0], 1)  # The number of quality measure runs (subsequent evaluations)
 									for inpcls, ulev in ((cfnames, False), ([] if uclfname is None else [uclfname], True)):
 										# ilev == ifc corresponds to the alphabetical ordering of the clustering levels file names
 										for ifc, fcl in enumerate(inpcls):

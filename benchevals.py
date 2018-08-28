@@ -64,7 +64,7 @@ import h5py  # HDF5 storage
 import numpy as np  # Required for the HDF5 operations
 
 # from benchapps import  # funcToAppName,
-from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, \
+from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, syncedTime, \
 	escapePathWildcards, envVarDefined, SyncValue, tobackup, funcToAppName, staticTrace, \
 	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, ALGSDIR, ALEVSMAX, ALGLEVS, \
 	TIMESTAMP_START, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
@@ -292,11 +292,13 @@ class QualitySaver(object):
 
 	"""Quality evaluations serializer to the persistent sotrage"""
 	@staticmethod
-	def __datasaver(storage, qsqueue, active, timeout=None, latency=2.):
+	def __datasaver(qsqueue, wlock, active, timeout=None, latency=2.):
 		"""Worker process function to save data to the persistent storage
 
 		qsqueue: Queue  - quality saver queue of QEntry items
-		active: Value('B')  - the saver process is operational (the requests can be processed)
+		wlock: Lock (typically RLock)  - write lock to guarantee a single write at time in case another process also
+			writes to the storage (benchmark greates groups on start)
+		active: Value('B', lock=False)  - the saver process is operational (the requests can be processed)
 		timeout: float  - global operational timeout in seconds, None means no timeout
 		latency: float  - latency of the datasaver in sec, recommended value: 1-3 sec
 		"""
@@ -344,7 +346,8 @@ class QualitySaver(object):
 								# Numpy NaNs (https://docs.scipy.org/doc/numpy-1.14.0/neps/missing-data.html):
 								# np.NA,  dtype='NA[f4]', dtype='NA', np.dtype('NA[f4,NaN]')
 						# Save data to the storage
-						qmdata[qm.smeta.iins][qm.smeta.ishf][qm.smeta.ilev][qm.smeta.irun] = mval
+						with wlock:
+							qmdata[qm.smeta.iins][qm.smeta.ishf][qm.smeta.ilev][qm.smeta.irun] = mval
 					except Exception as err:  #pylint: disable=W0703;  # queue.Empty as err:  # TypeError (HDF5), KeyError
 						print('ERROR, saving of {} in {}{}{} failed: {}. {}'.format(mval, qm.smeta.measure,
 							'' if not metric else _PREFMETR + metric, '' if not qm.smeta.ulev else _SUFULEV,
@@ -385,15 +388,16 @@ class QualitySaver(object):
 		Members:
 			_persister: Process  - persister worker process
 			queue: Queue  - multiprocess queue whose items are saved (persisted)
-			storage: SyncValue(h5py.File)  - HDF5 storage
+			storage: SyncValue(h5py.File)  - HDF5 storage with synchronized access
+				TODO: omit SyncValue or at least do not use it on sequential writing,
+				make syncvalue permanent on initializatoin with the only capability to access to it under the lock
+				ATTENTION: parallel write to the storage is not supported and should be done withing the storage ebter lock
 			_active: Value('B')  - the storage is operational (the requests can be processed)
 		"""
 		assert isinstance(seed, int) and (timeout is None or timeout >= 0), 'Invalid seed type: {}'.format(type(seed).__name__)
 		# Open or init the HDF5 storage
 		self._tstart = time.perf_counter()
 		self.timeout = timeout
-		self._persister = None
-		self.queue = None
 		timefmt = '%y%m%d-%H%M%S'  # Start time of the benchmarking, time format: YYMMDD_HHMMSS
 		timestamp = time.strftime(timefmt, TIMESTAMP_START)  # Timestamp string
 		seedstr = str(seed)
@@ -404,71 +408,73 @@ class QualitySaver(object):
 		storage = ''.join((qmsdir, 'qmeasures_', seedstr, '.h5'))  # File name of the HDF5.storage
 		ublocksize = 512  # Userblock size in bytes
 		ublocksep = ':'  # Userblock vals separator
-		try:
-			if os.path.isfile(storage):
-				# Read userblock: seed and timestamps, validate new seed and estimate whether
-				# there is enought space for one more timestamp
-				bcksftime = None
-				if update:
-					fstorage = h5py.File(storage, mode='r', driver='core', libver='latest')
-					ublocksize = fstorage.userblock_size
-					fstorage.close()
-					with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
-						# Note: userblock contains '<seed>:<timestamp1>:<timestamp2>...',
-						# where timestamp has timefmt
-						ublock = fstore.read(ublocksize).decode().rstrip('\0')
-						ubparts = ublock.split(ublocksep)
-						if len(ubparts) < 2:
-							update = False
-							print('ERROR, {} userblock should contain at least 2 items (seed and 1+ timestamp): {}.'
-								' The new store will be created.'.format(storage, ublock), file=sys.stderr)
-						if update and int(ubparts[0]) != seed:
-							update = False
-							print('WARNING, update is supported only for the same seed.'
-								' Specified seed {} != {} storage seed. New storage will be created.'
-								.format(seed, ubparts[0]), file=sys.stderr)
-						# Update userblock if possible
-						if update:
-							if len(ublock) + len(ublocksep) + len(timestamp) <= ublocksize:
-								fstore.seek(len(ublock))
-								# Note: .encode() is required for the byte stream in Python3
-								fstore.write(ublocksep.encode())  # Note: initially userblock is filled with 0
-								fstore.write(timestamp.encode())
-							else:
-								update = False
-								print('WARNING, {} can not be updated because the userblock is already full.'
-									' A new storage will be created.'.format(storage), file=sys.stderr)
-						bcksftime = SyncValue(time.strptime(ubparts[-1], timefmt))  # Use last benchmarking start time
-				tobackup(storage, False, synctime=bcksftime, move=not update)  # Copy/move to the backup
-			elif update:
-				update = False
-				print('WARNING, the storage does not exist and can not be updated, created:', storage)
-			# Create HFD5 storage if required
-			if not update:
-				# Create the storage, fail if exists ('w-' or 'x')
-				fstorage = h5py.File(storage, mode='w-', driver='core', libver='latest', userblock_size=ublocksize)
-				ubsize = fstorage.userblock_size  # Actual user block size of the storage
+		# try:
+		if os.path.isfile(storage):
+			# Read userblock: seed and timestamps, validate new seed and estimate whether
+			# there is enought space for one more timestamp
+			bcksftime = None
+			if update:
+				fstorage = h5py.File(storage, mode='r', driver='core', libver='latest')
+				ublocksize = fstorage.userblock_size
 				fstorage.close()
-				# Write the userblock
-				if (ubsize
-				and len(seedstr) + len(ublocksep) + len(timestamp) <= ubsize):
-					with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
-						fstore.write(seedstr.encode())  # Note: .encode() is required for the byte stream in Python3
-						fstore.write(ublocksep.encode())  # Note: initially userblock is filled with 0
-						fstore.write(timestamp.encode())
-						# Fill remained part with zeros to be sure that userblock is zeroed
-						fstore.write(('\0' * (ubsize - (len(seedstr) + len(ublocksep) + len(timestamp)))).encode())
-				else:
-					raise RuntimeError('ERROR, the userblock creation failed in the {}, userblock_size: {}'
-						', initial data size: {} (seed: {}, sep: {}, timestamp:{})'.format(storage
-						, ubsize, len(seedstr) + len(ublocksep) + len(timestamp)
-						, len(seedstr), len(ublocksep), len(timestamp)))
-				#print('> HDF5 storage userblock created: ', seedstr, ublocksep, timestamp)
-			# Note: append mode is the default one; core driver is a memory-mapped file, block_size is default (64 Kb)
-			# Persistent storage object (file)
-			self.storage = SyncValue(h5py.File(storage, mode='a', driver='core', libver='latest', userblock_size=ublocksize))
-		except Exception as err:
-			print('ERROR, HDF5 storage creation failed: {}. {}'.format(err, traceback.format_exc(5)), file=sys.stderr)
+				with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
+					# Note: userblock contains '<seed>:<timestamp1>:<timestamp2>...',
+					# where timestamp has timefmt
+					ublock = fstore.read(ublocksize).decode().rstrip('\0')
+					ubparts = ublock.split(ublocksep)
+					if len(ubparts) < 2:
+						update = False
+						print('ERROR, {} userblock should contain at least 2 items (seed and 1+ timestamp): {}.'
+							' The new store will be created.'.format(storage, ublock), file=sys.stderr)
+					if update and int(ubparts[0]) != seed:
+						update = False
+						print('WARNING, update is supported only for the same seed.'
+							' Specified seed {} != {} storage seed. New storage will be created.'
+							.format(seed, ubparts[0]), file=sys.stderr)
+					# Update userblock if possible
+					if update:
+						if len(ublock) + len(ublocksep) + len(timestamp) <= ublocksize:
+							fstore.seek(len(ublock))
+							# Note: .encode() is required for the byte stream in Python3
+							fstore.write(ublocksep.encode())  # Note: initially userblock is filled with 0
+							fstore.write(timestamp.encode())
+						else:
+							update = False
+							print('WARNING, {} can not be updated because the userblock is already full.'
+								' A new storage will be created.'.format(storage), file=sys.stderr)
+					bcksftime = syncedTime(time.strptime(ubparts[-1], timefmt), lock=False)  # Use last benchmarking start time
+			tobackup(storage, False, synctime=bcksftime, move=not update)  # Copy/move to the backup
+		elif update:
+			update = False
+			print('WARNING, the storage does not exist and can not be updated, created:', storage)
+		# Create HFD5 storage if required
+		if not update:
+			# Create the storage, fail if exists ('w-' or 'x')
+			fstorage = h5py.File(storage, mode='w-', driver='core', libver='latest', userblock_size=ublocksize)
+			ubsize = fstorage.userblock_size  # Actual user block size of the storage
+			fstorage.close()
+			# Write the userblock
+			if (ubsize
+			and len(seedstr) + len(ublocksep) + len(timestamp) <= ubsize):
+				with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
+					fstore.write(seedstr.encode())  # Note: .encode() is required for the byte stream in Python3
+					fstore.write(ublocksep.encode())  # Note: initially userblock is filled with 0
+					fstore.write(timestamp.encode())
+					# Fill remained part with zeros to be sure that userblock is zeroed
+					fstore.write(('\0' * (ubsize - (len(seedstr) + len(ublocksep) + len(timestamp)))).encode())
+			else:
+				raise RuntimeError('ERROR, the userblock creation failed in the {}, userblock_size: {}'
+					', initial data size: {} (seed: {}, sep: {}, timestamp:{})'.format(storage
+					, ubsize, len(seedstr) + len(ublocksep) + len(timestamp)
+					, len(seedstr), len(ublocksep), len(timestamp)))
+			# print('> HDF5 storage userblock created: ', seedstr, ublocksep, timestamp)
+		# Note: append mode is the default one; core driver is a memory-mapped file, block_size is default (64 Kb)
+		# Persistent storage object (file)
+		self.storage = SyncValue(h5py.File(storage, mode='a', driver='core', libver='latest', userblock_size=ublocksize))
+		# except Exception as err:  #pylint: disable=W0703
+		# 	print('ERROR, HDF5 storage creation failed: {}. {}'.format(err, traceback.format_exc(5)), file=sys.stderr)
+		# 	raise
+			
 		# Initialize or update metadata and groups
 		# # rescons meta data (h5str array)
 		# try:
@@ -488,20 +494,26 @@ class QualitySaver(object):
 
 		self.queue = None  # Note: the multiprocess queue is created in the enter blocks
 		# The storage is not operational until the queue is created
-		self._active = Value('B', False)
+		# Note: a shared value for the active state is sufficient, exact synchronization is not required
+		self._active = Value('B', False, lock=False)
+		self._persister = None
 
 
 	def __del__(self):
 		"""Destructor"""
 		self._active.value = False
-		if not self.queue.empty():
+		if self.queue is not None and not self.queue.empty():
 			print('WARNING, terminating the persistency layer with {} queued data entries, call stack: {}'
 				.format(self.queue.qsize(), traceback.format_exc(5)), file=sys.stderr)
 		try:
-			self.queue.close()  # No more data can be put in the queue
-			self.queue.join_thread()
-			self._persister.join(0)  # Note: timeout is 0 to avoid destructor blocking
+			if self.queue is not None:
+				self.queue.close()  # No more data can be put in the queue
+				self.queue.join_thread()
+			if self._persister is not None:
+				self._persister.join(0)  # Note: timeout is 0 to avoid destructor blocking
 		finally:
+			if self.storage is None:
+				return
 			with self.storage:
 				if self.storage.value is not None:
 					self.storage.value.close()
@@ -511,7 +523,8 @@ class QualitySaver(object):
 		"""Context entrence"""
 		self.queue = Queue(self.QUEUE_SIZEMAX)  # Qulity measures persistence queue, data pool
 		self._active.value = True
-		self._persister = Process(target=self.__datasaver, args=(self,))
+		# __datasaver(qsqueue, active, timeout=None, latency=2.)
+		self._persister = Process(target=self.__datasaver, args=(self.queue, self.storage.get_lock(), self._active, self.timeout))
 		self._persister.start()
 		return self
 
@@ -530,7 +543,8 @@ class QualitySaver(object):
 			self._persister.join(None if self.timeout is None else self.timeout - self._tstart)
 		finally:
 			with self.storage:
-				self.storage.value.flush()  # Allow to reuse the instance in several context managers
+				if self.storage.value is not None:
+					self.storage.value.flush()  # Allow to reuse the instance in several context managers
 		# Note: the exception (if any) is propagated if True is not returned here
 
 

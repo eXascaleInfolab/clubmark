@@ -73,7 +73,7 @@ from multiprocessing import cpu_count  # Returns the number of logical CPU units
 
 import benchapps  # Required for the functions name mapping to/from the app names
 from benchapps import PYEXEC, aggexec, EXTCLNODES  # , ALGSDIR
-from benchutils import viewitems, timeSeed, SyncValue, dirempty, tobackup, dhmsSec, \
+from benchutils import viewitems, timeSeed, dirempty, tobackup, dhmsSec, syncedTime, \
 	secDhms, delPathSuffix, parseName, funcToAppName, PREFEXEC, SEPPARS, SEPINST, SEPSHF, SEPPATHID, \
 	SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER, ALEVSMAX, ALGLEVS
 # PYEXEC - current Python interpreter
@@ -472,7 +472,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 	netsdirfull = basedir + netsdir
 	# Initialize backup path suffix if required
 	if overwrite:
-		bcksuffix = SyncValue()  # Use the same backup suffix for multiple paths
+		bcksuffix = syncedTime(lock=False)  # Use the same backup suffix for multiple paths
 
 	# Create dirs if required
 	for dirname in (basedir, paramsdirfull, seedsdirfull, netsdirfull):
@@ -739,8 +739,7 @@ while True:
 			dirpath  - directory to be initialized or moved to the backup
 			netfile  - network file to be linked into the <dirpath> dir
 			backup  - whether to backup the directory content
-			bcksuffix  - backup suffix for the group of directories, formed automatically
-				from the SyncValue()
+			bcksuffix: Value(time: float)  - backup suffix for the group of directories
 
 			return  - shuffle0, the origin network filename for the shuffles
 			"""
@@ -780,7 +779,7 @@ while True:
 				return False  # Such path does not exist
 			return True
 
-		bcksuffix = SyncValue()  # Use unified suffix for the backup of various network instances
+		bcksuffix = syncedTime(lock=False)  # Use unified suffix for the backup of various network instances
 		shfnum = 0  # Total number of shuffles
 		for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
 			#assert isinstance(popt, PathOpts), 'datas must be a container of PathOpts'

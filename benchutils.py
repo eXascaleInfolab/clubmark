@@ -18,8 +18,9 @@ import time
 import tarfile
 import re
 
-from multiprocessing import RLock
+from multiprocessing import RLock, Value
 from math import sqrt, copysign
+from calendar import timegm  # time.struct_time -> float (seconds since the epoch)
 
 _PREFINTERNDIR = '-'  # Internal directory prefix
 _BCKDIR = _PREFINTERNDIR + 'backup/'  # Backup directory
@@ -596,13 +597,21 @@ def basePathExists(path):
 
 class SyncValue(object):
 	"""Interprocess synchronized value.
-	Provides the single attribute: 'value', which should be used inside "with" statement
-	if non-atomic operation is applied like +=.
+	Provides a single attribute 'value' that should be used inside "with" statement.
+
+	ATTENTION: SyncValue() is initialized only once (on construction) and the assigned value can not be changed,
+	this value is COPIED to to the local context of other processes and access to the local copies of the value
+	is assumed to be performed via the shared RLock.
+	NOTE: Use multiprocessing.sharedctypes.Value() or ...synchronized()if a synchronized variable is required.
 
 	>>> sv = SyncValue(None); print(sv.value)
 	None
 	>>> with sv: sv.value = 1; print(sv.value)
-	1
+	Traceback (most recent call last):
+	...
+	ValueError: Sync value can be set only once (on the initialization)
+	>>> with sv: print(sv.value);
+	None
 	"""
 	def __init__(self, val=None):
 		"""Sync value constructor
@@ -618,8 +627,9 @@ class SyncValue(object):
 	def __setattr__(self, name, val):
 		if name != 'value':
 			raise AttributeError('Attribute "{}" is not accessible'.format(name))
-		with object.__getattribute__(self, '_lock'):
-			object.__setattr__(self, name, val)
+		raise ValueError('Sync value can be set only once (on the initialization)')
+		# with object.__getattribute__(self, '_lock'):
+		# 	object.__setattr__(self, name, val)
 
 
 	def __getattribute__(self, name):
@@ -639,15 +649,28 @@ class SyncValue(object):
 		object.__getattribute__(self, '_lock').release()
 
 
-	#def get_lock(self):
-	#	"""Return synchronization lock"""
-	#	self._synced = True
-	#	return self._lock
-	#
-	#
+	def get_lock(self):
+		"""Get synchronization lock"""
+		return object.__getattribute__(self, '_lock')
+
+
 	#def get_obj(self):
 	#	self._synced = True
 	#	return self._lock
+
+
+def syncedTime(value=None, lock=True):
+	"""Modifiable synchronized time
+
+	value: time.struct_time  - value to be stored in the optionally synchronized shared memory.
+		None is replaced with time.gmtime(0), which is stored as float value 0.
+	lock: Lock, RLock or bool  - lock if required, True means RLock
+
+	ATTENTION: shared time of ctypes.c_double rather than Value is yielded without the lock,
+		both c_double and Value have the .value attribute.
+	"""
+	assert value is None or isinstance(value, time.struct_time), 'Invalid value type: ' + type(value).__name__
+	return Value('d', 0 if value is None else timegm(value), lock=lock)  # 'd' - double (f64): https://docs.python.org/2/library/array.html
 
 
 def nameVersion(path, expand, synctime=None, suffix=''):
@@ -656,7 +679,7 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 	path  - the path to be named with version.
 		ATTENTION: the basepathis escaped, i.e. wildcards are not supported
 	expand  - threat path as a prefix and expend it to the first matching item (file/dir)
-	synctime: SyncValue(time.struct_time)  - use the same time suffix for multiple paths when is not None
+	synctime: Value(time: float) or c_double  - use the same time suffix for multiple paths when is not None
 	suffix  - suffix to be added to the backup name before the time suffix
 	"""
 	# Note: normpath() may change semantics in case symbolic link is used with parent dir:
@@ -682,14 +705,20 @@ def nameVersion(path, expand, synctime=None, suffix=''):
 			return name + suffix
 	# Process existing path
 	if synctime is not None:
-		with synctime:
-			if synctime.value is None:
-				synctime.value = time.gmtime(os.path.getmtime(path))
-			mtime = synctime.value
+		# Note: Value is not a class but has .get_lock() unlike c_double
+		if hasattr(synctime, 'get_lock'):
+			with synctime.get_lock():
+				if not synctime.value:
+					synctime.value = os.path.getmtime(path)
+		elif not synctime.value:
+			synctime.value = os.path.getmtime(path)
+		mtime = synctime.value
 	else:
-		mtime = time.gmtime(os.path.getmtime(path))
-	assert isinstance(mtime, time.struct_time), 'Unexpected type of mtime: ' + type(mtime).__name__
-	mtstr = time.strftime('_%y%m%d_%H%M%S', mtime)  # Modification time
+		mtime = os.path.getmtime(path)
+	assert (synctime is None or hasattr(synctime, 'value')) and isinstance(mtime, float
+		), 'Unexpected type of the argument, synctime: {}, mtime: {}'.format(
+		type(synctime).__name__, type(mtime).__name__)
+	mtstr = time.strftime('_%y%m%d_%H%M%S', time.gmtime(mtime))  # Modification time
 	return ''.join((name, suffix, mtstr))
 
 
@@ -700,7 +729,7 @@ def tobackup(basepath, expand=False, synctime=None, compress=True, xsuffix='', m
 	basepath: str  - path, last component of which (file or dir) is a name for the backup
 		ATTENTION: the basepath is escaped, i.e. wildcards are NOT supported
 	expand: bool  - expand prefix, back up all paths staring from basepath VS basepath only
-	synctime: SyncValue(time.struct_time)  - use the same time suffix for multiple paths if not None
+	synctime: Value(time:float or c_double  - use the same time suffix for multiple paths if not None
 	compress: bool  - compress or just copy spesified paths
 	xsuffix: str  - extra suffix to be added to the backup name before the time suffix
 	move: bool  - whether to move or copy the data to the backup

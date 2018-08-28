@@ -16,7 +16,9 @@ import glob
 import tempfile
 import shutil
 import tarfile
-from benchutils import SyncValue, nameVersion, tobackup, ORIGDIR, _BCKDIR
+import time
+from multiprocessing import Value
+from benchutils import nameVersion, tobackup, syncedTime, ORIGDIR, _BCKDIR
 # from benchapps import preparePath
 
 
@@ -41,7 +43,7 @@ class TestUtils(unittest.TestCase):
 		# Test for the non-existent name
 		randname = 's;35>.ds8u9'
 		stval0 = None
-		synctime = SyncValue(stval0)
+		synctime = syncedTime(stval0, lock=False)
 		suffix = 'suf'  # Versioning suffix
 		self.assertFalse(os.path.exists(randname))
 		self.assertEqual(nameVersion(randname, False), randname)
@@ -51,7 +53,7 @@ class TestUtils(unittest.TestCase):
 		self.assertEqual(nameVersion(randname, True), randname)
 		# Check with Synctime
 		self.assertEqual(nameVersion(randname, True, synctime), randname)
-		self.assertEqual(synctime.value, stval0
+		self.assertFalse(synctime.value
 			, 'synctime.value should not be changed for the non-existent path')
 		# Check path expansion to the existent path
 		path = next(glob.iglob('*'))
@@ -60,7 +62,7 @@ class TestUtils(unittest.TestCase):
 		# Check with Synctime
 		# None value
 		self.assertNotEqual(nameVersion(path, True, synctime), path)
-		self.assertNotEqual(synctime.value, stval0
+		self.assertTrue(synctime.value
 			, 'synctime.value should be initialized for the existent path')
 		self.assertIn('_' + suffix, nameVersion(path, True, synctime, suffix=suffix))
 		# Non None value

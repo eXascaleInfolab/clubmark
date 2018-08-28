@@ -119,12 +119,12 @@ def aggexec(apps):
 							dstats.append(ItemsStatistic('_'.join((app, dataset)), val, val))
 						dstats[-1].add(val)
 		except IOError:
-			print('WARNING, execution results for "{}" do not exist, skipped.'.format(app), file=sys.stderr)
+			print('WARNING, resource consumption results for "{}" do not exist, the aggregation is discarded.'.format(app), file=sys.stderr)
 		else:
 			iapp += 1
 	# Check number of the apps to be outputted
 	if not mapps:
-		print('WARNING, there are no any apps execution results to be aggregated.', file=sys.stderr)
+		print('WARNING, there are no any resource consumption results to be aggregated.', file=sys.stderr)
 		return
 	# Output results
 	for imsr, measure in enumerate(mnames):

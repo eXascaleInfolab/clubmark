@@ -85,7 +85,7 @@ except NameError:  # bytes are not defined in Python2
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 RESDIR = 'results/'  # Final accumulative results of .mod, .nmi and .rcp for each algorithm, specified RELATIVE to ALGSDIR
 CLSDIR = 'clusters/'  # Clusters directory for the resulting clusters of algorithms execution
-_QMSDIR = 'qmeasures/'  # Quality measures standard output and logs directory (_QMSDIR/<basenet>/*.{log,err})
+QMSDIR = 'qmeasures/'  # Quality measures standard output and logs directory (QMSDIR/<basenet>/*.{log,err})
 # _QUALITY_STORAGE = 'quality.h5'  # Quality evaluation storage file name
 EXTLOG = '.log'  # Extension for the logs (stdout redirection and notifications)
 EXTERR = '.err'  # Extension for the errors (stderr redirection and errors tracing)
@@ -359,7 +359,7 @@ class QualitySaver(object):
 					# 		, chunks=(10,), maxshape=(500,))  # , maxshape=(None,), fletcher32=True
 					# self.evals = self.storage.value.require_group('evals')  # Quality evaluations dir (group)
 			# Prepare for the next iteration considering the processing latency to reduce CPU loading
-			if tcur is None:
+			if tcur is not None:
 				duration = time.perf_counter() - tcur
 				if duration < latency:
 					time.sleep(latency - duration)
@@ -372,7 +372,8 @@ class QualitySaver(object):
 					.format(qsqueue.qsize()))
 			except NotImplementedError:
 				print('WARNING QualitySaver, some items remained unsaved in the terminating queue')
-		qsqueue.close()  # Close queue to prevent scheduling another tasks
+		# Note: qsqueue closing in the worker process (here) causes exception on the QualSaver destruction
+		# qsqueue.close()  # Close queue to prevent scheduling another tasks
 
 
 	def __init__(self, seed, update=False, timeout=None):  # algs, qms, nets=None,
@@ -402,7 +403,7 @@ class QualitySaver(object):
 		timefmt = '%y%m%d-%H%M%S'  # Start time of the benchmarking, time format: YYMMDD_HHMMSS
 		timestamp = time.strftime(timefmt, TIMESTAMP_START)  # Timestamp string
 		seedstr = str(seed)
-		qmsdir = RESDIR + _QMSDIR  # Quality measures directory
+		qmsdir = RESDIR + QMSDIR  # Quality measures directory
 		if not os.path.exists(qmsdir):
 			os.makedirs(qmsdir)
 		# HDF5 Storage: qmeasures_<seed>.h5
@@ -503,11 +504,11 @@ class QualitySaver(object):
 	def __del__(self):
 		"""Destructor"""
 		self._active.value = False
-		if self.queue is not None and not self.queue.empty():
-			print('WARNING, terminating the persistency layer with {} queued data entries, call stack: {}'
-				.format(self.queue.qsize(), traceback.format_exc(5)), file=sys.stderr)
 		try:
 			if self.queue is not None:
+				if not self.queue.empty():
+					print('WARNING, terminating the persistency layer with {} queued data entries, call stack: {}'
+						.format(self.queue.qsize(), traceback.format_exc(5)), file=sys.stderr)
 				self.queue.close()  # No more data can be put in the queue
 				self.queue.join_thread()
 			if self._persister is not None:
@@ -650,10 +651,15 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 		# where the measure name (with possible additional description) is on the pre-last string.
 		#
 		# Define the number of strings in the output counting the number of words in the last string
-		if len(job.pipedout[-1].split(None, 1)) == 1:
+		# Identify index of the last non-empty line
+		i = -1
+		while not job.pipedout[i].strip():
+			i -= 1
+		# print('Value line: {}, len: {}, sym1: {}'.format(job.pipedout[i], len(job.pipedout[i]), ord(job.pipedout[i])))
+		if len(job.pipedout[i].split(None, 1)) == 1:
 			# Metric name is None (the same as binary name) if not specified explicitly
-			metric = None if len(job.pipedout) == 1 else job.pipedout[-2].split(None, 1)[0].rstrip(':')  # Omit ending ':' if any
-			mval = job.pipedout[-1]
+			metric = None if len(job.pipedout) == 1 else job.pipedout[i-1].split(None, 1)[0].rstrip(':')  # Omit ending ':' if any
+			mval = job.pipedout[i]
 			try:
 				# qsqueue.put(QEntry(smeta, {metric: float(mval)}))
 				# # , block=True, timeout=None if not timeout else max(0, timeout - (time.perf_counter() - job.tstart)))
@@ -665,7 +671,7 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 			# 	print('WARNING, results serialization discarded by the Job "{}" timeout'.format(job.name))
 			return
 		# Parse multiple names of the metrics and their values from the last string: <metric>: <value>{,;} ...
-		metrics = job.pipedout[-1].split(',;(')  # Note: F1_labels: <val> (Precision: <val>, ...)
+		metrics = job.pipedout[i].split(',;(')  # Note: F1_labels: <val> (Precision: <val>, ...)
 		data = {}  # Serializing data
 		for mt in metrics:
 			name, val = mt.split(':', 1)
@@ -691,7 +697,7 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 	clsize = os.path.getsize(cfpath) + os.path.getsize(inpfpath)
 
 	# Define path to the logs relative to the root dir of the benchmark
-	logsdir = ''.join((RESDIR, algname, '/', _QMSDIR, basenetp, '/'))
+	logsdir = ''.join((RESDIR, algname, '/', QMSDIR, basenetp, '/'))
 	# Note: backup is not performed since it should be performed at most once for all logs in the logsdir
 	# (staticExec could be used) and only if the logs are rewriting but they are appended.
 	# The backup is not convenient here for multiple runs on various networks to get aggregated results
@@ -702,15 +708,16 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
-	xtimebin = relpath(UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((RESDIR, algname, '/', _QMSDIR, measurep, EXTEXECTIME)))
+	xtimebin = './exectime'  # Note: relpath(UTILDIR + 'exectime') -> 'exectime' does not work, it requires leading './'
+	xtimeres = relpath(''.join((RESDIR, algname, '/', QMSDIR, measurep, EXTEXECTIME)))
 
 	# The task argument name already includes: QMeasure / BaseNet#PathId / Alg
 	# Note: xtimeres does not include the base network name, so it should be included into the listed taskname,
 	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', basenetp, SEPNAMEPART, cfname)), '-s=/etime_' + measurep, './xmeasures']
 	if qparams:
 		args += qparams
-	args += (cfpath, inpfpath)
+	args += (relpath(cfpath), relpath(inpfpath))
+	# print('> Starting Xmeasures with the args: ', args)
 	execpool.execute(Job(name=taskname, workdir=workdir, args=args, timeout=timeout
 		, ondone=saveEvals, params={'qsqueue': qualsaver.queue, 'smeta': smeta}
 		# Note: poutlog indicates the output log file that should be formed from the PIPE output

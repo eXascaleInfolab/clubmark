@@ -63,6 +63,7 @@ import signal  # Intercept kill signals
 import glob
 import traceback  # Stacktrace
 import copy
+import itertools  # Iterables chaining
 import time
 # Consider time interface compatibility for Python before v3.3
 if not hasattr(time, 'perf_counter'):  #pylint: disable=C0413
@@ -78,7 +79,7 @@ from benchutils import viewitems, timeSeed, dirempty, tobackup, dhmsSec, syncedT
 	SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER, ALEVSMAX, ALGLEVS
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
-from benchevals import aggEvaluations, RESDIR, CLSDIR, EXTEXECTIME, QMSRAFN, QMSINTRIN, QMSRUNS, \
+from benchevals import aggEvaluations, RESDIR, CLSDIR, QMSDIR, EXTEXECTIME, QMSRAFN, QMSINTRIN, QMSRUNS, \
 	QualitySaver, NetInfo, SMeta
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
@@ -1340,18 +1341,21 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 				.format(err, traceback.format_exc(5)), file=sys.stderr)
 			raise
 		finally:
-			# Extend algorithms execution tracing files (.rcp) with time tracing, once per an executing algorithm
-			# to distinguish different executions (benchmark runs)
+			# Extend algorithm and quality measure resource consumption files (.rcp) with time tracing,
+			# once per the benchmark run
 			for alg in algorithms:
 				aresdir = RESDIR + alg
 				# if not os.path.exists(aresdir):
 				# 	os.mkdir(aresdir)
 				aexecres = ''.join((aresdir, '/', alg, EXTEXECTIME))
+				# Add timestamps also to the quality measures resource consumption files
+				aqxres = ''.join((aresdir, '/', QMSDIR, '*', EXTEXECTIME))
 				# Output timings only to the existing files after the execution results
 				# to not affect the original header
-				if os.path.isfile(aexecres):
-					with open(aexecres, 'a') as faexres:
-						faexres.write('# --- {time} (seed: {seed}) ---\n'.format(time=TIMESTAMP_START_STR, seed=seed))  # Write timestamp
+				for xres in itertools.chain((aexecres,), glob.iglob(aqxres)):
+					if os.path.isfile(xres):
+						with open(xres, 'a') as fxr:
+							fxr.write('# --- {time} (seed: {seed}) ---\n'.format(time=TIMESTAMP_START_STR, seed=seed))  # Write timestamp
 
 	_execpool = None
 	stime = time.perf_counter() - stime

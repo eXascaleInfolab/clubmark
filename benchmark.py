@@ -1562,6 +1562,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					#
 					# Fetch base network name and its attributes
 					netname, netext = os.path.splitext(os.path.split(net)[1])
+					netext = netext.lower()
 					# Note: the input network name does not contain the paid id, which is added during the processing
 					netname, _aparams, inst, shuf, _pid  = parseName(netname, True)
 					iinst = 0 if not inst else int(inst[len(SEPINST):])  # Instance id
@@ -1570,26 +1571,23 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 						for alg in algorithms:
 							# Validate network HDF5 group attributes (instances and shuffles) if required
 							group = None
-							if not netinf.gvld:
-								try:
-									netext = netext.lower()
-									group = qualsaver.storage.value.require_group(''.join(('/', alg, '/'
-										# Form network name with path id
-										, delPathSuffix(netname, True) + pathidsuf)))
+							try:
+								group = qualsaver.storage.value.require_group(''.join(('/', alg, '/'
+									# Form network name with path id
+									, delPathSuffix(netname, True) + pathidsuf)))
+								if not netinf.gvld:
 									# nins =
 									validateDim(netinf.nins, group, 'nins')
 									# nshf =
 									validateDim(netinf.nshf, group, 'nshf')
 									netinf.gvld = True
-								except Exception as err:  #pylint: disable=W0703
-									print('ERROR, quality evaluation of "{}" is interrupted by the exception: {}, call stack:'
-										.format(netname + pathidsuf, err), file=sys.stderr)
-									traceback.print_exc(5)
-									return jobsnum
-							else:
-								netext = os.path.splitext(net)[1].lower()
+							except Exception as err:  #pylint: disable=W0703
+								print('ERROR, quality evaluation of "{}" is interrupted by the exception: {}, call stack:'
+									.format(netname + pathidsuf, err), file=sys.stderr)
+								traceback.print_exc(5)
+								return jobsnum
 
-							for i, qm, eq in enumerate(cqmes):
+							for i, (qm, eq) in enumerate(cqmes):
 								# Append algortihm-indicating subtask: QMeasure / BaseNet / Alg
 								task = None if not tasks else tasks[i]
 								if task:

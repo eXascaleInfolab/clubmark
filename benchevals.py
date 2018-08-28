@@ -359,11 +359,12 @@ class QualitySaver(object):
 					# 		, chunks=(10,), maxshape=(500,))  # , maxshape=(None,), fletcher32=True
 					# self.evals = self.storage.value.require_group('evals')  # Quality evaluations dir (group)
 			# Prepare for the next iteration considering the processing latency to reduce CPU loading
-			duration = time.perf_counter() - tcur
-			if duration < latency:
-				time.sleep(latency - duration)
-				duration = latency
-			tcur += duration
+			if tcur is None:
+				duration = time.perf_counter() - tcur
+				if duration < latency:
+					time.sleep(latency - duration)
+					duration = latency
+				tcur += duration
 		active.value = False
 		if not qsqueue.empty():
 			try:
@@ -678,9 +679,8 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 
 	# The task argument name already includes: QMeasure / BaseNet#PathId / Alg,
 	# so here smeta parts and qparams should form the job name for the full identification of the executing job
-	# Note: HDF5 uses Unicode for the file name and ASCII/Unicode for the group names;
-	# ASCII/byte stream requires conversion to utf-8 in Python3.
-	algname, basenetp = smeta.group.name.decode()[1:].split('/')  # Omit the leading '/'; basenetp includes pathid
+	# Note: HDF5 uses Unicode for the file name and ASCII/Unicode for the group names
+	algname, basenetp = smeta.group.name[1:].split('/')  # Omit the leading '/'; basenetp includes pathid
 	# Note that evaluating file name might significantly differ from the network name, for example `tp<id>` produced by OSLOM
 	cfname = os.path.splitext(os.path.split(cfpath)[1])[0]  # Evaluating file name (without the extension)
 	measurep = SEPPARS.join((smeta.measure, _SEPQARGS.join(qparams)))  # Quality measure suffixed with its parameters

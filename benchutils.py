@@ -633,7 +633,7 @@ class SyncValue(object):
 
 
 	def __getattribute__(self, name):
-		if name != 'value':
+		if name not in ('value', 'get_lock'):
 			raise AttributeError('Attribute "{}" is not accessible'.format(name))
 		with object.__getattribute__(self, '_lock'):
 			return object.__getattribute__(self, name)

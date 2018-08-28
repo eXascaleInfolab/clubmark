@@ -739,7 +739,7 @@ while True:
 			dirpath  - directory to be initialized or moved to the backup
 			netfile  - network file to be linked into the <dirpath> dir
 			backup  - whether to backup the directory content
-			bcksuffix: Value(time: float)  - backup suffix for the group of directories
+			bcksuffix: Value(time: float) or c_double  - backup suffix for the group of directories
 
 			return  - shuffle0, the origin network filename for the shuffles
 			"""
@@ -898,10 +898,12 @@ def updateNetInfos(netinfs, net, pathidsuf='', shfnum=0):
 	ntinf = netinfs.setdefault(netnameps[0] + pathidsuf, NetInfo(nshf=shfnum+1))
 	# Evaluate the number of instances only if not specified explicitly
 	if netnameps[2]:
-		ntinf.nins = max(ntinf.insnum, int(netnameps[2][len(SEPINST):]) + 1)  # Note: +1 to form total number from id
+		ntinf.nins = max(ntinf.nins, int(netnameps[2][len(SEPINST):]) + 1)  # Note: +1 to form total number from id
 	# Evaluate the number of shuffles only if it is not specified explicitly (or specified as 0)
 	if not shfnum and netnameps[3]:
-		ntinf.nshf = max(ntinf.shfnum, int(netnameps[3][len(SEPSHF):]) + 1)  # Note: +1 to form total number from id
+		ntinf.nshf = max(ntinf.nshf, int(netnameps[3][len(SEPSHF):]) + 1)  # Note: +1 to form total number from id
+	# print('> updateNetInfos(), netinfs size: {}, net: {}, nins: {}, nshf: {}'.format(
+	# 	len(netinfs), net, ntinf.nins, ntinf.nshf))
 
 
 def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None, netinfs=None):
@@ -972,7 +974,7 @@ def processPath(popt, handler, xargs=None, dflextfn=dflnetext, tasks=None, netin
 						for desnet in glob.iglob('/*'.join((dirname, ext))):
 							updateNetInfos(netinfs, desnet, pathidsuf, popt.shfnum)
 					for desnet in glob.iglob('/*'.join((dirname, ext))):
-						handler(desnet, True, xargs, nettasks)  # True - shuffle is processed in the non-flat dir structure
+						handler(desnet, True, xargs, nettasks, netinf=fetchNetInfo(desnet))  # True - shuffle is processed in the non-flat dir structure
 				else:
 					handler(net, False, xargs, tasks, netinf=fetchNetInfo(dirname))  # Shufles do not exist for this network instance
 		else:
@@ -1086,7 +1088,7 @@ def processNetworks(datas, handler, xargs={}, dflextfn=dflnetext, tasks=None, fp
 			#  Process path if metainf formation is not required
 			if not metainf:
 				procPath(pcuropt, path)
-			elif not os.path.isdir(path):  # Update netinfs only for the files of the path
+			elif not os.path.isdir(path):  # Update netinfs only for the files of the path, others handled in the procPath()
 				# Both shuffles (if exist any) and network instances are located in the same dir
 				updateNetInfos(netinfs, path, xargs['pathidsuf'], popt.shfnum)
 		# Process paths if have not been done yet because of the the meta information construction
@@ -1410,9 +1412,10 @@ def gtpath(net, idir):
 			' Checking the ground-truth availability in the upper dir.', file=sys.stderr)
 	path, name = os.path.split(net)
 	# Check the ground-truth file in the parent directory
-	gfpath = delPathSuffix(os.path.splitext(name)[0], True).join((os.path.split(path)[0], EXTCLNODES))
+	gfpath = ''.join((os.path.split(path)[0], '/', delPathSuffix(os.path.splitext(name)[0], True), EXTCLNODES))
 	if not os.path.isfile(gfpath):
-		raise RuntimeError('Invalid structure of the input, the ground-truth clustering is not found for ' + net)
+		raise RuntimeError('Invalid argument, the ground-truth clustering {}'
+			' does not exist for the network {}'.format(gfpath, net))
 	return gfpath
 
 
@@ -1538,7 +1541,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 						jobsnum  - the number of scheduled jobs, typically 1
 					"""
 					# Note: netinf is mandatory for this callback
-					assert isinstance(netinf, NetInfo), 'Ivalid argument: ' + netinf
+					assert isinstance(netinf, NetInfo), 'Ivalid argument: ' + type(netinf)
 					# Scheduled tasks: qmeasure / basenet for each net
 					jobsnum = 0
 					## Task suffix is the network name
@@ -1553,7 +1556,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					# 			# Append irun to the task suffix
 					# 			, tasksuf if runs == 1 else 'r'.join((tasksuf, str(irun)))))
 					# 		, task=None if not tasks else tasks[j]))
-					
+
 					# Apply all quality measures having the same affinity for all the algorithms on all networks,
 					# such traversing benefits from both the networks and clusterings caching
 					#

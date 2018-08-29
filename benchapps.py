@@ -51,7 +51,7 @@ from sys import executable as PYEXEC  #pylint: disable=C0412;  # Full path to th
 from benchutils import viewitems, delPathSuffix, ItemsStatistic, parseName, dirempty, funcToAppName \
 	, tobackup, escapePathWildcards, UTILDIR, ALGSDIR, ORIGDIR, TIMESTAMP_START_HEADER \
 	, SEPPARS, SEPSUBTASK, SEPPATHID, ALEVSMAX, ALGLEVS
-from benchevals import SEPNAMEPART, RESDIR, CLSDIR, EXTEXECTIME, EXTLOG, EXTERR, EXTAGGRES, EXTAGGRESEXT
+from benchevals import SEPNAMEPART, RESDIR, CLSDIR, EXTRESCONS, EXTLOG, EXTERR, EXTAGGRES, EXTAGGRESEXT
 from utils.mpepool import Job, Task
 from algorithms.utils.parser_nsl import parseHeaderNslFile  #, asymnet
 
@@ -86,7 +86,7 @@ def aggexec(apps):
 	mapps = []  # Measured apps
 	iapp = 0  # Algorithm index
 	for app in apps:
-		appesfile = ''.join((RESDIR, app, '/', app, EXTEXECTIME))
+		appesfile = ''.join((RESDIR, app, '/', app, EXTRESCONS))
 		try:
 			with open(appesfile, 'r') as aest:
 				mapps.append(app)
@@ -666,7 +666,7 @@ def metainfo(levsmax=ALEVSMAX):
 #
 #	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'louvain'
 #	# ./community graph.bin -l -1 -w graph.weights > graph.tree
-#	args = ('../exectime', ''.join(('-o=../', RESDIR, algname, EXTEXECTIME)), ''.join(('-n=', taskname, pathidsuf)), '-s=/etime_' + algname
+#	args = ('../exectime', ''.join(('-o=../', RESDIR, algname, EXTRESCONS)), ''.join(('-n=', taskname, pathidsuf)), '-s=/etime_' + algname
 #		, './community', netfile + '.lig', '-l', '-1', '-v', '-w', netfile + '.liw')
 #	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=ALGSDIR, args=args
 #		, timeout=timeout, stdout=''.join((RESDIR, algname, '/', taskname, '.loc'))
@@ -732,7 +732,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout=0, seed=None, task=None
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
 	netfile = relpath(netfile)
 	# taskpath = relpath(taskpath)
 
@@ -796,7 +796,7 @@ def execScp(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, path
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
 	netfile = relpath(netfile)
 
 	# Set the best possible interpreter, run under pypy if possible
@@ -898,7 +898,7 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout=0, seed=None, task=No
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 	gtfile = relpath(gtfile)
@@ -1028,7 +1028,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout=0, seed=None, task
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
 	netfile = relpath(netfile)
 	reltaskpath = relpath(taskpath)
 
@@ -1225,7 +1225,7 @@ def execGanxis(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, p
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 
@@ -1281,7 +1281,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, p
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
 	netfile = relpath(netfile)
 
 	def fetchLevId(levname):
@@ -1353,7 +1353,7 @@ def execPscan(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pa
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 
@@ -1427,7 +1427,7 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout=0, seed=None, task=N
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 
@@ -1484,7 +1484,7 @@ def execScd(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, path
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTEXECTIME)))
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
 	netfile = relpath(netfile)
 	taskpath = relpath(taskpath)
 

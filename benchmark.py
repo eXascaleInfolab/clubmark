@@ -63,7 +63,6 @@ import signal  # Intercept kill signals
 import glob
 import traceback  # Stacktrace
 import copy
-import itertools  # Iterables chaining
 import time
 # Consider time interface compatibility for Python before v3.3
 if not hasattr(time, 'perf_counter'):  #pylint: disable=C0413
@@ -79,7 +78,7 @@ from benchutils import viewitems, timeSeed, dirempty, tobackup, dhmsSec, syncedT
 	SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER, ALEVSMAX, ALGLEVS
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
-from benchevals import aggEvaluations, RESDIR, CLSDIR, QMSDIR, EXTEXECTIME, QMSRAFN, QMSINTRIN, QMSRUNS, \
+from benchevals import aggEvaluations, RESDIR, CLSDIR, QMSDIR, EXTRESCONS, QMSRAFN, QMSINTRIN, QMSRUNS, \
 	QualitySaver, NetInfo, SMeta
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
@@ -578,7 +577,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 					if _DEBUG_TRACE:
 						print('Generating {netfile} as {name} by {netparams}'.format(netfile=netfile, name=name, netparams=netparams))
 					if insnum and overwrite or not os.path.exists(netfile.join((basedir, netext))):
-						args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, EXTEXECTIME))  # Output .rcp in the current dir, basedir
+						args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, EXTRESCONS))  # Output .rcp in the current dir, basedir
 							, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
 						if asymarg:
 							args.extend(asymarg)
@@ -592,7 +591,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 						namext = ''.join((name, SEPINST, str(i)))
 						netfile = netpath + namext
 						if overwrite or not os.path.exists(netfile.join((basedir, netext))):
-							args = [xtimebin, '-n=' + namext, ''.join(('-o=', bmname, EXTEXECTIME))
+							args = [xtimebin, '-n=' + namext, ''.join(('-o=', bmname, EXTRESCONS))
 								, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
 							if asymarg:
 								args.extend(asymarg)
@@ -1347,15 +1346,12 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 				aresdir = RESDIR + alg
 				# if not os.path.exists(aresdir):
 				# 	os.mkdir(aresdir)
-				aexecres = ''.join((aresdir, '/', alg, EXTEXECTIME))
-				# Add timestamps also to the quality measures resource consumption files
-				aqxres = ''.join((aresdir, '/', QMSDIR, '*', EXTEXECTIME))
+				xres = ''.join((aresdir, '/', alg, EXTRESCONS))
 				# Output timings only to the existing files after the execution results
 				# to not affect the original header
-				for xres in itertools.chain((aexecres,), glob.iglob(aqxres)):
-					if os.path.isfile(xres):
-						with open(xres, 'a') as fxr:
-							fxr.write('# --- {time} (seed: {seed}) ---\n'.format(time=TIMESTAMP_START_STR, seed=seed))  # Write timestamp
+				if os.path.isfile(xres):
+					with open(xres, 'a') as fxr:
+						fxr.write('# --- {time} (seed: {seed}) ---\n'.format(time=TIMESTAMP_START_STR, seed=seed))  # Write timestamp
 
 	_execpool = None
 	stime = time.perf_counter() - stime
@@ -1618,7 +1614,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 										# ilev == ifc corresponds to the alphabetical ordering of the clustering levels file names
 										for ifc, fcl in enumerate(inpcls):
 											for irun in range(runs):
-												smeta = SMeta(group=group, measure=qm[0], ulev=ulev,
+												smeta = SMeta(group=group.name, measure=qm[0], ulev=ulev,
 													iins=iinst, ishf=ishuf, ilev=ifc, irun=irun)
 												jobsnum += eq(_execpool, qualsaver, smeta, qm[1:], cfpath=fcl, inpfpath=ifpath,
 													asym=asym, timeout=timeout, seed=seed, task=task, revalue=revalue)
@@ -1669,6 +1665,21 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					print('WARNING, algorithms execution pool is interrupted by: {}. {}'
 						.format(err, traceback.format_exc(5)), file=sys.stderr)
 					raise
+				finally:
+					# Extend algorithm and quality measure resource consumption files (.rcp) with time tracing,
+					# once per the benchmark run
+					for alg in algorithms:
+						aresdir = RESDIR + alg
+						# if not os.path.exists(aresdir):
+						# 	os.mkdir(aresdir)
+						aqxres = ''.join((aresdir, '/', QMSDIR, '*', EXTRESCONS))
+						# Output timings only to the existing files after the execution results
+						# to not affect the original header
+						for xres in glob.iglob(aqxres):
+							if os.path.isfile(xres):
+								with open(xres, 'a') as fxr:
+									fxr.write('# --- {time} (seed: {seed}) ---\n'.format(time=TIMESTAMP_START_STR, seed=seed))  # Write timestamp
+
 	# Clear execpool
 	_execpool = None
 	stime = time.perf_counter() - stime

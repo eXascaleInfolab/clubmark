@@ -57,7 +57,7 @@ from multiprocessing import cpu_count, Process, Queue, Value
 try:
 	import queue	# queue in Python3
 except ImportError:  # Queue in Python2
-	import Queue as queue
+	import Queue as queue  # For exceptions handling: queue.Full, etc.
 
 
 import h5py  # HDF5 storage
@@ -90,7 +90,7 @@ QMSDIR = 'qmeasures/'  # Quality measures standard output and logs directory (QM
 EXTLOG = '.log'  # Extension for the logs (stdout redirection and notifications)
 EXTERR = '.err'  # Extension for the errors (stderr redirection and errors tracing)
 #_EXTERR = '.elog'  # Extension for the unbuffered (typically error) logs
-EXTEXECTIME = '.rcp'  # Extension for the Resource Consumption Profile
+EXTRESCONS = '.rcp'  # Extension for the Resource Consumption Profile (made by the exectime app)
 EXTAGGRES = '.res'  # Extension for the aggregated results
 EXTAGGRESEXT = '.resx'  # Extension for the extended aggregated results
 _EXTQDATASET = '.dat'  # Extension for the HDF5 datasets
@@ -226,7 +226,7 @@ class SMeta(object):
 	def __init__(self, group, measure, ulev, iins, ishf, ilev=0, irun=0):
 		"""Serialization meta information (location in the storage)
 		
-		group: h5py.Group  - group where the target dataset is located: <algname>/<basenet><pathid>/
+		group: str  - h5py.Group name where the target dataset is located: <algname>/<basenet><pathid>/
 		measure: str  - name of the serializing evaluation measure
 		ulev: bool  - unified levels, the clustering consists of the SINGLE (unified) level containing
 			(representative) clusters from ALL (multiple) resolutions
@@ -237,13 +237,13 @@ class SMeta(object):
 		"""
 		# alg: str  - algorithm name, required to only to structure (order) the output results
 		
-		assert isinstance(group, h5py.Group) and isinstance(measure, str
+		assert isinstance(group, str) and isinstance(measure, str
 			) and iins >= 0 and isinstance(iins, int) and ishf >= 0 and isinstance(ishf, int
 			) and ilev >= 0 and isinstance(ilev, int) and irun >= 0 and isinstance(irun, int
 			), ('Invalid arguments:\n\tgroup: {group}\n\tmeasure: {measure}\n\tulev: {ulev}\n\t'
 			'iins: {iins}\n\tishuf: {ishf}\n\tilev: {ilev}\n\tirun: {irun}'.format(
 				group=group, measure=measure, ulev=ulev, iins=iins, ishf=ishf, ilev=ilev, irun=irun))
-		self.group = group
+		self.group = group  # Group name since the opened group object can not be marshaled to another process
 		self.measure = measure
 		self.ulev = ulev
 		self.iins = iins
@@ -292,21 +292,20 @@ class QualitySaver(object):
 
 	"""Quality evaluations serializer to the persistent sotrage"""
 	@staticmethod
-	def __datasaver(qsqueue, wlock, active, timeout=None, latency=2.):
+	def __datasaver(qsqueue, syncstorage, active, timeout=None, latency=2.):
 		"""Worker process function to save data to the persistent storage
 
 		qsqueue: Queue  - quality saver queue of QEntry items
-		wlock: Lock (typically RLock)  - write lock to guarantee a single write at time in case another process also
-			writes to the storage (benchmark greates groups on start)
+		syncstorage: SyncValue(h5py.File)  - synchronized wrapper of the HDF5 storage
 		active: Value('B', lock=False)  - the saver process is operational (the requests can be processed)
 		timeout: float  - global operational timeout in seconds, None means no timeout
 		latency: float  - latency of the datasaver in sec, recommended value: 1-3 sec
 		"""
 		# def fetchAndSave():
 
-		tstart = None if not timeout else time.perf_counter()  # Global start time
+		tstart = time.perf_counter()  # Global start time
 		tcur = tstart  # Start of the current iteration
-		while (active.value and (tstart is None or tcur - tstart < timeout)):
+		while (active.value and (timeout is None or tcur - tstart < timeout)):
 			# Fetch and serialize items from the queue limiting their number
 			# (can be added in parallel) to avoid large latency
 			i = 0
@@ -328,25 +327,33 @@ class QualitySaver(object):
 							dsname += _SUFULEV
 						dsname += _EXTQDATASET
 						# Open or create the required dataset
+						try:
+							qmgroup = syncstorage.value[qm.smeta.group]
+						except KeyError:
+							print('ERROR, storage lacks the group:', qm.smeta.group, file=sys.stderr)
+							raise
 						qmdata = None
 						try:
-							qmdata = qm.smeta.group[dsname]
+							qmdata = qmgroup[dsname]
 						except KeyError:
 							# Such dataset does not exist, create it
 							nins = 1
 							nshf = 1
 							nlev = 1
 							if not qm.smeta.ulev:
-								nins = qm.smeta.group.attrs['nins']
-								nshf = qm.smeta.group.attrs['nshf']
-								nlev = qm.smeta.group.parent.attrs['nlev']
-							qmdata = qm.smeta.group.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
+								nins = qmgroup.attrs['nins']
+								nshf = qmgroup.attrs['nshf']
+								nlev = qmgroup.parent.attrs['nlev']
+							qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
 								# 32-bit floating number, checksum (fletcher32)
-								dtype='f4', fletcher32=True, fillvalue=np.dtype('NA[f4,NaN]'), track_times=True)
-								# Numpy NaNs (https://docs.scipy.org/doc/numpy-1.14.0/neps/missing-data.html):
+								dtype='f4', fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
+								# NOTE: Numpy NA (not available) instead of NaN (not a number) might be preferable
+								# but it requires latest NumPy versions.
+								# https://www.numpy.org/NA-overview.html
+								# Numpy NAs (https://docs.scipy.org/doc/numpy-1.14.0/neps/missing-data.html):
 								# np.NA,  dtype='NA[f4]', dtype='NA', np.dtype('NA[f4,NaN]')
 						# Save data to the storage
-						with wlock:
+						with syncstorage:
 							qmdata[qm.smeta.iins][qm.smeta.ishf][qm.smeta.ilev][qm.smeta.irun] = mval
 					except Exception as err:  #pylint: disable=W0703;  # queue.Empty as err:  # TypeError (HDF5), KeyError
 						print('ERROR, saving of {} in {}{}{} failed: {}. {}'.format(mval, qm.smeta.measure,
@@ -359,12 +366,11 @@ class QualitySaver(object):
 					# 		, chunks=(10,), maxshape=(500,))  # , maxshape=(None,), fletcher32=True
 					# self.evals = self.storage.value.require_group('evals')  # Quality evaluations dir (group)
 			# Prepare for the next iteration considering the processing latency to reduce CPU loading
-			if tcur is not None:
-				duration = time.perf_counter() - tcur
-				if duration < latency:
-					time.sleep(latency - duration)
-					duration = latency
-				tcur += duration
+			duration = time.perf_counter() - tcur
+			if duration < latency:
+				time.sleep(latency - duration)
+				duration = latency
+			tcur += duration
 		active.value = False
 		if not qsqueue.empty():
 			try:
@@ -506,9 +512,12 @@ class QualitySaver(object):
 		self._active.value = False
 		try:
 			if self.queue is not None:
-				if not self.queue.empty():
-					print('WARNING, terminating the persistency layer with {} queued data entries, call stack: {}'
-						.format(self.queue.qsize(), traceback.format_exc(5)), file=sys.stderr)
+				try:
+					if not self.queue.empty():
+						print('WARNING, terminating the persistency layer with {} queued data entries, call stack: {}'
+							.format(self.queue.qsize(), traceback.format_exc(5)), file=sys.stderr)
+				except OSError:   # The queue has been already closed from another process
+					pass
 				self.queue.close()  # No more data can be put in the queue
 				self.queue.join_thread()
 			if self._persister is not None:
@@ -526,7 +535,7 @@ class QualitySaver(object):
 		self.queue = Queue(self.QUEUE_SIZEMAX)  # Qulity measures persistence queue, data pool
 		self._active.value = True
 		# __datasaver(qsqueue, active, timeout=None, latency=2.)
-		self._persister = Process(target=self.__datasaver, args=(self.queue, self.storage.get_lock(), self._active, self.timeout))
+		self._persister = Process(target=self.__datasaver, args=(self.queue, self.storage, self._active, self.timeout))
 		self._persister.start()
 		return self
 
@@ -584,9 +593,9 @@ def saveQuality(qsqueue, qentry):
 		qsqueue: Queue  - quality saver queue
 		qentry: QEntry  - quality entry to be saved
 	"""
-	assert isinstance(qsqueue, Queue) and isinstance(qentry, QEntry), (
-		'Unexpected type of the arguments, qsqueue: {}, qentry: {}'.format(
-			type(qsqueue).__name__, type(qentry).__name__))
+	# Note: multiprocessing Queue is not a Python class, it is a function creating a proxy object
+	assert isinstance(qentry, QEntry), (
+		'Unexpected type of the arguments, qsqueue: {}, qentry: {}'.format(type(qentry).__name__))
 	try:
 		# Note: evaluators should not be delayed in the main thread
 		# Anyway qsqueue is buffered and in theory serialization 
@@ -686,7 +695,7 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 	# The task argument name already includes: QMeasure / BaseNet#PathId / Alg,
 	# so here smeta parts and qparams should form the job name for the full identification of the executing job
 	# Note: HDF5 uses Unicode for the file name and ASCII/Unicode for the group names
-	algname, basenetp = smeta.group.name[1:].split('/')  # Omit the leading '/'; basenetp includes pathid
+	algname, basenetp = smeta.group[1:].split('/')  # Omit the leading '/'; basenetp includes pathid
 	# Note that evaluating file name might significantly differ from the network name, for example `tp<id>` produced by OSLOM
 	cfname = os.path.splitext(os.path.split(cfpath)[1])[0]  # Evaluating file name (without the extension)
 	measurep = SEPPARS.join((smeta.measure, _SEPQARGS.join(qparams)))  # Quality measure suffixed with its parameters
@@ -709,7 +718,7 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = './exectime'  # Note: relpath(UTILDIR + 'exectime') -> 'exectime' does not work, it requires leading './'
-	xtimeres = relpath(''.join((RESDIR, algname, '/', QMSDIR, measurep, EXTEXECTIME)))
+	xtimeres = relpath(''.join((RESDIR, algname, '/', QMSDIR, measurep, EXTRESCONS)))
 
 	# The task argument name already includes: QMeasure / BaseNet#PathId / Alg
 	# Note: xtimeres does not include the base network name, so it should be included into the listed taskname,
@@ -1082,7 +1091,7 @@ def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob,
 	#print('Processing {}, pathidsuf: {}'.format(taskcapt, pathidsuf))
 
 	# Resource consumption profile file name
-	rcpoutp = ''.join((RESDIR, algname, '/', measure, EXTEXECTIME))
+	rcpoutp = ''.join((RESDIR, algname, '/', measure, EXTRESCONS))
 	jobs = []
 	# Traverse over directories of clusters corresponding to the base network
 	for clsbase in glob.iglob(''.join((RESDIR, algname, '/', CLSDIR, escapePathWildcards(taskcapt), '*'))):

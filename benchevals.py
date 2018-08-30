@@ -488,6 +488,7 @@ class QualitySaver(object):
 		dqrname = 'dims_qms_raw'
 		if self.storage.attrs.get(dqrname) is None or update:
 			# Describe dataset dimentions
+			# Note: the dimension is implicitly omitted in the visualizing table if its size equals to 1
 			dims_qms_raw = ('inst', 'shuf', 'levl', 'mrun')
 			dqrlen = max((len(s) for s in dims_qms_raw)) + 1
 			dqrtype = 'a' + str(dqrlen)  # Zero terminated bytes, fixed length

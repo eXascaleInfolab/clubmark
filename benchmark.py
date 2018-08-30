@@ -72,7 +72,7 @@ from math import sqrt
 from multiprocessing import cpu_count  # Returns the number of logical CPU units (HW treads) if defined
 
 import benchapps  # Required for the functions name mapping to/from the app names
-from benchapps import PYEXEC, aggexec, EXTCLNODES  # , ALGSDIR
+from benchapps import PYEXEC, EXTCLNODES, aggexec, reduceLevels  # , ALGSDIR
 from benchutils import viewitems, timeSeed, dirempty, tobackup, dhmsSec, syncedTime, \
 	secDhms, delPathSuffix, parseName, funcToAppName, PREFEXEC, SEPPARS, SEPINST, SEPSHF, SEPPATHID, \
 	SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER, ALEVSMAX, ALGLEVS
@@ -1379,18 +1379,21 @@ def clnames(net, odir, alg, pathidsuf=''):
 			the SINGLE (unified) level containing (representative) clusters from ALL (multiple) resolutions
 	"""
 	assert not pathidsuf or pathidsuf.startswith(SEPPATHID), 'Ivalid pathidsuf: ' + pathidsuf
-	clpath = os.path.splitext(os.path.split(net)[1])[0]  # Part of the resulting path suffix
+	clname = os.path.splitext(os.path.split(net)[1])[0]  # Base of the clustering file name
 	# Consider the multi-level clustering in a single file (required at least for DAOC)
 	# having the same name as the directory being aggregated
 	cbdir = ''.join((RESDIR, alg, '/', CLSDIR))
-	mrcl = ''.join((cbdir, clpath, '/', clpath, EXTCLNODES))
+	# Form clustering instance dir (without the shuffle)
+	clinstpath = clname
+	ishf = clinstpath.find(SEPSHF)
+	if ishf != -1:
+		clinstpath = clinstpath[:ishf]
+	mrcl = ''.join((cbdir, clinstpath, '/', clname, pathidsuf, EXTCLNODES))
 	# Take base network name (without the shuffle id)
 	if odir:
-		nameparts = parseName(clpath, True)
-		clpath = ''.join((nameparts[0], nameparts[2], '/', clpath))  # Use base name and instance id
-	clpath = clpath.join((cbdir, pathidsuf))
+		clname = '/'.join((clinstpath, clname))  # Use base name and instance id
 	# Reselting clustering file names
-	return ([clp for clp in glob.iglob('/'.join((clpath, '*'))) if os.path.isfile(clp)],
+	return ([clp for clp in glob.iglob(''.join((cbdir, clname, pathidsuf, '/*'))) if os.path.isfile(clp)],
 		# Aggregated levels into the single clustering
 		None if not os.path.isfile(mrcl) else mrcl)
 
@@ -1636,13 +1639,8 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								ifpath = net if eq in QMSINTRIN else gfpath
 								cfnames, uclfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
 								#print('> cfnames num: {}, uclfname: {}, iinst: {}'.format(len(cfnames), uclfname, iinst))
-								# Create or open the respective datasets
-								# Dataset with multiple cluster levels, typically each having clusters on a single resolution
-								if cfnames:
-									pass
-								# Dataset with a single level containing multi-resolution clusters
-								if uclfname:
-									pass
+								# Note: the datasets can be created/opened only after the evaluating quality measure specify
+								# the processing metrics (names) to form the target dataset name.
 								# Sort the clustering file names to form their clustering level ids in the same order
 								if len(cfnames) >= 2:
 									cfnames.sort()
@@ -1650,18 +1648,22 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								for inpcls, ulev in ((cfnames, False), ([] if uclfname is None else [uclfname], True)):
 									# ATTENTION: Each network instance might have distinct number of levels,
 									# so the index level adjustment is required:
-									# ilev == (ifc + 1) * nlev / cnlev - 1
+									# ilev == reduceLevels(range(nlev), cnlev, True)[ilev]
 									# which corresponds to the adjusted alphabetical ordering of the clustering levels file names,
 									# where nclevs is the number of levels in the current network instance
-									# Note: float() is required to have valid division and rounding in Python2
-									cnlev = float(len(inpcls))  # Number of (actually produced) levels for the current network instance
+									#cnlev = float(len(inpcls))  # Number of (actually produced) levels for the current network instance
+									iclevs = reduceLevels(range(nlev), len(inpcls), True)  # List of the adjusted indicies
 									for ifc, fcl in enumerate(inpcls):
 										for irun in range(runs):
 											smeta = SMeta(group=group.name, measure=qm[0], ulev=ulev, iins=iinst, ishf=ishuf,
-												ilev=0 if ulev else int(round((ifc + 1) * nlev / cnlev)) - 1, irun=irun)
-											print('>> Formed metadata for {}/{}: {},{},{},{}'.format(
-												os.path.split(net)[1], os.path.split(fcl)[1],
-												smeta.iins, smeta.ishf, smeta.ilev, smeta.irun))
+												# Note:
+												# + 0.5 to take a middle of the missed range, for example index 5(-1) / 10
+												# for a single value; + 0.50001 to guarantee correct rounding after the multiplication
+												# in case of cnlev == nlev and prevent index = -1
+												ilev=0 if ulev else iclevs[ifc], irun=irun)
+											# print('>> Formed metadata for {}/{}: {},{},{},{}'.format(
+											# 	os.path.split(net)[1], os.path.split(fcl)[1],
+											# 	smeta.iins, smeta.ishf, smeta.ilev, smeta.irun))
 											jobsnum += eq(_execpool, qualsaver, smeta, qm[1:], cfpath=fcl, inpfpath=ifpath,
 												asym=asym, timeout=timeout, seed=seed, task=task, revalue=revalue)
 							except Exception as err:  #pylint: disable=W0703

@@ -484,6 +484,17 @@ class QualitySaver(object):
 		# Note: append mode is the default one; core driver is a memory-mapped file, block_size is default (64 Kb)
 		# Persistent storage object (file)
 		self.storage = h5py.File(storage, mode='a', driver='core', libver='latest', userblock_size=ublocksize)
+		# Add attributes if required
+		dqrname = 'dims_qms_raw'
+		if fstorage.attrs.get(dqrname) is None or update:
+			# Describe dataset dimentions
+			dims_qms_raw = ('inst', 'shuf', 'levl', 'mrun')
+			dqrlen = max((len(s) for s in dims_qms_raw)) + 1
+			dqrtype = 'a' + str(dqrlen)  # Zero terminated bytes, fixed length
+			fstorage.attrs.create(dqrname, data=np.array(dims_qms_raw, dtype=dqrtype))
+				# shape=(len(dims_qms_raw),), dtype=dqrtype)
+			# dims_qms_agg = ('net'): ('avg', 'var', 'num')  # 'dims_qms_agg'
+
 		# except Exception as err:  #pylint: disable=W0703
 		# 	print('ERROR, HDF5 storage creation failed: {}. {}'.format(err, traceback.format_exc(5)), file=sys.stderr)
 		# 	raise

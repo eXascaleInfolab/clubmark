@@ -79,7 +79,7 @@ from benchutils import viewitems, timeSeed, dirempty, tobackup, dhmsSec, syncedT
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
 from benchevals import aggEvaluations, RESDIR, CLSDIR, QMSDIR, EXTRESCONS, QMSRAFN, QMSINTRIN, QMSRUNS, \
-	QualitySaver, NetInfo, SMeta
+	SATTRNINS, SATTRNSHF, SATTRNLEV, QualitySaver, NetInfo, SMeta
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
 from algorithms.utils.parser_nsl import asymnet, dflnetext
@@ -1503,7 +1503,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 			for alg in algorithms:
 				group = qualsaver.storage.require_group(alg)  #pylint: disable=E1101
 				# alevs[alg] =
-				validateDim(ALGLEVS.get(alg, ALEVSMAX), group, 'nlev')
+				validateDim(ALGLEVS.get(alg, ALEVSMAX), group, SATTRNLEV)
 		except Exception as err:  #pylint: disable=W0703
 			errexectime = time.perf_counter() - exectime
 			print('ERROR, quality evaluations are interrupted by the exception:'
@@ -1592,9 +1592,9 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 						# 	# and fill the group attributes if they we empty
 						# 	if not netinf.gvld:
 						# 		# nins =
-						# 		validateDim(netinf.nins, group, 'nins')
+						# 		validateDim(netinf.nins, group, SATTRNINS'nins')
 						# 		# nshf =
-						# 		validateDim(netinf.nshf, group, 'nshf')
+						# 		validateDim(netinf.nshf, group, SATTRNSHF)
 						# 		netinf.gvld = True
 						# except Exception as err:  #pylint: disable=W0703
 						# 	print('ERROR, quality evaluation of "{}" is interrupted by the exception: {}, call stack:'
@@ -1602,17 +1602,20 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 						# 	traceback.print_exc(5)
 						# 	return jobsnum
 
+						# Fetch max level number for the algorithm
+						group = qualsaver.storage[alg]
+						# Note: int() is required for the subsequent round()
+						nlev = int(group.attrs[SATTRNLEV])  # The maximal (declared) number of clustering levels
+
 						# Validate network HDF5 group attributes (instances and shuffles) if required
-						group = None
 						try:
-							group = qualsaver.storage.require_group(''.join(('/', alg, '/'
-								# Form network name with path id
-								, delPathSuffix(netname, True) + pathidsuf)))
+							# Form network name with path id
+							group = group.require_group(delPathSuffix(netname, True) + pathidsuf)
 							if not netinf.gvld:
 								# nins =
-								validateDim(netinf.nins, group, 'nins')
+								validateDim(netinf.nins, group, SATTRNINS)
 								# nshf =
-								validateDim(netinf.nshf, group, 'nshf')
+								validateDim(netinf.nshf, group, SATTRNSHF)
 								netinf.gvld = True
 						except Exception as err:  #pylint: disable=W0703
 							print('ERROR, quality evaluation of "{}" is interrupted by the exception: {}, call stack:'
@@ -1632,6 +1635,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								# Whether the input path is a network or a clustering
 								ifpath = net if eq in QMSINTRIN else gfpath
 								cfnames, uclfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
+								print('> cfnames num: {}, uclfname: {}, iinst: {}'.format(len(cfnames), uclfname, iinst))
 								# Create or open the respective datasets
 								# Dataset with multiple cluster levels, typically each having clusters on a single resolution
 								if cfnames:
@@ -1644,11 +1648,19 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									cfnames.sort()
 								runs = QMSRUNS.get(qm[0], 1)  # The number of quality measure runs (subsequent evaluations)
 								for inpcls, ulev in ((cfnames, False), ([] if uclfname is None else [uclfname], True)):
-									# ilev == ifc corresponds to the alphabetical ordering of the clustering levels file names
+									# ATTENTION: Each network instance might have distinct number of levels,
+									# so the index level adjustment is required:
+									# ilev == (ifc + 1) * nlev / cnlev - 1
+									# which corresponds to the adjusted alphabetical ordering of the clustering levels file names,
+									# where nclevs is the number of levels in the current network instance
+									# Note: float() is required to have valid division and rounding in Python2
+									cnlev = float(len(inpcls))  # Number of (actually produced) levels for the current network instance
 									for ifc, fcl in enumerate(inpcls):
 										for irun in range(runs):
 											smeta = SMeta(group=group.name, measure=qm[0], ulev=ulev,
-												iins=iinst, ishf=ishuf, ilev=ifc, irun=irun)
+												iins=iinst, ishf=ishuf, ilev=int(round((ifc + 1) * nlev / cnlev)) - 1, irun=irun)
+											print('>> Formed metadata for {}: {},{},{},{}'.format(
+												net, smeta.iins, smeta.ishf, smeta.ilev, smeta.irun))
 											jobsnum += eq(_execpool, qualsaver, smeta, qm[1:], cfpath=fcl, inpfpath=ifpath,
 												asym=asym, timeout=timeout, seed=seed, task=task, revalue=revalue)
 							except Exception as err:  #pylint: disable=W0703

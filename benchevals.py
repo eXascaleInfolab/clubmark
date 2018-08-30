@@ -103,6 +103,9 @@ _SEPQARGS = '_'  # Separator for the quality measure arguments to be shown in th
 _SEPQMS = ';'
 _SUFULEV = '+u'  # Unified levels suffix of the HDF5 dataset (actual for DAOC)
 _PREFMETR = ':'  # Metric prefix in the HDF5 dataset name
+SATTRNINS = 'nins'  # HDF5 storage object attribute for the number of network instances
+SATTRNSHF = 'nshf'  # HDF5 storage object attribute for the number of network instance shuffles
+SATTRNLEV = 'nlev'  # HDF5 storage object attribute for the number of clustering levels
 
 QMSRAFN = {}  # Specific affinity mask of the quality measures: str, AffinityMask;  qmsrAffinity
 QMSINTRIN = set()  # Intrinsic quality measures requiring input network instead of the ground-truth clustering
@@ -339,9 +342,9 @@ class QualitySaver(object):
 	# 						nshf = 1
 	# 						nlev = 1
 	# 						if not qm.smeta.ulev:
-	# 							nins = qmgroup.attrs['nins']
-	# 							nshf = qmgroup.attrs['nshf']
-	# 							nlev = qmgroup.parent.attrs['nlev']
+	# 							nins = qmgroup.attrs[SATTRNINS]
+	# 							nshf = qmgroup.attrs[SATTRNSHF]
+	# 							nlev = qmgroup.parent.attrs[SATTRNLEV]
 	# 						qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
 	# 							# 32-bit floating number, checksum (fletcher32)
 	# 							dtype='f4', fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
@@ -380,28 +383,30 @@ class QualitySaver(object):
 	# 	# qsqueue.close()  # Close queue to prevent scheduling another tasks
 
 
-	def __init__(self, seed, update=False, timeout=None):  # algs, qms, nets=None,
+	def __init__(self, seed, update=False):  # , timeout=None;  algs, qms, nets=None
 		"""Creating or open HDF5 storage and prepare for the quality measures evaluations
 
 		Check whether the storage exists, copy/move old storage to the backup and
 		create the new one if the storage is not exist.
 
-		Arguments:
-			seed: uint64  - benchmarking seed, natural number
-			update: bool  - update existing storage creating if not exists, or create a new one backing up the existent
-			timeout: float  - global operational timeout in seconds, None means no timeout
+		seed: uint64  - benchmarking seed, natural number
+		update: bool  - update existing storage creating if not exists, or create a new one backing up the existent
 
 		Members:
-			_persister: Process  - persister worker process
-			queue: Queue  - multiprocess queue whose items are saved (persisted)
 			storage: h5py.File  - HDF5 storage with synchronized access
 				ATTENTION: parallel write to the storage is not supported, i.e. requires synchronization layer
-			_active: Value('B')  - the storage is operational (the requests can be processed)
 		"""
-		assert isinstance(seed, int) and (timeout is None or timeout >= 0), 'Invalid seed type: {}'.format(type(seed).__name__)
+		# timeout: float  - global operational timeout in seconds, None means no timeout
+		# Members:
+		# 	_persister: Process  - persister worker process
+		# 	queue: Queue  - multiprocess queue whose items are saved (persisted)
+		# 	_active: Value('B')  - the storage is operational (the requests can be processed)
+
+		# and (timeout is None or timeout >= 0)
+		assert isinstance(seed, int), 'Invalid seed type: {}'.format(type(seed).__name__)
 		# Open or init the HDF5 storage
-		self._tstart = time.perf_counter()
-		self.timeout = timeout
+		# self._tstart = time.perf_counter()
+		# self.timeout = timeout
 		timefmt = '%y%m%d-%H%M%S'  # Start time of the benchmarking, time format: YYMMDD_HHMMSS
 		timestamp = time.strftime(timefmt, TIMESTAMP_START)  # Timestamp string
 		seedstr = str(seed)
@@ -410,8 +415,8 @@ class QualitySaver(object):
 			os.makedirs(qmsdir)
 		# HDF5 Storage: qmeasures_<seed>.h5
 		storage = ''.join((qmsdir, 'qmeasures_', seedstr, '.h5'))  # File name of the HDF5.storage
-		ublocksize = 512  # Userblock size in bytes
-		ublocksep = ':'  # Userblock vals separator
+		ublocksize = 512  # HDF5 .userblock size in bytes
+		ublocksep = ':'  # Userblock values separator
 		# try:
 		if os.path.isfile(storage):
 			# Read userblock: seed and timestamps, validate new seed and estimate whether
@@ -500,11 +505,11 @@ class QualitySaver(object):
 		# # rescons str to the index mapping
 		# self.irescons = {s: i for i, s in enumerate(self.mrescons)}
 
-		self.queue = None  # Note: the multiprocess queue is created in the enter blocks
-		# The storage is not operational until the queue is created
-		# Note: a shared value for the active state is sufficient, exact synchronization is not required
-		self._active = Value('B', False, lock=False)
-		self._persister = None
+		# self.queue = None  # Note: the multiprocess queue is created in the enter blocks
+		# # The storage is not operational until the queue is created
+		# # Note: a shared value for the active state is sufficient, exact synchronization is not required
+		# self._active = Value('B', False, lock=False)
+		# self._persister = None
 
 
 	def __call__(self, qm):
@@ -524,6 +529,7 @@ class QualitySaver(object):
 				dsname = qm.smeta.measure if not metric else _PREFMETR.join((qm.smeta.measure, metric))
 				if qm.smeta.ulev:
 					dsname += _SUFULEV
+					print('> dsname: {}, metric: {}, mval: {}; location: {}'.format(dsname, metric, mval, qm.smeta))
 				dsname += _EXTQDATASET
 				# Open or create the required dataset
 				qmgroup = self.storage[qm.smeta.group]
@@ -532,13 +538,9 @@ class QualitySaver(object):
 					qmdata = qmgroup[dsname]
 				except KeyError:
 					# Such dataset does not exist, create it
-					nins = 1
-					nshf = 1
-					nlev = 1
-					if not qm.smeta.ulev:
-						nins = qmgroup.attrs['nins']
-						nshf = qmgroup.attrs['nshf']
-						nlev = qmgroup.parent.attrs['nlev']
+					nins = qmgroup.attrs[SATTRNINS]
+					nshf = qmgroup.attrs[SATTRNSHF]
+					nlev = 1 if not qm.smeta.ulev else qmgroup.parent.attrs[SATTRNLEV]
 					qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
 						# 32-bit floating number, checksum (fletcher32)
 						dtype='f4', fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
@@ -550,10 +552,13 @@ class QualitySaver(object):
 
 				# Save data to the storage
 				# with syncstorage.get_lock():
-				qmdata[qm.smeta.iins][qm.smeta.ishf][qm.smeta.ilev][qm.smeta.irun] = mval
+				qmdata[qm.smeta.iins, qm.smeta.ishf, qm.smeta.ilev, qm.smeta.irun] = mval
+				print('>> [{},{},{},{}]{}: {}'.format(qm.smeta.iins, qm.smeta.ishf, qm.smeta.ilev, qm.smeta.irun,
+					'' if not qm.smeta.ulev else 'u', mval))
 			except Exception as err:  #pylint: disable=W0703;  # queue.Empty as err:  # TypeError (HDF5), KeyError
-				print('ERROR, saving of {} in {}{}{} failed: {}. {}'.format(mval, qm.smeta.measure,
+				print('ERROR, saving of {} into {}{}{}[{},{},{},{}] failed: {}. {}'.format(mval, qm.smeta.measure,
 					'' if not metric else _PREFMETR + metric, '' if not qm.smeta.ulev else _SUFULEV,
+					qm.smeta.iins, qm.smeta.ishf, qm.smeta.ilev, qm.smeta.irun,
 					err, traceback.format_exc(5)), file=sys.stderr)
 			# alg = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
 			# 	# Allocate chunks of 10 items starting with empty dataset and with possibility
@@ -723,35 +728,37 @@ def execXmeasures(execpool, save, smeta, qparams, cfpath, inpfpath, asym=False
 		#
 		# Define the number of strings in the output counting the number of words in the last string
 		# Identify index of the last non-empty line
-		i = -1
-		while not job.pipedout[i].strip():
-			i -= 1
-		# print('Value line: {}, len: {}, sym1: {}'.format(job.pipedout[i], len(job.pipedout[i]), ord(job.pipedout[i])))
-		if len(job.pipedout[i].split(None, 1)) == 1:
+		qmres = job.pipedout.rstrip().split('\n')[-2:]  # Fetch last 2 non-empty lines as a list(str)
+		# print('Value line: {}, len: {}, sym1: {}'.format(qmres[-1], len(qmres[-1]), ord(qmres[-1][0])))
+		if len(qmres[-1].split(None, 1)) == 1:
 			# Metric name is None (the same as binary name) if not specified explicitly
-			metric = None if len(job.pipedout) == 1 else job.pipedout[i-1].split(None, 1)[0].rstrip(':')  # Omit ending ':' if any
-			mval = job.pipedout[i]
+			name = None if len(qmres) == 1 else qmres[0].split(None, 1)[0].rstrip(':')  # Omit ending ':' if any
+			val = qmres[-1]  # Note: index -1 corresponds to either 0 or 1
 			try:
-				# qsqueue.put(QEntry(smeta, {metric: float(mval)}))
+				# qsqueue.put(QEntry(smeta, {name: float(val)}))
 				# # , block=True, timeout=None if not timeout else max(0, timeout - (time.perf_counter() - job.tstart)))
-				# saveQuality(qsqueue, QEntry(smeta, {metric: float(mval)}))
-				save(QEntry(smeta, {metric: float(mval)}))
+				# saveQuality(qsqueue, QEntry(smeta, {name: float(val)}))
+				# print('> Parsed data (single) from "{}", name: {}, val: {}; qmres: {}'.format(
+				# 	' '.join(('' if len(qmres) == 1 else qmres[0], qmres[-1])), name, val, qmres))
+				save(QEntry(smeta, {name: float(val)}))
 			except ValueError as err:
 				print('ERROR, metric "{}" serialization discarded of the job "{}" because of the invalid value format: {}. {}'
-					.format(metric, job.name, mval, err), file=sys.stderr)
+					.format(name, job.name, val, err), file=sys.stderr)
 			# except queue.Full as err:
 			# 	print('WARNING, results serialization discarded by the Job "{}" timeout'.format(job.name))
 			return
 		# Parse multiple names of the metrics and their values from the last string: <metric>: <value>{,;} ...
-		metrics = job.pipedout[i].split(',;(')  # Note: F1_labels: <val> (Precision: <val>, ...)
+		# Note: index -1 corresponds to either 0 or 1
+		metrics = job.qmres[-1].split(',;(')  # Note: F1_labels: <val> (Precision: <val>, ...)
 		data = {}  # Serializing data
 		for mt in metrics:
 			name, val = mt.split(':', 1)
 			try:
 				data[name.lstrip()] = float(val.rstrip(' \t)'))
+				# print('> Parsed data from "{}", name: {}, val: {}'.format(mt, name.lstrip(), data[name.lstrip()]))
 			except ValueError as err:
 				print('ERROR, metric "{}" serialization discarded of the job "{}" because of the invalid value format: {}. {}'
-					.format(metric, job.name, mval, err), file=sys.stderr)
+					.format(name, job.name, val, err), file=sys.stderr)
 		if data:
 			# saveQuality(qsqueue, QEntry(smeta, data))
 			save(QEntry(smeta, data))

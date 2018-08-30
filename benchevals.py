@@ -486,12 +486,12 @@ class QualitySaver(object):
 		self.storage = h5py.File(storage, mode='a', driver='core', libver='latest', userblock_size=ublocksize)
 		# Add attributes if required
 		dqrname = 'dims_qms_raw'
-		if fstorage.attrs.get(dqrname) is None or update:
+		if self.storage.attrs.get(dqrname) is None or update:
 			# Describe dataset dimentions
 			dims_qms_raw = ('inst', 'shuf', 'levl', 'mrun')
 			dqrlen = max((len(s) for s in dims_qms_raw)) + 1
 			dqrtype = 'a' + str(dqrlen)  # Zero terminated bytes, fixed length
-			fstorage.attrs.create(dqrname, data=np.array(dims_qms_raw, dtype=dqrtype))
+			self.storage.attrs.create(dqrname, data=np.array(dims_qms_raw, dtype=dqrtype))
 				# shape=(len(dims_qms_raw),), dtype=dqrtype)
 			# dims_qms_agg = ('net'): ('avg', 'var', 'num')  # 'dims_qms_agg'
 
@@ -540,7 +540,7 @@ class QualitySaver(object):
 				dsname = qm.smeta.measure if not metric else _PREFMETR.join((qm.smeta.measure, metric))
 				if qm.smeta.ulev:
 					dsname += _SUFULEV
-					print('> dsname: {}, metric: {}, mval: {}; location: {}'.format(dsname, metric, mval, qm.smeta))
+				#print('> dsname: {}, metric: {}, mval: {}; location: {}'.format(dsname, metric, mval, qm.smeta))
 				dsname += _EXTQDATASET
 				# Open or create the required dataset
 				qmgroup = self.storage[qm.smeta.group]
@@ -551,7 +551,7 @@ class QualitySaver(object):
 					# Such dataset does not exist, create it
 					nins = qmgroup.attrs[SATTRNINS]
 					nshf = qmgroup.attrs[SATTRNSHF]
-					nlev = 1 if not qm.smeta.ulev else qmgroup.parent.attrs[SATTRNLEV]
+					nlev = 1 if qm.smeta.ulev else qmgroup.parent.attrs[SATTRNLEV]
 					qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
 						# 32-bit floating number, checksum (fletcher32)
 						dtype='f4', fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
@@ -563,9 +563,9 @@ class QualitySaver(object):
 
 				# Save data to the storage
 				# with syncstorage.get_lock():
+				# print('>> [{},{},{},{}]{}: {}'.format(qm.smeta.iins, qm.smeta.ishf, qm.smeta.ilev, qm.smeta.irun,
+				# 	'' if not qm.smeta.ulev else 'u', mval))
 				qmdata[qm.smeta.iins, qm.smeta.ishf, qm.smeta.ilev, qm.smeta.irun] = mval
-				print('>> [{},{},{},{}]{}: {}'.format(qm.smeta.iins, qm.smeta.ishf, qm.smeta.ilev, qm.smeta.irun,
-					'' if not qm.smeta.ulev else 'u', mval))
 			except Exception as err:  #pylint: disable=W0703;  # queue.Empty as err:  # TypeError (HDF5), KeyError
 				print('ERROR, saving of {} into {}{}{}[{},{},{},{}] failed: {}. {}'.format(mval, qm.smeta.measure,
 					'' if not metric else _PREFMETR + metric, '' if not qm.smeta.ulev else _SUFULEV,

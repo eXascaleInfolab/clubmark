@@ -1635,7 +1635,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								# Whether the input path is a network or a clustering
 								ifpath = net if eq in QMSINTRIN else gfpath
 								cfnames, uclfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
-								print('> cfnames num: {}, uclfname: {}, iinst: {}'.format(len(cfnames), uclfname, iinst))
+								#print('> cfnames num: {}, uclfname: {}, iinst: {}'.format(len(cfnames), uclfname, iinst))
 								# Create or open the respective datasets
 								# Dataset with multiple cluster levels, typically each having clusters on a single resolution
 								if cfnames:
@@ -1657,10 +1657,11 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									cnlev = float(len(inpcls))  # Number of (actually produced) levels for the current network instance
 									for ifc, fcl in enumerate(inpcls):
 										for irun in range(runs):
-											smeta = SMeta(group=group.name, measure=qm[0], ulev=ulev,
-												iins=iinst, ishf=ishuf, ilev=int(round((ifc + 1) * nlev / cnlev)) - 1, irun=irun)
-											print('>> Formed metadata for {}: {},{},{},{}'.format(
-												net, smeta.iins, smeta.ishf, smeta.ilev, smeta.irun))
+											smeta = SMeta(group=group.name, measure=qm[0], ulev=ulev, iins=iinst, ishf=ishuf,
+												ilev=0 if ulev else int(round((ifc + 1) * nlev / cnlev)) - 1, irun=irun)
+											print('>> Formed metadata for {}/{}: {},{},{},{}'.format(
+												os.path.split(net)[1], os.path.split(fcl)[1],
+												smeta.iins, smeta.ishf, smeta.ilev, smeta.irun))
 											jobsnum += eq(_execpool, qualsaver, smeta, qm[1:], cfpath=fcl, inpfpath=ifpath,
 												asym=asym, timeout=timeout, seed=seed, task=task, revalue=revalue)
 							except Exception as err:  #pylint: disable=W0703

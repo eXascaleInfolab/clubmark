@@ -1497,11 +1497,13 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 		# Validate algorithm HDF5 group attributes (nlev)
 		# alevs = {}  # The actual number of levels in each algorithm in the storage
 		try:
-			with qualsaver.storage:
-				for alg in algorithms:
-					group = qualsaver.storage.value.require_group(alg)  #pylint: disable=E1101
-					# alevs[alg] =
-					validateDim(ALGLEVS.get(alg, ALEVSMAX), group, 'nlev')
+			# Note: Nothing is written to the storage before the quality measures execution,
+			# so there is no need to synchronize access to the storage here
+			# with qualsaver.storage:
+			for alg in algorithms:
+				group = qualsaver.storage.require_group(alg)  #pylint: disable=E1101
+				# alevs[alg] =
+				validateDim(ALGLEVS.get(alg, ALEVSMAX), group, 'nlev')
 		except Exception as err:  #pylint: disable=W0703
 			errexectime = time.perf_counter() - exectime
 			print('ERROR, quality evaluations are interrupted by the exception:'
@@ -1567,63 +1569,94 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					netname, _aparams, inst, shuf, _pid  = parseName(netname, True)
 					iinst = 0 if not inst else int(inst[len(SEPINST):])  # Instance id
 					ishuf = 0 if not shuf else int(shuf[len(SEPSHF):])  # Shuffle id
-					with qualsaver.storage:
-						for alg in algorithms:
-							# Validate network HDF5 group attributes (instances and shuffles) if required
-							group = None
-							try:
-								group = qualsaver.storage.value.require_group(''.join(('/', alg, '/'
-									# Form network name with path id
-									, delPathSuffix(netname, True) + pathidsuf)))
-								if not netinf.gvld:
-									# nins =
-									validateDim(netinf.nins, group, 'nins')
-									# nshf =
-									validateDim(netinf.nshf, group, 'nshf')
-									netinf.gvld = True
-							except Exception as err:  #pylint: disable=W0703
-								print('ERROR, quality evaluation of "{}" is interrupted by the exception: {}, call stack:'
-									.format(netname + pathidsuf, err), file=sys.stderr)
-								traceback.print_exc(5)
-								return jobsnum
+					# Note: the execution is sequential here and the quality measure results are written to the storage
+					# from the ondone() callback executing in the main thread of the main process,
+					# so the storage does not require any locks
+					# with qualsaver.storage:
+					for alg in algorithms:
+						# # Open or create the target group with the attributes (instances and shuffles)
+						# # and fill its and NetIfo attributes.
+						# group = None
+						# try:
+						# 	# Form network name with path id
+						# 	gname = ''.join(('/', alg, '/', delPathSuffix(netname, True) + pathidsuf))
+						# 	try:
+						# 		group = qualsaver.storage.value[gname]
+						# 	except KeyError:  # The group is not exist
+						# 		group = qualsaver.storage.value.create_group(gname)
+						# 		# Flushing is required to be able to use the created group from the another process
+						# 		qualsaver.storage.value.flush()
+						# 		# TODO: In multi-process implementation the storage should be reloaded from other
+						# 		# processes after the creation of any new groups or datasets
+						# 	# Validate network HDF5 group attributes (instances and shuffles) if required
+						# 	# and fill the group attributes if they we empty
+						# 	if not netinf.gvld:
+						# 		# nins =
+						# 		validateDim(netinf.nins, group, 'nins')
+						# 		# nshf =
+						# 		validateDim(netinf.nshf, group, 'nshf')
+						# 		netinf.gvld = True
+						# except Exception as err:  #pylint: disable=W0703
+						# 	print('ERROR, quality evaluation of "{}" is interrupted by the exception: {}, call stack:'
+						# 		.format(netname + pathidsuf, err), file=sys.stderr)
+						# 	traceback.print_exc(5)
+						# 	return jobsnum
 
-							for i, (qm, eq) in enumerate(cqmes):
-								# Append algortihm-indicating subtask: QMeasure / BaseNet / Alg
-								task = None if not tasks else tasks[i]
-								if task:
-									task = Task(SEPSUBTASK.join((task.name, alg)), task=task
-										# TODO: Aggregate quality evaluations of each algorithm on each network
-										#, onfinish=aggAlgQevals, params=_execpool
-									)
-								try:
-									# Whether the input path is a network or a clustering
-									ifpath = net if eq in QMSINTRIN else gfpath
-									cfnames, uclfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
-									# Create or open the respective datasets
-									# Dataset with multiple cluster levels, typically each having clusters on a single resolution
-									if cfnames:
-										pass
-									# Dataset with a single level containing multi-resolution clusters
-									if uclfname:
-										pass
-									# Sort the clustering file names to form their clustering level ids in the same order
-									if len(cfnames) >= 2:
-										cfnames.sort()
-									runs = QMSRUNS.get(qm[0], 1)  # The number of quality measure runs (subsequent evaluations)
-									for inpcls, ulev in ((cfnames, False), ([] if uclfname is None else [uclfname], True)):
-										# ilev == ifc corresponds to the alphabetical ordering of the clustering levels file names
-										for ifc, fcl in enumerate(inpcls):
-											for irun in range(runs):
-												smeta = SMeta(group=group.name, measure=qm[0], ulev=ulev,
-													iins=iinst, ishf=ishuf, ilev=ifc, irun=irun)
-												jobsnum += eq(_execpool, qualsaver, smeta, qm[1:], cfpath=fcl, inpfpath=ifpath,
-													asym=asym, timeout=timeout, seed=seed, task=task, revalue=revalue)
-								except Exception as err:  #pylint: disable=W0703
-									errexectime = time.perf_counter() - exectime
-									print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
-										.format(eq.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
-									# traceback.print_stack(limit=5, file=sys.stderr)
-									traceback.print_exc(5)
+						# Validate network HDF5 group attributes (instances and shuffles) if required
+						group = None
+						try:
+							group = qualsaver.storage.require_group(''.join(('/', alg, '/'
+								# Form network name with path id
+								, delPathSuffix(netname, True) + pathidsuf)))
+							if not netinf.gvld:
+								# nins =
+								validateDim(netinf.nins, group, 'nins')
+								# nshf =
+								validateDim(netinf.nshf, group, 'nshf')
+								netinf.gvld = True
+						except Exception as err:  #pylint: disable=W0703
+							print('ERROR, quality evaluation of "{}" is interrupted by the exception: {}, call stack:'
+								.format(netname + pathidsuf, err), file=sys.stderr)
+							traceback.print_exc(5)
+							return jobsnum
+
+						for i, (qm, eq) in enumerate(cqmes):
+							# Append algortihm-indicating subtask: QMeasure / BaseNet / Alg
+							task = None if not tasks else tasks[i]
+							if task:
+								task = Task(SEPSUBTASK.join((task.name, alg)), task=task
+									# TODO: Aggregate quality evaluations of each algorithm on each network
+									#, onfinish=aggAlgQevals, params=_execpool
+								)
+							try:
+								# Whether the input path is a network or a clustering
+								ifpath = net if eq in QMSINTRIN else gfpath
+								cfnames, uclfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
+								# Create or open the respective datasets
+								# Dataset with multiple cluster levels, typically each having clusters on a single resolution
+								if cfnames:
+									pass
+								# Dataset with a single level containing multi-resolution clusters
+								if uclfname:
+									pass
+								# Sort the clustering file names to form their clustering level ids in the same order
+								if len(cfnames) >= 2:
+									cfnames.sort()
+								runs = QMSRUNS.get(qm[0], 1)  # The number of quality measure runs (subsequent evaluations)
+								for inpcls, ulev in ((cfnames, False), ([] if uclfname is None else [uclfname], True)):
+									# ilev == ifc corresponds to the alphabetical ordering of the clustering levels file names
+									for ifc, fcl in enumerate(inpcls):
+										for irun in range(runs):
+											smeta = SMeta(group=group.name, measure=qm[0], ulev=ulev,
+												iins=iinst, ishf=ishuf, ilev=ifc, irun=irun)
+											jobsnum += eq(_execpool, qualsaver, smeta, qm[1:], cfpath=fcl, inpfpath=ifpath,
+												asym=asym, timeout=timeout, seed=seed, task=task, revalue=revalue)
+							except Exception as err:  #pylint: disable=W0703
+								errexectime = time.perf_counter() - exectime
+								print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
+									.format(eq.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
+								# traceback.print_stack(limit=5, file=sys.stderr)
+								traceback.print_exc(5)
 					return jobsnum
 
 				def runner(net, netshf, xargs, tasks=None, netinf=None):
@@ -1689,7 +1722,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 	aggexec([qm[0] for qm in qmeasures])
 	print('Execution statistics aggregated')
 # 	# TODO: aggregate and visualize quality evaluation results
-# 	qualsaver.storage.value.close()
+# 	qualsaver.storage.close()
 # 	_execpool = None  # Reset global execpool
 # 	stime = time.perf_counter() - stime
 # 	print('Results evaluation is successfully completed in {:.4f} sec ({} h {} m {:.4f} s)'

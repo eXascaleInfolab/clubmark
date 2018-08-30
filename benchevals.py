@@ -53,7 +53,7 @@ if not hasattr(time, 'perf_counter'):  #pylint: disable=C0413
 # from collections import namedtuple
 from subprocess import PIPE
 # Queue is required to asynchronously save evaluated quality measures to the persistent storage
-from multiprocessing import cpu_count, Process, Queue, Value
+from multiprocessing import cpu_count, Process, Queue, Value, sharedctypes
 try:
 	import queue	# queue in Python3
 except ImportError:  # Queue in Python2
@@ -65,7 +65,7 @@ import numpy as np  # Required for the HDF5 operations
 
 # from benchapps import  # funcToAppName,
 from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, syncedTime, \
-	escapePathWildcards, envVarDefined, SyncValue, tobackup, funcToAppName, staticTrace, \
+	escapePathWildcards, envVarDefined, tobackup, funcToAppName, staticTrace, \
 	SEPPARS, SEPINST, SEPSHF, SEPPATHID, UTILDIR, ALGSDIR, ALEVSMAX, ALGLEVS, \
 	TIMESTAMP_START, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER
 from utils.mpepool import Task, Job, AffinityMask
@@ -290,96 +290,94 @@ class QualitySaver(object):
 	QUEUE_SIZEMAX = max(128, cpu_count() * 2)  # At least 128 or twice the number of the logical CPUs in the system
 	# LATENCY = 1  # Latency in seconds
 
-	"""Quality evaluations serializer to the persistent sotrage"""
-	@staticmethod
-	def __datasaver(qsqueue, syncstorage, active, timeout=None, latency=2.):
-		"""Worker process function to save data to the persistent storage
-
-		qsqueue: Queue  - quality saver queue of QEntry items
-		syncstorage: SyncValue(h5py.File)  - synchronized wrapper of the HDF5 storage
-		active: Value('B', lock=False)  - the saver process is operational (the requests can be processed)
-		timeout: float  - global operational timeout in seconds, None means no timeout
-		latency: float  - latency of the datasaver in sec, recommended value: 1-3 sec
-		"""
-		# def fetchAndSave():
-
-		tstart = time.perf_counter()  # Global start time
-		tcur = tstart  # Start of the current iteration
-		while (active.value and (timeout is None or tcur - tstart < timeout)):
-			# Fetch and serialize items from the queue limiting their number
-			# (can be added in parallel) to avoid large latency
-			i = 0
-			while not qsqueue.empty() and i < QualitySaver.QUEUE_SIZEMAX:
-				i += 1
-				# qm = qsqueue.get(True, timeout=latency)  # Measures to be stored
-				qm = qsqueue.get_nowait()
-				assert isinstance(qm, QEntry), 'Unexpected type of the quality entry: ' + type(qm).__name__
-				# Save data elements (entries)
-				for metric, mval in  viewitems(qm.data):
-					try:
-						# Metric is  str (or can be unicode in Python2)
-						assert isinstance(mval, float), 'Invalid data type, metric: {}, value: {}'.format(
-							type(metric).__name__, type(mval).__name__)
-						# Construct dataset name based on the quality measure binary name and its metric name
-						# (in case of multiple metrics are evaluated by the executing app)
-						dsname = qm.smeta.measure if not metric else _PREFMETR.join((qm.smeta.measure, metric))
-						if qm.smeta.ulev:
-							dsname += _SUFULEV
-						dsname += _EXTQDATASET
-						# Open or create the required dataset
-						try:
-							qmgroup = syncstorage.value[qm.smeta.group]
-						except KeyError:
-							print('ERROR, storage lacks the group:', qm.smeta.group, file=sys.stderr)
-							raise
-						qmdata = None
-						try:
-							qmdata = qmgroup[dsname]
-						except KeyError:
-							# Such dataset does not exist, create it
-							nins = 1
-							nshf = 1
-							nlev = 1
-							if not qm.smeta.ulev:
-								nins = qmgroup.attrs['nins']
-								nshf = qmgroup.attrs['nshf']
-								nlev = qmgroup.parent.attrs['nlev']
-							qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
-								# 32-bit floating number, checksum (fletcher32)
-								dtype='f4', fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
-								# NOTE: Numpy NA (not available) instead of NaN (not a number) might be preferable
-								# but it requires latest NumPy versions.
-								# https://www.numpy.org/NA-overview.html
-								# Numpy NAs (https://docs.scipy.org/doc/numpy-1.14.0/neps/missing-data.html):
-								# np.NA,  dtype='NA[f4]', dtype='NA', np.dtype('NA[f4,NaN]')
-						# Save data to the storage
-						with syncstorage:
-							qmdata[qm.smeta.iins][qm.smeta.ishf][qm.smeta.ilev][qm.smeta.irun] = mval
-					except Exception as err:  #pylint: disable=W0703;  # queue.Empty as err:  # TypeError (HDF5), KeyError
-						print('ERROR, saving of {} in {}{}{} failed: {}. {}'.format(mval, qm.smeta.measure,
-							'' if not metric else _PREFMETR + metric, '' if not qm.smeta.ulev else _SUFULEV,
-							err, traceback.format_exc(5)), file=sys.stderr)
-					# alg = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
-					# 	# Allocate chunks of 10 items starting with empty dataset and with possibility
-					# 	# to resize up to 500 items (params combinations)
-					# 	self.apps[app] = appsdir.require_dataset(app, shape=(0,), dtype=h5py.special_dtype(vlen=_h5str)
-					# 		, chunks=(10,), maxshape=(500,))  # , maxshape=(None,), fletcher32=True
-					# self.evals = self.storage.value.require_group('evals')  # Quality evaluations dir (group)
-			# Prepare for the next iteration considering the processing latency to reduce CPU loading
-			duration = time.perf_counter() - tcur
-			if duration < latency:
-				time.sleep(latency - duration)
-				duration = latency
-			tcur += duration
-		active.value = False
-		if not qsqueue.empty():
-			try:
-				print('WARNING QualitySaver, {} items remained unsaved in the terminating queue'
-					.format(qsqueue.qsize()))
-			except NotImplementedError:
-				print('WARNING QualitySaver, some items remained unsaved in the terminating queue')
-		# Note: qsqueue closing in the worker process (here) causes exception on the QualSaver destruction
-		# qsqueue.close()  # Close queue to prevent scheduling another tasks
+	# TODO: Efficient multiprocess implementation requires a single instance of the storage to not reload
+	# the storage after each creation of a new group or dataset in it. So, group and dataset creation requests
+	# should be performed via the queue together with the ordinary data entry creation requests implemented as follows.
+	# @staticmethod
+	# def __datasaver(qsqueue, syncstorage, active, timeout=None, latency=2.):
+	# 	"""Worker process function to save data to the persistent storage
+	#
+	# 	qsqueue: Queue  - quality saver queue of QEntry items
+	# 	syncstorage: h5py.File  - synchronized wrapper of the HDF5 storage
+	# 	active: Value('B', lock=False)  - the saver process is operational (the requests can be processed)
+	# 	timeout: float  - global operational timeout in seconds, None means no timeout
+	# 	latency: float  - latency of the datasaver in sec, recommended value: 1-3 sec
+	# 	"""
+	# 	# def fetchAndSave():
+	#
+	# 	tstart = time.perf_counter()  # Global start time
+	# 	tcur = tstart  # Start of the current iteration
+	# 	while (active.value and (timeout is None or tcur - tstart < timeout)):
+	# 		# Fetch and serialize items from the queue limiting their number
+	# 		# (can be added in parallel) to avoid large latency
+	# 		i = 0
+	# 		while not qsqueue.empty() and i < QualitySaver.QUEUE_SIZEMAX:
+	# 			i += 1
+	# 			# qm = qsqueue.get(True, timeout=latency)  # Measures to be stored
+	# 			qm = qsqueue.get_nowait()
+	# 			assert isinstance(qm, QEntry), 'Unexpected type of the quality entry: ' + type(qm).__name__
+	# 			# Save data elements (entries)
+	# 			for metric, mval in  viewitems(qm.data):
+	# 				try:
+	# 					# Metric is  str (or can be unicode in Python2)
+	# 					assert isinstance(mval, float), 'Invalid data type, metric: {}, value: {}'.format(
+	# 						type(metric).__name__, type(mval).__name__)
+	# 					# Construct dataset name based on the quality measure binary name and its metric name
+	# 					# (in case of multiple metrics are evaluated by the executing app)
+	# 					dsname = qm.smeta.measure if not metric else _PREFMETR.join((qm.smeta.measure, metric))
+	# 					if qm.smeta.ulev:
+	# 						dsname += _SUFULEV
+	# 					dsname += _EXTQDATASET
+	# 					# Open or create the required dataset
+	# 					qmgroup = syncstorage.value[qm.smeta.group]
+	# 					qmdata = None
+	# 					try:
+	# 						qmdata = qmgroup[dsname]
+	# 					except KeyError:
+	# 						# Such dataset does not exist, create it
+	# 						nins = 1
+	# 						nshf = 1
+	# 						nlev = 1
+	# 						if not qm.smeta.ulev:
+	# 							nins = qmgroup.attrs['nins']
+	# 							nshf = qmgroup.attrs['nshf']
+	# 							nlev = qmgroup.parent.attrs['nlev']
+	# 						qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
+	# 							# 32-bit floating number, checksum (fletcher32)
+	# 							dtype='f4', fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
+	# 							# NOTE: Numpy NA (not available) instead of NaN (not a number) might be preferable
+	# 							# but it requires latest NumPy versions.
+	# 							# https://www.numpy.org/NA-overview.html
+	# 							# Numpy NAs (https://docs.scipy.org/doc/numpy-1.14.0/neps/missing-data.html):
+	# 							# np.NA,  dtype='NA[f4]', dtype='NA', np.dtype('NA[f4,NaN]')
+	# 					# Save data to the storage
+	# 					with syncstorage.get_lock():
+	# 						qmdata[qm.smeta.iins][qm.smeta.ishf][qm.smeta.ilev][qm.smeta.irun] = mval
+	# 				except Exception as err:  #pylint: disable=W0703;  # queue.Empty as err:  # TypeError (HDF5), KeyError
+	# 					print('ERROR, saving of {} in {}{}{} failed: {}. {}'.format(mval, qm.smeta.measure,
+	# 						'' if not metric else _PREFMETR + metric, '' if not qm.smeta.ulev else _SUFULEV,
+	# 						err, traceback.format_exc(5)), file=sys.stderr)
+	# 				# alg = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
+	# 				# 	# Allocate chunks of 10 items starting with empty dataset and with possibility
+	# 				# 	# to resize up to 500 items (params combinations)
+	# 				# 	self.apps[app] = appsdir.require_dataset(app, shape=(0,), dtype=h5py.special_dtype(vlen=_h5str)
+	# 				# 		, chunks=(10,), maxshape=(500,))  # , maxshape=(None,), fletcher32=True
+	# 				# self.evals = self.storage.require_group('evals')  # Quality evaluations dir (group)
+	# 		# Prepare for the next iteration considering the processing latency to reduce CPU loading
+	# 		duration = time.perf_counter() - tcur
+	# 		if duration < latency:
+	# 			time.sleep(latency - duration)
+	# 			duration = latency
+	# 		tcur += duration
+	# 	active.value = False
+	# 	if not qsqueue.empty():
+	# 		try:
+	# 			print('WARNING QualitySaver, {} items remained unsaved in the terminating queue'
+	# 				.format(qsqueue.qsize()))
+	# 		except NotImplementedError:
+	# 			print('WARNING QualitySaver, some items remained unsaved in the terminating queue')
+	# 	# Note: qsqueue closing in the worker process (here) causes exception on the QualSaver destruction
+	# 	# qsqueue.close()  # Close queue to prevent scheduling another tasks
 
 
 	def __init__(self, seed, update=False, timeout=None):  # algs, qms, nets=None,
@@ -396,10 +394,8 @@ class QualitySaver(object):
 		Members:
 			_persister: Process  - persister worker process
 			queue: Queue  - multiprocess queue whose items are saved (persisted)
-			storage: SyncValue(h5py.File)  - HDF5 storage with synchronized access
-				TODO: omit SyncValue or at least do not use it on sequential writing,
-				make syncvalue permanent on initializatoin with the only capability to access to it under the lock
-				ATTENTION: parallel write to the storage is not supported and should be done withing the storage ebter lock
+			storage: h5py.File  - HDF5 storage with synchronized access
+				ATTENTION: parallel write to the storage is not supported, i.e. requires synchronization layer
 			_active: Value('B')  - the storage is operational (the requests can be processed)
 		"""
 		assert isinstance(seed, int) and (timeout is None or timeout >= 0), 'Invalid seed type: {}'.format(type(seed).__name__)
@@ -422,9 +418,13 @@ class QualitySaver(object):
 			# there is enought space for one more timestamp
 			bcksftime = None
 			if update:
-				fstorage = h5py.File(storage, mode='r', driver='core', libver='latest')
-				ublocksize = fstorage.userblock_size
-				fstorage.close()
+				try:
+					fstorage = h5py.File(storage, mode='r', driver='core', libver='latest')
+					ublocksize = fstorage.userblock_size
+					fstorage.close()
+				except OSError:
+					print('WARNING, can not open the file {}, default userblock size will be used.'.format(
+						storage, file=sys.stderr))
 				with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
 					# Note: userblock contains '<seed>:<timestamp1>:<timestamp2>...',
 					# where timestamp has timefmt
@@ -478,7 +478,7 @@ class QualitySaver(object):
 			# print('> HDF5 storage userblock created: ', seedstr, ublocksep, timestamp)
 		# Note: append mode is the default one; core driver is a memory-mapped file, block_size is default (64 Kb)
 		# Persistent storage object (file)
-		self.storage = SyncValue(h5py.File(storage, mode='a', driver='core', libver='latest', userblock_size=ublocksize))
+		self.storage = h5py.File(storage, mode='a', driver='core', libver='latest', userblock_size=ublocksize)
 		# except Exception as err:  #pylint: disable=W0703
 		# 	print('ERROR, HDF5 storage creation failed: {}. {}'.format(err, traceback.format_exc(5)), file=sys.stderr)
 		# 	raise
@@ -490,11 +490,11 @@ class QualitySaver(object):
 		# except KeyError:  # IndexError
 		# 	self.mrescons = ['ExecTime', 'CPU_time', 'RSS_peak']
 		# 	# Note: None in maxshape means resizable, fletcher32 used for the checksum
-		# 	self.storage.value.create_dataset('rescons.inf', shape=(len(self.mrescons),)
+		# 	self.storage.create_dataset('rescons.inf', shape=(len(self.mrescons),)
 		# 		, dtype=h5str, data=[s.decode() for s in self.mrescons], fletcher32=True)  # fillvalue=''
 		# # # Note: None in maxshape means resizable, fletcher32 used for the checksum,
 		# # # exact used to require shape and type to match exactly
-		# # metares = self.storage.value.require_dataset('rescons.meta', shape=(len(self.mrescons),), dtype=h5str
+		# # metares = self.storage.require_dataset('rescons.meta', shape=(len(self.mrescons),), dtype=h5str
 		# # 	, data=self.mrescons, exact=True, fletcher32=True)  # fillvalue=''
 		# #
 		# # rescons str to the index mapping
@@ -507,56 +507,118 @@ class QualitySaver(object):
 		self._persister = None
 
 
+	def __call__(self, qm):
+		"""Worker process function to save data to the persistent storage
+
+		qm: QEntry  - quality metric (data and metadata) to be saved into the persistent storage
+		"""
+		assert isinstance(qm, QEntry), 'Unexpected type of the quality entry: ' + type(qm).__name__
+		# Save data elements (entries)
+		for metric, mval in  viewitems(qm.data):
+			try:
+				# Metric is  str (or can be unicode in Python2)
+				assert isinstance(mval, float), 'Invalid data type, metric: {}, value: {}'.format(
+					type(metric).__name__, type(mval).__name__)
+				# Construct dataset name based on the quality measure binary name and its metric name
+				# (in case of multiple metrics are evaluated by the executing app)
+				dsname = qm.smeta.measure if not metric else _PREFMETR.join((qm.smeta.measure, metric))
+				if qm.smeta.ulev:
+					dsname += _SUFULEV
+				dsname += _EXTQDATASET
+				# Open or create the required dataset
+				qmgroup = self.storage[qm.smeta.group]
+				qmdata = None
+				try:
+					qmdata = qmgroup[dsname]
+				except KeyError:
+					# Such dataset does not exist, create it
+					nins = 1
+					nshf = 1
+					nlev = 1
+					if not qm.smeta.ulev:
+						nins = qmgroup.attrs['nins']
+						nshf = qmgroup.attrs['nshf']
+						nlev = qmgroup.parent.attrs['nlev']
+					qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
+						# 32-bit floating number, checksum (fletcher32)
+						dtype='f4', fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
+						# NOTE: Numpy NA (not available) instead of NaN (not a number) might be preferable
+						# but it requires latest NumPy versions.
+						# https://www.numpy.org/NA-overview.html
+						# Numpy NAs (https://docs.scipy.org/doc/numpy-1.14.0/neps/missing-data.html):
+						# np.NA,  dtype='NA[f4]', dtype='NA', np.dtype('NA[f4,NaN]')
+
+				# Save data to the storage
+				# with syncstorage.get_lock():
+				qmdata[qm.smeta.iins][qm.smeta.ishf][qm.smeta.ilev][qm.smeta.irun] = mval
+			except Exception as err:  #pylint: disable=W0703;  # queue.Empty as err:  # TypeError (HDF5), KeyError
+				print('ERROR, saving of {} in {}{}{} failed: {}. {}'.format(mval, qm.smeta.measure,
+					'' if not metric else _PREFMETR + metric, '' if not qm.smeta.ulev else _SUFULEV,
+					err, traceback.format_exc(5)), file=sys.stderr)
+			# alg = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
+			# 	# Allocate chunks of 10 items starting with empty dataset and with possibility
+			# 	# to resize up to 500 items (params combinations)
+			# 	self.apps[app] = appsdir.require_dataset(app, shape=(0,), dtype=h5py.special_dtype(vlen=_h5str)
+			# 		, chunks=(10,), maxshape=(500,))  # , maxshape=(None,), fletcher32=True
+			# self.evals = self.storage.require_group('evals')  # Quality evaluations dir (group)
+
+
 	def __del__(self):
 		"""Destructor"""
-		self._active.value = False
-		try:
-			if self.queue is not None:
-				try:
-					if not self.queue.empty():
-						print('WARNING, terminating the persistency layer with {} queued data entries, call stack: {}'
-							.format(self.queue.qsize(), traceback.format_exc(5)), file=sys.stderr)
-				except OSError:   # The queue has been already closed from another process
-					pass
-				self.queue.close()  # No more data can be put in the queue
-				self.queue.join_thread()
-			if self._persister is not None:
-				self._persister.join(0)  # Note: timeout is 0 to avoid destructor blocking
-		finally:
-			if self.storage is None:
-				return
-			with self.storage:
-				if self.storage.value is not None:
-					self.storage.value.close()
+		# self._active.value = False
+		# try:
+		# 	if self.queue is not None:
+		# 		try:
+		# 			if not self.queue.empty():
+		# 				print('WARNING, terminating the persistency layer with {} queued data entries, call stack: {}'
+		# 					.format(self.queue.qsize(), traceback.format_exc(5)), file=sys.stderr)
+		# 		except OSError:   # The queue has been already closed from another process
+		# 			pass
+		# 		self.queue.close()  # No more data can be put in the queue
+		# 		self.queue.join_thread()
+		# 	if self._persister is not None:
+		# 		self._persister.join(0)  # Note: timeout is 0 to avoid destructor blocking
+		# finally:
+		# 	if self.storage is None:
+		# 		return
+		# 	with self.storage.get_lock():
+		# 		if self.storage.value is not None:
+		# 			self.storage.close()
+
+		if self.storage is not None:
+			self.storage.close()
 
 
 	def __enter__(self):
-		"""Context entrence"""
-		self.queue = Queue(self.QUEUE_SIZEMAX)  # Qulity measures persistence queue, data pool
-		self._active.value = True
-		# __datasaver(qsqueue, active, timeout=None, latency=2.)
-		self._persister = Process(target=self.__datasaver, args=(self.queue, self.storage, self._active, self.timeout))
-		self._persister.start()
+	# 	"""Context entrence"""
+	# 	self.queue = Queue(self.QUEUE_SIZEMAX)  # Qulity measures persistence queue, data pool
+	# 	self._active.value = True
+	# 	# __datasaver(qsqueue, active, timeout=None, latency=2.)
+	# 	self._persister = Process(target=self.__datasaver, args=(self.queue, self.storage, self._active, self.timeout))
+	# 	self._persister.start()
 		return self
 
 
 	def __exit__(self, etype, evalue, tracebk):
 		"""Contex exit
-
+	
 		etype  - exception type
 		evalue  - exception value
 		tracebk  - exception traceback
 		"""
-		self._active.value = False
-		try:
-			self.queue.close()  # No more data can be put in the queue
-			self.queue.join_thread()
-			self._persister.join(None if self.timeout is None else self.timeout - self._tstart)
-		finally:
-			with self.storage:
-				if self.storage.value is not None:
-					self.storage.value.flush()  # Allow to reuse the instance in several context managers
-		# Note: the exception (if any) is propagated if True is not returned here
+	# 	self._active.value = False
+	# 	try:
+	# 		self.queue.close()  # No more data can be put in the queue
+	# 		self.queue.join_thread()
+	# 		self._persister.join(None if self.timeout is None else self.timeout - self._tstart)
+	# 	finally:
+	# 		with self.storage.get_lock():
+	# 			if self.storage.value is not None:
+	# 				self.storage.value.flush()  # Allow to reuse the instance in several context managers
+	# 	# Note: the exception (if any) is propagated if True is not returned here
+
+		if self.storage is not None:
+			self.storage.flush()  # Allow to reuse the instance in several context managers
 
 
 def metainfo(afnmask=None, intrinsic=False, multirun=1):
@@ -586,34 +648,34 @@ def metainfo(afnmask=None, intrinsic=False, multirun=1):
 	return decor
 
 
-def saveQuality(qsqueue, qentry):
-	"""Save quality entry int the Quality Saver queue
-
-	Args:
-		qsqueue: Queue  - quality saver queue
-		qentry: QEntry  - quality entry to be saved
-	"""
-	# Note: multiprocessing Queue is not a Python class, it is a function creating a proxy object
-	assert isinstance(qentry, QEntry), (
-		'Unexpected type of the arguments, qsqueue: {}, qentry: {}'.format(type(qentry).__name__))
-	try:
-		# Note: evaluators should not be delayed in the main thread
-		# Anyway qsqueue is buffered and in theory serialization 
-		qsqueue.put_nowait(qentry)
-	except queue.Full as err:
-		print('WARNING, the quality entry ({}) saving is cancelled because of the busy serialization queue: {}'
-			.format(str(qentry), err, file=sys.stderr))
+# def saveQuality(qsqueue, qentry):
+# 	"""Save quality entry int the Quality Saver queue
+#
+# 	Args:
+# 		qsqueue: Queue  - quality saver queue
+# 		qentry: QEntry  - quality entry to be saved
+# 	"""
+# 	# Note: multiprocessing Queue is not a Python class, it is a function creating a proxy object
+# 	assert isinstance(qentry, QEntry), ('Unexpected type of the arguments, qsqueue: {}, qentry: {}'
+# 		.format(type(qsqueue).__name__, type(qentry).__name__))
+# 	try:
+# 		# Note: evaluators should not be delayed in the main thread
+# 		# Anyway qsqueue is buffered and in theory serialization 
+# 		qsqueue.put_nowait(qentry)
+# 	except queue.Full as err:
+# 		print('WARNING, the quality entry ({}) saving is cancelled because of the busy serialization queue: {}'
+# 			.format(str(qentry), err, file=sys.stderr))
 
 
 # Note: default AffinityMask is 1 (logical CPUs, i.e. hardware threads)
-def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=False
+def execXmeasures(execpool, save, smeta, qparams, cfpath, inpfpath, asym=False
 , timeout=0, seed=None, task=None, workdir=UTILDIR, revalue=True):
 	"""Quality measure executor
 
 	xmeasures  - various extrinsic quality measures
 
 	execpool: ExecPool  - execution pool
-	qualsaver: QualitySaver  - quality results saver (persister)
+	save: QualitySaver or callable proxy to its persistance routine  - quality results saving function or functor
 	smeta: SMeta - serialization meta data
 	qparams: iterable(str)  - quality measures parameters (arguments excluding the clustering and network files)
 	cfpath: str  - file path of the clustering to be evaluated
@@ -637,12 +699,12 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 		# where metrics are provided by the quality measure app by it's qparams
 		staticTrace('execXmeasures', 'Omission of the existent results is not supported yet')
 	# qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
-	assert execpool and isinstance(qualsaver, QualitySaver) and isinstance(smeta, SMeta
+	assert execpool and callable(save) and isinstance(smeta, SMeta
 		) and isinstance(cfpath, str) and isinstance(inpfpath, str) and (seed is None
 		or isinstance(seed, int)) and (task is None or isinstance(task, Task)), (
-		'Invalid arguments, execpool type: {}, qualsaver type: {}, smeta type: {}, cfpath type: {},'
+		'Invalid arguments, execpool type: {}, save() type: {}, smeta type: {}, cfpath type: {},'
 		' inpfpath type: {}, timeout: {}, seed: {}, task type: {}'.format(type(execpool).__name__,
-		type(qualsaver).__name__, type(smeta).__name__, type(cfpath).__name__, type(inpfpath).__name__,
+		type(save).__name__, type(smeta).__name__, type(cfpath).__name__, type(inpfpath).__name__,
 		timeout, seed, type(task).__name__))
 
 	def saveEvals(job):
@@ -651,7 +713,7 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 			# Note: any notice is redundant here since everything is automatically logged
 			# to the Job log (at least the timestamp if the log body itself is empty)
 			return
-		qsqueue = job.params['qsqueue']
+		save = job.params['save']
 		smeta = job.params['smeta']
 		# xmeasures output is performed either in the last string with metrics separated with ':'
 		# from their values and {',', ';'} from each other, where Precision and Recall of F1_labels
@@ -672,7 +734,8 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 			try:
 				# qsqueue.put(QEntry(smeta, {metric: float(mval)}))
 				# # , block=True, timeout=None if not timeout else max(0, timeout - (time.perf_counter() - job.tstart)))
-				saveQuality(qsqueue, QEntry(smeta, {metric: float(mval)}))
+				# saveQuality(qsqueue, QEntry(smeta, {metric: float(mval)}))
+				save(QEntry(smeta, {metric: float(mval)}))
 			except ValueError as err:
 				print('ERROR, metric "{}" serialization discarded of the job "{}" because of the invalid value format: {}. {}'
 					.format(metric, job.name, mval, err), file=sys.stderr)
@@ -690,7 +753,8 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 				print('ERROR, metric "{}" serialization discarded of the job "{}" because of the invalid value format: {}. {}'
 					.format(metric, job.name, mval, err), file=sys.stderr)
 		if data:
-			saveQuality(qsqueue, QEntry(smeta, data))
+			# saveQuality(qsqueue, QEntry(smeta, data))
+			save(QEntry(smeta, data))
 
 	# The task argument name already includes: QMeasure / BaseNet#PathId / Alg,
 	# so here smeta parts and qparams should form the job name for the full identification of the executing job
@@ -728,7 +792,7 @@ def execXmeasures(execpool, qualsaver, smeta, qparams, cfpath, inpfpath, asym=Fa
 	args += (relpath(cfpath), relpath(inpfpath))
 	# print('> Starting Xmeasures with the args: ', args)
 	execpool.execute(Job(name=taskname, workdir=workdir, args=args, timeout=timeout
-		, ondone=saveEvals, params={'qsqueue': qualsaver.queue, 'smeta': smeta}
+		, ondone=saveEvals, params={'save': save, 'smeta': smeta}
 		# Note: poutlog indicates the output log file that should be formed from the PIPE output
 		, task=task, category=measurep, size=clsize, stdout=PIPE, stderr=errfile, poutlog=logfile))
 	return 1

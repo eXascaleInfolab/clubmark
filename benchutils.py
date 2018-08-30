@@ -623,7 +623,6 @@ class SyncValue(object):
 		# Private attributes
 		object.__setattr__(self, '_lock', RLock())  # Use reentrant lock (can be acquired multiple times by the same thread)
 
-
 	def __setattr__(self, name, val):
 		if name != 'value':
 			raise AttributeError('Attribute "{}" is not accessible'.format(name))
@@ -631,32 +630,27 @@ class SyncValue(object):
 		# with object.__getattribute__(self, '_lock'):
 		# 	object.__setattr__(self, name, val)
 
-
 	def __getattribute__(self, name):
-		if name not in ('value', 'get_lock'):
+		if name not in ('value', 'get_lock', 'get_obj'):
 			raise AttributeError('Attribute "{}" is not accessible'.format(name))
 		with object.__getattribute__(self, '_lock'):
 			return object.__getattribute__(self, name)
-
 
 	def __enter__(self):
 		if not object.__getattribute__(self, '_lock').acquire():
 			raise ValueError('Lock timeout is exceeded')
 		return self
 
-
 	def __exit__(self, exception_type, exception_val, trace):
 		object.__getattribute__(self, '_lock').release()
-
 
 	def get_lock(self):
 		"""Get synchronization lock"""
 		return object.__getattribute__(self, '_lock')
 
-
-	#def get_obj(self):
-	#	self._synced = True
-	#	return self._lock
+	def get_obj(self):
+		"""Get the wrapped object"""
+		return object.__getattribute__(self, 'value')
 
 
 def syncedTime(value=None, lock=True):

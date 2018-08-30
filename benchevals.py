@@ -59,7 +59,6 @@ try:
 except ImportError:  # Queue in Python2
 	import Queue as queue  # For exceptions handling: queue.Full, etc.
 
-
 import h5py  # HDF5 storage
 import numpy as np  # Required for the HDF5 operations
 
@@ -740,7 +739,7 @@ def execXmeasures(execpool, save, smeta, qparams, cfpath, inpfpath, asym=False
 		#
 		# Define the number of strings in the output counting the number of words in the last string
 		# Identify index of the last non-empty line
-		qmres = job.pipedout.rstrip().split('\n')[-2:]  # Fetch last 2 non-empty lines as a list(str)
+		qmres = job.pipedout.rstrip().splitlines()[-2:]  # Fetch last 2 non-empty lines as a list(str)
 		# print('Value line: {}, len: {}, sym1: {}'.format(qmres[-1], len(qmres[-1]), ord(qmres[-1][0])))
 		if len(qmres[-1].split(None, 1)) == 1:
 			# Metric name is None (the same as binary name) if not specified explicitly
@@ -761,7 +760,13 @@ def execXmeasures(execpool, save, smeta, qparams, cfpath, inpfpath, asym=False
 			return
 		# Parse multiple names of the metrics and their values from the last string: <metric>: <value>{,;} ...
 		# Note: index -1 corresponds to either 0 or 1
-		metrics = job.qmres[-1].split(',;(')  # Note: F1_labels: <val> (Precision: <val>, ...)
+		metrics = [qmres[-1]]
+		# Example of the parsing line: "F1_labels: <val> (Precision: <val>, ...)"
+		for sep in ',;(':
+			smet = []
+			for m in metrics:
+				smet.extend(m.split(sep))
+			metrics = smet
 		data = {}  # Serializing data
 		for mt in metrics:
 			name, val = mt.split(':', 1)

@@ -1518,7 +1518,8 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 		# Compute quality measures grouping them into batches with the same affinity
 		# starting with the measures having the affinity step = 1
 		# Sort qmeasures with their executables having affinity step = 1 in the end for the pop()
-		qmeas = sorted(zip(qmeasures, exeqms, [QMSRAFN.get(eq) for eq in exeqms]), key=lambda qmea: qmea[2], reverse=True)
+		qmeas = sorted(zip(qmeasures, exeqms, [QMSRAFN.get(eq) for eq in exeqms]),
+			key=lambda qmea: 1 if qmea[2] is None else qmea[2].afnstep, reverse=True)
 		cqmes = []  # Currently processing qmes having the same affinity mask
 		# tasks = []  # All tasks
 		while qmeas:

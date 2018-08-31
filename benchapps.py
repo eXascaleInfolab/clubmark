@@ -729,7 +729,9 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout=0, seed=None, task=None
 	# def relpath(path, basedir=workdir):
 	# 	"""Relative path to the specified basedir"""
 	# 	return os.path.relpath(path, basedir)
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
+
+	# Note: without './' relpath args do not work properly for the binaries located in the current dir
+	relpath = lambda path: './' + os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
@@ -793,7 +795,7 @@ def execScp(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, path
 			avgnls = size / float(netinfo.ndsnum)  # Average number of arcs per node
 			# size *= avgnls  # To partially consider complexity increase with the density
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	relpath = lambda path: './' + os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
@@ -895,7 +897,7 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout=0, seed=None, task=No
 	# print('> Starting Randcommuns; odir: {}, asym: {}, netfile: {}, gtfile (exists: {}): {}'
 	# 	.format(odir, asym, netfile, os.path.exists(gtfile), gtfile))
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	relpath = lambda path: './' + os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
@@ -1025,7 +1027,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout=0, seed=None, task
 	errfile = taskpath + EXTERR  # Errors log + lib tracing including modularity value and clustering summary
 	logfile = taskpath + EXTLOG   # Tracing to stdout, contains timings
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	relpath = lambda path: './' + os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
@@ -1222,7 +1224,7 @@ def execGanxis(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, p
 	errfile = taskpath + EXTERR
 	logfile = taskpath + EXTLOG
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	relpath = lambda path: './' + os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
@@ -1278,7 +1280,7 @@ def execOslom2(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, p
 	errfile = taskpath + EXTERR
 	logfile = taskpath + EXTLOG
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	relpath = lambda path: './' + os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
@@ -1350,7 +1352,7 @@ def execPscan(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pa
 	errfile = taskpath + EXTERR
 	# logfile = taskpath + EXTLOG
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	relpath = lambda path: './' + os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
@@ -1424,7 +1426,7 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout=0, seed=None, task=N
 	errfile = taskpath + EXTERR
 	logfile = taskpath + EXTLOG
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	relpath = lambda path: './' + os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
@@ -1481,7 +1483,7 @@ def execScd(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, path
 	errfile = taskpath + EXTERR
 	# logfile = taskpath + EXTLOG
 
-	relpath = lambda path: os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	relpath = lambda path: './' + os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))

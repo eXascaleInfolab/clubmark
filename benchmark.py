@@ -226,6 +226,54 @@ class Params(object):
 		self.evaltimeout = _EVALTIMEOUT
 
 
+def unquote(text):
+	"""Unqoute the text from ' and "
+
+	text: str  - text to be unquoted
+
+	return  text: str  - unquoted text
+
+	>>> unquote('dfhreh')
+	'dfhreh'
+	>>> unquote('"dfhreh"')
+	'dfhreh'
+	>>> unquote('"df \\'rtj\\'"') == "df 'rtj'"
+	True
+	>>> unquote('"df" x "a"')
+	'"df" x "a"'
+	>>> unquote("'df' 'rtj'") == "'df' 'rtj'"
+	True
+	>>> unquote('"dfhreh"\\'') == '"dfhreh"\\''
+	True
+	>>> unquote('"rtj\\'a "dfh" qw\\'sd"') ==  'rtj\\'a "dfh" qw\\'sd'
+	True
+	>>> unquote('"\\'dfhreh\\'"')
+	'dfhreh'
+	"""
+	# Ensure that the text is quoted
+	quotes = '"\''  # Kinds of the resolving quotes
+	tlen = 0 if not text else len(text)  # Text length
+	if tlen <= 1 or text[0] not in quotes or text[-1] != text[0]:
+		return text
+	q = []  # Current quotation with its position
+	qnum = 0  # The number of removing quotations
+	for i in range(tlen):
+		c = text[i]  # Current character (symbol)
+		if c not in quotes:
+			continue
+		# Count opening quotation
+		if not q or q[-1][0] != c:
+			q.append((c, i))
+			continue
+		# Closing quotation compensates the last opening one
+		if len(q) == tlen - i and tlen - i - 1 == q[-1][1]:
+			qnum += 1
+		else:
+			qnum = 0
+		q.pop()
+	return text[qnum:tlen-qnum]  # Unquotted text
+
+
 # Input parameters processing --------------------------------------------------
 def parseParams(args):
 	"""Parse user-specified parameters
@@ -329,7 +377,7 @@ def parseParams(args):
 					if not val[1]:  # arg ended with '=' symbol
 						raise ValueError('Unexpected argument: ' + arg)
 					opts.syntpo.path = val[1]
-					opts.syntpo.path = opts.syntpo.path.strip('"\'')
+					opts.syntpo.path = unquote(opts.syntpo.path)
 					if not opts.syntpo.path.endswith('/'):
 						opts.syntpo.path += '/'
 		elif arg[1] == 'i':
@@ -340,7 +388,7 @@ def parseParams(args):
 			# flat  - Use flat derivatives or generate the dedicated dir for the derivatives of this network(s)
 			# asym  - asymmetric (directed): None - not specified (symmetric is assumed), False - symmetric, True - asymmetric
 			# shfnum  - the number of shuffles
-			popt = PathOpts(arg[pos+1:].strip('"\''), flat=False, asym=False, shfnum=0)  # Remove quotes if exist
+			popt = PathOpts(unquote(arg[pos+1:]), flat=False, asym=False, shfnum=0)  # Remove quotes if exist
 			for i in range(2, pos):
 				if arg[i] == 'f':
 					popt.flat = True
@@ -371,7 +419,7 @@ def parseParams(args):
 			inverse = arg[3] == '-'  # Consider inversing (run all except)
 			if inverse and len(arg) <= 4:
 				raise ValueError('Unexpected argument: ' + arg)
-			opts.algorithms = arg[3 + inverse:].strip('"').strip("'").split()  # Note: argparse automatically performs this escaping
+			opts.algorithms = unquote(arg[3 + inverse:]).split()  # Note: argparse automatically performs this escaping
 			# Exclude algorithms if required
 			if opts.algorithms and inverse:
 				algs = fetchAppnames(benchapps)
@@ -394,11 +442,11 @@ def parseParams(args):
 			if opts.qmeasures is None:
 				opts.qmeasures = []
 			# Note: each argument is stored as an array item, which is either a parameter or its value
-			opts.qmeasures.append(arg[3:].strip('"').strip("'").split())
+			opts.qmeasures.append(unquote(arg[3:]).split())
 		elif arg[1] == 's':
 			if len(arg) <= 3 or arg[2] != '=':
 				raise ValueError('Unexpected argument: ' + arg)
-			opts.aggrespaths.append(arg[3:].strip('"\''))  # Remove quotes if exist
+			opts.aggrespaths.append(unquote(arg[3:]))
 		elif arg[1] == 't':
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'smh=' or len(arg) == pos + 1:
@@ -1994,23 +2042,34 @@ if __name__ == '__main__':
 				, algtimeout=secDhms(_TIMEOUT), seedfile=_SEEDFILE, port=_PORT
 				, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
 	else:
-		# Fill signals mapping {value: name}
-		_signals = {sv: sn for sn, sv in viewitems(signal.__dict__)
-			if sn.startswith('SIG') and not sn.startswith('SIG_')}
+		if len(sys.argv) == 2 and sys.argv[1] == '--doc-tests':
+			# Doc tests execution
+			import doctest
+			#doctest.testmod()  # Detailed tests output
+			flags = doctest.REPORT_NDIFF | doctest.REPORT_ONLY_FIRST_FAILURE
+			failed, total = doctest.testmod(optionflags=flags)
+			if failed:
+				print("Doctest FAILED: {} failures out of {} tests".format(failed, total))
+			else:
+				print('Doctest PASSED')
+		else:
+			# Fill signals mapping {value: name}
+			_signals = {sv: sn for sn, sv in viewitems(signal.__dict__)
+				if sn.startswith('SIG') and not sn.startswith('SIG_')}
 
-		# Set handlers of external signals
-		signal.signal(signal.SIGTERM, terminationHandler)
-		signal.signal(signal.SIGHUP, terminationHandler)
-		signal.signal(signal.SIGINT, terminationHandler)
-		signal.signal(signal.SIGQUIT, terminationHandler)
-		signal.signal(signal.SIGABRT, terminationHandler)
+			# Set handlers of external signals
+			signal.signal(signal.SIGTERM, terminationHandler)
+			signal.signal(signal.SIGHUP, terminationHandler)
+			signal.signal(signal.SIGINT, terminationHandler)
+			signal.signal(signal.SIGQUIT, terminationHandler)
+			signal.signal(signal.SIGABRT, terminationHandler)
 
-		# Ignore terminated children procs to avoid zombies
-		# ATTENTION: signal.SIG_IGN affects the return code of the former zombie resetting it to 0,
-		# where signal.SIG_DFL works fine and without any the side effects.
-		signal.signal(signal.SIGCHLD, signal.SIG_DFL)
+			# Ignore terminated children procs to avoid zombies
+			# ATTENTION: signal.SIG_IGN affects the return code of the former zombie resetting it to 0,
+			# where signal.SIG_DFL works fine and without any the side effects.
+			signal.signal(signal.SIGCHLD, signal.SIG_DFL)
 
-		# Set termination handler for the internal termination
-		atexit.register(terminationHandler, terminate=False)  # Note: False because it is already terminating
+			# Set termination handler for the internal termination
+			atexit.register(terminationHandler, terminate=False)  # Note: False because it is already terminating
 
-		benchmark(*sys.argv[1:])
+			benchmark(*sys.argv[1:])

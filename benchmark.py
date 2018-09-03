@@ -915,7 +915,7 @@ def basenetTasks(netname, pathidsuf, basenets, rtasks):
 
 	return  nettasks: list(Task) or None  - tasks for the basenet of the specified netname
 	"""
-	if not (rtasks and basenets):
+	if not rtasks and not basenets:
 		return None
 	assert not pathidsuf or pathidsuf.startswith(SEPPATHID), 'Ivalid pathidsuf: ' + pathidsuf
 
@@ -1099,6 +1099,7 @@ def processNetworks(datas, handler, xargs={}, dflextfn=dflnetext, tasks=None, fp
 		pcuropt.path = path
 		if _DEBUG_TRACE:
 			print('  Scheduling apps execution for the path options ({})'.format(str(pcuropt)))
+		#assert tasks, 'Job tasks are expected to be specified'
 		processPath(pcuropt, handler, xargs=xargs, dflextfn=dflextfn, tasks=tasks
 			, netinfs=None if not metainf else netinfs)
 
@@ -1713,6 +1714,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 											# print('>> Formed metadata for {}/{}: {},{},{},{}'.format(
 											# 	os.path.split(net)[1], os.path.split(fcl)[1],
 											# 	smeta.iins, smeta.ishf, smeta.ilev, smeta.irun))
+											#assert task, 'Job tasks is expected to be specified'
 											jobsnum += eq(_execpool, qualsaver, smeta, qm[1:], cfpath=fcl, inpfpath=ifpath,
 												asym=asym, timeout=timeout, seed=seed, task=task, revalue=revalue)
 							except Exception as err:  #pylint: disable=W0703
@@ -1742,6 +1744,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 						'netcount': 0}  # Number of processing network instances (includes multiple shuffles)
 				ctasks = [Task(qme[0][0]) for qme in cqmes]  # Current tasks
 				# tasks.extend(ctasks)
+				assert ctasks, 'Root tasks shoult be formed'
 
 				# Note: subtasks for each base networks are created automatically
 				## TODO: aggregate results for each quality measure with the fixed args on each base network

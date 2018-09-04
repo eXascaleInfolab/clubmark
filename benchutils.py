@@ -27,7 +27,7 @@ _BCKDIR = _PREFINTERNDIR + 'backup/'  # Backup directory
 ORIGDIR = _PREFINTERNDIR + 'orig/'  # Backup directory
 _REFLOAT = re.compile(r'[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')  # Regular expression to parse float
 _REINT = re.compile(r'[-+]?\d+(?=\W)')  # Regular expression to parse int
-SEPPARS = '!'  # Network parameters separator, must be a char
+SEPPARS = '='  # Network parameters separator, must be a char
 SEPINST = '^'  # Network instances separator, must be a char
 SEPSHF = '%'  # Network shuffles separator, must be a char; ~
 SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char

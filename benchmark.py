@@ -1437,12 +1437,13 @@ def clnames(net, odir, alg, pathidsuf=''):
 	ishf = clinstpath.find(SEPSHF)
 	if ishf != -1:
 		clinstpath = clinstpath[:ishf]
-	mrcl = ''.join((cbdir, clinstpath, '/', clname, pathidsuf, EXTCLNODES))
+	clinstpath += pathidsuf  # Note: pathidsuf is applied only to the upper clusters dir to identify the source network
+	mrcl = ''.join((cbdir, clinstpath, '/', clname, EXTCLNODES))
 	# Take base network name (without the shuffle id)
 	if odir:
 		clname = '/'.join((clinstpath, clname))  # Use base name and instance id
 	# Reselting clustering file names
-	return ([clp for clp in glob.iglob(''.join((cbdir, clname, pathidsuf, '/*'))) if os.path.isfile(clp)],
+	return ([clp for clp in glob.iglob(''.join((cbdir, clname, '/*'))) if os.path.isfile(clp)],
 		# Aggregated levels into the single clustering
 		None if not os.path.isfile(mrcl) else mrcl)
 

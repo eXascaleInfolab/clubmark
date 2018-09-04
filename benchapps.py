@@ -849,6 +849,7 @@ def execScp(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, path
 			# so it is better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
 			, task=task, category=algname if avgnls is not None else '_'.join((algname, kstrex))
 			, size=size * (k ** pratio if avgnls is None or k <= avgnls else ((k + avgnls)/2.) ** (1./pratio))
+			#, memlim=64  # Limit max memory consumption to 64 GB
 			, ondone=subuniflevs, params=taskpath # {'taskpath': taskpath} # , 'aparams': kstrex
 			, stdout=logfile, stderr=errfile))
 

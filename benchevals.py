@@ -695,6 +695,12 @@ def qmeasure(qmapp, workdir=UTILDIR):
 		qmsaver: callable(job: Job)  - parcing and saving function of the quality measure,
 			used as a Job.ondone() callback
 		"""
+		qmsname = None  # Name of the wrapping callable object (function or class instance)
+		try:
+			qmsname = qmsaver.__name__
+		except AttributeError:  # The callable is not a function, so it should be a class object
+			qmsname = qmsaver.__class__
+
 		def executor(execpool, save, smeta, qparams, cfpath, inpfpath, asym=False
 		, timeout=0, seed=None, task=None, workdir=workdir, revalue=True):
 			"""Quality measure executor
@@ -722,7 +728,7 @@ def qmeasure(qmapp, workdir=UTILDIR):
 			if not revalue:
 				# TODO: implement early exit on qualsaver.valueExists(smeta, metrics),
 				# where metrics are provided by the quality measure app by it's qparams
-				staticTrace('execXmeasures', 'Omission of the existent results is not supported yet')
+				staticTrace(qmsname, 'Omission of the existent results is not supported yet')
 			# qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
 			assert execpool and callable(save) and isinstance(smeta, SMeta
 				) and isinstance(cfpath, str) and isinstance(inpfpath, str) and (seed is None
@@ -769,12 +775,13 @@ def qmeasure(qmapp, workdir=UTILDIR):
 				args += qparams
 			args += (relpath(cfpath), relpath(inpfpath))
 			# print('> Starting Xmeasures with the args: ', args)
+			print('> Starting {} for: {}, {}'.format(qmsname, args[-2], args[-1]))
 			execpool.execute(Job(name=taskname, workdir=workdir, args=args, timeout=timeout
 				, ondone=qmsaver, params={'save': save, 'smeta': smeta}
 				# Note: poutlog indicates the output log file that should be formed from the PIPE output
 				, task=task, category=measurep, size=clsize, stdout=PIPE, stderr=errfile, poutlog=logfile))
 			return 1
-		executor.__name__ = qmsaver.__name__
+		executor.__name__ = qmsname
 		return executor
 	return wrapper
 

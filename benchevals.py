@@ -722,7 +722,6 @@ def qmeasure(qmapp, workdir=UTILDIR):
 				ATTENTION: Not all quality measure implementations might support early omission
 					of the calculations on revalue=False, in which case a warning should be issued.
 
-
 			return jobsnum: uint  - the number of started jobs
 			"""
 			if not revalue:
@@ -773,9 +772,11 @@ def qmeasure(qmapp, workdir=UTILDIR):
 			args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', basenetp, SEPNAMEPART, cfname)), '-s=/etime_' + measurep, './' + qmapp]
 			if qparams:
 				args += qparams
-			args += (relpath(cfpath), relpath(inpfpath))
+			# Note: use first the ground-truth or network file and then the clustering file to perform sync correctly
+			# for the xmeaseres (gecmi and onmi select the most reasonable direction automatically)
+			args += (relpath(inpfpath), relpath(cfpath))
 			# print('> Starting Xmeasures with the args: ', args)
-			print('> Starting {} for: {}, {}'.format(qmsname, args[-2], args[-1]))
+			# print('> Starting {} for: {}, {}'.format(qmsname, args[-2], args[-1]))
 			execpool.execute(Job(name=taskname, workdir=workdir, args=args, timeout=timeout
 				, ondone=qmsaver, params={'save': save, 'smeta': smeta}
 				# Note: poutlog indicates the output log file that should be formed from the PIPE output
@@ -1007,13 +1008,93 @@ def execOnmi(job):
 	qmsaver(job)
 
 
-@qmeasure('daoc', workdir=ALGSDIR + 'daoc/')
+# @qmeasure('daoc', workdir=ALGSDIR + 'daoc/')
+# @metainfo(intrinsic=True)  # Note: intrinsic causes interpretation of ifname as inpnet and requires netparams
+# def execImeasures(job):
 @metainfo(intrinsic=True)  # Note: intrinsic causes interpretation of ifname as inpnet and requires netparams
-def execImeasures(job):
-	"""imeasures (proxy for DAOC)  - some intrinsic quality measures"""
-	# TODO: consider "intrinsic" in the actual executor to interpret the input network correctly and
-	# check output format for the modularity and conductance
-	raise NotImplementedError('Intrinsic measures parsing is not implemented yet')
+def execImeasures(execpool, save, smeta, qparams, cfpath, inpfpath, asym=False
+		, timeout=0, seed=None, task=None, workdir=ALGSDIR + 'daoc/', revalue=True):
+	"""imeasures (proxy for DAOC)  - executor of some intrinsic quality measures
+
+	execpool: ExecPool  - execution pool
+	save: QualitySaver or callable proxy to its persistance routine  - quality results saving function or functor
+	smeta: SMeta - serialization meta data
+	qparams: iterable(str)  - quality measures parameters (arguments excluding the clustering and network files)
+	cfpath: str  - file path of the clustering to be evaluated
+	inpfpath: str  - input dataset file path (ground-truth / input network for the ex/in-trinsic quality measure)
+	asym: bool  - whether the input network is asymmetric (directed, specified by arcs)
+	timeout: uint  - execution timeout in seconds, 0 means infinity
+	seed: uint  - seed for the stochastic qmeasures
+	task: Task  - owner (super) task
+	workdir: str  - working directory of the quality measure (qmeasure location)
+	revalue: bool  - whether to revalue the existent results or omit such evaluations
+		calculating and saving only the values which are not present in the dataset.
+		NOTE: The default value is True because of the straight forward out of the box implementation.
+		ATTENTION: Not all quality measure implementations might support early omission
+			of the calculations on revalue=False, in which case a warning should be issued.
+
+	return jobsnum: uint  - the number of started jobs
+	"""
+	if not revalue:
+		# TODO: implement early exit on qualsaver.valueExists(smeta, metrics),
+		# where metrics are provided by the quality measure app by it's qparams
+		staticTrace(qmsname, 'Omission of the existent results is not supported yet')
+	# qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
+	assert execpool and callable(save) and isinstance(smeta, SMeta
+		) and isinstance(cfpath, str) and isinstance(inpfpath, str) and (seed is None
+		or isinstance(seed, int)) and (task is None or isinstance(task, Task)), (
+		'Invalid arguments, execpool type: {}, save() type: {}, smeta type: {}, cfpath type: {},'
+		' inpfpath type: {}, timeout: {}, seed: {}, task type: {}'.format(type(execpool).__name__,
+		type(save).__name__, type(smeta).__name__, type(cfpath).__name__, type(inpfpath).__name__,
+		timeout, seed, type(task).__name__))
+
+	# The task argument name already includes: QMeasure / BaseNet#PathId / Alg,
+	# so here smeta parts and qparams should form the job name for the full identification of the executing job
+	# Note: HDF5 uses Unicode for the file name and ASCII/Unicode for the group names
+	algname, basenetp = smeta.group[1:].split('/')  # Omit the leading '/'; basenetp includes pathid
+	# Note that evaluating file name might significantly differ from the network name, for example `tp<id>` produced by OSLOM
+	cfname = os.path.splitext(os.path.split(cfpath)[1])[0]  # Evaluating file name (without the extension)
+	measurep = SEPPARS.join((smeta.measure, _SEPQARGS.join(qparams)))  # Quality measure suffixed with its parameters
+	taskname = _SEPQMS.join((cfname, measurep))
+
+	# Evaluate relative size of the clusterings
+	# Note: xmeasures takes inpfpath as the ground-truth clustering, so the asym parameter is not actual here
+	clsize = os.path.getsize(cfpath) + os.path.getsize(inpfpath)
+
+	# Define path to the logs relative to the root dir of the benchmark
+	logsdir = ''.join((RESDIR, algname, '/', QMSDIR, basenetp, '/'))
+	# Note: backup is not performed since it should be performed at most once for all logs in the logsdir
+	# (staticExec could be used) and only if the logs are rewriting but they are appended.
+	# The backup is not convenient here for multiple runs on various networks to get aggregated results
+	if not os.path.exists(logsdir):
+		os.makedirs(logsdir)
+	errfile = taskname.join((logsdir, EXTERR))
+	logfile = taskname.join((logsdir, EXTLOG))
+
+	# Note: without './' relpath args do not work properly for the binaries located in the current dir
+	relpath = lambda path: './' + os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	# Evaluate relative paths
+	# xtimebin = './exectime'  # Note: relpath(UTILDIR + 'exectime') -> 'exectime' does not work, it requires leading './'
+	xtimebin = relpath(UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((RESDIR, algname, '/', QMSDIR, measurep, EXTRESCONS)))
+
+	# The task argument name already includes: QMeasure / BaseNet#PathId / Alg
+	# Note: xtimeres does not include the base network name, so it should be included into the listed taskname,
+	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', basenetp, SEPNAMEPART, cfname)), '-s=/etime_' + measurep, './daoc']
+	for qp in qparams:
+		if qp.startswith('-e'):  #  Append filename of the evaluating clsutering
+			qp = '='.join((qp, relpath(cfpath)))
+		args.append(qp)
+	# Note: use first the ground-truth or network file and then the clustering file to perform sync correctly
+	# for the xmeaseres (gecmi and onmi select the most reasonable direction automatically)
+	args.append(relpath(inpfpath))
+	# print('> Starting Xmeasures with the args: ', args)
+	# print('> Starting {} for: {}, {}'.format(qmsname, args[-2], args[-1]))
+	execpool.execute(Job(name=taskname, workdir=workdir, args=args, timeout=timeout
+		, ondone=qmsaver, params={'save': save, 'smeta': smeta}
+		# Note: poutlog indicates the output log file that should be formed from the PIPE output
+		, task=task, category=measurep, size=clsize, stdout=PIPE, stderr=errfile, poutlog=logfile))
+	return 1
 
 
 class ShufflesAgg(object):

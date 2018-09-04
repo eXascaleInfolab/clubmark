@@ -1671,7 +1671,8 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 							gname = delPathSuffix(netname, True) + pathidsuf
 							try:
 								group = group[gname]
-							except KeyError:
+							except KeyError:  # This group is not exist yet
+								# Greate the group and fill its attributes
 								group = group.create_group(gname)
 								# if not netinf.gvld:
 								# nins =

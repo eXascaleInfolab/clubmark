@@ -1714,10 +1714,10 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									for ifc, fcl in enumerate(inpcls):
 										# Consider if the actual number of levels is larger than the declared number,
 										# which should never happen in theory but if it happens than skip such levels
-										if ifc > nicl:
+										if ifc >= nicl:
 											print('WARNING, the actual number of clusering levels of {} on {} is larger'
 												' than the declared one ({} > {}), {} excessive levels are discarded',
-												alg, os.path.split(net)[1], ifc, nicl, ifc - nicl, file=sys.stderr)
+												alg, os.path.split(net)[1], len(inpcls), nicl, len(inpcls) - nicl, file=sys.stderr)
 											break
 										for irun in range(runs):
 											smeta = SMeta(group=group.name, measure=qm[0], ulev=ulev, iins=iinst, ishf=ishuf,

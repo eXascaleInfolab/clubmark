@@ -1038,7 +1038,7 @@ def execImeasures(execpool, save, smeta, qparams, cfpath, inpfpath, asym=False
 	if not revalue:
 		# TODO: implement early exit on qualsaver.valueExists(smeta, metrics),
 		# where metrics are provided by the quality measure app by it's qparams
-		staticTrace(qmsname, 'Omission of the existent results is not supported yet')
+		staticTrace('Imeasures', 'Omission of the existent results is not supported yet')
 	# qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
 	assert execpool and callable(save) and isinstance(smeta, SMeta
 		) and isinstance(cfpath, str) and isinstance(inpfpath, str) and (seed is None
@@ -1089,7 +1089,7 @@ def execImeasures(execpool, save, smeta, qparams, cfpath, inpfpath, asym=False
 	# for the xmeaseres (gecmi and onmi select the most reasonable direction automatically)
 	args.append(relpath(inpfpath))
 	# print('> Starting Xmeasures with the args: ', args)
-	# print('> Starting {} for: {}, {}'.format(qmsname, args[-2], args[-1]))
+	# print('> Starting {} for: {}, {}'.format('Imeasures', args[-2], args[-1]))
 	execpool.execute(Job(name=taskname, workdir=workdir, args=args, timeout=timeout
 		, ondone=qmsaver, params={'save': save, 'smeta': smeta}
 		# Note: poutlog indicates the output log file that should be formed from the PIPE output

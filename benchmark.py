@@ -1700,7 +1700,9 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								if len(cfnames) >= 2:
 									cfnames.sort()
 								runs = QMSRUNS.get(qm[0], 1)  # The number of quality measure runs (subsequent evaluations)
-								for inpcls, ulev in ((cfnames, False), ([] if uclfname is None else [uclfname], True)):
+								for inpcls, ulev in ((cfnames, False), (None if uclfname is None else [uclfname], True)):
+									if not inpcls:
+										continue
 									# ATTENTION: Each network instance might have distinct number of levels,
 									# so the index level adjustment is required:
 									# ilev == reduceLevels(range(nlev), cnlev, True)[ilev]
@@ -1716,8 +1718,8 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 										# which should never happen in theory but if it happens than skip such levels
 										if ifc >= nicl:
 											print('WARNING, the actual number of clusering levels of {} on {} is larger'
-												' than the declared one ({} > {}), {} excessive levels are discarded',
-												alg, os.path.split(net)[1], len(inpcls), nicl, len(inpcls) - nicl, file=sys.stderr)
+												' than the declared one ({} > {}), {} excessive levels are discarded'.format(
+												alg, os.path.split(net)[1], len(inpcls), nicl, len(inpcls) - nicl), file=sys.stderr)
 											break
 										for irun in range(runs):
 											smeta = SMeta(group=group.name, measure=qm[0], ulev=ulev, iins=iinst, ishf=ishuf,

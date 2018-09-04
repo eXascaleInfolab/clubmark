@@ -1442,7 +1442,11 @@ def clnames(net, odir, alg, pathidsuf=''):
 	# Take base network name (without the shuffle id)
 	if odir:
 		clname = '/'.join((clinstpath, clname))  # Use base name and instance id
-	# Reselting clustering file names
+	# Resulting clustering file names
+	# print('> clnames() for the path wildcard: ', ''.join((cbdir, clname, '/*')))
+	# for clp in glob.iglob(''.join((cbdir, clname, '/*'))):
+	# 	if not os.path.isfile(clp):
+	# 		print('> ERROR, target item is not an existent file: ', clp)
 	return ([clp for clp in glob.iglob(''.join((cbdir, clname, '/*'))) if os.path.isfile(clp)],
 		# Aggregated levels into the single clustering
 		None if not os.path.isfile(mrcl) else mrcl)
@@ -1704,7 +1708,17 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									# where nclevs is the number of levels in the current network instance
 									#cnlev = float(len(inpcls))  # Number of (actually produced) levels for the current network instance
 									iclevs = reduceLevels(range(nlev), len(inpcls), True)  # List of the adjusted indicies
+									# assert len(iclevs) == len(inpcls), 'Unexpected size of iclevs: {} != {}'.format(
+									# 	len(iclevs), len(inpcls))
+									nicl = len(iclevs)  # The number of reduced levels
 									for ifc, fcl in enumerate(inpcls):
+										# Consider if the actual number of levels is larger than the declared number,
+										# which should never happen in theory but if it happens than skip such levels
+										if ifc > nicl:
+											print('WARNING, the actual number of clusering levels of {} on {} is larger'
+												' than the declared one ({} > {}), {} excessive levels are discarded',
+												alg, os.path.split(net)[1], ifc, nicl, ifc - nicl, file=sys.stderr)
+											break
 										for irun in range(runs):
 											smeta = SMeta(group=group.name, measure=qm[0], ulev=ulev, iins=iinst, ishf=ishuf,
 												# Note:
@@ -1720,8 +1734,10 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 												asym=asym, timeout=timeout, seed=seed, task=task, revalue=revalue)
 							except Exception as err:  #pylint: disable=W0703
 								errexectime = time.perf_counter() - exectime
-								print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
-									.format(eq.__name__, err, errexectime, *secondsToHms(errexectime)), file=sys.stderr)
+								print('ERROR, "{}" is interrupted by the exception processing {}/{}:'
+								' {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
+									.format(eq.__name__, task.name, net, err, errexectime
+									, *secondsToHms(errexectime)), file=sys.stderr)
 								# traceback.print_stack(limit=5, file=sys.stderr)
 								traceback.print_exc(5)
 					return jobsnum

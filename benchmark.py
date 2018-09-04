@@ -1668,13 +1668,17 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 						# Validate network HDF5 group attributes (instances and shuffles) if required
 						try:
 							# Form network name with path id
-							group = group.require_group(delPathSuffix(netname, True) + pathidsuf)
-							if not netinf.gvld:
+							gname = delPathSuffix(netname, True) + pathidsuf
+							try:
+								group = group[gname]
+							except KeyError:
+								group = group.create_group(gname)
+								# if not netinf.gvld:
 								# nins =
 								validateDim(netinf.nins, group, SATTRNINS)
 								# nshf =
 								validateDim(netinf.nshf, group, SATTRNSHF)
-								netinf.gvld = True
+								# netinf.gvld = True
 						except Exception as err:  #pylint: disable=W0703
 							print('ERROR, quality evaluation of "{}" is interrupted by the exception: {}, call stack:'
 								.format(netname + pathidsuf, err), file=sys.stderr)

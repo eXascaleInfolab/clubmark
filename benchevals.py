@@ -200,21 +200,21 @@ _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 class NetInfo(object):
 	"""Network Metainformation"""
-	__slots__ = ('nins', 'nshf', 'gvld')
+	__slots__ = ('nins', 'nshf')  # , 'gvld'
 
 	def __init__(self, nins=1, nshf=1):
 		"""Network metainformation
 
 		nins: uint8 >= 1  - the number of instances including the origin
 		nshf: uint8 >= 1  - the number of shuffles including the origin
-		gvld: bool or None  - whether the respective HDF5 group entry attributes have been validated for this netinfo
-			(exception is raised on the failed validation)
 		"""
+		# gvld: bool or None  - whether the respective HDF5 group entry attributes have been validated for this netinfo
+		# 	(exception is raised on the failed validation)
 		assert nins >= 1 and isinstance(nins, int) and nshf >= 1 and isinstance(nshf, int
 			), 'Invalid arguments  nins: {}, nshf: {}'.format(nins, nshf)
 		self.nins = nins
 		self.nshf = nshf
-		self.gvld = False
+		# self.gvld = False
 
 	def __str__(self):
 		"""String conversion"""

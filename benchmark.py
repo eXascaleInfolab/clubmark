@@ -78,7 +78,7 @@ from benchutils import viewitems, timeSeed, dirempty, tobackup, dhmsSec, syncedT
 	SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER, ALEVSMAX, ALGLEVS
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
-from benchevals import aggEvaluations, RESDIR, CLSDIR, QMSDIR, EXTRESCONS, QMSRAFN, QMSINTRIN, QMSRUNS, \
+from benchevals import aggEvals, RESDIR, CLSDIR, QMSDIR, EXTRESCONS, QMSRAFN, QMSINTRIN, QMSRUNS, \
 	SATTRNINS, SATTRNSHF, SATTRNLEV, QualitySaver, NetInfo, SMeta
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
@@ -102,6 +102,8 @@ _VMLIMIT = 4096  # Set 4 TB or RAM to be automatically limited to the physical m
 _PORT = 8080  # Default port for the WebUI, Note: port 80 accessible only from the root in NIX
 _RUNTIMEOUT = 10*24*60*60  # Clustering execution timeout, 10 days
 _EVALTIMEOUT = 5*24*60*60  # Results evaluation timeout, 5 days
+_QSEPMSR='/'  # Quality aggregation option separator for measures section
+_QSEPNET=':'  # Quality aggregation option separator for networks section
 
 #_TRACE = 1  # Tracing level: 0 - none, 1 - lightweight, 2 - debug, 3 - detailed
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
@@ -171,6 +173,63 @@ class SyntPathOpts(PathOpts):
 			, 'overwrite: ' + str(self.overwrite)))
 
 
+class QAggOpt(object):
+	"""Quality aggregation option"""
+	__slots__ = ('alg', 'msrs', 'nets')
+
+	def __init__(self, alg, msrs=None, nets=None):
+		"""Sets values for the input parameters
+
+		alg: str  - algorithm name
+		msrs: iterable(str) or None  - quality measure names
+		nets: iterable(str) or None  - network names
+		"""
+		assert isinstance(alg, str) and isinstance(msrs, (tuple, list)) and isinstance(nets, (tuple, list)), (
+			'Ivalid type of the argument, alg: {}, msrs: {}, nets: {}'.format(
+			type(alg).__name__, type(msrs).__name__, type(nets).__name__))
+		self.alg = alg
+		self.msrs = msrs
+		self.nets = nets
+
+	@staticmethod
+	def parse(text):
+		"""Parse text to QAggOpt
+
+		text: str  - text representation of QAggOpt in the format:  <algname>[/<metric1>,<metric2>...][:<net1>,<net2>,...]
+
+		return  QAggOpt  - parsed QAggOpt
+		"""
+		if not text:
+			raise ValueError('A valid text is expected')
+		msrs = None
+		nets = None
+		parts = text.split(_QSEPMSR)
+		if len(parts) >= 2:
+			# Fetch pure alg
+			alg = parts[0].strip()
+			# Fetch msrs and nets
+			parts = parts[1].split(_QSEPNET)
+			msrs = parts[0].strip().split(',')
+			if len(parts) >= 2:
+				nets = parts[1].strip().split(',')
+		else:
+			# Fetch pure alg and nets
+			parts = parts[0].split(_QSEPNET)
+			alg = parts[0].strip()
+			if len(parts) >= 2:
+				nets = parts[1].strip().split(',')
+		return QAggOpt(alg, msrs, nets)
+
+	def __str__(self):
+		"""String conversion"""
+		res = self.alg
+		if self.msrs:
+			res = _QSEPMSR.join((res, ','.join(self.msrs)))
+		if self.nets:
+			res = _QSEPNET.join((res, ','.join(self.nets)))
+		return res
+
+
 class Params(object):
 	"""Input parameters"""
 	def __init__(self):
@@ -200,9 +259,9 @@ class Params(object):
 				0b11 - force conversion (overwrite all)
 			0b100 - resolve duplicated links on conversion
 			TODO: replace with IntEnum like in mpewui
-		aggrespaths: iterable(str)  -  paths for the evaluated results aggregation
-			(to be done for already existent evaluations)
-			TODO: clarify and check availability in the latest version
+		qaggopts: list(QAggOpt) or None  - aggregate evaluations of the algorithms for the
+			specified targets or for all algorithms on all networks if only the list is empty,
+			the aggregation is omitted if the value is None
 		host: str  - WebUI host, None to disable WebUI
 		port: int  - WebUI port
 		runtimeout: uint  - clustering algorithms execution timeout
@@ -218,7 +277,8 @@ class Params(object):
 		self.algorithms = []
 		self.seedfile = _SEEDFILE  # Seed value for the synthetic networks generation and stochastic algorithms, integer
 		self.convnets = 0
-		self.aggrespaths = []  # Paths for the evaluated results aggregation (to be done for already existent evaluations)
+		self.qaggopts = None  # None means omit the aggregation
+		# self.aggrespaths = []  # Paths for the evaluated results aggregation (to be done for already existent evaluations)
 		# WebUI host and port
 		self.host = None
 		self.port = _PORT
@@ -444,9 +504,14 @@ def parseParams(args):
 			# Note: each argument is stored as an array item, which is either a parameter or its value
 			opts.qmeasures.append(unquote(arg[3:]).split())
 		elif arg[1] == 's':
+			if opts.qaggopts is None:  # Aggregate all algs on all networks
+				opts.qaggopts = []  # algname: network_names
+			if len(arg) == 2:
+				continue
 			if len(arg) <= 3 or arg[2] != '=':
 				raise ValueError('Unexpected argument: ' + arg)
-			opts.aggrespaths.append(unquote(arg[3:]))
+			opts.qaggopts.append(QAggOpt.parse(arg[3:]))
+			# opts.aggrespaths.append(unquote(arg[3:]))
 		elif arg[1] == 't':
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'smh=' or len(arg) == pos + 1:
@@ -1838,12 +1903,13 @@ def benchmark(*args):
 	opts = parseParams(args)
 	print('The benchmark is started, parsed params:\n\tsyntpo: "{}"\n\tconvnets: 0b{:b}'
 		'\n\trunalgs: {}\n\talgorithms: {}\n\tquality measures: {}\n\tqupdate: {}\n\tqrevalue: {}\n\tdatas: {}'
-		'\n\taggrespaths: {}\n\twebui: {}\n\ttimeout: {} h {} m {:.4f} sec'
+		'\n\tqaggopts: {}\n\twebui: {}\n\ttimeout: {} h {} m {:.4f} sec'
 	 .format(opts.syntpo, opts.convnets, opts.runalgs
 		, ', '.join(opts.algorithms) if opts.algorithms else ''
 		, None if opts.qmeasures is None else ' '.join([qm[0] for qm in opts.qmeasures]), opts.qupdate, opts.qrevalue
-		, '; '.join([str(pathopts) for pathopts in opts.datas])  # Note: ';' because internal separator is ','
-		, ', '.join(opts.aggrespaths) if opts.aggrespaths else ''
+		, '; '.join([str(pathopts) for pathopts in opts.datas])  # Note: ';' because the internal separator is ','
+		, '-' if opts.qaggopts is None else '; '.join(opts.qaggopts)  # Note: ';' because the internal separator is ','
+		# , ', '.join(opts.aggrespaths) if opts.aggrespaths else ''
 		, None if opts.host is None else '{}:{}'.format(opts.host, opts.port)
 		, *secondsToHms(opts.timeout)))
 
@@ -1918,8 +1984,9 @@ def benchmark(*args):
 			, timeout=opts.timeout, evaltimeout=opts.evaltimeout, update=opts.qupdate, revalue=opts.qrevalue)
 			# , netnames=netnames
 
-	if opts.aggrespaths:
-		aggEvaluations(opts.aggrespaths)
+	if opts.qaggopts is not None:
+		aggEvals(opts.qaggopts, seed=seed, update=opts.qupdate, revalue=opts.qrevalue)
+		# aggEvaluations(opts.aggrespaths)
 
 	exectime = time.perf_counter() - exectime
 	print('The benchmark completed in {:.4f} sec ({} h {} m {:.4f} s)'
@@ -2007,8 +2074,9 @@ if __name__ == '__main__':
 			#'    f  - force execution even when the results already exists (existent datasets are moved to the backup)',
 			'  --runapps, -r  - run specified apps on the specified datasets, default: all',
 			'  --quality, -q[="qmapp [arg1 arg2 ...]"  - evaluate quality (accuracy) with the specified quality measure'
-			' application (<qmapp>) for the algorithms (specified with "-a") on the datasets (specified with "-i")'
-			' and form the aggregated final results. Default: MF1p, GNMI_max, OIx extrinsic and Q, f intrinsic measures'
+			' application (<qmapp>) for the algorithms (specified with "-a") on the datasets (specified with "-i").'
+			#' and form the aggregated final results.'
+			' Default: MF1p, GNMI_max, OIx extrinsic and Q, f intrinsic measures'
 			' on all datasets. Available qmapps ({qmappsnum}): {qmapps}.',
 			'NOTE:',
 			'  - Multiple quality measure applications can be specified with multiple -q options.',
@@ -2055,9 +2123,13 @@ if __name__ == '__main__':
 			'  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.), deprecated',
 			'    f  - force the conversion even when the data is already exist',
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
-			'  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
-			', which is useful to include external manual evaluations into the final summarized results',
-			'ATTENTION: <resval_path> should include the algorithm name and target measure.',
+			'  --summary, -s[=<alg>[{qsepmsr}<qmeassre1,qmeassre2,...>][{qsepnet}<net1>,<net2>,...]]  - summarize evaluation results of the specified algorithms on the specified networks'
+			' extending the existent quality measures storage considering the specified update policy. Especially useful to include extended'
+			' evaluations into the final summarized results.',
+			'NOTE: aggregation for multiple algorithms can be specified with multiple -s options.',
+			# '  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
+			# ', which is useful to include external manual evaluations into the final summarized results',
+			# 'ATTENTION: <resval_path> should include the algorithm name and target measure.',
 			'  --webaddr, -w  - run WebUI on the specified <webui_addr> in the format <host>[:<port>], default port={port}.',
 			'  --runtimeout  - global clustering algorithms execution timeout in the'
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {runtimeout}.',
@@ -2066,8 +2138,8 @@ if __name__ == '__main__':
 			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=SEPINST, seppars=SEPPARS, sepshf=SEPSHF, rsvpathsmb=(SEPPARS, SEPINST, SEPSHF, SEPPATHID)
 				, anppsnum=len(apps), apps=', '.join(apps), qmappsnum=len(qmapps), qmapps=', '.join(qmapps)
-				, algtimeout=secDhms(_TIMEOUT), seedfile=_SEEDFILE, port=_PORT
-				, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
+				, algtimeout=secDhms(_TIMEOUT), seedfile=_SEEDFILE, qsepmsr=_QSEPMSR, qsepnet=_QSEPNET
+				, port=_PORT, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
 	else:
 		if len(sys.argv) == 2 and sys.argv[1] == '--doc-tests':
 			# Doc tests execution

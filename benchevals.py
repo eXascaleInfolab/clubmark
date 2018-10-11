@@ -57,12 +57,14 @@ try:
 except ImportError:  # Queue in Python2
 	import Queue as queue  # For exceptions handling: queue.Full, etc.
 
-import h5py  # HDF5 storage
-import numpy as np  # Required for the HDF5 operations
 # Required for the aggregation of the quality evaluations
 import math
 import copy
+import fnmatch  # Matching of the name wildcards
 from collections import namedtuple
+# Required for the quality evaluation persistence
+import numpy as np  # Required for the HDF5 operations
+import h5py  # HDF5 storage
 
 # from benchapps import  # funcToAppName,
 from benchutils import viewitems, viewvalues, ItemsStatistic, parseFloat, parseName, syncedTime, \
@@ -108,12 +110,9 @@ SATTRNINS = 'nins'  # HDF5 storage object attribute for the number of network in
 SATTRNSHF = 'nshf'  # HDF5 storage object attribute for the number of network instance shuffles
 SATTRNLEV = 'nlev'  # HDF5 storage object attribute for the number of clustering levels
 
-QMSRAFN = {
-}  # Specific affinity mask of the quality measures: str, AffinityMask;  qmsrAffinity
-QMSINTRIN = set(
-)  # Intrinsic quality measures requiring input network instead of the ground-truth clustering
-QMSRUNS = {
-}  # Run the respective stochastic quality measures specified number of times
+QMSRAFN = {}  # Specific affinity mask of the quality measures: str, AffinityMask;  qmsrAffinity
+QMSINTRIN = set()  # Intrinsic quality measures requiring input network instead of the ground-truth clustering
+QMSRUNS = {}  # Run the respective stochastic quality measures specified number of times
 # Note: the metrics producing by the measure can be defined by the execution arguments
 # QMSMTS = {}  # Metrics of the respective quality measures, omission means availability of the single metric with same name as the measuring executor
 
@@ -212,20 +211,15 @@ class NetInfo(object):
 		"""
 		# gvld: bool or None  - whether the respective HDF5 group entry attributes have been validated for this netinfo
 		# 	(exception is raised on the failed validation)
-		assert nins >= 1 and isinstance(
-			nins, int) and nshf >= 1 and isinstance(
-			nshf, int), 'Invalid arguments  nins: {}, nshf: {}'.format(
-			nins, nshf)
+		assert nins >= 1 and isinstance(nins, int) and nshf >= 1 and isinstance(
+			nshf, int), 'Invalid arguments  nins: {}, nshf: {}'.format(nins, nshf)
 		self.nins = nins
 		self.nshf = nshf
 		# self.gvld = False
 
 	def __str__(self):
 		"""String conversion"""
-		return ', '.join([
-			': '.join((name, str(self.__getattribute__(name))))
-			for name in self.__slots__
-		])
+		return ', '.join([': '.join((name, str(self.__getattribute__(name))))for name in self.__slots__])
 
 
 class SMeta(object):
@@ -246,22 +240,12 @@ class SMeta(object):
 		"""
 		# alg: str  - algorithm name, required to only to structure (order) the output results
 
-		assert isinstance(group, str) and isinstance(
-			measure, str
-		) and iins >= 0 and isinstance(iins, int) and ishf >= 0 and isinstance(
-			ishf, int
-		) and ilev >= 0 and isinstance(ilev, int) and irun >= 0 and isinstance(
-			irun, int
-		), ('Invalid arguments:\n\tgroup: {group}\n\tmeasure: {measure}\n\tulev: {ulev}\n\t'
-			'iins: {iins}\n\tishuf: {ishf}\n\tilev: {ilev}\n\tirun: {irun}'.
-			format(
-			group=group,
-			measure=measure,
-			ulev=ulev,
-			iins=iins,
-			ishf=ishf,
-			ilev=ilev,
-			irun=irun))
+		assert isinstance(group, str) and isinstance(measure, str) and iins >= 0 and isinstance(
+			iins, int) and ishf >= 0 and isinstance(ishf, int) and ilev >= 0 and isinstance(
+			ilev, int) and irun >= 0 and isinstance(irun, int), (
+			'Invalid arguments:\n\tgroup: {group}\n\tmeasure: {measure}\n\tulev: {ulev}\n\t'
+			'iins: {iins}\n\tishuf: {ishf}\n\tilev: {ilev}\n\tirun: {irun}'.format(
+			group=group, measure=measure, ulev=ulev, iins=iins, ishf=ishf, ilev=ilev, irun=irun))
 		self.group = group  # Group name since the opened group object can not be marshaled to another process
 		self.measure = measure
 		self.ulev = ulev
@@ -272,10 +256,7 @@ class SMeta(object):
 
 	def __str__(self):
 		"""String conversion"""
-		return ', '.join([
-			': '.join((name, str(self.__getattribute__(name))))
-			for name in self.__slots__
-		])
+		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
 
 
 class QEntry(object):
@@ -291,8 +272,7 @@ class QEntry(object):
 		"""
 		assert isinstance(smeta, SMeta) and data and isinstance(data, dict), (
 			'Invalid type of the arguments, smeta: {}, data: {}'.format(
-			type(smeta).__name__,
-			type(data).__name__))
+			type(smeta).__name__, type(data).__name__))
 		# # Validate first item in the data
 		# name, val = next(iter(data))
 		# assert isinstance(name, str) and isinstance(val, float), (
@@ -302,10 +282,7 @@ class QEntry(object):
 
 	def __str__(self):
 		"""String conversion"""
-		return ', '.join([
-			': '.join((name, str(self.__getattribute__(name))))
-			for name in self.__slots__
-		])
+		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
 
 
 class QualitySaver(object):
@@ -314,10 +291,7 @@ class QualitySaver(object):
 	# before blocking the caller on appending more items
 	# Should not be too much to save them into the persistent store on the
 	# program termination or any external interruptions
-	QUEUE_SIZEMAX = max(
-		128,
-		cpu_count() * 2
-	)  # At least 128 or twice the number of the logical CPUs in the system
+	QUEUE_SIZEMAX = max(128, cpu_count() * 2)  # At least 128 or twice the number of the logical CPUs in the system
 
 	# LATENCY = 1  # Latency in seconds
 
@@ -431,8 +405,7 @@ class QualitySaver(object):
 		# 	_active: Value('B')  - the storage is operational (the requests can be processed)
 
 		# and (timeout is None or timeout >= 0)
-		assert isinstance(seed, int), 'Invalid seed type: {}'.format(
-			type(seed).__name__)
+		assert isinstance(seed, int), 'Invalid seed type: {}'.format(type(seed).__name__)
 		# Open or init the HDF5 storage
 		# self._tstart = time.perf_counter()
 		# self.timeout = timeout
@@ -443,8 +416,7 @@ class QualitySaver(object):
 		if not os.path.exists(qmsdir):
 			os.makedirs(qmsdir)
 		# HDF5 Storage: qmeasures_<seed>.h5
-		storage = ''.join((qmsdir, 'qmeasures_', seedstr,
-			'.h5'))  # File name of the HDF5.storage
+		storage = ''.join((qmsdir, 'qmeasures_', seedstr, '.h5'))  # File name of the HDF5.storage
 		ublocksize = 512  # HDF5 .userblock size in bytes
 		ublocksep = ':'  # Userblock values separator
 		# try:
@@ -454,115 +426,73 @@ class QualitySaver(object):
 			bcksftime = None
 			if update:
 				try:
-					fstorage = h5py.File(
-						storage, mode='r', driver='core', libver='latest')
+					fstorage = h5py.File(storage, mode='r', driver='core', libver='latest')
 					ublocksize = fstorage.userblock_size
 					fstorage.close()
 				except OSError:
-					print(
-						'WARNING, can not open the file {}, default userblock size will be used.'.
-						format(storage, file=sys.stderr))
-				with open(storage,
-					'r+b') as fstore:  # Open file for R/W in binary mode
+					print('WARNING, can not open the file {}, default userblock size will be used.'.format(
+						storage, file=sys.stderr))
+				with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
 					# Note: userblock contains '<seed>:<timestamp1>:<timestamp2>...',
 					# where timestamp has timefmt
 					ublock = fstore.read(ublocksize).decode().rstrip('\0')
 					ubparts = ublock.split(ublocksep)
 					if len(ubparts) < 2:
 						update = False
-						print(
-							'ERROR, {} userblock should contain at least 2 items (seed and 1+ timestamp): {}.'
-							' The new store will be created.'.format(
-							storage, ublock),
-							file=sys.stderr)
+						print('ERROR, {} userblock should contain at least 2 items (seed and 1+ timestamp): {}.'
+							' The new store will be created.'.format(storage, ublock), file=sys.stderr)
 					if update and int(ubparts[0]) != seed:
 						update = False
-						print(
-							'WARNING, update is supported only for the same seed.'
+						print('WARNING, update is supported only for the same seed.'
 							' Specified seed {} != {} storage seed. New storage will be created.'
-							.format(seed, ubparts[0]),
-							file=sys.stderr)
+							.format(seed, ubparts[0]), file=sys.stderr)
 					# Update userblock if possible
 					if update:
-						if len(ublock) + len(ublocksep) + len(
-							timestamp) <= ublocksize:
+						if len(ublock) + len(ublocksep) + len(timestamp) <= ublocksize:
 							fstore.seek(len(ublock))
 							# Note: .encode() is required for the byte stream in Python3
-							fstore.write(ublocksep.encode(
-							))  # Note: initially userblock is filled with 0
+							fstore.write(ublocksep.encode())  # Note: initially userblock is filled with 0
 							fstore.write(timestamp.encode())
 						else:
 							update = False
-							print(
-								'WARNING, {} can not be updated because the userblock is already full.'
-								' A new storage will be created.'.format(
-								storage),
-								file=sys.stderr)
-					bcksftime = syncedTime(
-						time.strptime(ubparts[-1], timefmt),
-						lock=False)  # Use last benchmarking start time
-			tobackup(
-				storage, False, synctime=bcksftime,
-				move=not update)  # Copy/move to the backup
+							print('WARNING, {} can not be updated because the userblock is already full.'
+								' A new storage will be created.'.format(storage), file=sys.stderr)
+					bcksftime = syncedTime(time.strptime(ubparts[-1], timefmt), lock=False)  # Use last benchmarking start time
+			tobackup(storage, False, synctime=bcksftime, move=not update)  # Copy/move to the backup
 		elif update:
 			update = False
-			print(
-				'WARNING, the storage does not exist and can not be updated, created:',
-				storage)
+			print('WARNING, the storage does not exist and can not be updated, created:', storage)
 		# Create HFD5 storage if required
 		if not update:
 			# Create the storage, fail if exists ('w-' or 'x')
-			fstorage = h5py.File(
-				storage,
-				mode='w-',
-				driver='core',
-				libver='latest',
-				userblock_size=ublocksize)
+			fstorage = h5py.File(storage, mode='w-', driver='core', libver='latest', userblock_size=ublocksize)
 			ubsize = fstorage.userblock_size  # Actual user block size of the storage
 			fstorage.close()
 			# Write the userblock
-			if (ubsize
-				and len(seedstr) + len(ublocksep) + len(timestamp) <= ubsize):
-				with open(storage,
-					'r+b') as fstore:  # Open file for R/W in binary mode
-					fstore.write(
-						seedstr.encode()
-					)  # Note: .encode() is required for the byte stream in Python3
-					fstore.write(ublocksep.encode(
-					))  # Note: initially userblock is filled with 0
+			if (ubsize and len(seedstr) + len(ublocksep) + len(timestamp) <= ubsize):
+				with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
+					fstore.write(seedstr.encode())  # Note: .encode() is required for the byte stream in Python3
+					fstore.write(ublocksep.encode())  # Note: initially userblock is filled with 0
 					fstore.write(timestamp.encode())
 					# Fill remained part with zeros to be sure that userblock is zeroed
-					fstore.write(
-						('\0' *
-						(ubsize -
-						(len(seedstr) + len(ublocksep) + len(timestamp)))
-						).encode())
+					fstore.write(('\0' * (ubsize - (len(seedstr) + len(ublocksep) + len(timestamp)))).encode())
 			else:
-				raise RuntimeError(
-					'ERROR, the userblock creation failed in the {}, userblock_size: {}'
-					', initial data size: {} (seed: {}, sep: {}, timestamp:{})'.
-					format(storage, ubsize,
-					len(seedstr) + len(ublocksep) + len(timestamp),
-					len(seedstr), len(ublocksep), len(timestamp)))
+				raise RuntimeError('ERROR, the userblock creation failed in the {}, userblock_size: {}'
+					', initial data size: {} (seed: {}, sep: {}, timestamp:{})'.format(storage, ubsize,
+					len(seedstr) + len(ublocksep) + len(timestamp), len(seedstr), len(ublocksep), len(timestamp)))
 			# print('> HDF5 storage userblock created: ', seedstr, ublocksep, timestamp)
 		# Note: append mode is the default one; core driver is a memory-mapped file, block_size is default (64 Kb)
 		# Persistent storage object (file)
-		self.storage = h5py.File(
-			storage,
-			mode='a',
-			driver='core',
-			libver='latest',
-			userblock_size=ublocksize)
+		self.storage = h5py.File(storage, mode='a', driver='core', libver='latest', userblock_size=ublocksize)
 		# Add attributes if required
 		dqrname = 'dims_qms_raw'
 		if self.storage.attrs.get(dqrname) is None or update:
-			# Describe dataset dimentions
+			# Describe dataset dimensions
 			# Note: the dimension is implicitly omitted in the visualizing table if its size equals to 1
 			dims_qms_raw = ('inst', 'shuf', 'levl', 'mrun')
 			dqrlen = max((len(s) for s in dims_qms_raw)) + 1
 			dqrtype = 'a' + str(dqrlen)  # Zero terminated bytes, fixed length
-			self.storage.attrs.create(
-				dqrname, data=np.array(dims_qms_raw, dtype=dqrtype))
+			self.storage.attrs.create(dqrname, data=np.array(dims_qms_raw, dtype=dqrtype))
 			# shape=(len(dims_qms_raw),), dtype=dqrtype)
 			# dims_qms_agg = ('net'): ('avg', 'var', 'num')  # 'dims_qms_agg'
 
@@ -598,22 +528,16 @@ class QualitySaver(object):
 
 		qm: QEntry  - quality metric (data and metadata) to be saved into the persistent storage
 		"""
-		assert isinstance(
-			qm, QEntry
-		), 'Unexpected type of the quality entry: ' + type(qm).__name__
+		assert isinstance(qm, QEntry), 'Unexpected type of the quality entry: ' + type(qm).__name__
 		# Save data elements (entries)
 		for metric, mval in viewitems(qm.data):
 			try:
 				# Metric is  str (or can be unicode in Python2)
-				assert isinstance(
-					mval,
-					float), 'Invalid data type, metric: {}, value: {}'.format(
-					type(metric).__name__,
-					type(mval).__name__)
+				assert isinstance(mval, float), 'Invalid data type, metric: {}, value: {}'.format(
+					type(metric).__name__, type(mval).__name__)
 				# Construct dataset name based on the quality measure binary name and its metric name
 				# (in case of multiple metrics are evaluated by the executing app)
-				dsname = qm.smeta.measure if not metric else _PREFMETR.join(
-					(qm.smeta.measure, metric))
+				dsname = qm.smeta.measure if not metric else _PREFMETR.join((qm.smeta.measure, metric))
 				if qm.smeta.ulev:
 					dsname += _SUFULEV
 				#print('> dsname: {}, metric: {}, mval: {}; location: {}'.format(dsname, metric, mval, qm.smeta))
@@ -627,17 +551,10 @@ class QualitySaver(object):
 					# Such dataset does not exist, create it
 					nins = qmgroup.attrs[SATTRNINS]
 					nshf = qmgroup.attrs[SATTRNSHF]
-					nlev = 1 if qm.smeta.ulev else qmgroup.parent.attrs[
-						SATTRNLEV]
-					qmdata = qmgroup.create_dataset(
-						dsname,
-						shape=(nins, nshf, nlev,
-						QMSRUNS.get(qm.smeta.measure, 1)),
+					nlev = 1 if qm.smeta.ulev else qmgroup.parent.attrs[SATTRNLEV]
+					qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
 						# 32-bit floating number, checksum (fletcher32)
-						dtype='f4',
-						fletcher32=True,
-						fillvalue=np.float32(np.nan),
-						track_times=True)
+						dtype='f4', fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
 					# NOTE: Numpy NA (not available) instead of NaN (not a number) might be preferable
 					# but it requires latest NumPy versions.
 					# https://www.numpy.org/NA-overview.html
@@ -651,14 +568,10 @@ class QualitySaver(object):
 				qmdata[qm.smeta.iins, qm.smeta.ishf, qm.smeta.ilev,
 					qm.smeta.irun] = mval
 			except Exception as err:  #pylint: disable=W0703;  # queue.Empty as err:  # TypeError (HDF5), KeyError
-				print(
-					'ERROR, saving of {} into {}{}{}[{},{},{},{}] failed: {}. {}'.
-					format(mval, qm.smeta.measure, ''
-					if not metric else _PREFMETR + metric, ''
-					if not qm.smeta.ulev else _SUFULEV, qm.smeta.iins,
-					qm.smeta.ishf, qm.smeta.ilev, qm.smeta.irun, err,
-					traceback.format_exc(5)),
-					file=sys.stderr)
+				print('ERROR, saving of {} into {}{}{}[{},{},{},{}] failed: {}. {}'.format(
+					mval, qm.smeta.measure, '' if not metric else _PREFMETR + metric,
+					'' if not qm.smeta.ulev else _SUFULEV, qm.smeta.iins, qm.smeta.ishf,
+					qm.smeta.ilev, qm.smeta.irun, err, traceback.format_exc(5)), file=sys.stderr)
 			# alg = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
 			# 	# Allocate chunks of 10 items starting with empty dataset and with possibility
 			# 	# to resize up to 500 items (params combinations)
@@ -719,8 +632,7 @@ class QualitySaver(object):
 		# 	# Note: the exception (if any) is propagated if True is not returned here
 
 		if self.storage is not None:
-			self.storage.flush(
-			)  # Allow to reuse the instance in several context managers
+			self.storage.flush()  # Allow to reuse the instance in several context managers
 
 
 def metainfo(afnmask=None, intrinsic=False, multirun=1):
@@ -736,11 +648,8 @@ def metainfo(afnmask=None, intrinsic=False, multirun=1):
 	# metrics: list(str)  - quality metrics producing by the measure
 	def decor(func):
 		"""Decorator returning the original function"""
-		assert (
-			afnmask is None or isinstance(afnmask, AffinityMask)
-		) and multirun >= 1 and isinstance(multirun, int), (
-			'Invalid arguments, affinity mask type: {}, multirun: {}'.format(
-			type(afnmask).__name__, multirun))
+		assert (afnmask is None or isinstance(afnmask, AffinityMask)) and multirun >= 1 and isinstance(multirun, int), (
+			'Invalid arguments, affinity mask type: {}, multirun: {}'.format(type(afnmask).__name__, multirun))
 		# QMSRAFN[funcToAppName(func)] = afnmask
 		if afnmask is not None and afnmask.afnstep != 1:  # Save only quality measures with non-default affinity
 			QMSRAFN[func] = afnmask
@@ -793,18 +702,8 @@ def qmeasure(qmapp, workdir=UTILDIR):
 		except AttributeError:  # The callable is not a function, so it should be a class object
 			qmsname = qmsaver.__class__
 
-		def executor(execpool,
-			save,
-			smeta,
-			qparams,
-			cfpath,
-			inpfpath,
-			asym=False,
-			timeout=0,
-			seed=None,
-			task=None,
-			workdir=workdir,
-			revalue=True):
+		def executor(execpool, save, smeta, qparams, cfpath, inpfpath, asym=False, timeout=0, seed=None
+		, task=None, workdir=workdir, revalue=True):
 			"""Quality measure executor
 
 			execpool: ExecPool  - execution pool
@@ -829,38 +728,23 @@ def qmeasure(qmapp, workdir=UTILDIR):
 			if not revalue:
 				# TODO: implement early exit on qualsaver.valueExists(smeta, metrics),
 				# where metrics are provided by the quality measure app by it's qparams
-				staticTrace(
-					qmsname,
-					'Omission of the existent results is not supported yet')
+				staticTrace(qmsname, 'Omission of the existent results formation is not supported yet')
 			# qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
-			assert execpool and callable(save) and isinstance(
-				smeta, SMeta
-			) and isinstance(cfpath, str) and isinstance(inpfpath, str) and (
-				seed is None or isinstance(seed, int)
-			) and (task is None or isinstance(
-				task, Task
-			)), (
-				'Invalid arguments, execpool type: {}, save() type: {}, smeta type: {}, cfpath type: {},'
-				' inpfpath type: {}, timeout: {}, seed: {}, task type: {}'.
-				format(
-				type(execpool).__name__,
-				type(save).__name__,
-				type(smeta).__name__,
-				type(cfpath).__name__,
-				type(inpfpath).__name__, timeout, seed,
-				type(task).__name__))
+			assert execpool and callable(save) and isinstance(smeta, SMeta
+			) and isinstance(cfpath, str) and isinstance(inpfpath, str) and (seed is None or isinstance(seed, int)
+			) and (task is None or isinstance(task, Task)), (
+			'Invalid arguments, execpool type: {}, save() type: {}, smeta type: {}, cfpath type: {},'
+			' inpfpath type: {}, timeout: {}, seed: {}, task type: {}'.format(
+			type(execpool).__name__, type(save).__name__, type(smeta).__name__, type(cfpath).__name__,
+			type(inpfpath).__name__, timeout, seed, type(task).__name__))
 
 			# The task argument name already includes: QMeasure / BaseNet#PathId / Alg,
 			# so here smeta parts and qparams should form the job name for the full identification of the executing job
 			# Note: HDF5 uses Unicode for the file name and ASCII/Unicode for the group names
-			algname, basenetp = smeta.group[1:].split(
-				'/')  # Omit the leading '/'; basenetp includes pathid
+			algname, basenetp = smeta.group[1:].split('/')  # Omit the leading '/'; basenetp includes pathid
 			# Note that evaluating file name might significantly differ from the network name, for example `tp<id>` produced by OSLOM
-			cfname = os.path.splitext(os.path.split(cfpath)[1])[
-				0]  # Evaluating file name (without the extension)
-			measurep = SEPPARS.join(
-				(smeta.measure, _SEPQARGS.join(qparams)
-				))  # Quality measure suffixed with its parameters
+			cfname = os.path.splitext(os.path.split(cfpath)[1])[0]  # Evaluating file name (without the extension)
+			measurep = SEPPARS.join((smeta.measure, _SEPQARGS.join(qparams)))  # Quality measure suffixed with its parameters
 			taskname = _SEPQMS.join((cfname, measurep))
 
 			# Evaluate relative size of the clusterings
@@ -882,16 +766,12 @@ def qmeasure(qmapp, workdir=UTILDIR):
 			# Evaluate relative paths
 			# xtimebin = './exectime'  # Note: relpath(UTILDIR + 'exectime') -> 'exectime' does not work, it requires leading './'
 			xtimebin = relpath(UTILDIR + 'exectime')
-			xtimeres = relpath(''.join((RESDIR, algname, '/', QMSDIR, measurep,
-				EXTRESCONS)))
+			xtimeres = relpath(''.join((RESDIR, algname, '/', QMSDIR, measurep, EXTRESCONS)))
 
 			# The task argument name already includes: QMeasure / BaseNet#PathId / Alg
 			# Note: xtimeres does not include the base network name, so it should be included into the listed taskname,
-			args = [
-				xtimebin, '-o=' + xtimeres, ''.join(('-n=', basenetp,
-				SEPNAMEPART, cfname)),
-				'-s=/etime_' + measurep, './' + qmapp
-			]
+			args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', basenetp, SEPNAMEPART, cfname)),
+				'-s=/etime_' + measurep, './' + qmapp]
 			if qparams:
 				args += qparams
 			# Note: use first the ground-truth or network file and then the clustering file to perform sync correctly
@@ -899,25 +779,10 @@ def qmeasure(qmapp, workdir=UTILDIR):
 			args += (relpath(inpfpath), relpath(cfpath))
 			# print('> Starting Xmeasures with the args: ', args)
 			# print('> Starting {} for: {}, {}'.format(qmsname, args[-2], args[-1]))
-			execpool.execute(
-				Job(
-				name=taskname,
-				workdir=workdir,
-				args=args,
-				timeout=timeout,
-				ondone=qmsaver,
-				params={
-				'save': save,
-				'smeta': smeta
-				}
+			execpool.execute(Job(name=taskname, workdir=workdir, args=args, timeout=timeout,
+				ondone=qmsaver, params={'save': save, 'smeta': smeta},
 				# Note: poutlog indicates the output log file that should be formed from the PIPE output
-				,
-				task=task,
-				category=measurep,
-				size=clsize,
-				stdout=PIPE,
-				stderr=errfile,
-				poutlog=logfile))
+				task=task, category=measurep, size=clsize, stdout=PIPE, stderr=errfile, poutlog=logfile))
 			return 1
 
 		executor.__name__ = qmsname
@@ -947,13 +812,11 @@ def qmsaver(job):
 	#
 	# Define the number of strings in the output counting the number of words in the last string
 	# Identify index of the last non-empty line
-	qmres = job.pipedout.rstrip().splitlines()[
-		-2:]  # Fetch last 2 non-empty lines as a list(str)
+	qmres = job.pipedout.rstrip().splitlines()[-2:]  # Fetch last 2 non-empty lines as a list(str)
 	# print('Value line: {}, len: {}, sym1: {}'.format(qmres[-1], len(qmres[-1]), ord(qmres[-1][0])))
 	if len(qmres[-1].split(None, 1)) == 1:
 		# Metric name is None (the same as binary name) if not specified explicitly
-		name = None if len(qmres) == 1 else qmres[0].split(None, 1)[0].rstrip(
-			':')  # Omit ending ':' if any
+		name = None if len(qmres) == 1 else qmres[0].split(None, 1)[0].rstrip(':')  # Omit ending ':' if any
 		val = qmres[-1]  # Note: index -1 corresponds to either 0 or 1
 		try:
 			# qsqueue.put(QEntry(smeta, {name: float(val)}))
@@ -963,10 +826,8 @@ def qmsaver(job):
 			# 	' '.join(('' if len(qmres) == 1 else qmres[0], qmres[-1])), name, val, qmres))
 			save(QEntry(smeta, {name: float(val)}))
 		except ValueError as err:
-			print(
-				'ERROR, metric "{}" serialization discarded of the job "{}" because of the invalid value format: {}. {}'
-				.format(name, job.name, val, err),
-				file=sys.stderr)
+			print('ERROR, metric "{}" serialization discarded of the job "{}" because of the invalid value format: {}. {}'
+				.format(name, job.name, val, err), file=sys.stderr)
 		# except queue.Full as err:
 		# 	print('WARNING, results serialization discarded by the Job "{}" timeout'.format(job.name))
 		return
@@ -986,10 +847,8 @@ def qmsaver(job):
 			data[name.lstrip()] = float(val.rstrip(' \t)'))
 			# print('> Parsed data from "{}", name: {}, val: {}'.format(mt, name.lstrip(), data[name.lstrip()]))
 		except ValueError as err:
-			print(
-				'ERROR, metric "{}" serialization discarded of the job "{}" because of the invalid value format: {}. {}'
-				.format(name, job.name, val, err),
-				file=sys.stderr)
+			print('ERROR, metric "{}" serialization discarded of the job "{}" because of the invalid value format: {}. {}'
+				.format(name, job.name, val, err), file=sys.stderr)
 	if data:
 		# saveQuality(qsqueue, QEntry(smeta, data))
 		save(QEntry(smeta, data))
@@ -1141,9 +1000,7 @@ def execXmeasures(job):
 
 
 @qmeasure('gecmi')
-@metainfo(
-	afnmask=AffinityMask(AffinityMask.NODE_CPUS, first=False),
-	multirun=3)  # Note: multirun requires irun
+@metainfo(afnmask=AffinityMask(AffinityMask.NODE_CPUS, first=False), multirun=3)  # Note: multirun requires irun
 def execGnmi(job):
 	"""gnmi (gecmi)  - Generalized Normalized Mutual Information"""
 	qmsaver(job)
@@ -1158,21 +1015,9 @@ def execOnmi(job):
 # @qmeasure('daoc', workdir=ALGSDIR + 'daoc/')
 # @metainfo(intrinsic=True)  # Note: intrinsic causes interpretation of ifname as inpnet and requires netparams
 # def execImeasures(job):
-@metainfo(
-	intrinsic=True
-)  # Note: intrinsic causes interpretation of ifname as inpnet and requires netparams
-def execImeasures(execpool,
-	save,
-	smeta,
-	qparams,
-	cfpath,
-	inpfpath,
-	asym=False,
-	timeout=0,
-	seed=None,
-	task=None,
-	workdir=ALGSDIR + 'daoc/',
-	revalue=True):
+@metainfo(intrinsic=True)  # Note: intrinsic causes interpretation of ifname as inpnet and requires netparams
+def execImeasures(execpool, save, smeta, qparams, cfpath, inpfpath, asym=False, timeout=0
+, seed=None, task=None, workdir=ALGSDIR + 'daoc/', revalue=True):
 	"""imeasures (proxy for DAOC)  - executor of some intrinsic quality measures
 
 	execpool: ExecPool  - execution pool
@@ -1197,35 +1042,23 @@ def execImeasures(execpool,
 	if not revalue:
 		# TODO: implement early exit on qualsaver.valueExists(smeta, metrics),
 		# where metrics are provided by the quality measure app by it's qparams
-		staticTrace('Imeasures',
-			'Omission of the existent results is not supported yet')
+		staticTrace('Imeasures', 'Omission of the existent results is not supported yet')
 	# qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
-	assert execpool and callable(save) and isinstance(
-		smeta, SMeta
-	) and isinstance(cfpath, str) and isinstance(inpfpath, str) and (
-		seed is None or isinstance(seed, int)
-	) and (task is None or isinstance(
-		task, Task
-	)), (
+	assert execpool and callable(save) and isinstance(smeta, SMeta
+		) and isinstance(cfpath, str) and isinstance(inpfpath, str) and (
+		seed is None or isinstance(seed, int)) and (task is None or isinstance(task, Task)), (
 		'Invalid arguments, execpool type: {}, save() type: {}, smeta type: {}, cfpath type: {},'
 		' inpfpath type: {}, timeout: {}, seed: {}, task type: {}'.format(
-		type(execpool).__name__,
-		type(save).__name__,
-		type(smeta).__name__,
-		type(cfpath).__name__,
-		type(inpfpath).__name__, timeout, seed,
-		type(task).__name__))
+		type(execpool).__name__, type(save).__name__, type(smeta).__name__, type(cfpath).__name__,
+		type(inpfpath).__name__, timeout, seed, type(task).__name__))
 
 	# The task argument name already includes: QMeasure / BaseNet#PathId / Alg,
 	# so here smeta parts and qparams should form the job name for the full identification of the executing job
 	# Note: HDF5 uses Unicode for the file name and ASCII/Unicode for the group names
-	algname, basenetp = smeta.group[1:].split(
-		'/')  # Omit the leading '/'; basenetp includes pathid
+	algname, basenetp = smeta.group[1:].split('/')  # Omit the leading '/'; basenetp includes pathid
 	# Note that evaluating file name might significantly differ from the network name, for example `tp<id>` produced by OSLOM
-	cfname = os.path.splitext(os.path.split(cfpath)[1])[
-		0]  # Evaluating file name (without the extension)
-	measurep = SEPPARS.join((smeta.measure, _SEPQARGS.join(qparams)
-		))  # Quality measure suffixed with its parameters
+	cfname = os.path.splitext(os.path.split(cfpath)[1])[0]  # Evaluating file name (without the extension)
+	measurep = SEPPARS.join((smeta.measure, _SEPQARGS.join(qparams)))  # Quality measure suffixed with its parameters
 	taskname = _SEPQMS.join((cfname, measurep))
 
 	# Evaluate relative size of the clusterings
@@ -1247,19 +1080,14 @@ def execImeasures(execpool,
 	# Evaluate relative paths
 	# xtimebin = './exectime'  # Note: relpath(UTILDIR + 'exectime') -> 'exectime' does not work, it requires leading './'
 	xtimebin = relpath(UTILDIR + 'exectime')
-	xtimeres = relpath(''.join((RESDIR, algname, '/', QMSDIR, measurep,
-		EXTRESCONS)))
+	xtimeres = relpath(''.join((RESDIR, algname, '/', QMSDIR, measurep, EXTRESCONS)))
 
 	# The task argument name already includes: QMeasure / BaseNet#PathId / Alg
 	# Note: xtimeres does not include the base network name, so it should be included into the listed taskname,
-	args = [
-		xtimebin, '-o=' + xtimeres, ''.join(('-n=', basenetp, SEPNAMEPART,
-		cfname)), '-s=/etime_' + measurep,
-		'./daoc'
-	]
+	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', basenetp, SEPNAMEPART, cfname)),
+		'-s=/etime_' + measurep, './daoc']
 	for qp in qparams:
-		if qp.startswith(
-			'-e'):  #  Append filename of the evaluating clsutering
+		if qp.startswith('-e'):  #  Append filename of the evaluating clsutering
 			qp = '='.join((qp, relpath(cfpath)))
 		args.append(qp)
 	# Note: use first the ground-truth or network file and then the clustering file to perform sync correctly
@@ -1267,25 +1095,10 @@ def execImeasures(execpool,
 	args.append(relpath(inpfpath))
 	# print('> Starting Xmeasures with the args: ', args)
 	# print('> Starting {} for: {}, {}'.format('Imeasures', args[-2], args[-1]))
-	execpool.execute(
-		Job(
-		name=taskname,
-		workdir=workdir,
-		args=args,
-		timeout=timeout,
-		ondone=qmsaver,
-		params={
-		'save': save,
-		'smeta': smeta
-		}
+	execpool.execute(Job(name=taskname, workdir=workdir, args=args, timeout=timeout,
+		ondone=qmsaver, params={'save': save, 'smeta': smeta},
 		# Note: poutlog indicates the output log file that should be formed from the PIPE output
-		,
-		task=task,
-		category=measurep,
-		size=clsize,
-		stdout=PIPE,
-		stderr=errfile,
-		poutlog=logfile))
+		task=task, category=measurep, size=clsize, stdout=PIPE, stderr=errfile, poutlog=logfile))
 	return 1
 
 
@@ -1335,10 +1148,7 @@ class ValAcc(object):
 
 	def __str__(self):
 		"""String conversion"""
-		return ', '.join([
-			': '.join((name, str(self.__getattribute__(name))))
-			for name in self.__slots__
-		])
+		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
 
 
 class VarAcc(ValAcc):
@@ -1375,8 +1185,7 @@ class VarAcc(ValAcc):
 
 	def sd(self):
 		"""Standard deviation"""
-		return np.nan if not self.num else math.sqrt(
-			(self.sum2 - float(self.sum) / self.num * self.sum) / self.num)
+		return np.nan if not self.num else math.sqrt((self.sum2 - float(self.sum) / self.num * self.sum) / self.num)
 
 	def reset(self):
 		"""Reset accumulation"""
@@ -1409,22 +1218,17 @@ class NamedList(object):
 		"""
 		self.kinds = {} if not keys else {k: i for i, k in enumerate(keys)}
 		self.values = [None] * len(self.kinds)
-		assert len(self.values) == len(
-			self.kinds), 'Items number should correspond to the keys number'
+		assert len(self.values) == len(self.kinds), 'Items number should correspond to the keys number'
 
 	def insert(self, key, val):
 		"""Insert a key-value pair overwriting the existing if any"""
 		size = len(self.kinds)
-		i = self.kinds.setdefault(
-			key, size
-		)  # Return the value if exists otherwise set and return the value
+		i = self.kinds.setdefault(key, size)  # Return the value if exists otherwise set and return the value
 		if i < size:
 			self.values[i] = val
 		else:
 			self.values.append(val)
-		assert len(self.values) == len(
-			self.kinds
-		), 'The number of extended items should correspond to the keys number'
+		assert len(self.values) == len(self.kinds), 'The number of extended items should correspond to the keys number'
 
 	def get(self, key, default=None):
 		"""Get value by the name
@@ -1434,6 +1238,11 @@ class NamedList(object):
 		"""
 		i = self.get(key)
 		return default if i is None else self.values[i]
+
+	def __len__(self):
+		"""Returns the number of elements in the container"""
+		assert len(self.values) == len(self.kinds), 'The number of extended items should correspond to the keys number'
+		return len(self.values)
 
 
 QValStat = namedtuple('QValStat', 'avg sd conf')
@@ -1445,18 +1254,12 @@ conf: float4  - confidance (rins*rshf*rrun)
 """
 
 
-def aggeval(aggevals,
-	nets,
-	qaggopts,
-	qmsname,
-	update=True,
-	revalue=False,
-	maxins=0):
+def aggeval(aggevals, nets, qaggopts, qmsname, update=True, revalue=False, maxins=0):
 	"""Aggregate evaluation results from the specified HDF5 storage to the dedicated HDF5 storage
 
 	aggevals: dict(qmeasure: dict(algname: NamedList(netname: QValStat)))
 		- resulting aggregated evaluations to be extended, where the netname includes pathid if any
-	qaggopts: QAggOpt  - quality aggregation options
+	qaggopts: QAggOpt  - quality aggregation options (filter), empty or None means aggregate everything
 	qmsname: str  - path of the HDF5 quality measures storage to be aggregated
 	update: bool  - update evaluations file (storage of datasets) or create a new one,
 		anyway existed evaluations are backed up
@@ -1465,86 +1268,111 @@ def aggeval(aggevals,
 		actual only for the update flag set
 	maxins: int >= 0  - max number of instances to process, 0 means all
 	"""
+	# Define type of the aggregation filtering, which should be the same for all options
+	fltout = None if not qaggopts else qaggopts[0].exclude
+	# Index aggregation filters by the algorithm names
+	aflts = None if not qaggopts else {flt.alg: flt for flt in qaggopts}
 	# Open HDF5 storage of the resulting quality measures
 	# HDF5 Storage: qmeasures_<seed>.h5
 	# qmsdir = RESDIR + QMSDIR  # Quality measures directory
 	qmeasures = h5py.File(qmsname, mode='r', driver='core', libver='latest')
-	if not qaggopts:  # Aggregate everything
-		avgres = ValAcc()  # Average resulting value over all instances
-		avgsd = ValAcc()  # Average standard deviation over all instances
-		nansfavg = ValAcc()  #  Average number of NAN shuffles and runs for the instances
-		# Shuffles statistics
-		varshf = VarAcc()  # Variance over the instance shuffles
-		avgrshf = ValAcc()  # Average ration of the NAN shuffles (used to evaluate confidence of the results)
-		avgrun = ValAcc() # Average value of measure for multiple runs of the evaluation app
-		for alg in viewvalues(qmeasures):
-			for net in viewvalues(alg):
-				for msr in viewvalues(net):
-					# Identify whether the quality measure dataset multilevel and has multiple runs:
-					# (iinst)[(ishuf)][(ilev)][(qmirun)]: float4
-					i = 3
-					mrun = len(msr.shape) >= i + 1 and msr.shape[i] >= 2
-					i -= 1
-					mlev = mrun or (len(msr.shape) >= i + 1
-						and msr.shape[i] >= 2)
-					i -= 1
-					mshf = mlev or (len(msr.shape) >= i + 1
-						and msr.shape[i] >= 2)
-					avgres.reset()
-					avgsd.reset()
-					avgrshf.reset()
-					nansfavg.reset()
-					for iins, inst in enumerate(msr):
-						if mshf:
-							varshf.reset()
-							for shf in inst:
-								if mlev:
-									# Select level with the highest resulting value
-									if mrun:
-										vmax = -np.inf
-										for lev in shf:
-											avgrun.reset()
-											for run in lev:
-												avgrun.add(run)
-											if vmax < avgrun.avg():
-												vmax = avgrun.avg()
-										if math.isinf(vmax):
-											vmax = np.nan
-									else:
-										vmax = max(shf)
-									varshf.add(vmax)
+	avgres = ValAcc()  # Average resulting value over all instances
+	avgsd = ValAcc()  # Average standard deviation over all instances
+	nansfavg = ValAcc()  #  Average number of NAN shuffles and runs for the instances
+	# Shuffles statistics
+	varshf = VarAcc()  # Variance over the instance shuffles
+	avgrshf = ValAcc()  # Average ration of the NAN shuffles (used to evaluate confidence of the results)
+	avgrun = ValAcc() # Average value of measure for multiple runs of the evaluation app
+	for galg in viewvalues(qmeasures):
+		alg = os.path.split(galg.name)[1]
+		aflt = None if not aflts else aflts.get(alg)  # Algorithm aggregation filter
+		# Filter out algorithms listed in the exclusive filter or not listed in the inclusive filter
+		if (fltout is not None) and (
+		(fltout and aflt and not aflt.nets and not aflt.msrs) or (not fltout and not aflt)):
+			continue
+		for gnet in viewvalues(galg):
+			net = os.path.split(gnet.name)[1]
+			# Consider also network wildcard matching if any
+			netmatch = None
+			if (fltout is not None) and (aflt and aflt.nets):
+				netmatch = False
+				for ntw in aflt.nets:  # Network name wildcard
+					if fnmatch.fnmatch(net, ntw):
+						netmatch = True
+						break
+				if not aflt.msrs and ((netmatch and fltout) or (not netmatch and not fltout)):
+					continue
+			for dmsr in viewvalues(gnet):
+				# Add result to the aggevals
+				# a) considering '+u' suffix of the unified representative clusters
+				# 	forming a single level from the multi-lev clustering and
+				# b) moving it to the algorithm name
+				msr = os.path.splitext(os.path.split(dmsr.name)[1])[0]
+				assert msr, 'The metric name should be valid'
+				if fltout is not None and aflt and aflt.msrs:
+					match = False
+					# Consider measure prefix matching if any
+					if netmatch is not False:
+						for mpr in aflt.msrs:  # Measure prefix
+							if msr.startswith(mpr):
+								match = True
+								break
+					if (match and fltout) or (not match and not fltout):
+						continue
+				# Identify whether the quality measure dataset multilevel and has multiple runs:
+				# (iinst)[(ishuf)][(ilev)][(qmirun)]: float4
+				i = 3
+				mrun = len(dmsr.shape) >= i + 1 and dmsr.shape[i] >= 2
+				i -= 1
+				mlev = mrun or (len(dmsr.shape) >= i + 1
+					and dmsr.shape[i] >= 2)
+				i -= 1
+				mshf = mlev or (len(dmsr.shape) >= i + 1
+					and dmsr.shape[i] >= 2)
+				avgres.reset()
+				avgsd.reset()
+				avgrshf.reset()
+				nansfavg.reset()
+				for iins, inst in enumerate(dmsr):
+					if mshf:
+						varshf.reset()
+						for shf in inst:
+							if mlev:
+								# Select level with the highest resulting value
+								if mrun:
+									vmax = -np.inf
+									for lev in shf:
+										avgrun.reset()
+										for run in lev:
+											avgrun.add(run)
+										if vmax < avgrun.avg():
+											vmax = avgrun.avg()
+									if math.isinf(vmax):
+										vmax = np.nan
 								else:
-									varshf.add(shf)
-							avgres.add(varshf.avg())
-							avgsd.add(varshf.sd())
-							if varshf.nans:
-								avgrshf.add(varshf.nans / float(varshf.nans + varshf.num))
-						else:
-							avgres.add(inst)
-						if maxins and iins >= maxins:
-							break
-					# Add result to the aggevals consdering '+u' suffix of the unified reprsentative multi-lev
-					# and moving it to the algorithm name
-					msrname = os.path.splitext(os.path.split(msr.name)[1])[0]
-					assert msrname, 'The metric name should be valid'
-					# Networks evaluations for each measure and each algorithm
-					netsevs = aggevals.setdefault(msrname, {}).setdefault(
-						alg, NamedList())
-					# conf: float4  - confidance (rins*rshf*rrun)
-					netsevs.insert(net, QValStat(avgres.avg(), avgsd.avg(), np.nan if not len(msr) else
-						avgres.num / float(avgres.nans + avgres.num) * (1 if not avgrshf.num else avgrshf.avg())))
-
-	else:
-		raise NotImplementedError('Custom (parameterized) aggregation is not implemented')
-		for qao in qaggopts:
-			# TODO: aggregate only over the specified items
-			pass
+									vmax = max(shf)
+								varshf.add(vmax)
+							else:
+								varshf.add(shf)
+						avgres.add(varshf.avg())
+						avgsd.add(varshf.sd())
+						if varshf.nans:
+							avgrshf.add(varshf.nans / float(varshf.nans + varshf.num))
+					else:
+						avgres.add(inst)
+					if maxins and iins >= maxins:
+						break
+				# Networks evaluations for each measure and each algorithm
+				netsevs = aggevals.setdefault(msr, {}).setdefault(alg, NamedList())
+				# conf: float4  - confidance (rins*rshf*rrun)
+				netsevs.insert(net, QValStat(avgres.avg(), avgsd.avg(), np.nan if not len(dmsr) else
+					avgres.num / float(avgres.nans + avgres.num) * (1 if not avgrshf.num else avgrshf.avg())))
 
 
 def aggEvals(qaggopts, seed, update=True, revalue=False):
 	"""Aggregate evaluation results from the HDF5 storages to the dedicated HDF5 storage
 
-	qaggopts: QAggOpt  - quality aggregation options
+	qaggopts: QAggOpt or None  - quality aggregation options (filter)
 	seed: uint or None  - benchmark seed, natural number. Used to distinguish the target results
 		(and parameterize clustering algorithms if required). Aggrege all available qmeasure storages
 		if the seed is None.
@@ -1554,40 +1382,73 @@ def aggEvals(qaggopts, seed, update=True, revalue=False):
 		calculating and saving only the values being not present in the dataset,
 		actual only for the update flag set
 	"""
-	if qaggopts is None:
-		assert qaggopts is not None, 'Invalid qaggopts: ' + qaggopts
-		return
-
 	qmsdir = RESDIR + QMSDIR  # Quality measures directory
 	seeds = []  # Seeds in the string format of the input storages
 	qmnbase = 'qmeasures_'
 	qmnsuf = '.h5'
 	# Aggregated evaluations to be saved
-	aggevals = {
-	}  # dict(qmeasure: dict(algname: NamedList(netname: QValStat)))
+	aggevals = {}  # dict(qmeasure: dict(algname: NamedList(netname: QValStat)))
+	maxins = 1  # TODO: use default maxins=0 after insuring that values for all instances are correct in the clustering results
+	if not revalue:
+		# TODO: omit aggregation of the already existent (aggregated) results
+		print('WARNING aggEvals(), Omission of the existent results formation is not supported yet')
 	if seed is not None:
 		seedstr = str(seed)
-		qmsname = ''.join((qmsdir, qmnbase, seedstr,
-			qmnsuf))  # File name of the HDF5.storage
-		# TODO: use default maxins after insuring that values for all instances are correct in the clustering results
-		aggeval(aggevals, qaggopts, qmsname, update, revalue, maxins=1)
+		qmspath = ''.join((qmsdir, qmnbase, seedstr, qmnsuf))  # File name of the HDF5.storage
+		aggeval(aggevals, qaggopts, qmspath, update, revalue, maxins=1)
 		seeds.append(seedstr)
 	else:
-		for qmsname in glob.iglob(qmsdir + '*'.join((qmnbase, qmnsuf))):
+		for qmspath in glob.iglob(qmsdir + '*'.join((qmnbase, qmnsuf))):
 			try:
-				# TODO: use default maxins after insuring that values for all instances are correct in the clustering results
-				aggeval(aggevals, qaggopts, qmsname, update, revalue, maxins=1)
+				print('Aggregating', os.path.split(qmspath)[1])
+				aggeval(aggevals, qaggopts, qmspath, update, revalue, maxins=1)
 				# Extract seeds and to the added to the userblock of the forming storage
-				seeds.append(qmsname[len(qmnbase):len(qmsname) - len(qmnsuf)]
-					)  # Note: considered that qmsuf can be empty
+				seeds.append(qmspath[len(qmnbase):len(qmspath) - len(qmnsuf)])  # Note: considered that qmsuf can be empty
 			except Exception as err:  #pylint: disable=W0703
-				print(
-					'ERROR, quality measures aggregation in {} failed: {}. Discarded. {}'.
-					format(qmsname, err, traceback.format_exc(5)),
-					file=sys.stderr)
+				print('ERROR, quality measures aggregation in {} failed: {}. Discarded. {}'.format(
+					qmspath, err, traceback.format_exc(5)), file=sys.stderr)
 	# Form the resulting HDF5 storage indicating the number of processed levels (maxins) in the name if used
-	# aggqms = h5py.File(storage, mode='r', driver='core', libver='latest')
-	# with open(storage, 'r+b') as fstore:  # Open file for R/W in binary mode
+	aggqpath = ''.join((qmsdir, ('aggqms', '' if not maxins else '%' + str(maxins), '_', '-'.join(seeds))))
+	if os.path.isfile(aggqpath):
+		tobackup(aggqpath, False, move=not update)  # Copy/move to the backup
+	storage = h5py.File(aggqpath, mode='a', driver='core', libver='latest')
+	# # Add attributes if required
+	# dqrname = 'dims_aggqms'
+	# if storage.attrs.get(dqrname) is None or update:
+	# 	# Describe dataset dimensions
+	# 	# Note: the dimension is implicitly omitted in the visualizing table if its size equals to 1
+	# 	dims_aggqms = ('net')  # :QValStat
+	# 	dqrlen = max((len(s) for s in dims_qms_raw)) + 1
+	# 	dqrtype = 'a' + str(dqrlen)  # Zero terminated bytes, fixed length
+	# 	storage.attrs.create(dqrname, data=np.array(dims_qms_raw, dtype=dqrtype))
+
+	# Update/create groups and datasets:
+	# /<measure>/<alg>.dat
+	# Data format: <net[#pathid]>Enum: QValStat, where QValStat is a tuple(avgares, sdval, conf=rins*rshf*rrun)
+	for qmtr, qevs in viewitems(aggevals):
+		for alg, aevs in viewitems(qevs):
+			netevs = storage.require_dataset(''.join((qmtr, '/', alg, '.dat')), shape=(len(aevs),),
+				dtype=np.dtype([(attr, 'f4') for attr in QValStat._fields]), # 32-bit (4 byte) floating numbers
+					#, chunks=(10,) # , maxshape=(None,)
+					fletcher32=True, fillvalue=[np.float32(np.nan)]*len(QValStat._fields), track_times=True, exact=True)
+
+	# 						qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
+	# 							# 32-bit floating number, checksum (fletcher32)
+	# 							dtype='f4', fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
+	
+	# alg = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
+	# 	# Allocate chunks of 10 items starting with empty dataset and with possibility
+	# 	# to resize up to 500 items (params combinations)
+	# 	self.apps[app] = appsdir.require_dataset(app, shape=(0,), dtype=h5py.special_dtype(vlen=_h5str)
+	# 		, chunks=(10,), maxshape=(500,))  # , maxshape=(None,), fletcher32=True
+	# self.evals = self.storage.require_group('evals')  # Quality evaluations dir (group)
+	# # Note: None in maxshape means resizable, fletcher32 used for the checksum,
+	# # exact used to require shape and type to match exactly
+	# metares = self.storage.require_dataset('rescons.meta', shape=(len(self.mrescons),), dtype=h5str
+	# 	, data=self.mrescons, exact=True, fletcher32=True)  # fillvalue=''
+
+
+	storage.close()  # Explicitly close to flush the file
 
 
 class ShufflesAgg(object):
@@ -1611,8 +1472,7 @@ class ShufflesAgg(object):
 		fixed  - whether all items are aggregated and summarization is performed
 		bestlev  - cluster level with the best value, defined for the finalized evaluations
 		"""
-		assert name.count(
-			SEPNAMEPART) == 2, 'Name format validation failed: ' + name
+		assert name.count(SEPNAMEPART) == 2, 'Name format validation failed: ' + name
 		self.name = name
 		# Aggregation data
 		self.levels = {}  # Name: LevelStat
@@ -1634,24 +1494,18 @@ class ShufflesAgg(object):
 		# [Evaluate max avg among the aggregated level and transfer it to the instagg as final result]
 		assert not self.fixed, 'Only non-fixed aggregator can be modified'
 		# Validate lev to guarantee it does not contain shuffle part
-		assert lev.find(
-			SEPNAMEPART) == -1, 'Level name should not contain shuffle part'
+		assert lev.find(SEPNAMEPART) == -1, 'Level name should not contain shuffle part'
 
 		# Extract algorithm params if exist from the 'taskoutp' job param
 		taskname = os.path.splitext(os.path.split(resfile)[1])[0]
 		# Validate taskname, i.e. validate that shuffles aggregator is called for its network
 		assert taskname == self.name[self.name.rfind('/') + 1:], (
-			'taskname validation failed: "{}" does not belong to "{}"'.format(
-			taskname, self.name))
+			'taskname validation failed: "{}" does not belong to "{}"'.format(taskname, self.name))
 		algpars = ''  # Algorithm params
-		ipb = taskname.find(
-			SEPPARS, 1
-		)  # Index of params begin. Params separator can't be the first symbol of the name
+		ipb = taskname.find(SEPPARS, 1)  # Index of params begin. Params separator can't be the first symbol of the name
 		if ipb != -1 and ipb != len(taskname) - 1:
 			# Find end of the params
-			ipe = filter(lambda x: x >= 0, [
-				taskname[ipb:].rfind(c) for c in (SEPINST, SEPPATHID, SEPSHF)
-			])
+			ipe = filter(lambda x: x >= 0, [taskname[ipb:].rfind(c) for c in (SEPINST, SEPPATHID, SEPSHF)])
 			if ipe:
 				ipe = min(ipe) + ipb  # Conside ipb offset
 			else:
@@ -1660,9 +1514,7 @@ class ShufflesAgg(object):
 		# Update statistics
 		levname = lev
 		if algpars:
-			levname = SEPNAMEPART.join(
-				(levname, algpars
-				))  # Note: SEPNAMEPART never occurs in the filename, levname
+			levname = SEPNAMEPART.join((levname, algpars))  # Note: SEPNAMEPART never occurs in the filename, levname
 		#print('addraw lev: {}, aps: {}, taskname: {}'.format(levname, algpars, taskname))
 		levstat = self.levels.get(levname)
 		if levstat is None:
@@ -1694,8 +1546,7 @@ class ShufflesAgg(object):
 		# Trace best lev value for debugging purposes
 		elif _DEBUG_TRACE:
 			#else:
-			print('Best lev of {}:\t{} = {:.6f}'.format(
-				self.name[self.name.rfind('/') + 1:], self.bestlev[0],
+			print('Best lev of {}:\t{} = {:.6f}'.format(self.name[self.name.rfind('/') + 1:], self.bestlev[0],
 				self.bestlev[1].avg))
 		##	val = self.bestlev[1]
 		##	print('{} bestval is {}: {} (from {} up to {}, sd: {})'
@@ -1716,8 +1567,7 @@ class EvalsAgg(object):
 		self.measure = measure
 		self.partaggs = []
 
-		self.netsev = {
-		}  # Global network evaluations in the format: net_name: alg_eval
+		self.netsev = {}  # Global network evaluations in the format: net_name: alg_eval
 		self.algs = set()
 
 	def aggregate(self):
@@ -1729,10 +1579,8 @@ class EvalsAgg(object):
 		nameps = False  # Parameters are used in the name
 		for inst in self.partaggs:
 			if not inst.fixed:
-				print(
-					'WARNING, shuffles aggregator for task "{}" was not fixed on final aggregation'
-					.format(inst.name),
-					file=sys.stderr)
+				print('WARNING, shuffles aggregator for task "{}" was not fixed on final aggregation'
+					.format(inst.name), file=sys.stderr)
 				inst.fix()
 			measure, algname, netname = inst.name.split(SEPNAMEPART)
 			#print('Final aggregate over net: {}, pathid: {}'.format(netname, pathid))
@@ -1753,12 +1601,9 @@ class EvalsAgg(object):
 			if netstat is None:
 				netstat = ItemsStatistic(algname)
 				algsev[algname] = netstat
-			netstat.addstat(
-				inst.stat()
-			)  # Note: best result for each network with the same alg params can correspond to different levels
+			netstat.addstat(inst.stat())  # Note: best result for each network with the same alg params can correspond to different levels
 		# For each network retain only best result among all algorithm parameters
-		naparams = {
-		}  # Algorithm parameters for the network that correspond to the best result, format:  AlgName: AlgParams
+		naparams = {}  # Algorithm parameters for the network that correspond to the best result, format:  AlgName: AlgParams
 		if nameps:
 			netsev = {}
 			for net, algsev in viewitems(self.netsev):
@@ -1789,13 +1634,10 @@ class EvalsAgg(object):
 		self.algs = sorted(self.algs)
 		# Output aggregated results for this measure for all algorithms
 		resbase = RESDIR + self.measure
-		with open(resbase + EXTAGGRES, 'a') as fmeasev, open(
-			resbase + EXTAGGRESEXT, 'a') as fmeasevx:
+		with open(resbase + EXTAGGRES, 'a') as fmeasev, open(resbase + EXTAGGRESEXT, 'a') as fmeasevx:
 			# Append to the results and extended results
 			#timestamp = datetime.utcnow()
-			fmeasev.write(
-				'# --- {}, output:  Q_avg\n'.format(TIMESTAMP_START_STR)
-			)  # format = Q_avg: Q_min Q_max, Q_sd count;
+			fmeasev.write('# --- {}, output:  Q_avg\n'.format(TIMESTAMP_START_STR))  # format = Q_avg: Q_min Q_max, Q_sd count;
 			# Extended output has notations in each row
 			# Note: print() unlike .write() outputs also ending '\n'
 			print(TIMESTAMP_START_HEADER, file=fmeasevx)
@@ -1807,9 +1649,7 @@ class EvalsAgg(object):
 						fmeasev.write('\t{}'.format(alg))
 					fmeasev.write('\n')
 					# Brief header for the extended results
-					fmeasevx.write(
-						'# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n'
-					)
+					fmeasevx.write('# <network>\n#\t<alg1_outp>\n#\t<alg2_outp>\n#\t...\n')
 					header = False
 				algsev = iter(sorted(viewitems(algsev), key=lambda x: x[0]))
 				ialgs = iter(self.algs)
@@ -1845,13 +1685,10 @@ class EvalsAgg(object):
 							# where best is defined as highest average value among all levels in the shuffles.
 							# Min is min best avg among shuffles for each instance, max is max best avg.
 							# ATTENTION: values that can be None can't be represented as .6f, but can be as .6
-							fmeasevx.write(
-								'\n\t{}>\tQ: {:.6f} ({:.6f} .. {:.6f}), s: {:.6}, count: {}, fails: {},'
+							fmeasevx.write('\n\t{}>\tQ: {:.6f} ({:.6f} .. {:.6f}), s: {:.6}, count: {}, fails: {},'
 								' d(shuf): {:.6}, s(shuf): {:.6}, count(shuf): {}, fails(shuf): {}'
-								.format(alg + (napars.join((' (', ')'))
-								if napars else ''), val.avg,
-								val.min, val.max, val.sd, val.count,
-								val.invals, val.statDelta, val.statSD,
+								.format(alg + (napars.join((' (', ')')) if napars else ''), val.avg,
+								val.min, val.max, val.sd, val.count, val.invals, val.statDelta, val.statSD,
 								val.statCount, val.invstats))
 						else:
 							# Skip this alg
@@ -1862,8 +1699,7 @@ class EvalsAgg(object):
 	def register(self, shfagg):
 		"""Register new partial aggregator, shuffles aggregator"""
 		measure = shfagg.name.split(SEPNAMEPART, 1)[0]
-		assert measure == self.measure, (
-			'This aggregator serves "{}" measure, but "{}" is registering'
+		assert measure == self.measure, ('This aggregator serves "{}" measure, but "{}" is registering'
 			.format(self.measure, measure))
 		self.partaggs.append(shfagg)
 
@@ -1876,7 +1712,7 @@ def aggEvaluations(respaths):
 	"""
 	print('Starting evaluation results aggregation ...')
 	evalaggs = {}  # Evaluation aggregators per measures:  measure: evalagg
-	# Process specified pahts
+	# Process specified paths
 	for path in respaths:
 		for resfile in glob.iglob(path):
 			# Skip dirs if occurred
@@ -1893,10 +1729,8 @@ def aggEvaluations(respaths):
 			algname, measure, netname = resfile.rsplit('/', 2)
 			algname = os.path.split(algname)[1]
 			netname = os.path.splitext(netname)[0]
-			assert measure in (
-				'mod', 'nmi', 'nmi_s'
-			), 'Invalid evaluation measure "{}" from file: {}'.format(
-				measure, resfile)
+			assert measure in ('mod', 'nmi', 'nmi_s'), ('Invalid evaluation measure "{}" from file: {}'
+				.format(measure, resfile))
 
 			# Fetch corresponding evaluations aggregator
 			eagg = evalaggs.get(measure)
@@ -1905,8 +1739,7 @@ def aggEvaluations(respaths):
 				evalaggs[measure] = eagg
 			with open(resfile, 'r') as finp:
 				partagg = ShufflesAgg(eagg,
-					SEPNAMEPART.join((measure, algname,
-					netname)))
+					SEPNAMEPART.join((measure, algname, netname)))
 				#print('Aggregating partial: ', partagg.name)
 				for ln in finp:
 					# Skip header
@@ -1915,9 +1748,7 @@ def aggEvaluations(respaths):
 						continue
 					# Process values:  <value>\t<lev_with_shuffle>
 					val, levname = ln.split(None, 1)
-					levname = levname.split(
-						SEPNAMEPART,
-						1)[0]  # Remove shuffle part from the levname if exists
+					levname = levname.split(SEPNAMEPART, 1)[0]  # Remove shuffle part from the levname if exists
 					partagg.addraw(resfile, levname, float(val))
 				partagg.fix()
 	# Aggregate total statistics
@@ -1926,16 +1757,7 @@ def aggEvaluations(respaths):
 	print('Evaluation results aggregation is finished.')
 
 
-def evalGeneric(execpool,
-	measure,
-	algname,
-	basefile,
-	measdir,
-	timeout,
-	evaljob,
-	resagg,
-	pathidsuf='',
-	tidy=True):
+def evalGeneric(execpool, measure, algname, basefile, measdir, timeout, evaljob, resagg, pathidsuf='', tidy=True):
 	"""Generic evaluation on the specified file
 	NOTE: all paths are given relative to the root benchmark directory.
 
@@ -1955,13 +1777,10 @@ def evalGeneric(execpool,
 	assert execpool and basefile and measure and algname, 'Parameters must be defined'
 	assert not pathidsuf or pathidsuf[0] == SEPPATHID, 'pathidsuf must include separator'
 	# Fetch the task name and chose correct network filename
-	taskcapt = os.path.splitext(os.path.split(basefile)[1])[
-		0]  # Name of the basefile (network or ground-truth clusters)
-	ishuf = None if taskcapt.find(SEPSHF) == -1 else taskcapt.rsplit(
-		SEPSHF,
-		1)[1]  # Separate shuffling index (with possible pathid) if exists
-	assert taskcapt and not ishuf, 'The base file name must exists and should not be shuffled, file: {}, ishuf: {}'.format(
-		taskcapt, ishuf)
+	taskcapt = os.path.splitext(os.path.split(basefile)[1])[0]  # Name of the basefile (network or ground-truth clusters)
+	ishuf = None if taskcapt.find(SEPSHF) == -1 else taskcapt.rsplit(SEPSHF, 1)[1]  # Separate shuffling index (with possible pathid) if exists
+	assert taskcapt and not ishuf, (
+		'The base file name must exists and should not be shuffled, file: {}, ishuf: {}'.format(taskcapt, ishuf))
 	# Define index of the task suffix (identifier) start
 	tcapLen = len(taskcapt)  # Note: it never contains pathid
 	#print('Processing {}, pathidsuf: {}'.format(taskcapt, pathidsuf))
@@ -1970,15 +1789,12 @@ def evalGeneric(execpool,
 	rcpoutp = ''.join((RESDIR, algname, '/', measure, EXTRESCONS))
 	jobs = []
 	# Traverse over directories of clusters corresponding to the base network
-	for clsbase in glob.iglob(''.join((RESDIR, algname, '/', CLSDIR,
-		escapePathWildcards(taskcapt), '*'))):
+	for clsbase in glob.iglob(''.join((RESDIR, algname, '/', CLSDIR, escapePathWildcards(taskcapt), '*'))):
 		# Skip execution of log files, leaving only dirs
 		if not os.path.isdir(clsbase):
 			continue
 		# Note: algorithm parameters are present in dirs and handled here together with shuffles and sinstance / pathid
-		clsname = os.path.split(
-			clsbase
-		)[1]  # Processing a cluster dir, which is a base name of the job, id part of the task name
+		clsname = os.path.split(clsbase)[1]  # Processing a cluster dir, which is a base name of the job, id part of the task name
 		clsnameLen = len(clsname)
 
 		# Skip cases when processing clusters does not have expected pathid
@@ -1993,10 +1809,9 @@ def evalGeneric(execpool,
 					int(clsname[icnpid + 1:])
 				except ValueError as err:
 					# This is not the pathid, or this pathid has invalid format
-					print(
-						'WARNING, invalid suffix or the separator "{}" represents part of the path "{}", exception: {}. Skipped.'
-						.format(SEPPATHID, clsname, err),
-						file=sys.stderr)
+					print('WARNING, invalid suffix or the separator "{}" represents'
+						' part of the path "{}", exception: {}. Skipped.'
+						.format(SEPPATHID, clsname, err), file=sys.stderr)
 					# Continue processing as ordinary clusters without pathid
 				else:
 					# Skip this clusters having unexpected pathid
@@ -2008,19 +1823,16 @@ def evalGeneric(execpool,
 			continue
 
 		# Fetch shuffling index if exists
-		ish = clsname[:icnpid].rfind(
-			SEPSHF
-		) + 1  # Note: reverse direction to skip possible separator symbols in the name itself
+		ish = clsname[:icnpid].rfind(SEPSHF) + 1  # Note: reverse direction to skip possible separator symbols in the name itself
 		shuffle = clsname[ish:icnpid] if ish else ''
 		# Validate shuffling index
 		if shuffle:
 			try:
 				int(shuffle)
 			except ValueError as err:
-				print(
-					'WARNING, invalid suffix or the separator "{}" represents part of the path "{}", exception: {}. Skipped.'
-					.format(SEPSHF, clsname, err),
-					file=sys.stderr)
+				print('WARNING, invalid suffix or the separator "{}" represents'
+					' part of the path "{}", exception: {}. Skipped.'
+					.format(SEPSHF, clsname, err), file=sys.stderr)
 				# Continue processing skipping such index
 				shuffle = ''
 
@@ -2040,24 +1852,17 @@ def evalGeneric(execpool,
 			# Recover lost pathidsuf if required
 			if pathidsuf:
 				taskoutp += pathidsuf
-		taskoutp = '.'.join(
-			(taskoutp, measure)
-		)  # evalext  # Name of the file with modularity values for each level
+		taskoutp = '.'.join((taskoutp, measure))  # evalext  # Name of the file with modularity values for each level
 		if tidy and os.path.exists(taskoutp):
 			os.remove(taskoutp)
 
 		#shuffagg = ShufflesAgg(resagg, name=SEPNAMEPART.join((measure, algname, taskcapt, pathidsuf)))  # Note: taskcapt here without alg params
 		taskname = os.path.splitext(os.path.split(taskoutp)[1])[0]
-		shagg = ShufflesAgg(resagg,
-			SEPNAMEPART.join((measure, algname, taskname)))
-		task = Task(
-			name=taskname, params=shagg,
-			ondone=shagg.fix)  # , params=EvalState(taskcapt, )
+		shagg = ShufflesAgg(resagg, SEPNAMEPART.join((measure, algname, taskname)))
+		task = Task(name=taskname, params=shagg, ondone=shagg.fix)  # , params=EvalState(taskcapt, )
 		# Traverse over all resulting communities for each ground truth, log results
 		for cfile in glob.iglob(escapePathWildcards(clsbase) + '/*'):
-			if os.path.isdir(
-				cfile
-			):  # Skip dirs among the resulting clusters (extra/, generated by OSLOM)
+			if os.path.isdir(cfile):  # Skip dirs among the resulting clusters (extra/, generated by OSLOM)
 				continue
 			# Extract base name of the evaluating clusters level
 			# Note: benchmarking algorithm output file names are not controllable and can be any, unlike the embracing folders
@@ -2069,14 +1874,10 @@ def evalGeneric(execpool,
 			# Define clusters level name as part of the jbasename
 			if pos == -1:
 				pos = 0
-				jbasename = '_'.join(
-					(clsname[:icnpid], jbasename
-					))  # Note: pathid is already included into clsname
+				jbasename = '_'.join((clsname[:icnpid], jbasename))  # Note: pathid is already included into clsname
 			#elif pathidsuf:
 			#	jbasename += pathidsuf
-			clslev = jbasename[pos + icnpid:].lstrip(
-				'_-.'
-			)  # Note: clslev can be empty if jbasename == clsname[:icnpid]
+			clslev = jbasename[pos + icnpid:].lstrip('_-.')  # Note: clslev can be empty if jbasename == clsname[:icnpid]
 			#print('Lev naming: clslev = {}, jbasename = {}'.format(clslev, jbasename))
 			# Note: it is better to path clsname and shuffle separately to avoid redundant cut on evaluations processing
 			#if shuffle:
@@ -2085,33 +1886,21 @@ def evalGeneric(execpool,
 			#jobname = SEPNAMEPART.join((measure, algname, clsname))
 			logfilebase = '/'.join((logsbase, jbasename))
 			# pathid must be part of jobname, and  bun not of the clslev
-			jobs.append(
-				evaljob(cfile, task, taskoutp, clslev, shuffle, rcpoutp,
-				logfilebase))
+			jobs.append(evaljob(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logfilebase))
 	# Run all jobs after all of them were added to the task
 	if jobs:
 		for job in jobs:
 			try:
 				execpool.execute(job)
 			except Exception as err:
-				print(
-					'ERROR, "{}" job execution failed: {}. {}'.format(
-					job.name, err, traceback.format_exc(8)),
+				print('ERROR, "{}" job execution failed: {}. {}'.format(job.name, err, traceback.format_exc(8)),
 					file=sys.stderr)
 	else:
-		print(
-			'WARNING, "{}" clusters from "{}" do not exist to be evaluated'
-			.format(algname, basefile),
+		print('WARNING, "{}" clusters from "{}" do not exist to be evaluated'.format(algname, basefile),
 			file=sys.stderr)
 
 
-def evalAlgorithm(execpool,
-	algname,
-	basefile,
-	measure,
-	timeout,
-	resagg,
-	pathidsuf=''):
+def evalAlgorithm(execpool, algname, basefile, measure, timeout, resagg, pathidsuf=''):
 	"""Evaluate the algorithm by the specified measure.
 	NOTE: all paths are given relative to the root benchmark directory.
 
@@ -2123,11 +1912,9 @@ def evalAlgorithm(execpool,
 	resagg  - results aggregator
 	pathidsuf: str  - network path id prepended with the path separator
 	"""
-	assert not pathidsuf or pathidsuf.startswith(
-		SEPPATHID), 'Ivalid pathidsuf: ' + pathidsuf
+	assert not pathidsuf or pathidsuf.startswith(SEPPATHID), 'Ivalid pathidsuf: ' + pathidsuf
 	if _DEBUG_TRACE:
-		print('Evaluating {} for "{}" on base of "{}"...'.format(
-			measure, algname, basefile))
+		print('Evaluating {} for "{}" on base of "{}"...'.format(measure, algname, basefile))
 
 	def evaljobMod(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logsbase):
 		"""Produce modularity evaluation job
@@ -2158,13 +1945,10 @@ def evalAlgorithm(execpool,
 			# Find require value to be aggregated
 			targpref = 'mod: '
 			# Match float number
-			mod = parseFloat(result[len(targpref):])[0] if result.startswith(
-				targpref) else None
+			mod = parseFloat(result[len(targpref):])[0] if result.startswith(targpref) else None
 			if mod is None:
-				print(
-					'ERROR, job "{}" has invalid output format. Moularity value is not found in: {}'
-					.format(job.name, result),
-					file=sys.stderr)
+				print('ERROR, job "{}" has invalid output format. Moularity value is not found in: {}'
+					.format(job.name, result), file=sys.stderr)
 				return
 
 			# Transfer results to the embracing task if exists
@@ -2183,21 +1967,10 @@ def evalAlgorithm(execpool,
 					clslev = SEPNAMEPART.join((clslev, shuffle))
 				tmod.write('{}\t{}\n'.format(mod, clslev))
 
-		return Job(
-			name=SEPSHF.join((task.name, shuffle)),
-			workdir=ALGSDIR,
-			args=args,
-			timeout=timeout,
-			ondone=aggLevs,
-			params={
-			'taskoutp': taskoutp,
-			'clslev': clslev,
-			'shuffle': shuffle
-			}
+		return Job(name=SEPSHF.join((task.name, shuffle)), workdir=ALGSDIR, args=args, timeout=timeout,
+			ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle},
 			# Output modularity to the proc PIPE buffer to be aggregated on postexec to avoid redundant files
-			,
-			stdout=PIPE,
-			stderr=logsbase + EXTERR)
+			stdout=PIPE, stderr=logsbase + EXTERR)
 
 	def evaljobNmi(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logsbase):
 		"""Produce nmi evaluation job
@@ -2248,17 +2021,12 @@ def evalAlgorithm(execpool,
 				result = job.proc.communicate()[0].decode()
 				nmi = float(result)  # Read buffered stdout
 			except ValueError:
-				print(
-					'ERROR, nmi evaluation failed for the job "{}": {}'.format(
-					job.name, result),
-					file=sys.stderr)
+				print('ERROR, nmi evaluation failed for the job "{}": {}'.format(job.name, result), file=sys.stderr)
 			else:
 				# Transfer results to the embracing task if exists
 				taskoutp = job.params['taskoutp']
 				clslev = job.params['clslev']
-				task.params.addraw(
-					taskoutp, clslev,
-					nmi)  # Note: task.params is shuffles aggregator
+				task.params.addraw(taskoutp, clslev, nmi)  # Note: task.params is shuffles aggregator
 				# Log results
 				with open(taskoutp, 'a') as tnmi:  # Append to the end
 					if not os.fstat(tnmi.fileno()).st_size:
@@ -2270,20 +2038,9 @@ def evalAlgorithm(execpool,
 						clslev = SEPNAMEPART.join((clslev, shuffle))
 					tnmi.write('{}\t{}\n'.format(nmi, clslev))
 
-		return Job(
-			name=jobname,
-			task=task,
-			workdir=ALGSDIR,
-			args=args,
-			timeout=timeout,
-			ondone=aggLevs,
-			params={
-			'taskoutp': taskoutp,
-			'clslev': clslev,
-			'shuffle': shuffle
-			},
-			stdout=PIPE,
-			stderr=logsbase + EXTERR)
+		return Job(name=jobname, task=task, workdir=ALGSDIR, args=args, timeout=timeout,
+			ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle},
+			stdout=PIPE, stderr=logsbase + EXTERR)
 
 	def evaljobNmiS(cfile, task, taskoutp, clslev, shuffle, rcpoutp, logsbase):
 		"""Produce nmi_s evaluation job
@@ -2311,17 +2068,12 @@ def evalAlgorithm(execpool,
 				result = job.proc.communicate()[0].decode()
 				nmi = float(result)  # Read buffered stdout
 			except ValueError:
-				print(
-					'ERROR, nmi_s evaluation failed for the job "{}": {}'
-					.format(job.name, result),
-					file=sys.stderr)
+				print('ERROR, nmi_s evaluation failed for the job "{}": {}'.format(job.name, result), file=sys.stderr)
 			else:
 				# Transfer results to the embracing task if exists
 				taskoutp = job.params['taskoutp']
 				clslev = job.params['clslev']
-				task.params.addraw(
-					taskoutp, clslev,
-					nmi)  # Note: task.params is shuffles aggregator
+				task.params.addraw(taskoutp, clslev, nmi)  # Note: task.params is shuffles aggregator
 				# Log results
 				with open(taskoutp, 'a') as tnmi:  # Append to the end
 					if not os.fstat(tnmi.fileno()).st_size:
@@ -2333,39 +2085,17 @@ def evalAlgorithm(execpool,
 						clslev = SEPNAMEPART.join((clslev, shuffle))
 					tnmi.write('{}\t{}\n'.format(nmi, clslev))
 
-		return Job(
-			name=jobname,
-			task=task,
-			workdir=ALGSDIR,
-			args=args,
-			timeout=timeout,
-			ondone=aggLevs,
-			params={
-			'taskoutp': taskoutp,
-			'clslev': clslev,
-			'shuffle': shuffle
-			},
-			stdout=PIPE,
-			stderr=logsbase + EXTERR)
+		return Job(name=jobname, task=task, workdir=ALGSDIR, args=args, timeout=timeout,
+			ondone=aggLevs, params={'taskoutp': taskoutp, 'clslev': clslev, 'shuffle': shuffle},
+			stdout=PIPE, stderr=logsbase + EXTERR)
 
 	if measure == 'mod':
-		evalGeneric(execpool, measure, algname, basefile, measure + '/',
-			timeout, evaljobMod, resagg, pathidsuf)
+		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, evaljobMod, resagg, pathidsuf)
 	elif measure == 'nmi':
-		evalGeneric(execpool, measure, algname, basefile, measure + '/',
-			timeout, evaljobNmi, resagg, pathidsuf)
+		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout, evaljobNmi, resagg, pathidsuf)
 	elif measure == 'nmi_s':
-		evalGeneric(
-			execpool,
-			measure,
-			algname,
-			basefile,
-			measure + '/',
-			timeout,
-			evaljobNmiS,
-			resagg,
-			pathidsuf,
-			tidy=False)
+		evalGeneric(execpool, measure, algname, basefile, measure + '/', timeout,
+			evaljobNmiS, resagg, pathidsuf, tidy=False)
 	else:
 		raise ValueError('Unexpected measure: ' + measure)
 
@@ -2377,7 +2107,6 @@ if __name__ == '__main__':
 	flags = doctest.REPORT_NDIFF | doctest.REPORT_ONLY_FIRST_FAILURE
 	failed, total = doctest.testmod(optionflags=flags)
 	if failed:
-		print("Doctest FAILED: {} failures out of {} tests".format(
-			failed, total))
+		print("Doctest FAILED: {} failures out of {} tests".format(failed, total))
 	else:
 		print('Doctest PASSED')

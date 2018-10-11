@@ -175,14 +175,20 @@ class SyntPathOpts(PathOpts):
 
 class QAggOpt(object):
 	"""Quality aggregation option"""
-	__slots__ = ('alg', 'msrs', 'nets')
+	__slots__ = ('alg', 'msrs', 'nets', 'exclude')
 
-	def __init__(self, alg, msrs=None, nets=None):
+	def __init__(self, alg, msrs=None, nets=None, exclude=False):
 		"""Sets values for the input parameters
 
+		Specified networks and measures that do not exist in the algorithm output are omitted
+
 		alg: str  - algorithm name
-		msrs: iterable(str) or None  - quality measure names
-		nets: iterable(str) or None  - network names
+		msrs: iterable(str) or None  - quality measure names or their prefixes in the format <appname>[:<metric>][+u]
+			(like: "Xmeasures:MF1h_w+u")
+			Note: there are few measures, so linear search is the fastest
+		nets: set(str) or None  - wildcards of the network names
+		exclude: bool  - include in (filter by) or exclude from (filter out)
+			the output according to the specified options
 		"""
 		assert isinstance(alg, str) and isinstance(msrs, (tuple, list)) and isinstance(nets, (tuple, list)), (
 			'Ivalid type of the argument, alg: {}, msrs: {}, nets: {}'.format(
@@ -190,6 +196,7 @@ class QAggOpt(object):
 		self.alg = alg
 		self.msrs = msrs
 		self.nets = nets
+		self.exclude = exclude
 
 	@staticmethod
 	def parse(text):
@@ -218,7 +225,8 @@ class QAggOpt(object):
 			alg = parts[0].strip()
 			if len(parts) >= 2:
 				nets = parts[1].strip().split(',')
-		return QAggOpt(alg, msrs, nets)
+		exclude = alg.startswith('-')
+		return QAggOpt(alg.lstrip('-+'), msrs, nets, exclude)
 
 	def __str__(self):
 		"""String conversion"""
@@ -341,6 +349,7 @@ def parseParams(args):
 	return params: Params
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
+	aggoflt = None  # Filter type of the aggregation options, required to valide it's consistence
 	opts = Params()
 
 	timemul = 1  # Time multiplier, sec by default
@@ -505,12 +514,18 @@ def parseParams(args):
 			opts.qmeasures.append(unquote(arg[3:]).split())
 		elif arg[1] == 's':
 			if opts.qaggopts is None:  # Aggregate all algs on all networks
-				opts.qaggopts = []  # algname: network_names
+				opts.qaggopts = []  # QAggOpt array
 			if len(arg) == 2:
 				continue
 			if len(arg) <= 3 or arg[2] != '=':
 				raise ValueError('Unexpected argument: ' + arg)
-			opts.qaggopts.append(QAggOpt.parse(arg[3:]))
+			qao = QAggOpt.parse(arg[3:])
+			if aggoflt is None:
+				aggoflt = qao.exclude
+			elif aggoflt != qao.exclude:
+				raise ValueError('All aggregation option filters should be either inclusive or exclusive'
+					', failed for alg: ' + qao.alg)
+			opts.qaggopts.append(qao)
 			# opts.aggrespaths.append(unquote(arg[3:]))
 		elif arg[1] == 't':
 			pos = arg.find('=', 2)
@@ -1758,6 +1773,8 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								task = Task(SEPSUBTASK.join((task.name, alg)), task=task
 									# TODO: Aggregate quality evaluations of each algorithm on each network
 									#, onfinish=aggAlgQevals, params=_execpool
+									# NOTE: Currently the aggregation is performed for all algorithms after their evaluation,
+									# which is faster and requires less IO than the dedicated aggregations per an algorithm.
 								)
 							try:
 								# Whether the input path is a network or a clustering
@@ -1765,7 +1782,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								cfnames, uclfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
 								#print('> cfnames num: {}, uclfname: {}, iinst: {}'.format(len(cfnames), uclfname, iinst))
 								# Note: the datasets can be created/opened only after the evaluating quality measure specify
-								# the processing metrics (names) to form the target dataset name.
+								# the processing measures (names) to form the target dataset name.
 								# Sort the clustering file names to form their clustering level ids in the same order
 								if len(cfnames) >= 2:
 									cfnames.sort()
@@ -1985,7 +2002,7 @@ def benchmark(*args):
 			# , netnames=netnames
 
 	if opts.qaggopts is not None:
-		aggEvals(opts.qaggopts, seed=seed, update=opts.qupdate, revalue=opts.qrevalue)
+		aggEvals(None if not opts.qaggopts else opts.qaggopts, seed=seed, update=opts.qupdate, revalue=opts.qrevalue)
 		# aggEvaluations(opts.aggrespaths)
 
 	exectime = time.perf_counter() - exectime
@@ -2028,7 +2045,8 @@ if __name__ == '__main__':
 			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
 			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
 			' [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[="qmapp [arg1 arg2 ...]"]]'
-			' [-s=<resval_path>] [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] [-w=<webui_addr>] | -h',
+			' [-s[=[{{-,+}}]<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...]]]'
+			' [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] [-w=<webui_addr>] | -h',
 			'',
 			'Example:',
 			'  {0} -g=3{gensepshuf}5 -r -q -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
@@ -2123,10 +2141,17 @@ if __name__ == '__main__':
 			'  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.), deprecated',
 			'    f  - force the conversion even when the data is already exist',
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
-			'  --summary, -s[=<alg>[{qsepmsr}<qmeassre1,qmeassre2,...>][{qsepnet}<net1>,<net2>,...]]  - summarize evaluation results of the specified algorithms on the specified networks'
+			'  --summary, -s[=[{{-,+}}]<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...]]'
+			'  - summarize evaluation results of the specified algorithms on the specified networks'
 			' extending the existent quality measures storage considering the specified update policy. Especially useful to include extended'
 			' evaluations into the final summarized results.',
-			'NOTE: aggregation for multiple algorithms can be specified with multiple -s options.',
+			'    -/+  - filter inclusion prefix: "-" to filter out specified data (exclude) and'
+			' "+" (default) to filter by (include only such data).',
+			'    <qmeasure>  - quality measure in the format:  <appname>[:<qmetric>][+u]'
+			', for example "Xmeasures:MF1h_w+u", where "+u" denotes representative clusters fetched'
+			' from the multi-resolution clustering and represented in a single level.',
+			'NOTE: aggregation for multiple algorithms can be specified with multiple -s options given that'
+			' all of them have THE SAME filter inclusion prefix.',
 			# '  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
 			# ', which is useful to include external manual evaluations into the final summarized results',
 			# 'ATTENTION: <resval_path> should include the algorithm name and target measure.',
@@ -2135,10 +2160,11 @@ if __name__ == '__main__':
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {runtimeout}.',
 			'  --evaltimeout  - global clustering algorithms execution timeout in the'
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {evaltimeout}.',
-			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, resdir=RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
+			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, qsepnet=_QSEPNET
+				, resdir=RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=SEPINST, seppars=SEPPARS, sepshf=SEPSHF, rsvpathsmb=(SEPPARS, SEPINST, SEPSHF, SEPPATHID)
 				, anppsnum=len(apps), apps=', '.join(apps), qmappsnum=len(qmapps), qmapps=', '.join(qmapps)
-				, algtimeout=secDhms(_TIMEOUT), seedfile=_SEEDFILE, qsepmsr=_QSEPMSR, qsepnet=_QSEPNET
+				, algtimeout=secDhms(_TIMEOUT), seedfile=_SEEDFILE, qsepmsr=_QSEPMSR
 				, port=_PORT, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
 	else:
 		if len(sys.argv) == 2 and sys.argv[1] == '--doc-tests':

@@ -1577,7 +1577,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 	update: bool  - update evaluations file (storage of datasets) or create a new one,
 		anyway existed evaluations are backed up
 	revalue: bool  - whether to revalue the existent results or omit such evaluations
-		calculating and saving only the values being not present in the dataset,
+		calculating and saving only the absent values in the dataset,
 		actual only for the update flag set
 	"""
 	# netnames: iterable(str)  - input network names with path id and without the base path,
@@ -1616,6 +1616,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 			else:
 				raise ValueError('Processing {} {} > {} persisted. A new dedicated storage is required'.format(vname, vactual, vstored))
 		if vstored is None:
+			# NOTE: the existing attribute is overwritten
 			group.attrs.create(vname, vactual, shape=(1,), dtype=vtype)
 			return vactual  # The same as new vstored
 		return vstored  # >= vactual
@@ -2126,6 +2127,12 @@ if __name__ == '__main__':
 			'    Examples: `-th=2.5` is the same as `-t=2h30m` and `--timeout=2h1800`',
 			'  --quality-noupdate  - always create a new storage file for the quality measure evaluations'
 			' instead of updating the existent one.',
+			'NOTE: the shape of the updating dataset is retained, which results in distinct semantics'
+			' for the evaluations and aggregations when if applied on the increased number of networks:',
+			'  1. The raw quality evaluation dataset has multi-dimensional fixed shape,'
+			' which results in omission out of bound values logging these omissions.',
+			'  2. The quality metrics aggregation dataset has a single-dimensional resizable shape,'
+			' so the absent networks are appended with the respective values.',
 			'  --quality-revalue  - evaluate resulting clusterings with the quality measures from scratch'
 			' instead of retaining the existent values (for the same seed) and adding only the non-existent.',
 			'NOTE: actual (makes sense) only when --quality-noupdate is NOT applied.',

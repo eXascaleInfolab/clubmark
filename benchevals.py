@@ -492,6 +492,7 @@ class QualitySaver(object):
 			dims_qms_raw = ('inst', 'shuf', 'levl', 'mrun')
 			dqrlen = max((len(s) for s in dims_qms_raw)) + 1
 			dqrtype = 'a' + str(dqrlen)  # Zero terminated bytes, fixed length
+			# NOTE: the existing attribute is overwritten
 			self.storage.attrs.create(dqrname, data=np.array(dims_qms_raw, dtype=dqrtype))
 			# shape=(len(dims_qms_raw),), dtype=dqrtype)
 			# dims_qms_agg = ('net'): ('avg', 'var', 'num')  # 'dims_qms_agg'
@@ -544,8 +545,12 @@ class QualitySaver(object):
 				dsname += _EXTQDATASET
 				# Open or create the required dataset
 				qmgroup = self.storage[qm.smeta.group]
+				# qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
+				# 	# 32-bit floating number, checksum (fletcher32), "exact" used to require both shape and type to match exactly
+				# 	dtype='f4', exact=True, fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
 				qmdata = None
 				try:
+					# Note: the out of bound values are omitted in case of update
 					qmdata = qmgroup[dsname]
 				except KeyError:
 					# Such dataset does not exist, create it
@@ -1216,6 +1221,7 @@ class NamedList(object):
 		kinds: dict(obj, int >= 0)  - mapping of a key to the respective value index
 		values: list(obj)  - values indexed buy the key
 		"""
+		# Track the order of items
 		self.kinds = {} if not keys else {k: i for i, k in enumerate(keys)}
 		self.values = [None] * len(self.kinds)
 		assert len(self.values) == len(self.kinds), 'Items number should correspond to the keys number'
@@ -1228,7 +1234,8 @@ class NamedList(object):
 			self.values[i] = val
 		else:
 			self.values.append(val)
-		assert len(self.values) == len(self.kinds), 'The number of extended items should correspond to the keys number'
+			assert len(self.values) == len(self.kinds
+				), 'The number of extended items should correspond to the keys number'
 
 	def get(self, key, default=None):
 		"""Get value by the name
@@ -1238,6 +1245,13 @@ class NamedList(object):
 		"""
 		i = self.get(key)
 		return default if i is None else self.values[i]
+
+	def keys(self):
+		"""Keys in the order of values (items insertion)"""
+		res = [None] * len(self.kinds)
+		for k, i in viewitems(self.kinds):
+			res[i] = k
+		return res
 
 	def __len__(self):
 		"""Returns the number of elements in the container"""
@@ -1254,20 +1268,24 @@ conf: float4  - confidance (rins*rshf*rrun)
 """
 
 
-def aggeval(aggevals, nets, qaggopts, qmsname, update=True, revalue=False, maxins=0):
+def aggeval(aggevals, nets, qaggopts, qmsname, revalue=False, maxins=0):
 	"""Aggregate evaluation results from the specified HDF5 storage to the dedicated HDF5 storage
 
 	aggevals: dict(qmeasure: dict(algname: NamedList(netname: QValStat)))
 		- resulting aggregated evaluations to be extended, where the netname includes pathid if any
-	qaggopts: QAggOpt  - quality aggregation options (filter), empty or None means aggregate everything
+		NOTE: Each algorithm has own indexing and number of networks
+	nets: set(str)  - resulting networks present in any of the processed algorithms or None
+	qaggopts: iterable(QAggOpt)  - quality aggregation options (filter), empty or None means aggregate everything
 	qmsname: str  - path of the HDF5 quality measures storage to be aggregated
-	update: bool  - update evaluations file (storage of datasets) or create a new one,
-		anyway existed evaluations are backed up
-	revalue: bool  - whether to revalue the existent results or omit such evaluations
-		calculating and saving only the values being not present in the dataset,
+	revalue: bool  - whether to revalue (reaggregate) the existent results or omit such evaluations
+		calculating and saving only the absent values in the dataset,
 		actual only for the update flag set
 	maxins: int >= 0  - max number of instances to process, 0 means all
 	"""
+	# Check types to validate positional arguments
+	assert isinstance(qmsname, str) and isinstance(revalue, bool) and isinstance(maxins, int), (
+		'Unexpected types of the arguments, qmsname: {}, revalue: {}, maxins: {}'.format(
+		type(qmsname).__name__, type(revalue).__name__, type(maxins).__name__))
 	# Define type of the aggregation filtering, which should be the same for all options
 	fltout = None if not qaggopts else qaggopts[0].exclude
 	# Index aggregation filters by the algorithm names
@@ -1363,10 +1381,12 @@ def aggeval(aggevals, nets, qaggopts, qmsname, update=True, revalue=False, maxin
 					if maxins and iins >= maxins:
 						break
 				# Networks evaluations for each measure and each algorithm
-				netsevs = aggevals.setdefault(msr, {}).setdefault(alg, NamedList())
+				netsevs = aggevals.setdefault(msr, {}).setdefault(alg, NamedList(keys=nets))
 				# conf: float4  - confidance (rins*rshf*rrun)
 				netsevs.insert(net, QValStat(avgres.avg(), avgsd.avg(), np.nan if not len(dmsr) else
 					avgres.num / float(avgres.nans + avgres.num) * (1 if not avgrshf.num else avgrshf.avg())))
+	if nets is not None:
+		nets.extend(netsevs.kinds)  # Add keys (network kinds)
 
 
 def aggEvals(qaggopts, seed, update=True, revalue=False):
@@ -1378,76 +1398,91 @@ def aggEvals(qaggopts, seed, update=True, revalue=False):
 		if the seed is None.
 	update: bool  - update evaluations file (storage of datasets) or create a new one,
 		anyway existed evaluations are backed up
-	revalue: bool  - whether to revalue the existent results or omit such evaluations
-		calculating and saving only the values being not present in the dataset,
+	revalue: bool  - whether to revalue (reaggregate) the existent results or omit such evaluations
+		calculating and saving only the absent values in the dataset,
 		actual only for the update flag set
 	"""
 	qmsdir = RESDIR + QMSDIR  # Quality measures directory
-	seeds = []  # Seeds in the string format of the input storages
+	seedstr = None  # Seed of the aggregating datasets (should be the same)
 	qmnbase = 'qmeasures_'
 	qmnsuf = '.h5'
 	# Aggregated evaluations to be saved
 	aggevals = {}  # dict(qmeasure: dict(algname: NamedList(netname: QValStat)))
+	nets = set()  # Forming set of networks present in any of the processed algorithms
 	maxins = 1  # TODO: use default maxins=0 after insuring that values for all instances are correct in the clustering results
 	if not revalue:
-		# TODO: omit aggregation of the already existent (aggregated) results
+		# TODO: omit aggregation of the already existent (aggregated) results,
+		# which requires first to read the existent aggregated evaluations
 		print('WARNING aggEvals(), Omission of the existent results formation is not supported yet')
 	if seed is not None:
 		seedstr = str(seed)
 		qmspath = ''.join((qmsdir, qmnbase, seedstr, qmnsuf))  # File name of the HDF5.storage
-		aggeval(aggevals, qaggopts, qmspath, update, revalue, maxins=1)
-		seeds.append(seedstr)
+		aggeval(aggevals, nets, qaggopts, qmspath, revalue, maxins=maxins)
 	else:
 		for qmspath in glob.iglob(qmsdir + '*'.join((qmnbase, qmnsuf))):
 			try:
-				print('Aggregating', os.path.split(qmspath)[1])
-				aggeval(aggevals, qaggopts, qmspath, update, revalue, maxins=1)
+				qmsname = os.path.split(qmspath)[1]
+				print('Aggregating', qmsname)
 				# Extract seeds and to the added to the userblock of the forming storage
-				seeds.append(qmspath[len(qmnbase):len(qmspath) - len(qmnsuf)])  # Note: considered that qmsuf can be empty
+				seed = qmspath[len(qmnbase):len(qmspath) - len(qmnsuf)]  # Note: considered that qmsuf can be empty
+				if seedstr is None:
+					seedstr = seed
+				elif seedstr != seed:
+					print('WARNING, the aggregating dataset "{}" is omitted because its seed is distinct'
+						' from the aggregation one'.format(qmsname), file=sys.stderr)
+					continue
+				aggeval(aggevals, nets, qaggopts, qmspath, revalue, maxins=maxins)
 			except Exception as err:  #pylint: disable=W0703
 				print('ERROR, quality measures aggregation in {} failed: {}. Discarded. {}'.format(
 					qmspath, err, traceback.format_exc(5)), file=sys.stderr)
 	# Form the resulting HDF5 storage indicating the number of processed levels (maxins) in the name if used
-	aggqpath = ''.join((qmsdir, ('aggqms', '' if not maxins else '%' + str(maxins), '_', '-'.join(seeds))))
+	aggqpath = ''.join((qmsdir, ('aggqms', '' if not maxins else '%' + str(maxins), '_', seedstr)))
 	if os.path.isfile(aggqpath):
 		tobackup(aggqpath, False, move=not update)  # Copy/move to the backup
 	storage = h5py.File(aggqpath, mode='a', driver='core', libver='latest')
-	# # Add attributes if required
-	# dqrname = 'dims_aggqms'
-	# if storage.attrs.get(dqrname) is None or update:
-	# 	# Describe dataset dimensions
-	# 	# Note: the dimension is implicitly omitted in the visualizing table if its size equals to 1
-	# 	dims_aggqms = ('net')  # :QValStat
-	# 	dqrlen = max((len(s) for s in dims_qms_raw)) + 1
-	# 	dqrtype = 'a' + str(dqrlen)  # Zero terminated bytes, fixed length
-	# 	storage.attrs.create(dqrname, data=np.array(dims_qms_raw, dtype=dqrtype))
+	# Add attributes if required
+	if storage.attrs.get('nets') is None or update:
+		# List all networks in the utf8 string, the existing attribute is overwritten
+		storage.attrs['nets'] = ' '.join(nets).decode()
 
 	# Update/create groups and datasets:
 	# /<measure>/<alg>.dat
 	# Data format: <net[#pathid]>Enum: QValStat, where QValStat is a tuple(avgares, sdval, conf=rins*rshf*rrun)
 	for qmtr, qevs in viewitems(aggevals):
 		for alg, aevs in viewitems(qevs):
-			netevs = storage.require_dataset(''.join((qmtr, '/', alg, '.dat')), shape=(len(aevs),),
-				dtype=np.dtype([(attr, 'f4') for attr in QValStat._fields]), # 32-bit (4 byte) floating numbers
-					#, chunks=(10,) # , maxshape=(None,)
-					fletcher32=True, fillvalue=[np.float32(np.nan)]*len(QValStat._fields), track_times=True, exact=True)
-
-	# 						qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
-	# 							# 32-bit floating number, checksum (fletcher32)
-	# 							dtype='f4', fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
-	
-	# alg = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
-	# 	# Allocate chunks of 10 items starting with empty dataset and with possibility
-	# 	# to resize up to 500 items (params combinations)
-	# 	self.apps[app] = appsdir.require_dataset(app, shape=(0,), dtype=h5py.special_dtype(vlen=_h5str)
-	# 		, chunks=(10,), maxshape=(500,))  # , maxshape=(None,), fletcher32=True
-	# self.evals = self.storage.require_group('evals')  # Quality evaluations dir (group)
-	# # Note: None in maxshape means resizable, fletcher32 used for the checksum,
-	# # exact used to require shape and type to match exactly
-	# metares = self.storage.require_dataset('rescons.meta', shape=(len(self.mrescons),), dtype=h5str
-	# 	, data=self.mrescons, exact=True, fletcher32=True)  # fillvalue=''
-
-
+			dsname = ''.join((qmtr, '/', alg, '.dat'))
+			aggdata = None
+			try:
+				# Note: the absent values are added in case of update
+				aggdata = storage[dsname]
+			except KeyError:
+				aggdata = storage.create_dataset(dsname, shape=(len(aevs),),
+					dtype=np.dtype([(attr, 'f4') for attr in QValStat._fields]), # 32-bit (4 byte) floating numbers
+					maxshape=(None,), chunks=(8,), #exact=True, # "exact" means that both shape and type should match exactly
+					fletcher32=True, fillvalue=[np.float32(np.nan)]*len(QValStat._fields), track_times=True)
+			# Extend or reuse the attributes
+			dsanets = aggdata.attrs.get('nets')
+			# Append the absent networks in the original order and construct mapping of the updated indices
+			imap = {}  # src: uint -> dst: uint
+			if dsanets is None:
+				dnets = aevs.keys()
+				aggdata.attrs['nets'] = ' '.join(dnets).decode()
+			else:
+				dnets = dsanets.split()
+				pnets = set(dnets)
+				for i, net in enumerate(aevs.keys()):
+					if net not in pnets:
+						imap[i] = len(dnets)
+						dnets.append(net)
+				aggdata.attrs['nets'] = ' '.join(dnets)
+			# Fill missed values
+			if update:
+				for i, qv in enumerate(aevs.values):
+					iu = imap.get(i, i)  # Updated index
+					if revalue or iu != i:
+						aggdata[iu] = qv
+			else:
+				aggdata[...] = np.array(aevs.values)
 	storage.close()  # Explicitly close to flush the file
 
 

@@ -61,6 +61,8 @@ except ImportError:  # Queue in Python2
 import math
 import copy
 import fnmatch  # Matching of the name wildcards
+import itertools  # chain
+from numbers import Number  # To verify that a variable is a number (int or float)
 from collections import namedtuple
 # Required for the quality evaluation persistence
 import numpy as np  # Required for the HDF5 operations
@@ -228,7 +230,7 @@ class SMeta(object):
 
 	def __init__(self, group, measure, ulev, iins, ishf, ilev=0, irun=0):
 		"""Serialization meta information (location in the storage)
-		
+
 		group: str  - h5py.Group name where the target dataset is located: <algname>/<basenet><pathid>/
 		measure: str  - name of the serializing evaluation measure
 		ulev: bool  - unified levels, the clustering consists of the SINGLE (unified) level containing
@@ -384,8 +386,7 @@ class QualitySaver(object):
 	# 	# Note: qsqueue closing in the worker process (here) causes exception on the QualSaver destruction
 	# 	# qsqueue.close()  # Close queue to prevent scheduling another tasks
 
-	def __init__(self, seed,
-		update=False):  # , timeout=None;  algs, qms, nets=None
+	def __init__(self, seed, update=False):  # , timeout=None;  algs, qms, nets=None
 		"""Creating or open HDF5 storage and prepare for the quality measures evaluations
 
 		Check whether the storage exists, copy/move old storage to the backup and
@@ -620,7 +621,7 @@ class QualitySaver(object):
 
 	def __exit__(self, etype, evalue, tracebk):
 		"""Contex exit
-	
+
 		etype  - exception type
 		evalue  - exception value
 		tracebk  - exception traceback
@@ -697,7 +698,7 @@ def qmeasure(qmapp, workdir=UTILDIR):
 
 	def wrapper(qmsaver):  # Actual decorator for the qmsaver func(Job)
 		"""Actual decorator of the quality measure parcing saving function
-		
+
 		qmsaver: callable(job: Job)  - parcing and saving function of the quality measure,
 			used as a Job.ondone() callback
 		"""
@@ -800,7 +801,7 @@ def qmsaver(job):
 	"""Default quality measure parser and serializer, used as Job ondone() callback
 
 	job  - executed job, whose params contain:
-		save: callable  - save(QEntry) routine to the persistant storage 
+		save: callable  - save(QEntry) routine to the persistant storage
 		smeta: SMeta  - metadata identifying location of the saving values in the storage dataset
 	"""
 	if not job.pipedout:
@@ -1109,7 +1110,7 @@ def execImeasures(execpool, save, smeta, qparams, cfpath, inpfpath, asym=False, 
 
 class ValAcc(object):
 	"""Values accumulator
-	
+
 	>>> str(ValAcc().avg()) == 'nan'
 	True
 	>>> acc = ValAcc(); acc.add(1); acc.add(3.6); acc.avg() == 2.3
@@ -1120,7 +1121,7 @@ class ValAcc(object):
 	def __init__(self):
 		"""Initialization of the accumulator
 
-		Attributes:		
+		Attributes:
 		nans: int >= 0  - the number of processed NAN values
 		num: int >= 0  - the number of processed non-NAN values
 		sum: float  - sum of the non-NAN values
@@ -1131,9 +1132,10 @@ class ValAcc(object):
 
 	def add(self, val):
 		"""Add value to the accumulator
-		
+
 		val: number  - value to be added
 		"""
+		assert isinstance(val, Number), 'Unexpected type of val: ' + type(val).__name__
 		if not math.isnan(val):
 			self.num += 1
 			self.sum += val
@@ -1165,26 +1167,22 @@ class VarAcc(ValAcc):
 	>>> acc = VarAcc(); acc.add(1); acc.add(3.6); round(acc.sd(), 2) == 1.3
 	True
 	"""
-	__slots__ = ('sum2', )  #('num', 'sum', 'sum2')
+	__slots__ = ('sum2',)
 
 	def __init__(self):
 		"""Initialization of the accumulator
 
-		Attributes:		
+		Attributes:
 		sum2: float  - sum of the squared values
 		"""
-		# self.num = 0
-		# self.sum = 0.
 		super(VarAcc, self).__init__()
 		self.sum2 = 0.
 
 	def add(self, val):
 		"""Add value to the accumulator
-		
+
 		val: number  - value to be added
 		"""
-		# self.num += 1
-		# self.sum += val
 		super(VarAcc, self).add(val)
 		self.sum2 += val * val
 
@@ -1194,14 +1192,13 @@ class VarAcc(ValAcc):
 
 	def reset(self):
 		"""Reset accumulation"""
-		# self.num = 0
-		# self.sum = 0.
 		super(VarAcc, self).reset()
 		self.sum2 = 0.
 
-	# def __str__(self):
-	# 	"""String conversion"""
-	# 	return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
+	def __str__(self):
+		"""String conversion"""
+		return ', '.join([': '.join((name, str(self.__getattribute__(name))))
+			for name in itertools.chain(super(VarAcc, self).__slots__, self.__slots__)])
 
 
 class NamedList(object):
@@ -1342,11 +1339,9 @@ def aggeval(aggevals, nets, qaggopts, qmsname, revalue=False, maxins=0):
 				i = 3
 				mrun = len(dmsr.shape) >= i + 1 and dmsr.shape[i] >= 2
 				i -= 1
-				mlev = mrun or (len(dmsr.shape) >= i + 1
-					and dmsr.shape[i] >= 2)
+				mlev = mrun or (len(dmsr.shape) >= i + 1 and dmsr.shape[i] >= 2)
 				i -= 1
-				mshf = mlev or (len(dmsr.shape) >= i + 1
-					and dmsr.shape[i] >= 2)
+				mshf = mlev or (len(dmsr.shape) >= i + 1 and dmsr.shape[i] >= 2)
 				avgres.reset()
 				avgsd.reset()
 				avgrshf.reset()
@@ -1369,24 +1364,25 @@ def aggeval(aggevals, nets, qaggopts, qmsname, revalue=False, maxins=0):
 										vmax = np.nan
 								else:
 									vmax = max(shf)
-								varshf.add(vmax)
+								varshf.add(vmax if not isinstance(vmax, np.ndarray) else vmax.item(0))
 							else:
-								varshf.add(shf)
+								varshf.add(shf if not isinstance(shf, np.ndarray) else shf.item(0))
 						avgres.add(varshf.avg())
 						avgsd.add(varshf.sd())
 						if varshf.nans:
 							avgrshf.add(varshf.nans / float(varshf.nans + varshf.num))
 					else:
-						avgres.add(inst)
+						avgres.add(inst if not isinstance(inst, np.ndarray) else inst.item(0))
 					if maxins and iins >= maxins:
 						break
 				# Networks evaluations for each measure and each algorithm
 				netsevs = aggevals.setdefault(msr, {}).setdefault(alg, NamedList(keys=nets))
+				#print('> {} on {}: ({}, {}, ...)'.format(alg, net, avgres.avg(), avgsd.avg()))
 				# conf: float4  - confidance (rins*rshf*rrun)
 				netsevs.insert(net, QValStat(avgres.avg(), avgsd.avg(), np.nan if not len(dmsr) else
 					avgres.num / float(avgres.nans + avgres.num) * (1 if not avgrshf.num else avgrshf.avg())))
 	if nets is not None:
-		nets.extend(netsevs.kinds)  # Add keys (network kinds)
+		nets.union(netsevs.kinds)  # Add keys (network kinds)
 
 
 def aggEvals(qaggopts, seed, update=True, revalue=False):
@@ -1402,6 +1398,7 @@ def aggEvals(qaggopts, seed, update=True, revalue=False):
 		calculating and saving only the absent values in the dataset,
 		actual only for the update flag set
 	"""
+	print('Aggregation of the raw quality evaluations started')
 	qmsdir = RESDIR + QMSDIR  # Quality measures directory
 	seedstr = None  # Seed of the aggregating datasets (should be the same)
 	qmnbase = 'qmeasures_'
@@ -1436,37 +1433,48 @@ def aggEvals(qaggopts, seed, update=True, revalue=False):
 				print('ERROR, quality measures aggregation in {} failed: {}. Discarded. {}'.format(
 					qmspath, err, traceback.format_exc(5)), file=sys.stderr)
 	# Form the resulting HDF5 storage indicating the number of processed levels (maxins) in the name if used
-	aggqpath = ''.join((qmsdir, ('aggqms', '' if not maxins else '%' + str(maxins), '_', seedstr)))
+	aggqpath = ''.join((qmsdir, 'aggqms', '' if not maxins else '%' + str(maxins), '_', seedstr, qmnsuf))
 	if os.path.isfile(aggqpath):
 		tobackup(aggqpath, False, move=not update)  # Copy/move to the backup
 	storage = h5py.File(aggqpath, mode='a', driver='core', libver='latest')
 	# Add attributes if required
 	if storage.attrs.get('nets') is None or update:
 		# List all networks in the utf8 string, the existing attribute is overwritten
-		storage.attrs['nets'] = ' '.join(nets).decode()
+		storage.attrs['nets'] = ' '.join(nets)
 
 	# Update/create groups and datasets:
 	# /<measure>/<alg>.dat
 	# Data format: <net[#pathid]>Enum: QValStat, where QValStat is a tuple(avgares, sdval, conf=rins*rshf*rrun)
-	for qmtr, qevs in viewitems(aggevals):
+	dsupdates = {}  # Wheter the dataset is updating or created/overwritten
+	for mtr, qevs in viewitems(aggevals):
+		gmtr = storage.require_group(mtr)
 		for alg, aevs in viewitems(qevs):
-			dsname = ''.join((qmtr, '/', alg, '.dat'))
+			dsname = alg + '.dat'
+			dsupdates.setdefault(dsname, update)
 			aggdata = None
 			try:
 				# Note: the absent values are added in case of update
-				aggdata = storage[dsname]
+				aggdata = gmtr[dsname]
 			except KeyError:
-				aggdata = storage.create_dataset(dsname, shape=(len(aevs),),
-					dtype=np.dtype([(attr, 'f4') for attr in QValStat._fields]), # 32-bit (4 byte) floating numbers
+				dsupdates[dsname] = False
+				tdata = np.dtype([(attr, 'f4') for attr in QValStat._fields]) # 32-bit (4 byte) floating numbers
+				aggdata = gmtr.create_dataset(dsname, shape=(len(aevs),),
+					dtype=tdata,
+					#dtype=np.dtype([(attr, 'f4') for attr in QValStat._fields]), # 32-bit (4 byte) floating numbers
+					#dtype=np.ndarray(shape=(len(QValStat._fields),), dtype='f4'), # 32-bit (4 byte) floating numbers
 					maxshape=(None,), chunks=(8,), #exact=True, # "exact" means that both shape and type should match exactly
-					fletcher32=True, fillvalue=[np.float32(np.nan)]*len(QValStat._fields), track_times=True)
+					fletcher32=True,
+					# fillvalue=QValStat._make([np.float32(np.nan)]*len(QValStat._fields)),
+					# fillvalue=tuple([np.float32(np.nan)]*len(QValStat._fields)),
+					fillvalue=np.array([np.float32(np.nan)]*len(QValStat._fields), dtype='f4').astype(tdata),
+					track_times=True)
 			# Extend or reuse the attributes
 			dsanets = aggdata.attrs.get('nets')
 			# Append the absent networks in the original order and construct mapping of the updated indices
 			imap = {}  # src: uint -> dst: uint
 			if dsanets is None:
 				dnets = aevs.keys()
-				aggdata.attrs['nets'] = ' '.join(dnets).decode()
+				aggdata.attrs['nets'] = ' '.join(dnets)
 			else:
 				dnets = dsanets.split()
 				pnets = set(dnets)
@@ -1476,13 +1484,15 @@ def aggEvals(qaggopts, seed, update=True, revalue=False):
 						dnets.append(net)
 				aggdata.attrs['nets'] = ' '.join(dnets)
 			# Fill missed values
-			if update:
+			if dsupdates[dsname]:
 				for i, qv in enumerate(aevs.values):
 					iu = imap.get(i, i)  # Updated index
-					if revalue or iu != i:
-						aggdata[iu] = qv
+					# if revalue or iu != i:
+					#print('> Added val: ', qv)
+					aggdata[iu] = qv
 			else:
-				aggdata[...] = np.array(aevs.values)
+				#print('> Assigned values: ', aevs.values)
+				aggdata[...] = aevs.values
 	storage.close()  # Explicitly close to flush the file
 
 

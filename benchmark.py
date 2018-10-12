@@ -63,6 +63,7 @@ import signal  # Intercept kill signals
 import glob
 import traceback  # Stacktrace
 import copy
+import itertools  # chain
 import time
 # Consider time interface compatibility for Python before v3.3
 if not hasattr(time, 'perf_counter'):  #pylint: disable=C0413
@@ -169,8 +170,8 @@ class SyntPathOpts(PathOpts):
 
 	def __str__(self):
 		"""String conversion"""
-		return ', '.join((super(SyntPathOpts, self).__str__(), 'netins: ' + str(self.netins)
-			, 'overwrite: ' + str(self.overwrite)))
+		return ', '.join([': '.join((name, str(self.__getattribute__(name))))
+			for name in itertools.chain(super(SyntPathOpts, self).__slots__, self.__slots__)])
 
 
 class QAggOpt(object):
@@ -2126,15 +2127,16 @@ if __name__ == '__main__':
 			'    h  - time in hours',
 			'    Examples: `-th=2.5` is the same as `-t=2h30m` and `--timeout=2h1800`',
 			'  --quality-noupdate  - always create a new storage file for the quality measure evaluations'
-			' instead of updating the existent one.',
+			' or aggregations instead of updating the existent one.',
 			'NOTE: the shape of the updating dataset is retained, which results in distinct semantics'
 			' for the evaluations and aggregations when if applied on the increased number of networks:',
 			'  1. The raw quality evaluation dataset has multi-dimensional fixed shape,'
 			' which results in omission out of bound values logging these omissions.',
 			'  2. The quality metrics aggregation dataset has a single-dimensional resizable shape,'
 			' so the absent networks are appended with the respective values.',
-			'  --quality-revalue  - evaluate resulting clusterings with the quality measures from scratch'
-			' instead of retaining the existent values (for the same seed) and adding only the non-existent.',
+			'  --quality-revalue  - evaluate resulting clusterings with the quality measures or'
+			' aggregate the resulting raw quality measures'
+			' from scratch instead of retaining the existent values (for the same seed) and adding only the non-existent.',
 			'NOTE: actual (makes sense) only when --quality-noupdate is NOT applied.',
 			'  --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation,'
 			' stochastic algorithms and quality measures execution, contains uint64_t value. Default: {seedfile}.',
@@ -2148,17 +2150,21 @@ if __name__ == '__main__':
 			'  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.), deprecated',
 			'    f  - force the conversion even when the data is already exist',
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
-			'  --summary, -s[=[{{-,+}}]<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...]]'
+			'  --summary, -s[a][v][=[{{-,+}}]<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...]]'
 			'  - summarize evaluation results of the specified algorithms on the specified networks'
 			' extending the existent quality measures storage considering the specified update policy. Especially useful to include extended'
 			' evaluations into the final summarized results.',
+			'    a  - aggregate all available quality evaluations instead of only the one matching the seed',
+			'    v  - visualize the aggregated results to the <aggqms>.png',
 			'    -/+  - filter inclusion prefix: "-" to filter out specified data (exclude) and'
 			' "+" (default) to filter by (include only such data).',
 			'    <qmeasure>  - quality measure in the format:  <appname>[:<qmetric>][+u]'
 			', for example "Xmeasures:MF1h_w+u", where "+u" denotes representative clusters fetched'
 			' from the multi-resolution clustering and represented in a single level.',
-			'NOTE: aggregation for multiple algorithms can be specified with multiple -s options given that'
+			'NOTE:',
+			'  - Aggregation for multiple algorithms can be specified with multiple -s options given that'
 			' all of them have THE SAME filter inclusion prefix.',
+			'  - --quality-noupdate and --quality-revalue options are applied ',
 			# '  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
 			# ', which is useful to include external manual evaluations into the final summarized results',
 			# 'ATTENTION: <resval_path> should include the algorithm name and target measure.',
@@ -2167,11 +2173,11 @@ if __name__ == '__main__':
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {runtimeout}.',
 			'  --evaltimeout  - global clustering algorithms execution timeout in the'
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {evaltimeout}.',
-			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, qsepnet=_QSEPNET
+			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, qsepmsr=_QSEPMSR, qsepnet=_QSEPNET
 				, resdir=RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=SEPINST, seppars=SEPPARS, sepshf=SEPSHF, rsvpathsmb=(SEPPARS, SEPINST, SEPSHF, SEPPATHID)
 				, anppsnum=len(apps), apps=', '.join(apps), qmappsnum=len(qmapps), qmapps=', '.join(qmapps)
-				, algtimeout=secDhms(_TIMEOUT), seedfile=_SEEDFILE, qsepmsr=_QSEPMSR
+				, algtimeout=secDhms(_TIMEOUT), seedfile=_SEEDFILE
 				, port=_PORT, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
 	else:
 		if len(sys.argv) == 2 and sys.argv[1] == '--doc-tests':

@@ -1184,7 +1184,8 @@ class VarAcc(ValAcc):
 		val: number  - value to be added
 		"""
 		super(VarAcc, self).add(val)
-		self.sum2 += val * val
+		if not math.isnan(val):
+			self.sum2 += val * val
 
 	def sd(self):
 		"""Standard deviation"""
@@ -1265,8 +1266,15 @@ conf: float4  - confidance (rins*rshf*rrun)
 """
 
 
+def scalar(val):
+	"""Return the scalar value (number) from itself or from the NumPy array of size 1"""
+	assert isinstance(val, Number) or (isinstance(val, np.ndarray) and val.size == 1
+		), 'Unexpected argument type or shape: {}, size: {}'.format(type(val).__name__, val.size)
+	return val if not isinstance(val, np.ndarray) else val.item(0)
+
+
 def aggeval(aggevals, nets, qaggopts, qmsname, revalue=False, maxins=0):
-	"""Aggregate evaluation results from the specified HDF5 storage to the dedicated HDF5 storage
+	"""Aggregate evaluation results from the specified HDF5 storage
 
 	aggevals: dict(qmeasure: dict(algname: NamedList(netname: QValStat)))
 		- resulting aggregated evaluations to be extended, where the netname includes pathid if any
@@ -1344,9 +1352,11 @@ def aggeval(aggevals, nets, qaggopts, qmsname, revalue=False, maxins=0):
 				mshf = mlev or (len(dmsr.shape) >= i + 1 and dmsr.shape[i] >= 2)
 				avgres.reset()
 				avgsd.reset()
-				avgrshf.reset()
+				avgrshf.reset()  # Empty if all shuffles are successfully processed, otherwise the ratio of not NaNs
 				nansfavg.reset()
 				for iins, inst in enumerate(dmsr):
+					if maxins and iins >= maxins:  # Note: iins indexing starts from 0, which corresponds to maxins = 1
+						break
 					if mshf:
 						varshf.reset()
 						for shf in inst:
@@ -1358,29 +1368,39 @@ def aggeval(aggevals, nets, qaggopts, qmsname, revalue=False, maxins=0):
 										avgrun.reset()
 										for run in lev:
 											avgrun.add(run)
+											#if alg == 'Daoc' and net == '5K5' and msr == 'Xmeasures:MF1h_w':
+											#	print('>> run:', run)
 										if vmax < avgrun.avg():
 											vmax = avgrun.avg()
 									if math.isinf(vmax):
 										vmax = np.nan
 								else:
 									vmax = max(shf)
-								varshf.add(vmax if not isinstance(vmax, np.ndarray) else vmax.item(0))
+								varshf.add(scalar(vmax))
+								#if alg == 'Daoc' and net == '5K5' and msr == 'Xmeasures:MF1h_w':
+								#	print('>> ml shf:', scalar(vmax))
 							else:
-								varshf.add(shf if not isinstance(shf, np.ndarray) else shf.item(0))
+								varshf.add(scalar(shf))
+								#if alg == 'Daoc' and net == '5K5' and msr == 'Xmeasures:MF1h_w':
+								#	print('>> u shf:', scalar(shf))
 						avgres.add(varshf.avg())
+						#if alg == 'Daoc' and net == '5K5' and msr == 'Xmeasures:MF1h_w':
+						#	print('>> avgval:', scalar(varshf.avg()))
 						avgsd.add(varshf.sd())
 						if varshf.nans:
 							avgrshf.add(varshf.nans / float(varshf.nans + varshf.num))
 					else:
-						avgres.add(inst if not isinstance(inst, np.ndarray) else inst.item(0))
-					if maxins and iins >= maxins:
-						break
+						avgres.add(scalar(inst))
+						#if alg == 'Daoc' and net == '5K5' and msr == 'Xmeasures:MF1h_w':
+						#	print('>> inst:', scalar(inst))
 				# Networks evaluations for each measure and each algorithm
 				netsevs = aggevals.setdefault(msr, {}).setdefault(alg, NamedList(keys=nets))
-				#print('> {} on {}: ({}, {}, ...)'.format(alg, net, avgres.avg(), avgsd.avg()))
 				# conf: float4  - confidance (rins*rshf*rrun)
-				netsevs.insert(net, QValStat(avgres.avg(), avgsd.avg(), np.nan if not len(dmsr) else
-					avgres.num / float(avgres.nans + avgres.num) * (1 if not avgrshf.num else avgrshf.avg())))
+				qv = QValStat(avgres.avg(), avgsd.avg(), np.nan if not len(dmsr) else
+					avgres.num / float(avgres.nans + avgres.num) * (1 if not avgrshf.num else avgrshf.avg()))
+				#if alg == 'Daoc' and net == '5K5' and msr == 'Xmeasures:MF1h_w':
+				#	print('> 5K5 qv:', qv)
+				netsevs.insert(net, qv)
 	if nets is not None:
 		nets.union(netsevs.kinds)  # Add keys (network kinds)
 

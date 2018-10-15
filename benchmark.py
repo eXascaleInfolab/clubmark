@@ -2004,7 +2004,8 @@ def benchmark(*args):
 			# , netnames=netnames
 
 	if opts.qaggopts is not None:
-		aggEvals(None if not opts.qaggopts else opts.qaggopts, seed=seed, update=opts.qupdate, revalue=opts.qrevalue)
+		aggEvals(None if not opts.qaggopts else opts.qaggopts, seed=seed  #None  # seed
+			, update=opts.qupdate, revalue=opts.qrevalue)
 		# aggEvaluations(opts.aggrespaths)
 
 	exectime = time.perf_counter() - exectime
@@ -2150,11 +2151,11 @@ if __name__ == '__main__':
 			'  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.), deprecated',
 			'    f  - force the conversion even when the data is already exist',
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
-			'  --summary, -s[a][v][=[{{-,+}}]<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...]]'
+			'  --summary, -s[*][=[{{-,+}}]<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...]]'
 			'  - summarize evaluation results of the specified algorithms on the specified networks'
 			' extending the existent quality measures storage considering the specified update policy. Especially useful to include extended'
 			' evaluations into the final summarized results.',
-			'    a  - aggregate all available quality evaluations instead of only the one matching the seed',
+			'    *  - aggregate all available quality evaluations instead of only the one matching the seed',
 			'    v  - visualize the aggregated results to the <aggqms>.png',
 			'    -/+  - filter inclusion prefix: "-" to filter out specified data (exclude) and'
 			' "+" (default) to filter by (include only such data).',

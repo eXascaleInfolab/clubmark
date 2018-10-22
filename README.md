@@ -5,6 +5,16 @@
 `\organizations` [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
 `\keywords` overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
 
+`\cite` [Clubmark: a Parallel Isolation Framework for Benchmarking and Profiling Clustering Algorithms on NUMA Architectures](https://github.com/eXascaleInfolab/clubmark/blob/draft/docs/clubmark.pdf)
+```bibtex
+@inproceedings{Clb18,
+	author={Artem Lutov and Mourad Khayati and Philippe Cudr{\'e}-Mauroux},
+	title={Clubmark: a Parallel Isolation Framework for Benchmarking and Profiling Clustering Algorithms on NUMA Architectures},
+	booktitle={2018 IEEE International Conference on Data Mining Workshops (ICDMW)},
+	year={2018},
+	keywords={benchmarking framework, clustering evaluation, parallel benchmarking, algorithm profiling, community detection benchmarking, constraint-aware load-balancing}
+}
+```
 
 ## Content
 - [Overview](#overview)
@@ -441,4 +451,33 @@ All the evaluations will be performed automatically, the algorithm should just f
 * DAOC - (former [HiReCS](https://github.com/eXascaleInfolab/hirecs) High Resolution Hierarchical Clustering with Stable State, which was totally redesigned).
 
 See also [eXascale Infolab](https://github.com/eXascaleInfolab) GitHub repository and [our website](http://exascale.info/) where you can find another projects and research papers related to Big Data processing!  
-**Note:** Please, [star this project](https://github.com/eXascaleInfolab/clubmark) if you use it.
+**Note:** Please, [star this project](https://github.com/eXascaleInfolab/clubmark) if you use it. 
+
+<!--
+## HDF5 File Format
+The HDF5 storage uses a memory-mapped file (core driver) results/qmeasures_<seed>.h5 (.hdf5) as a physical storage and holds the userblock consisting of the seed and timestamps of the updates. The storage format, where size of the working set among the allocated is stored in the attributes:
+
+// Note: rescons is formed on the storage file creation
+rescons.inf    // Resource names: vector<utf8str>, associates name with the index
+// Note: nets can be formed and extended dynamically
+nets.inf    // Net names with pathid: vector<utf8str>, associates basename with the index
+
+// HDF groups, netbasedir: {relnets, syntnets/networks, ...}
+/algs/<algorithm{levs}>/<net[#pathid]{insts,shufs}>/  // Note: Attributes are specified inside {}
+    <qmname{runs}>[:<metric_name>]^insts%shufs[+u].dat    // NetAlgParam: Vector<utf8str>,
+// Data is a Multi-dim array:
+//    (iinst)[(ishuf)][(ilev)][(qmirun)]: float4  // float4 is 32 bit float;
+//    (iins)[(ishf)][(ilev)][(qmirun)]: float4  // float4 is 32 bit float;
+// levs number (typically fixed, NOTE: “Data does not “rearrange” itself as it does when resizing a NumPy array.”) is defined by <algorithm>, qmiruns number by <qmname>[:<metric_name>];
+// ilev is the index of the respective level file name in the ordered list of levels;
+// +u  - a multi-resolution clustering (actual for DAOC representative levs, nlev is 1)
+//
+// Note: rescons and levs are formed either on the post-processing after the levs refined
+// or on the qms computing
+
+
+// Aggregated quality measures storage
+aggqms[%maxins]_<id>.h5:
+/<measure>/
+    <alg>.dat  // Data format: <net[#pathid]>Enum: (avgares)(sdval)(conf=rins*rshf*rrun)
+-->

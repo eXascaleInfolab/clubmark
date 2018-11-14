@@ -34,6 +34,13 @@ sudo apt-get install -y \
 	libboost-program-options1.58.0 \
 	libtbb2
 
+# Check and set locale if required
+if [ "$LC_ALL" = '' ]
+then
+	export LC_ALL="en_US.UTF-8"
+	export LC_CTYPE="en_US.UTF-8"
+fi
+
 # Note: Python3 and pip3 were installed on previous step
 sudo pip3 install --upgrade pip
 

@@ -554,7 +554,7 @@ def parseParams(args):
 				if arg[i] == 'p':
 					opts.qaggmeta.plot = True
 				elif arg[i] == '*':
-					opts.qaggmeta.seeded = True
+					opts.qaggmeta.seeded = False
 				elif arg[i] == '-':
 					opts.qaggmeta.exclude = True
 				else:

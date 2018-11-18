@@ -1294,6 +1294,7 @@ def aggeval(aggevals, nets, qaggopts, exclude, qmsname, revalue=False, maxins=0)
 		type(qmsname).__name__, type(revalue).__name__, type(maxins).__name__))
 	# Define type of the aggregation filtering, which should be the same for all options
 	if exclude and not qaggopts:  # Exclude everything, i.e. nothing to be aggregated
+		print('WARNING, the aggregation is specified to be excluded, nothing to be done')
 		return
 	fltout = exclude
 	# Index aggregation filters by the algorithm names
@@ -1301,7 +1302,9 @@ def aggeval(aggevals, nets, qaggopts, exclude, qmsname, revalue=False, maxins=0)
 	# Open HDF5 storage of the resulting quality measures
 	# HDF5 Storage: qmeasures_<seed>.h5
 	# qmsdir = RESDIR + QMSDIR  # Quality measures directory
+	print('Opening for the aggregation', qmsname)
 	qmeasures = h5py.File(qmsname, mode='r', driver='core', libver='latest')
+	print('Aggregating', qmeasures.name)
 	avgres = ValAcc()  # Average resulting value over all instances
 	avgsd = ValAcc()  # Average standard deviation over all instances
 	nansfavg = ValAcc()  #  Average number of NAN shuffles and runs for the instances
@@ -1422,9 +1425,10 @@ def aggEvals(qaggopts, exclude, seed, update=True, revalue=False, plot=False):
 		calculating and saving only the absent values in the dataset,
 		actual only for the update flag set
 	"""
-	print('Aggregation of the raw quality evaluations started')
+	print('Aggregation of the raw quality evaluations started:\n\tqaggopts: {}\n\texclude: {}'
+		'\n\tseed: {}\n\tupdate: {}\n\trevalue: {}\n\tplot: {}'.format(qaggopts, exclude, seed, update, revalue, plot))
 	if exclude and not qaggopts:
-		print('WARNING, all aggregations are specified to be excluded')
+		print('WARNING, all aggregations are specified to be excluded, nothing to be done')
 		return
 	if plot:  # TODO: implement plotting using mathplotlib
 		print('WARNING, plotting has not been implemented yet. Pleasse, copy the aggregated'
@@ -1442,10 +1446,13 @@ def aggEvals(qaggopts, exclude, seed, update=True, revalue=False, plot=False):
 		# which requires first to read the existent aggregated evaluations
 		print('WARNING aggEvals(), Omission of the existent results formation is not supported yet')
 	if seed is not None:
-		#seedstr = str(seed)  # Note: only the seed(s) of the aggregating file(s) are meaningful
+		seedstr = str(seed)  # Note: only the seed(s) of the aggregating file(s) are meaningful
 		qmspath = ''.join((qmsdir, qmnbase, seedstr, qmnsuf))  # File name of the HDF5.storage
-		aggeval(aggevals, nets, qaggopts, qmspath, revalue, maxins=maxins)
+		# TODO: Clarify why seedstr is already prefexed in qmspath 
+		print('qmspath: ', qmspath)
+		aggeval(aggevals, nets, qaggopts, exclude, qmspath, revalue, maxins=maxins)
 	else:
+		#print('Aggregating', qmsdir,'*'.join((qmnbase, qmnsuf)))
 		for qmspath in glob.iglob(qmsdir + '*'.join((qmnbase, qmnsuf))):
 			try:
 				qmsname = os.path.split(qmspath)[1]
@@ -1458,13 +1465,14 @@ def aggEvals(qaggopts, exclude, seed, update=True, revalue=False, plot=False):
 					print('WARNING, the aggregating dataset "{}" is omitted because its seed is distinct'
 						' from the aggregation one'.format(qmsname), file=sys.stderr)
 					continue
-				aggeval(aggevals, nets, qaggopts, qmspath, revalue, maxins=maxins)
+				aggeval(aggevals, nets, qaggopts, exclude, qmspath, revalue, maxins=maxins)
 			except Exception as err:  #pylint: disable=W0703
 				print('ERROR, quality measures aggregation in {} failed: {}. Discarded. {}'.format(
 					qmspath, err, traceback.format_exc(5)), file=sys.stderr)
 	# Form the resulting HDF5 storage indicating the number of processed levels (maxins) in the name if used
 	aggqpath = ''.join((qmsdir, 'aggqms', '' if not maxins else '%' + str(maxins)
-		, '' if seedstr is None else'_' + seedstr, qmnsuf))
+		, '' if seedstr is None else '_' + seedstr, qmnsuf))
+	print('aggqpath: ', aggqpath)
 	if os.path.isfile(aggqpath):
 		tobackup(aggqpath, False, move=not update)  # Copy/move to the backup
 	storage = h5py.File(aggqpath, mode='a', driver='core', libver='latest')

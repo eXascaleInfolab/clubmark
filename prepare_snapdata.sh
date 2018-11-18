@@ -16,7 +16,7 @@ then
 	then
 		echo "Usage: $0 [<snap_dir>]\n"\
 			"\nUnpacks and renames SNAP networks and ground-truth communities to"\
-			 " the have required file names for the benchmarking."\
+			 " have the required file names for the benchmarking."\
 			 "\n<snap_dir>  - directory with SNAP datasets, \"$WDIR\" by default."
 		exit 0
 	fi
@@ -41,3 +41,5 @@ do
 		mv -v ${file} `echo ${file} | sed "s/\(.*\)$SUF/\1$ext/"`
 	done
 done
+
+# TODO: Remove Duplicates

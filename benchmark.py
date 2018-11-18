@@ -103,6 +103,7 @@ _VMLIMIT = 4096  # Set 4 TB or RAM to be automatically limited to the physical m
 _PORT = 8080  # Default port for the WebUI, Note: port 80 accessible only from the root in NIX
 _RUNTIMEOUT = 10*24*60*60  # Clustering execution timeout, 10 days
 _EVALTIMEOUT = 5*24*60*60  # Results evaluation timeout, 5 days
+_QSEPGROUP=';'  # Quality aggregation options group separator
 _QSEPMSR='/'  # Quality aggregation option separator for measures section
 _QSEPNET=':'  # Quality aggregation option separator for networks section
 
@@ -174,11 +175,33 @@ class SyntPathOpts(PathOpts):
 			for name in itertools.chain(super(SyntPathOpts, self).__slots__, self.__slots__)])
 
 
+class QAggMeta(object):
+	"""Quality aggregation options metadata"""
+	__slots__ = ('exclude', 'seeded', 'plot')
+
+	def __init__(self, exclude=False, seeded=True, plot=False):
+		"""Sets values for the input parameters
+
+		exclude: bool  - include in (filter by) or exclude from (filter out)
+			the output according to the specified options
+		seeded: bool  - aggregate results only from the HDF5 storage having current seed or from all the matching storages
+		plot: bool  - plot the aggregated results besides storing them
+		"""
+		self.exclude = exclude
+		self.seeded = seeded
+		self.plot = plot
+
+	def __str__(self):
+		"""String conversion"""
+		# return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
+		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
+
+
 class QAggOpt(object):
 	"""Quality aggregation option"""
-	__slots__ = ('alg', 'msrs', 'nets', 'exclude')
+	__slots__ = ('alg', 'msrs', 'nets')
 
-	def __init__(self, alg, msrs=None, nets=None, exclude=False):
+	def __init__(self, alg, msrs=None, nets=None):
 		"""Sets values for the input parameters
 
 		Specified networks and measures that do not exist in the algorithm output are omitted
@@ -188,8 +211,6 @@ class QAggOpt(object):
 			(like: "Xmeasures:MF1h_w+u")
 			Note: there are few measures, so linear search is the fastest
 		nets: set(str) or None  - wildcards of the network names
-		exclude: bool  - include in (filter by) or exclude from (filter out)
-			the output according to the specified options
 		"""
 		assert isinstance(alg, str) and isinstance(msrs, (tuple, list)) and isinstance(nets, (tuple, list)), (
 			'Ivalid type of the argument, alg: {}, msrs: {}, nets: {}'.format(
@@ -197,37 +218,41 @@ class QAggOpt(object):
 		self.alg = alg
 		self.msrs = msrs
 		self.nets = nets
-		self.exclude = exclude
 
 	@staticmethod
 	def parse(text):
 		"""Parse text to QAggOpt
 
 		text: str  - text representation of QAggOpt in the format:  <algname>[/<metric1>,<metric2>...][:<net1>,<net2>,...]
+		seeded: bool  - aggregate results only from the HDF5 storage having current seed or from all the matching storages
+		plot: bool  - plot the aggregated results besides storing them
 
-		return  QAggOpt  - parsed QAggOpt
+		return  list(QAggOpt)  - parsed QAggOpts
 		"""
 		if not text:
 			raise ValueError('A valid text is expected')
 		msrs = None
 		nets = None
-		parts = text.split(_QSEPMSR)
-		if len(parts) >= 2:
-			# Fetch pure alg
-			alg = parts[0].strip()
-			# Fetch msrs and nets
-			parts = parts[1].split(_QSEPNET)
-			msrs = parts[0].strip().split(',')
+		groups = text.split(_QSEPGROUP)
+		res = []
+		for gr in groups:
+			parts = gr.split(_QSEPMSR)
 			if len(parts) >= 2:
-				nets = parts[1].strip().split(',')
-		else:
-			# Fetch pure alg and nets
-			parts = parts[0].split(_QSEPNET)
-			alg = parts[0].strip()
-			if len(parts) >= 2:
-				nets = parts[1].strip().split(',')
-		exclude = alg.startswith('-')
-		return QAggOpt(alg.lstrip('-+'), msrs, nets, exclude)
+				# Fetch pure alg
+				alg = parts[0].strip()
+				# Fetch msrs and nets
+				parts = parts[1].split(_QSEPNET)
+				msrs = parts[0].strip().split(',')
+				if len(parts) >= 2:
+					nets = parts[1].strip().split(',')
+			else:
+				# Fetch pure alg and nets
+				parts = parts[0].split(_QSEPNET)
+				alg = parts[0].strip()
+				if len(parts) >= 2:
+					nets = parts[1].strip().split(',')
+			res.append(QAggOpt(alg, msrs, nets))
+		return res
 
 	def __str__(self):
 		"""String conversion"""
@@ -268,6 +293,7 @@ class Params(object):
 				0b11 - force conversion (overwrite all)
 			0b100 - resolve duplicated links on conversion
 			TODO: replace with IntEnum like in mpewui
+		qaggmeta: QAggMeta  - quality aggregation meta options
 		qaggopts: list(QAggOpt) or None  - aggregate evaluations of the algorithms for the
 			specified targets or for all algorithms on all networks if only the list is empty,
 			the aggregation is omitted if the value is None
@@ -286,6 +312,7 @@ class Params(object):
 		self.algorithms = []
 		self.seedfile = _SEEDFILE  # Seed value for the synthetic networks generation and stochastic algorithms, integer
 		self.convnets = 0
+		self.qaggmeta = QAggMeta()
 		self.qaggopts = None  # None means omit the aggregation
 		# self.aggrespaths = []  # Paths for the evaluated results aggregation (to be done for already existent evaluations)
 		# WebUI host and port
@@ -350,7 +377,6 @@ def parseParams(args):
 	return params: Params
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
-	aggoflt = None  # Filter type of the aggregation options, required to valide it's consistence
 	opts = Params()
 
 	timemul = 1  # Time multiplier, sec by default
@@ -516,18 +542,26 @@ def parseParams(args):
 		elif arg[1] == 's':
 			if opts.qaggopts is None:  # Aggregate all algs on all networks
 				opts.qaggopts = []  # QAggOpt array
-			if len(arg) == 2:
+			iv0 = 2
+			if len(arg) == iv0:
 				continue
-			if len(arg) <= 3 or arg[2] != '=':
-				raise ValueError('Unexpected argument: ' + arg)
-			qao = QAggOpt.parse(arg[3:])
-			if aggoflt is None:
-				aggoflt = qao.exclude
-			elif aggoflt != qao.exclude:
-				raise ValueError('All aggregation option filters should be either inclusive or exclusive'
-					', failed for alg: ' + qao.alg)
-			opts.qaggopts.append(qao)
-			# opts.aggrespaths.append(unquote(arg[3:]))
+			# Parse (plot, sdeded) for the summarization
+			ival = arg.find('=', iv0)
+			# Parse even if the value part is not specifier
+			if ival == -1:
+				ival = len(arg)
+			for i in range(iv0, ival):
+				if arg[i] == 'p':
+					opts.qaggmeta.plot = True
+				elif arg[i] == '*':
+					opts.qaggmeta.seeded = True
+				elif arg[i] == '-':
+					opts.qaggmeta.exclude = True
+				else:
+					raise ValueError('Bad argument [{}]: {}'.format(i, arg))
+			# Parse the values
+			if ival < len(arg):
+				opts.qaggopts = QAggOpt.parse(arg[ival+1:])
 		elif arg[1] == 't':
 			pos = arg.find('=', 2)
 			if pos == -1 or arg[2] not in 'smh=' or len(arg) == pos + 1:
@@ -1535,6 +1569,7 @@ def clnames(net, odir, alg, pathidsuf=''):
 
 def gtpath(net, idir):
 	"""Ground-truth clustering file path by the input network file path
+	Note the the ground-truth name includes instance suffix for the synthetic nets but not the shufle suffix.
 
 	net: str  - input network path, may include instace and shuffle suffixes
 	idir: bool - whether the input network is given from the dedicated directory of shuffles or
@@ -1543,14 +1578,16 @@ def gtpath(net, idir):
 	return gfpath: str  - ground-truth clustering file path
 	"""
 	if not idir:
-		gfpath = delPathSuffix(os.path.splitext(net)[0]) + EXTCLNODES
+		bname, _, inst, _, _ = parseName(os.path.splitext(net)[0])  # delPathSuffix(os.path.splitext(net)[0])
+		gfpath = ''.join((bname, inst, EXTCLNODES))
 		if os.path.isfile(gfpath):
 			return gfpath
 		print('WARNING, gtpath() idir parameter does not correspond to the actual input structure.'
 			' Checking the ground-truth availability in the upper dir.', file=sys.stderr)
 	path, name = os.path.split(net)
 	# Check the ground-truth file in the parent directory
-	gfpath = ''.join((os.path.split(path)[0], '/', delPathSuffix(os.path.splitext(name)[0], True), EXTCLNODES))
+	bname, _, inst, _, _ = parseName(os.path.splitext(name)[0], True)  # delPathSuffix(os.path.splitext(name)[0], True)
+	gfpath = ''.join((os.path.split(path)[0], '/', bname, inst, EXTCLNODES))
 	if not os.path.isfile(gfpath):
 		raise RuntimeError('Invalid argument, the ground-truth clustering {}'
 			' does not exist for the network {}'.format(gfpath, net))
@@ -2004,9 +2041,9 @@ def benchmark(*args):
 			# , netnames=netnames
 
 	if opts.qaggopts is not None:
-		aggEvals(None if not opts.qaggopts else opts.qaggopts, seed=seed  #None  # seed
-			, update=opts.qupdate, revalue=opts.qrevalue)
-		# aggEvaluations(opts.aggrespaths)
+		aggEvals(None if not opts.qaggopts else opts.qaggopts, exclude=opts.qaggmeta.exclude
+			, seed=seed if opts.qaggmeta.seeded else None, update=opts.qupdate, revalue=opts.qrevalue
+			, plot=opts.qaggmeta.plot)
 
 	exectime = time.perf_counter() - exectime
 	print('The benchmark completed in {:.4f} sec ({} h {} m {:.4f} s)'
@@ -2048,7 +2085,7 @@ if __name__ == '__main__':
 			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
 			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
 			' [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[="qmapp [arg1 arg2 ...]"]]'
-			' [-s[=[{{-,+}}]<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...]]]'
+			' [-s[p][*][[{{-,+}}]=<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...][{qsepgroup}<alg>...]]]'
 			' [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] [-w=<webui_addr>] | -h',
 			'',
 			'Example:',
@@ -2151,20 +2188,17 @@ if __name__ == '__main__':
 			'  --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.), deprecated',
 			'    f  - force the conversion even when the data is already exist',
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
-			'  --summary, -s[*][=[{{-,+}}]<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...]]'
+			'  --summary, -s[p][*][[{{-,+}}]=<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...][{qsepgroup}<alg>...]]'
 			'  - summarize evaluation results of the specified algorithms on the specified networks'
 			' extending the existent quality measures storage considering the specified update policy. Especially useful to include extended'
 			' evaluations into the final summarized results.',
-			'    *  - aggregate all available quality evaluations instead of only the one matching the seed',
-			'    v  - visualize the aggregated results to the <aggqms>.png',
+			'    p  - plot the aggregated results to the <aggqms>.png',
+			'    *  - aggregate all available quality evaluations besides the one matching the seed',
 			'    -/+  - filter inclusion prefix: "-" to filter out specified data (exclude) and'
 			' "+" (default) to filter by (include only such data).',
 			'    <qmeasure>  - quality measure in the format:  <appname>[:<qmetric>][+u]'
 			', for example "Xmeasures:MF1h_w+u", where "+u" denotes representative clusters fetched'
 			' from the multi-resolution clustering and represented in a single level.',
-			'NOTE:',
-			'  - Aggregation for multiple algorithms can be specified with multiple -s options given that'
-			' all of them have THE SAME filter inclusion prefix.',
 			'  - --quality-noupdate and --quality-revalue options are applied ',
 			# '  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
 			# ', which is useful to include external manual evaluations into the final summarized results',
@@ -2174,7 +2208,7 @@ if __name__ == '__main__':
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {runtimeout}.',
 			'  --evaltimeout  - global clustering algorithms execution timeout in the'
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {evaltimeout}.',
-			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, qsepmsr=_QSEPMSR, qsepnet=_QSEPNET
+			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, qsepmsr=_QSEPMSR, qsepnet=_QSEPNET, qsepgroup=_QSEPGROUP
 				, resdir=RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=SEPINST, seppars=SEPPARS, sepshf=SEPSHF, rsvpathsmb=(SEPPARS, SEPINST, SEPSHF, SEPPATHID)
 				, anppsnum=len(apps), apps=', '.join(apps), qmappsnum=len(qmapps), qmapps=', '.join(qmapps)

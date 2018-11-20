@@ -53,8 +53,8 @@ Properties specific for the clustering algorithms benchmarking:
 
 Executing [algorithms](algorithms/README.md) and [evaluation measures with the accessory processing tools](utils/README.md) are described on the respective pages.
 
-Clubmark Demo Poster for ICDM18
-![Clubmark_Poster-w1024](images/Clubmark_Poster-w1024)
+Clubmark Demo Poster for ICDM18:
+![Clubmark_Poster-w1024](images/Clubmark_Poster-w1024.jpg)
 
 ## Motivation
 

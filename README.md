@@ -52,7 +52,7 @@ To run the benchmark on other [POSIX-compatible] platfroms / operating systems, 
 
 ## Overview
 
-The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks), measures execution statistics and evaluates accuracy of the results using specified measures. Clubmark is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation. The generic functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multiprocess execution pool and load balancer.
+The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks, graphs), measures execution statistics and evaluates quality (including accuracy) of the results using specified measures. Clubmark is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation. The generic functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multiprocess execution pool and load balancer.
 
 Generic properties:
 - Data preprocessing (synthetic networks generation, shuffling, etc.);
@@ -62,29 +62,29 @@ Generic properties:
   * Specification of the global and per executable constraints for the maximal execution time and memory consumption;
   * Binding of any executable to the specified set of logical CPUs (affinity masking) to employ advantages of the NUMA hardware executing apps in parallel not affecting their CPU caches (dedicating L1/2/3 caches);
   * Tracing of the execution time, CPU timings (user and kernel) and peak RAM RSS memory consumption;
-- Load balancing of the executing apps to employ as much as possible available hardware resources respecting the specified constraints;
+- Load balancing of the executing apps to employ all available hardware resources respecting the specified constraints;
 - Resilience and fault tolerance (failover execution), where crashes of some running applications does not affect execution of other applications and other scheduled jobs associated with the crashed application.
 
 Properties specific for the clustering algorithms benchmarking:
-- Synthetic networks generation with the extended [LFR Framework](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) and subsequent shuffling;
+- Synthetic networks generation with the extended [LFR Framework](https://github.com/eXascaleInfolab/LFR-Benchmark_UndirWeightOvp) and subsequent shuffling (network nodes and links reordering);
 - Execution of the [clustering algorithms](algorithms/README.md) on the specified networks;
-- Evaluation of the extrinsic (modularity, conductance) and intrinsic (various NMIs and F1-Scores) quality measures for the generalized clustering algorithms (considering overlaps and multiple resolutions/scales if any);
+- Evaluation of the intrinsic (modularity, conductance) and extrinsic quality / accuracy (mean F1-Score family, NMIs and Omega Index / Fuzzy Adjusted Rand Index) measures for the generalized clustering algorithms (considering overlaps and multiple resolutions/scales if any);
 - Selection of the best result for the parameterized clustering algorithms among the results produced for the specified variations of the parameters;
 - Evaluation of both the average value and deviation of [the quality measures](utils/README.md#clustering-quality-measures). The deviation is evaluated if multiple instances and/or shuffles (nodes and links reordering) of the input networks are present.
 
-Executing [algorithms](algorithms/README.md) and [evaluation measures with the accessory processing tools](utils/README.md) are described on the respective pages.
+Executing [algorithms](algorithms/README.md) and [evaluation measures with the accessory processing tools](utils/README.md) are described in the respective pages.
 
 Clubmark Demo Poster for ICDM18:
 ![Clubmark_Poster-w1024](images/Clubmark_Poster-w1024.jpg)
 
 ## Motivation
 
-I have not found any open source cross-platform framework for the [efficient] execution and evaluation of custom applications, which have  significant variation of the time/memory complexity and custom constraints, so decided to write the own one.
+I have not found any open source cross-platform framework for the [efficient] execution and evaluation of custom applications having significant variation of the time/memory complexity and custom constraints, so decided to write the own one.
 
 Particularly, I had to evaluate various clustering (community detection) algorithms on large networks using specific measures. The main challenges are the following:
 - the executing applications (clustering algorithms) being benchmarked have very different (orders of magnitude) time and memory complexity and represented by the applications implemented on various languages (mainly C++, Java, C and Python);
 - the target datasets are very different by structure and size (orders of magnitude varying from KBs to GBs);
-- the accessory evaluating applications (NMI, F1 Scores, ...) have very different (orders of magnitude) time and memory complexity and architecture (single-threaded and multi-threaded applications).
+- the accessory evaluating applications (NMI, F1-Scores, Omega Index) have very different (orders of magnitude) time and memory complexity and architecture (single-threaded and multi-threaded applications).
 
 Ideally, the applications should be executed in parallel in a way to guarantee that they:
 - are not swapped out from RAM (which happens on the *unconstrained* execution of multiple memory demanding apps) to not affect the efficiency measurements;
@@ -233,10 +233,10 @@ To see the possible input parameters, run the benchmark without the arguments or
 ```sh
 $ ./benchmark.py 
 Usage:
-  ./benchmark.py [-g[o][a]=[<number>][%<shuffles_number>][=<outpdir>] [-i[f][a][%<shuffles_number>]=<datasets_{dir,file}_wildcard> [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[="qmapp [arg1 arg2 ...]"]] [-s=<resval_path>] [-t[{s,m,h}]=<timeout>] [-d=<seed_file>] [-w=<webui_addr>] | -h
+  ./benchmark.py [-g[o][a]=[<number>][%<shuffles_number>][=<outpdir>] [-i[f][a][%<shuffles_number>]=<datasets_{dir,file}_wildcard> [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[="qmapp [arg1 arg2 ...]"]] [-s[p][*][[{-,+}]=<alg>[/<qmeasure1>,<qmeasure2>,...][:<net1>,<net2>,...][;<alg>...]]] [-t[{s,m,h}]=<timeout>] [-d=<seed_file>] [-w=<webui_addr>] | -h
 
 Example:
-  ./benchmark.py -g=3%5 -r -q -th=2.5 1> results/bench.log 2> results/bench.err
+  ./benchmark.py -g=3%5 -r -q -s -th=2.5 1> bench.log 2> bench.err
 NOTE:
   - The benchmark should be executed exclusively from the current directory (./).
   - The expected format of input datasets (networks) is .ns<l> - network specified by <links> (arcs / edges), a generalization of the .snap, .ncol and Edge/Arcs Graph formats.
@@ -255,10 +255,10 @@ NOTE: shuffled datasets have the following naming format:
     NOTE: variance over the shuffles of each network instance is evaluated only for the non-flat structure.
     a  - the dataset is specified by arcs (asymmetric, directed links) instead of edges (undirected links), considered only for not .ns{a,e} extensions.
 NOTE:
-  - The following symbols in the path name have specific semantic and processed respectively: ('!', '^', '%', '#').
+  - The following symbols in the path name have specific semantic and processed respectively: ('=', '^', '%', '#').
   - Paths may contain wildcards: *, ?, +.
   - Multiple directories and files wildcards can be specified with multiple -i options.
-  - Existent shuffles are backed up if reduced, the existend shuffles are RETAINED and only the additional shuffles are generated if required.
+  - Existent shuffles are backed up if reduced, the existent shuffles are RETAINED and only the additional shuffles are generated if required.
   - Datasets should have the .ns<l> format: <node_src> <node_dest> [<weight>]
   - Ambiguity of links weight resolution in case of duplicates (or edges specified in both directions) is up to the clustering algorithm.
   --apps, -a[=[-]"app1 app2 ..."]  - apps (clustering algorithms) to be applied, default: all.
@@ -266,18 +266,20 @@ Leading "-" means apply all except the specified apps. Available apps (24): Cggc
 Impacts {r, q} options. Optional, all registered apps (see benchapps.py) are executed by default.
 NOTE: output results are stored in the "results/<algname>/" directory
   --runapps, -r  - run specified apps on the specified datasets, default: all
-  --quality, -q[="qmapp [arg1 arg2 ...]"  - evaluate quality (accuracy) with the specified quality measure application (<qmapp>) for the algorithms (specified with "-a") on the datasets (specified with "-i") and form the aggregated final results. Default: MF1p, GNMI_max, OIx extrinsic and Q, f intrinsic measures on all datasets. Available qmapps (4): Gnmi, Imeasures, Onmi, Xmeasures.
-NOTE: Multiple quality measure applications can be specified with multiple -q options.
-Notations of the quality mesurements:
+  --quality, -q[="qmapp [arg1 arg2 ...]"  - evaluate quality (accuracy) with the specified quality measure application (<qmapp>) for the algorithms (specified with "-a") on the datasets (specified with "-i"). Default: MF1p, GNMI_max, OIx extrinsic and Q, f intrinsic measures on all datasets. Available qmapps (4): Gnmi, Imeasures, Onmi, Xmeasures.
+NOTE:
+  - Multiple quality measure applications can be specified with multiple -q options.
+  - Existent quality measures with the same seed are updated (extended with the lacking evaluations omitting the already existent) until --quality-revalue is specified.
+Notations of the quality measurements:
  = Extrinsic Quality (Accuracy) Measures =
    - GNMI[_{max,sqrt}]  - Generalized Normalized Mutual Information for overlapping and multi-resolution clusterings (collections of clusters), equals to the standard NMI when applied to the non-overlapping single-resolution clusterings.
    - MF1{p,h,a}[_{w,u,c}]  - mean F1 measure (harmonic or average) of all local best matches by the Partial Probabilities or F1 (harmonic mean) considering macro/micro/combined weighting.
    - OI[x]  - [x - extended] Omega Index for the overlapping clusterings, non-extended version equals to the Adjusted Rand Index when applied to the non-overlapping single-resolution clusterings.
  --- Less Indicative Extrinsic Quality Measures ---
-   - F1{p,h}_[{w,u}]  - perform labelling of the evaluating clusters with the specified ground-truth and evaluate F1-measure of the labeled clusters
-   - ONMI[_{max,sqrt,avg,lfk}]  - Ovelapping NMI suitable for a single-resolution clusterins having light overlaps, the resulting values are not compatible with the standard NMI when applied to the non-overlapping clsuters.
+   - F1{p,h}_[{w,u}]  - perform labeling of the evaluating clusters with the specified ground-truth and evaluate F1-measure of the labeled clusters
+   - ONMI[_{max,sqrt,avg,lfk}]  - Ovelapping NMI suitable for a single-resolution clusterings having light overlaps, the resulting values are not compatible with the standard NMI when applied to the non-overlapping clusters.
  = Intrinsic Quality Measures =
-   - Cdt  - conducance f for the overlapping clustering.
+   - Cdt  - conductance f for the overlapping clustering.
    - Q[a]  - [autoscaled] modularity for the overlapping clustering, non-autoscaled equals to the standard modularity
  when applied to the non-overlapping single-resolution clustering.
   --timeout, -t=[<days:int>d][<hours:int>h][<minutes:int>m][<seconds:float>] | -t[X]=<float>  - timeout for each benchmarking application per single evaluation on each network; 0 - no timeout, default: 1d12h. X option:
@@ -285,18 +287,30 @@ Notations of the quality mesurements:
     m  - time in minutes
     h  - time in hours
     Examples: `-th=2.5` is the same as `-t=2h30m` and `--timeout=2h1800`
-  --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation and stochastic algorithms, contains uint64_t value. Default: results/seed.txt
-NOTE: the seed file is not used in the shuffling, so the shuffles are distinct for the same seed.
+  --quality-noupdate  - always create a new storage file for the quality measure evaluations or aggregations instead of updating the existent one.
+NOTE: the shape of the updating dataset is retained, which results in distinct semantics for the evaluations and aggregations when if applied on the increased number of networks:
+  1. The raw quality evaluation dataset has multi-dimensional fixed shape, which results in omission out of bound values logging these omissions.
+  2. The quality metrics aggregation dataset has a single-dimensional resizable shape, so the absent networks are appended with the respective values.
+  --quality-revalue  - evaluate resulting clusterings with the quality measures or aggregate the resulting raw quality measures from scratch instead of retaining the existent values (for the same seed) and adding only the non-existent.
+NOTE: actual (makes sense) only when --quality-noupdate is NOT applied.
+  --seedfile, -d=<seed_file>  - seed file to be used/created for the synthetic networks generation, stochastic algorithms and quality measures execution, contains uint64_t value. Default: results/seed.txt.
+NOTE:
+  - The seed file is not used on shuffling, so the shuffles are DISTINCT for the same seed.
+  - Each re-execution of the benchmarking reuses once created seed file, which is permanent and can be updated manually.
 
 Advanced parameters:
   --convret, -c[X]  - convert input networks into the required formats (app-specific formats: .rcg[.hig], .lig, etc.), deprecated
     f  - force the conversion even when the data is already exist
     r  - resolve (remove) duplicated links on conversion (recommended to be used)
-  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results, which is useful to include external manual evaluations into the final summarized results
-ATTENTION: <resval_path> should include the algorithm name and target measure.
+  --summary, -s[p][*][[{-,+}]=<alg>[/<qmeasure1>,<qmeasure2>,...][:<net1>,<net2>,...][;<alg>...]]  - summarize evaluation results of the specified algorithms on the specified networks extending the existent quality measures storage considering the specified update policy. Especially useful to include extended evaluations into the final summarized results.
+    p  - plot the aggregated results to the <aggqms>.png
+    *  - aggregate all available quality evaluations besides the one matching the seed
+    -/+  - filter inclusion prefix: "-" to filter out specified data (exclude) and "+" (default) to filter by (include only such data).
+    <qmeasure>  - quality measure in the format:  <appname>[:<qmetric>][+u], for example "Xmeasures:MF1h_w+u", where "+u" denotes representative clusters fetched from the multi-resolution clustering and represented in a single level.
+  - --quality-noupdate and --quality-revalue options are applied 
   --webaddr, -w  - run WebUI on the specified <webui_addr> in the format <host>[:<port>], default port=8080.
-  --runtimeout  - global clustrering algorithms execution timeout in the format [<days>d][<hours>h][<minutes>m<seconds>], default: 10d.
-  --evaltimeout  - global clustrering algorithms execution timeout in the format [<days>d][<hours>h][<minutes>m<seconds>], default: 2d.
+  --runtimeout  - global clustering algorithms execution timeout in the format [<days>d][<hours>h][<minutes>m<seconds>], default: 10d.
+  --evaltimeout  - global clustering algorithms execution timeout in the format [<days>d][<hours>h][<minutes>m<seconds>], default: 5d.
 ```
 <!-- #endregion BenchParams -->
 > _REPRODUCIBILITY NOTICE_: Use seed to reproduce the evaluations but be aware that:
@@ -313,7 +327,7 @@ If any application is crashed, the crash is logged and does not affect execution
 ### Synthetic networks generation, clustering algorithms execution and evaluation
 To speed up generation of the synthetic networks, run the benchmarking under the PyPy:
 ```sh
-$ pypy ./benchmark.py -g=3%2=syntnets_i3_s4 -a="scp oslom2" -r -q -tm=90
+$ pypy ./benchmark.py -g=3%2=syntnets_i3_s4 -a="scp oslom2" -r -q -s -tm=90
 ```
 This command generates synthetic networks producing 3 instances of each network with 2 shuffles (random reordering of network nodes) of each instance yielding 3*2=6 synthetic networks of each type (for each set of the network generation parameters). The generated networks are stored in the specified `./syntnets_i3_s4/` directory.  
 `scp` and `oslom2` clustering algorithms are executed for each generated network, default quality measures are evaluated for these algorithms with subsequent aggregation of the results over all instances and shuffles of each network.  
@@ -322,7 +336,7 @@ The timeout is set to 90 min for the following actions: networks generation and 
 
 ### Shuffling of the existent networks, clustering algorithm  execution and evaluation
 ```sh
-$ pypy ./benchmark.py -ie%5='realnets' -cr -a="daoc" -r -qenx -th=1
+$ pypy ./benchmark.py -i%5='realnets' -cr -a="daoc" -r -qenx -th=1
 ```
 This command makes 5 shuffles for each network in the `./realnets/` directory (already existent shuffles of this network are backed up), converts networks to the .rcg format, executes `daoc` algorithm for all shuffles and evaluates `NMI_max` with timeout for each activity equal to 1 hour.
 
@@ -331,81 +345,55 @@ This command makes 5 shuffles for each network in the `./realnets/` directory (a
 
 ### Aggregation of the specified evaluation results
 ```sh
-$ pypy benchmark.py -s=results/scp/mod/*.mod
+$ pypy benchmark.py -s
 ```
-Results aggregation is performed with automatic identification of the target clustering algorithm and evaluation measure by the specified path. It is performed automatically as the last step of the algorithm evaluation, but also can be called manually for the modified scope.
+Results aggregation is performed with automatic identification of the target clustering algorithm and evaluation measure taken from the already produced raw evaluations.
 
 
 ## Benchmark Structure
 
-- ./contrib/  - valuable patches to the external open source tools used as binaries
 - ./algorithms/  - benchmarking algorithms
+- ./docs/  - the paper formally describing Clubmark (published in ICDM18) and other documentation
+- ./formats/  - I/O format specifications
 - ./results/  - aggregated and per-algorithm execution and evaluation results (brief `*.res` and extended `*.resx`): timings (execution and CPU), memory consumption, NMIs, Q, per-algorithm resources consumption profile (`*.rcp`)
   - `<algname>.rcp`  - resource consumption profile for all executions of the algorithm even in case of crashes / interruptions
-  - `<measure>.res[x]`  - aggregated value of the measure: average is evaluated for each level / scale for all shuffles of the each network instance, then the weighted best average among all levels is taken for all instances as a final result
+  - `<measure>.res[x]`  - aggregated value of the `<measure>` (cputime, rssmem, etc.): average is evaluated for each level / scale for all shuffles of the each network instance, then the weighted best average among all levels is taken for all instances as a final result
   * `<algname>/clusters/`  - algorithm execution results produced hierarchies of communities for each network instance shuffle
     - `*.cnl`  - resulting clusters unwrapped to nodes (community nodes list) for NMIs evaluation. `*.cnl` are generated either per each level of the resulting hierarchy of communities or for the whole hierarchy (parameterized inside the benchmark)
-  * `<algname>/<measure>/`  - evalautions of the `<measure>` of the `<algname>` for each level (if the clustering is hierarchical or multi-level) of the network instance, were `measure = {mod, nmi, f1h, f1p, ...}`
-    - `<net_instance>.<mext>`  - `<measure>` value aggregated per all network instances and shuffles
+  * `<algname>/<qmeasures>/`  - raw results, logs and traces of the evaluation measures execution
+  * `<qmeasures>/`  - raw and aggregated evaluated measures in the HDF5 storages
   - `*.log`  - `stdout` of the executed algorithm, logs
   - `*.err`  - `stderr` of the executed algorithm and benchmarking routings, errors
+-  ./utils/  - evaluation measures and other related utilities
+   - `./exectime`  - a lightweight resource consumption [profiler](https://bitbucket.org/lumais/exectime/)
+-  ./views/  - web UI view templates and html pages
 
 Example of the `<entity>.rcp` format:
 ```sh
-# ExecTime(sec)	CPU_time(sec)	CPU_usr(sec)	CPU_kern(sec)	RSS_RAM_peak(Mb)	TaskName
-2.575555	2.574302	2.540420	0.033882	6.082	5K5
-0.528582	0.528704	0.519277	0.009427	3.711	2K10
+# ExecTime(sec)	CPU_time(sec)	CPU_usr(sec)	CPU_kern(sec)	RSS_RAM_peak(Mb)	Rcode TaskName
+2.575555	2.574302	2.540420	0.033882	6.082	0 5K5
+0.528582	0.528704	0.519277	0.009427	3.711	0 2K10
 ...
 ```
 
-Example of the `.res` format:
+`qmeasures_<seed>.h5` format:
 ```sh
-# --- 2015-12-31 16:15:37.693514, output:  Q_avg
-# <network>	ganxis	louvain_igraph	...
-karate	0.130950	0.414481	0.233974	0.240929
-jazz_u	0.330844	0.400587	0.392081	0.292395
-...
+<algname>
+  <netname>
+    <measure>
+      Array(<instance_id>, <shuffle_id>[, <level_id>, <run_id>]): float32
 ```
 
-Example of the `.resx` format:
+`aggqms_<seed>.h5` format:
 ```sh
-# --- 2015-12-31 17:05:50.582245 ---
-# <network>
-#	<alg1_outp>
-#	<alg2_outp>
-#	...
-karate
-  ganxis>	Q: 0.130950 (0.084073 .. 0.217867), s: 0.163688, count: 5, fails: 0, d(shuf): 0.133794, s(shuf): 0.0566965, count(shuf): 5, fails(shuf): 0
-  louvain_igraph>	Q: 0.414481 (0.395217 .. 0.419790), s: 0.518101, count: 5, fails: 0, d(shuf): 0.024573, s(shuf): 0.0120524, count(shuf): 5, fails(shuf): 0
-  ...
-jazz_u
-  ganxis>	Q: 0.340728 (0.321374 .. 0.371617), s: 0.42591, count: 5, fails: 0, d(shuf): 0.050243, s(shuf): 0.0219596, count(shuf): 5, fails(shuf): 0
-  louvain_igraph>	Q: 0.400587 (0.399932 .. 0.400999), s: 0.534116, count: 4, fails: 0, d(shuf): 0.001067, s(shuf): 0.000595067, count(shuf): 4, fails(shuf): 0
-  ...
-...
+<measure>
+  <algname>
+      Array(<netid>): (avg: float32, sd: float32, conf: float32)
 ```
+where `<netid>` to the `<netname>` mapping is specified in the `nets` attribute of the `aggqms_<seed>.h5` HFD5 dataset,
+`avg` is the average value, `sd` is the standard deviation and `conf` is the confidence (&#8804; 1, how many instances are successfully processed by the app among the all processed instances).
 
-Example of the `<net_instance>.nmi[_s]` format:
-```sh
-# NMI	level[/shuffle]
-0.815814	0
-0.870791	1
-0.882737	0/1
-...
-```
-
-Example of the `<net_instance>.mod` format:
-```sh
-# Q	level[/shuffle]
-0.333874	1
-0.32539	0
-0.313085	0/1
-...
-```
-
-- ./realnets/  - simple gold standard networks with available ground-truth
-  - dimacs/  - [10th DIMACS'13](http://www.cc.gatech.edu/dimacs10/) networks with the ground-truth modularity value for non-overlapping clustering (see "Modularity Maximization in Networks by Variable Neighborhood Search" by Daniel Aloise et al, 10th DIMACS'13)
-  - snap/  - Stanford SNAP large networks with available ground-truth communities (see "Defining and Evaluating Network Communities based on Ground-truth" by J. Yang and J. Leskovec, ICDM'12)
+- ./realnets/  - real-world networks with available ground-truth (gold-standard) clusters, Stanford SNAP large networks with available ground-truth communities (see "Defining and Evaluating Network Communities based on Ground-truth" by J. Yang and J. Leskovec, ICDM'12) are used with removed duplicated clusters
 - ./syntnets/  - synthetic networks produced by the extended LFR framework: undirected weighted complex networks with overlaps, both mixing parameters are set for the topology and weights, both exponential nodes degree and weights distributions are set
   * `*.ngp`  - network generation parameters
   * `time_seed.dat`  - used time seed on batch generation
@@ -413,7 +401,6 @@ Example of the `<net_instance>.mod` format:
   * `*.nst`  - statistics for the generated network (**n**etwork **st**atistics)
   * `*.nsa`  - generated network to be processed as input graph by the algorithms to build the community structure. The **n**etwork is specified by newline / space/tab **s**eparated **a**rcs as a list of lines: `<src_id> <dst_id> [<weight>]`
   * `*.cnl`  - ground truth for the community structure (cluster/**c**ommunity **n**odes **l**ist) generated by the LFR framework. It is specified by the space/tab separated nodes for each cluster (a line in the file): `<c1_nid_1> <c1_nid_2> ...`
-- `./exectime`  - lightweight resource consumption [profiler](https://bitbucket.org/lumais/exectime/)
 - `./benchmark.py`  - the benchmark (interactive mode)
 - `./benchmark_daemon.sh`  - the shell script to execute the benchmark in background (daemon mode)
 - `./install_depends.sh`  - the shell script to install dependencies

@@ -1,6 +1,6 @@
 # Clubmark (former [PyCABeM](https://github.com/eXascaleInfolab/PyCABeM/tree/draft)) - Bench ![bench mark icon](images/benchmark-64.png) marking Framework for the Clustering Algorithms Evaluation
 
-`\brief` Benchmarking of the clustering (community detection) algorithms using extrinsic (various Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information)(NMI) and Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) measures) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks))(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures, considering overlaps (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of some cluster and parent clusters of that cluster).  
+`\brief` Benchmarking and real-time profiling of the \[overlapping\] clustering (community detection) algorithms, evaluating their quality using extrinsic (all existing accuracy measures applicable for overlapping clustering algorithms on large datasets: Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) family, Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information)(NMI) and [Omega Index](https://www.ncbi.nlm.nih.gov/pubmed/26764947) / fuzzy ARI family) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks))(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures considering overlaps/covers (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of a cluster and its super-clusters).  
 `\authors` (c) Artem Lutov <artem@exascale.info>  
 `\organizations` [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
 `\keywords` overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
@@ -17,6 +17,7 @@
 ```
 
 ## Content
+- [Brief Tutorial](#fast-start)
 - [Overview](#overview)
 - [Motivation](#motivation)
 - [Requirements](#requirements)
@@ -28,6 +29,25 @@
 - [Benchmark Extension](#benchmark-extension)
 - [Related Projects](#related-projects)
 
+
+## Brief Tutorial
+On Linux Ubuntu 16.04 LTS x64:
+1. Clone this repository: `$ git clone https://github.com/eXascaleInfolab/clubmark.git`
+2. Install dependencies: `$ install_reqs.sh`
+3. Prepare system environment for the load balancer: `$ prepare_hostenv.sh`
+4. Run the benchmark from the cloned repository: `$ python3 ./benchmark.py -w=0.0.0.0:8080 -g=3%3 -i%3=realnets/*.nse -a="CggciRg Daoc DaocAR DaocX LouvainIg Pscan Scd CggcRg DaocA DaocR Ganxis Oslom2 Randcommuns Scp" -q="Xmeasures -fh -o -s" -s -t=8h --runtimeout=15d 1>> ./bench.log 2>> ./bench.err`
+    - `-w=0.0.0.0:8080`  - deploy profiling Web UI at `0.0.0.0:8080`
+    - `-g=4%3`  - generate 4 instances of each kind of the synthetic network (weighted undirected graph with overlapping clusters in the ground-truth) and additionally shuffle (reorder links and nodes of) each instance 3 times
+    - `-i%3=realnets/*.nse`  - additionally process \[real-world\] networks from `./realnets` (the networks should be put there in advance, see `./prepare_snapdata.sh`)
+    - `-a=...`  - execute specified clustering algorithms, produces sets (hierarchy / multiple levels of) clusters and execution profiles in `./results/<algname>`
+    - `-q=...`  - evaluate produced clusters with the specified quality measures, produces (raw) evaluation results in `./results/qmeasures/qmeasures_*.h5`
+    - `-s`  - aggregate and summarize the quality evaluation results, produces `./results/qmeasures/aggqms_*.h5` from `./results/qmeasures/qmeasures_*.h5`
+    - `-t=8h`  - limit execution time for each algorithm / evaluation measure on each dataset to 8 hours
+    - `--runtimeout=15d`  - limit execution time for the whole benchmarking to 15 days
+    - `1>> ...` output execution log (`stdout` tracing) to the `./bench.log`
+    - `2>> ...` output execution log (`stderr` tracing) to the `./bench.err`
+
+To run the benchmark on other [POSIX-compatible] platfroms / operating systems, either the [docker container](#deployment-via-docker) of the default environment should be used, or all clustering algorithms and evaluating measures should be recompiled for the target platform.
 
 ## Overview
 

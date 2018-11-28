@@ -1480,7 +1480,7 @@ def aggEvals(qaggopts, exclude, seed, update=True, revalue=False, plot=False):
 	# Form the resulting HDF5 storage indicating the number of processed levels (maxins) in the name if used
 	aggqpath = ''.join((qmsdir, 'aggqms', '' if not maxins else '%' + str(maxins)
 		, '' if seedstr is None else '_' + seedstr, qmnsuf))
-	print('> aggqpath:', aggqpath, ', seedstr:', seedstr)
+	#print('> aggqpath:', aggqpath, ', seedstr:', seedstr)
 	if os.path.isfile(aggqpath):
 		tobackup(aggqpath, False, move=not update)  # Copy/move to the backup
 	try:

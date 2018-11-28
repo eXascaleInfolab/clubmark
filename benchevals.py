@@ -1466,7 +1466,7 @@ def aggEvals(qaggopts, exclude, seed, update=True, revalue=False, plot=False):
 				qmsname = os.path.split(qmspath)[1]
 				print('Aggregating', qmsname)
 				# Extract seeds and to the added to the userblock of the forming storage
-				seed = qmspath[len(qmnbase):len(qmspath) - len(qmnsuf)]  # Note: considered that qmsuf can be empty
+				seed = qmspath[len(qmsdir) + len(qmnbase):len(qmspath) - len(qmnsuf)]  # Note: considered that qmsuf can be empty
 				if seedstr is None:
 					seedstr = seed
 				elif seedstr != seed:
@@ -1480,13 +1480,13 @@ def aggEvals(qaggopts, exclude, seed, update=True, revalue=False, plot=False):
 	# Form the resulting HDF5 storage indicating the number of processed levels (maxins) in the name if used
 	aggqpath = ''.join((qmsdir, 'aggqms', '' if not maxins else '%' + str(maxins)
 		, '' if seedstr is None else '_' + seedstr, qmnsuf))
-	print('aggqpath: ', aggqpath)
+	print('> aggqpath:', aggqpath, ', seedstr:', seedstr)
 	if os.path.isfile(aggqpath):
 		tobackup(aggqpath, False, move=not update)  # Copy/move to the backup
 	try:
 		storage = h5py.File(aggqpath, mode='a', driver='core', libver='latest')
 	except OSError as err:
-		print('ERROR, HDF5 storage "{}" extension failed: {}'.format(aggqpath, err))
+		print('ERROR, HDF5 storage "{}" extension failed: {}'.format(aggqpath, err), file=sys.stderr)
 		raise
 	# Add attributes if required
 	if storage.attrs.get('nets') is None or update:

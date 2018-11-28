@@ -1315,9 +1315,13 @@ def aggeval(aggevals, nets, qaggopts, exclude, qmsname, revalue=False, maxins=0)
 	for galg in viewvalues(qmeasures):
 		alg = os.path.split(galg.name)[1]
 		aflt = None if not aflts else aflts.get(alg)  # Algorithm aggregation filter
+		# Empty inclusive filtering should include everything
+		if aflt is None and not fltout:
+			fltout = not fltout
 		# Filter out algorithms listed in the exclusive filter or not listed in the inclusive filter
 		if (fltout is not None) and (
 		(fltout and aflt and not aflt.nets and not aflt.msrs) or (not fltout and not aflt)):
+			#print('> Omitted by the filtering, fltout: {}, aflt: {}'.format(fltout, aflt))
 			continue
 		for gnet in viewvalues(galg):
 			net = os.path.split(gnet.name)[1]
@@ -1330,6 +1334,8 @@ def aggeval(aggevals, nets, qaggopts, exclude, qmsname, revalue=False, maxins=0)
 						netmatch = True
 						break
 				if not aflt.msrs and ((netmatch and fltout) or (not netmatch and not fltout)):
+					#print('> Omitted by the filtering 2, fltout: {}, aflt: {}, netmatch: {}'
+					#	.format(fltout, aflt, netmatch))
 					continue
 			for dmsr in viewvalues(gnet):
 				# Add result to the aggevals
@@ -1347,6 +1353,8 @@ def aggeval(aggevals, nets, qaggopts, exclude, qmsname, revalue=False, maxins=0)
 								match = True
 								break
 					if (match and fltout) or (not match and not fltout):
+						#print('> Omitted by the filtering 3, fltout: {}, aflt: {}, netmatch: {}'
+						#	.format(fltout, aflt, match))
 						continue
 				# Identify whether the quality measure dataset multilevel and has multiple runs:
 				# (iinst)[(ishuf)][(ilev)][(qmirun)]: float4
@@ -1475,7 +1483,11 @@ def aggEvals(qaggopts, exclude, seed, update=True, revalue=False, plot=False):
 	print('aggqpath: ', aggqpath)
 	if os.path.isfile(aggqpath):
 		tobackup(aggqpath, False, move=not update)  # Copy/move to the backup
-	storage = h5py.File(aggqpath, mode='a', driver='core', libver='latest')
+	try:
+		storage = h5py.File(aggqpath, mode='a', driver='core', libver='latest')
+	except OSError as err:
+		print('ERROR, HDF5 storage "{}" extension failed: {}'.format(aggqpath, err))
+		raise
 	# Add attributes if required
 	if storage.attrs.get('nets') is None or update:
 		# List all networks in the utf8 string, the existing attribute is overwritten

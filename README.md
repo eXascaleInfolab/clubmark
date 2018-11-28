@@ -35,12 +35,13 @@ On Linux Ubuntu 16.04 LTS x64:
 1. Clone this repository: `$ git clone https://github.com/eXascaleInfolab/clubmark.git`
 2. Install dependencies: `$ install_reqs.sh`
 3. Prepare system environment for the load balancer: `$ prepare_hostenv.sh`
-4. Run the benchmark from the cloned repository: `$ python3 ./benchmark.py -w=0.0.0.0:8080 -g=3%3 -i%3=realnets/*.nse -a="CggciRg Daoc DaocAR DaocX LouvainIg Pscan Scd CggcRg DaocA DaocR Ganxis Oslom2 Randcommuns Scp" -q="Xmeasures -fh -o -s" -s -t=8h --runtimeout=15d 1>> ./bench.log 2>> ./bench.err`
+4. Run the benchmark from the cloned repository: `$ python3 ./benchmark.py -w=0.0.0.0:8080 -g=3%3 -i%3=realnets/*.nse -a="CggciRg Daoc DaocAR DaocX LouvainIg Pscan Scd CggcRg DaocA DaocR Ganxis Oslom2 Randcommuns Scp" -r -q="Xmeasures -fh -o -s" -s -t=8h --runtimeout=15d 1>> ./bench.log 2>> ./bench.err`
     - `-w=0.0.0.0:8080`  - deploy profiling Web UI at `0.0.0.0:8080`
     - `-g=4%3`  - generate 4 instances of each kind of the synthetic network (weighted undirected graph with overlapping clusters in the ground-truth) and additionally shuffle (reorder links and nodes of) each instance 3 times
     - `-i%3=realnets/*.nse`  - additionally process \[real-world\] networks from `./realnets` (the networks should be put there in advance, see `./prepare_snapdata.sh`)
-    - `-a=...`  - execute specified clustering algorithms, produces sets (hierarchy / multiple levels of) clusters and execution profiles in `./results/<algname>`
-    - `-q=...`  - evaluate produced clusters with the specified quality measures, produces (raw) evaluation results in `./results/qmeasures/qmeasures_*.h5`
+    - `-a=...`  - use specified clustering algorithms
+    - `-r`  - run (execute) the clustering algorithms (specified with `-a`, otherwise all available), produces sets (hierarchy / multiple levels of) clusters and execution profiles in `./results/<algname>`
+    - `-q=...`  - evaluate produced clusters of the specified algorithms (`-a`) with the specified quality measures, produces (raw) evaluation results in `./results/qmeasures/qmeasures_*.h5`
     - `-s`  - aggregate and summarize the quality evaluation results, produces `./results/qmeasures/aggqms_*.h5` from `./results/qmeasures/qmeasures_*.h5`
     - `-t=8h`  - limit execution time for each algorithm / evaluation measure on each dataset to 8 hours
     - `--runtimeout=15d`  - limit execution time for the whole benchmarking to 15 days

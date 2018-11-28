@@ -17,7 +17,7 @@
 ```
 
 ## Content
-- [Brief Tutorial](#fast-start)
+- [Fast Start Tutorial](#fast-start-tutorial)
 - [Overview](#overview)
 - [Motivation](#motivation)
 - [Requirements](#requirements)
@@ -30,7 +30,7 @@
 - [Related Projects](#related-projects)
 
 
-## Brief Tutorial
+## Fast Start Tutorial
 On Linux Ubuntu 16.04 LTS x64:
 1. Clone this repository: `$ git clone https://github.com/eXascaleInfolab/clubmark.git`
 2. Install dependencies: `$ install_reqs.sh`

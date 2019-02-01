@@ -5,7 +5,7 @@
 `\organizations` [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
 `\keywords` overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
 
-`\cite` [Clubmark: a Parallel Isolation Framework for Benchmarking and Profiling Clustering Algorithms on NUMA Architectures](https://github.com/eXascaleInfolab/clubmark/blob/draft/docs/clubmark.pdf)
+`\cite` [Clubmark: a Parallel Isolation Framework for Benchmarking and Profiling Clustering Algorithms on NUMA Architectures](https://github.com/eXascaleInfolab/clubmark/blob/master/docs/clubmark.pdf)
 ```bibtex
 @inproceedings{Clb18,
 	author={Artem Lutov and Mourad Khayati and Philippe Cudr{\'e}-Mauroux},

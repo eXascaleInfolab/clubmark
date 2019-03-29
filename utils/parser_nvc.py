@@ -14,20 +14,27 @@ import numpy as np
 
 
 def loadNvc(nvcfile):
-	"""Load network embeddings from the specified file in the NVC format v1.1
+	"""Load network embeddings from the specified file in the NVC format v1.2
 
 	nvcfile: str  - file name
 
 	return
-		embeds: matrix  - embeddings matrix in the Dictionary Of Keys sparse matrix format
-		dimwsim: array  - dimensions weights for the similarity or None
-		dimwdis: array  - dimensions weights for the dissimilarity or None
+		embeds: matrix(float32)  - embeddings matrix in the Dictionary Of Keys sparse matrix format
+		rootdims: array(uint16)  - indicies of the root dimensions
+		dimrds: array(float32)  - ratios of dimension (cluster) density step relative to the possibly indirect super cluster, typically >= 1
+		dimrws: array(float32)  - ratios of dimension (cluster) weight step relative to the possibly indirect super cluster, typically <= 1
+		dimwsim: array(float32)  - dimensions weights for the similarity or None
+		dimwdis: array(float32)  - dimensions weights for the dissimilarity or None
 	"""
 	hdr = False  # Whether the header is parsed
 	ftr = False # Whether the footer is parsed
 	ndsnum = 0  # The number of nodes
 	dimnum = 0  # The number of dimensions (reprsentative clusters)
+	rootdnum = 0  # The number of root dimensions (reprsentative clusters)
 	numbered = False
+	rootdims = None  # Indices of the root dimensions
+	dimrds = None  # Dimension density ratios relative to the possibly indirect super cluster (dimension), typically >= 1
+	dimrws = None  # Dimension density ratios relative to the possibly indirect super cluster (dimension), typically <= 1
 	dimwsim = None  # Dimension weights for the similarity
 	dimwdis = None  # Dimension weights for the dissimilarity
 	COMPR_NONE = 0
@@ -40,7 +47,8 @@ def loadNvc(nvcfile):
 	VAL_UINT16 = 2
 	VAL_FLOAT32 = 4
 	valfmt = VAL_UINT8  # Falue format
-	hdrvals = {'nodes:': None, 'dimensions:': None, 'value:': None, 'compression:': None, 'numbered:': None}
+	hdrvals = {'nodes:': None, 'dimensions:': None, 'rootdims:': None, 'value:': None, 'compression:': None, 'numbered:': None}
+	assert not any(filter(lambda k: not k.endswith(':'), hdrvals)), 'Header attribute names must end with ":"'
 	irow = 0  # Payload line (matrix row) index (of either dimensions or nodes)
 	nvec = None  # Node vectors matrix
 	vqnorm = np.uint16(0xFF if valfmt == VAL_UINT8 else 0xFFFF)  # Normalization value for the vector quantification based compression
@@ -74,9 +82,10 @@ def loadNvc(nvcfile):
 						else:
 							del toks[:]
 					if hdr:
-						print
+						#print('hdrvals:',hdrvals)
 						ndsnum = np.uint32(hdrvals.get('nodes:', ndsnum))
 						dimnum = np.uint16(hdrvals.get('dimensions:', dimnum))
+						rootdnum = np.uint16(hdrvals.get('rootdims:', rootdnum))
 						numbered = int(hdrvals.get('numbered:', numbered))  # Note: bool('0') is True (non-empty string)
 						comprstr = hdrvals.get('compression:', '').lower()
 						if comprstr == 'none':
@@ -110,16 +119,39 @@ def loadNvc(nvcfile):
 					if len(vals) <= 1:
 						continue
 					vals = vals[1].split()
-					idimw = vals[0].find(':') + 1
-					if vals and idimw:
-						# if valfmt == VAL_UINT8 or valfmt == VAL_UINT16:
-						# 	dimwsim = np.array([np.float32(1. / np.uint16(v[v.find(':') + 1:])) for v in vals], dtype=np.float32)
-						# else:
-						if vals[0].find('/', idimw) == -1:
-							dimwsim = np.array([np.float32(v[v.find(':') + 1:]) for v in vals], dtype=np.float32)
-						else:
-							dimwsim = np.array([np.float32(v[v.find(':') + 1:v.rfind('/')]) for v in vals], dtype=np.float32)
-							dimwdis = np.array([np.float32(v[v.rfind('/')+1:]) for v in vals], dtype=np.float32)
+					# Initialize resulting arrays
+					if rootdnum:
+						rootdims = np.empty(rootdnum, np.uint16)
+
+					elems = []  # Filling elements
+					pos = vals[0].find('%') + 1
+					if dimnum and pos != 0:
+						dimrds = np.empty(dimnum, np.float32)
+						elems.append(('%', dimrds))
+					pos = vals[0].find('/', pos) + 1
+					if dimnum and pos != 0:
+						dimrws = np.empty(dimnum, np.float32)
+						elems.append(('/', dimrws))
+					pos = vals[0].find(':', pos) + 1
+					if dimnum and pos != 0:
+						dimwsim = np.empty(dimnum, np.float32)
+						elems.append((':', dimwsim))
+					pos = vals[0].find('-', pos) + 1
+					if dimnum and pos != 0:
+						dimwdis = np.empty(dimnum, np.float32)
+						elems.append(('-', dimwdis))
+
+					if dimrds is None and dimrws is None and dimwsim is None and dimwdis is None and rootdims is None:
+						continue
+					ird = 0  # Index in the rootdims array
+					for iv, v in enumerate(vals):
+						if v.endswith('!'):
+							rootdims[ird] = iv
+							ird += 1
+							v = v[:-1]
+						for ie, e in enumerate(elems):
+							ibeg = v.find(e[0]) + 1
+							e[1][iv] = v[ibeg : None if ie + 1 == len(elems) else v.find(elems[ie + 1][0], ibeg)]
 				continue
 
 			# Construct the matrix
@@ -195,4 +227,4 @@ def loadNvc(nvcfile):
 	assert len(dimwsim) == len(dimwdis), 'Parsed dimension weights are not synchronized'
 	#print('nvec:\n', nvec, '\ndimwsim:\n', dimwsim, '\ndimwdis:\n', dimwdis)
 	# Return node vecctors matrix in the Dictionary Of Keys based sparse format and dimension weights
-	return nvec, dimwsim, dimwdis  # nvec.tocsc() - Compressed Sparse Column format
+	return nvec, rootdims, dimrds, dimrws, dimwsim, dimwdis  # nvec.tocsc() - Compressed Sparse Column format

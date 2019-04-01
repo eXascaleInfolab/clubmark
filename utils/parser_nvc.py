@@ -7,14 +7,13 @@
 :Organizations: eXascale lab <http://exascale.info/>, Lumais <http://www.lumais.com/>
 :Date: 2019-03
 """
-
 from __future__ import print_function, division  # Required for stderr output, must be the first import
 from scipy.sparse import dok_matrix  #, coo_matrix
 import numpy as np
 
 
 def loadNvc(nvcfile):
-	"""Load network embeddings from the specified file in the NVC format v1.2
+	"""Load network embeddings from the specified file in the NVC format v1.2.1
 
 	nvcfile: str  - file name
 
@@ -47,11 +46,22 @@ def loadNvc(nvcfile):
 	VAL_UINT16 = 2
 	VAL_FLOAT32 = 4
 	valfmt = VAL_UINT8  # Falue format
-	hdrvals = {'nodes:': None, 'dimensions:': None, 'rootdims:': None, 'value:': None, 'compression:': None, 'numbered:': None}
+	hdrvals = {'nodes:': None, 'dimensions:': None, 'rootdims:': None, 'value:': None, 'compression:': None, 'valmin:': None, 'numbered:': None}
 	assert not any(filter(lambda k: not k.endswith(':'), hdrvals)), 'Header attribute names must end with ":"'
 	irow = 0  # Payload line (matrix row) index (of either dimensions or nodes)
 	nvec = None  # Node vectors matrix
-	vqnorm = np.uint16(0xFF if valfmt == VAL_UINT8 else 0xFFFF)  # Normalization value for the vector quantification based compression
+	vqmax = np.uint16(0xFF if valfmt == VAL_UINT8 else 0xFFFF)  # Maximal (and normalization) value for the vector quantification based compression
+	valmin = 0  # Minimal value (bottom margin) accounted in the node vectors, affects interpretation of the encoded values (format range)
+	valcorr = 0  # Value correction caused by valmin
+
+	def vqdec(v):
+		"""Vector quantified value decoding (decompression)
+
+		v: str(np.uint16)  - a string value to be decoded, E [1, 255]
+
+		return np.float32  - the resulting decoded value
+		"""
+		return valcorr + (1 - valcorr) * np.float32(vqmax - np.uint16(v) + 1) / vqmax
 
 	with open(nvcfile, 'r') as fnvc:
 		for ln in fnvc:
@@ -86,6 +96,7 @@ def loadNvc(nvcfile):
 						ndsnum = np.uint32(hdrvals.get('nodes:', ndsnum))
 						dimnum = np.uint16(hdrvals.get('dimensions:', dimnum))
 						rootdnum = np.uint16(hdrvals.get('rootdims:', rootdnum))
+						valmin = np.float32(hdrvals.get('valmin:', valmin))
 						numbered = int(hdrvals.get('numbered:', numbered))  # Note: bool('0') is True (non-empty string)
 						comprstr = hdrvals.get('compression:', '').lower()
 						if comprstr == 'none':
@@ -103,8 +114,10 @@ def loadNvc(nvcfile):
 							valfmt = VAL_BIT
 						elif valstr == 'uint8':
 							valfmt = VAL_UINT8
+							valcorr = np.float32(max(valmin - 0.5 / vqmax, 0))
 						elif valstr == 'uint16':
 							valfmt = VAL_UINT16
+							valcorr = np.float32(max(valmin - 0.5 / vqmax, 0))
 						elif valstr == 'float32':
 							valfmt = VAL_FLOAT32
 						else:
@@ -179,7 +192,7 @@ def loadNvc(nvcfile):
 					nids, vals = zip(*[v.split(':') for v in vals])
 					if valfmt == VAL_UINT8 or valfmt == VAL_UINT16:
 						# vals = [np.float32(1. / np.uint16(v)) for v in vals]
-						vals = [np.float32(vqnorm - np.uint16(v) + 1) / vqnorm for v in vals]
+						vals = [vqdec(v) for v in vals]
 					else:
 						assert valfmt == VAL_FLOAT32, 'Unexpected valfmt'
 					for i, nd in enumerate(nids):
@@ -192,7 +205,7 @@ def loadNvc(nvcfile):
 					dms, vals = zip(*[v.split(':') for v in vals])
 					if valfmt == VAL_UINT8 or valfmt == VAL_UINT16:
 						# vals = [np.float32(1. / np.uint16(v)) for v in vals]
-						vals = [np.float32(vqnorm - np.uint16(v) + 1) / vqnorm for v in vals]
+						vals = [vqdec(v) for v in vals]
 					else:
 						assert valfmt == VAL_FLOAT32, 'Unexpected valfmt'
 					for i, dm in enumerate(dms):
@@ -203,7 +216,7 @@ def loadNvc(nvcfile):
 					if v[0] != '0':
 						if valfmt == VAL_UINT8 or valfmt == VAL_UINT16:
 							# nvec[irow, j + corr] = 1. / np.uint16(v)
-							nvec[irow, j + corr] = np.float32(vqnorm - np.uint16(v) + 1) / vqnorm
+							nvec[irow, j + corr] = vqdec(v)
 						else:
 							assert valfmt == VAL_FLOAT32 or valfmt == VAL_BIT, 'Unexpected valfmt'
 							nvec[irow, j + corr] = v
@@ -222,7 +235,7 @@ def loadNvc(nvcfile):
 						continue
 					if valfmt == VAL_UINT8 or valfmt == VAL_UINT16:
 						# nvec[irow, j + corr] = 1. / np.uint16(v)
-						nvec[irow, j + corr] = np.float32(vqnorm - np.uint16(v) + 1) / vqnorm
+						nvec[irow, j + corr] = vqdec(v)
 					else:
 						assert valfmt == VAL_FLOAT32 or valfmt == VAL_BIT, 'Unexpected valfmt'
 						nvec[irow, j + corr] = v

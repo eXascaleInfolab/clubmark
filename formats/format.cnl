@@ -6,7 +6,7 @@
 # clusters). Nodes a listed with space/tab separator and possible share
 # in case the membership is not equal (fuzzy overlap).
 #
-# \Author: Artem Lutov <luart@ya.ru>
+# \Author: Artem Lutov <artem@exascale.info>
 # \Organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
 # \Date: 2016-11
 # \Version: 1.1
@@ -18,10 +18,10 @@
 # Note: the comma is either always present as a delimiter or always absent
 # The body consists of clusters_num lines (not considering comments that might be present)
 # in the following format using a space delimiter:
-# [cl1_id>] <nd1_id>[:<share1>] <nd2_id>[:<share1>] ...
+# [<cl1_id>>] <nd1_id>[:<share1>] <nd2_id>[:<share1>] ...
 # ...
 # where:
-#  clusters_num  - the number of clusters
+#  clusters_num  - the number of *listed* clusters (the hierarchy itslef may contain more clusters)
 #  nodes_num  - the number of DISTINCT nodes in all clusters
 #  Fuzzy = {0, 1}  - whether the membership can be fuzzy (inequal) or not, default: 1
 #  Numbered = {0, 1}  - whether the clusters are numbered, default: 0

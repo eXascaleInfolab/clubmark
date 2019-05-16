@@ -3,7 +3,7 @@
 # \description The input Network (graph) is Specified by Links (Edges/Arcs).
 # Each line of the file defines edge of arc with optional weight.
 #
-# \Author: Artem Lutov <luart@ya.ru>
+# \Author: Artem Lutov <artem@exascale.info>
 # \Organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>, Lumais <http://www.lumais.com/>
 # \Date: 2016-11
 # \Version: 1.1
@@ -19,9 +19,9 @@
 ...
 # where:
 #  nodes_num  - the number of nodes (vertices) in the network (graph)
-#  Links  - are either Edges (for the undirected network) or Arcs (for the direted network)
+#  Links  - are either Edges (for the undirected network) or Arcs (for the directed network)
 #  links_num  - the number of <links> (edges or arcs) in the network
-#  weighted = {0, 1}  - wether the network is weighted or not, default: 1
+#  weighted = {0, 1}  - whether the network is weighted or not, default: 1
 #
 #  src_id  - source node id >= 0
 #  dst_id  - destination node id >= 0
@@ -29,7 +29,7 @@
 
 
 # Example --------------------------------------------------------------
-# = Example Network .nse (edges - nondirected) =
+# = Example Network .nse (edges, undirected links) =
 # Nodes: 3	Edges: 3   Weighted: 0 
 # Note that the number of links corresponds to the number of payload lines in the file
 0 1

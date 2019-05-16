@@ -65,6 +65,7 @@ import traceback  # Stacktrace
 import copy
 import itertools  # chain
 import time
+from numbers import Number  # To verify that a variable is a number (int or float)
 # Consider time interface compatibility for Python before v3.3
 if not hasattr(time, 'perf_counter'):  #pylint: disable=C0413
 	time.perf_counter = time.time
@@ -74,7 +75,7 @@ from multiprocessing import cpu_count  # Returns the number of logical CPU units
 
 import benchapps  # Required for the functions name mapping to/from the app names
 from benchapps import PYEXEC, EXTCLNODES, aggexec, reduceLevels  # , ALGSDIR
-from benchutils import viewitems, timeSeed, dirempty, tobackup, dhmsSec, syncedTime, \
+from benchutils import IntEnum, viewitems, timeSeed, dirempty, tobackup, dhmsSec, syncedTime, \
 	secDhms, delPathSuffix, parseName, funcToAppName, PREFEXEC, SEPPARS, SEPINST, SEPSHF, SEPPATHID, \
 	SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER, ALEVSMAX, ALGLEVS
 # PYEXEC - current Python interpreter
@@ -91,6 +92,8 @@ from algorithms.utils.parser_nsl import asymnet, dflnetext
 
 # Note: '/' is required in the end of the dir to evaluate whether it is already exist and distinguish it from the file
 _SYNTDIR = 'syntnets/'  # Default base directory for the synthetic datasets (both networks, params and seeds)
+_SYNTDIR_MIXED = 'syntnets_mixed/'  # Default base directory for the synthetic datasets varying only the mixing parameter
+_SYNTDIR_LREDUCT = 'syntnets_lreduct/'  # Default base directory for the synthetic datasets reducing the number of network links
 _NETSDIR = 'networks/'  # Networks sub-directory of the synthetic networks (inside _SYNTDIR)
 assert RESDIR.endswith('/'), 'A directory should have a valid terminator'
 _SEEDFILE = RESDIR + 'seed.txt'
@@ -146,14 +149,19 @@ class PathOpts(object):
 		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
 
 
+SyntPolicy = IntEnum('SyntPolicy', 'ordinary mixed lreduct')  # JOB_INFO, TASK_INFO
+"""Synthethic network generation polcy"""
+
+
 class SyntPathOpts(PathOpts):
 	"""Paths parameters for the synthetic networks"""
-	__slots__ = ('netins', 'overwrite')
+	__slots__ = ('policy', 'netins', 'overwrite')
 
-	def __init__(self, path, netins=3, overwrite=False, flat=False, asym=False, shfnum=0):
+	def __init__(self, policy, path, netins=3, overwrite=False, flat=False, asym=False, shfnum=0):
 		"""Sets default values for the input parameters
 
 		path  - path (directory or file), a wildcard is allowed
+		policy: SyntPolicy  - policy for the synthetic networks generation
 		netins  - the number of network instances to generate, >= 0
 		overwrite  - overwrite or skip generation if the synthetic networks instances
 			already exist
@@ -165,7 +173,9 @@ class SyntPathOpts(PathOpts):
 		asym  - the network is asymmetric (specified by arcs rather than edges)
 		shfnum  - the number of shuffles of each network instance to be produced, >= 0
 		"""
+		assert isinstance(policy, SyntPolicy), 'Unexpected policy type: ' + type(policy).__name__
 		super(SyntPathOpts, self).__init__(path, flat, asym, shfnum)
+		self.policy = policy
 		self.netins = netins
 		self.overwrite = overwrite
 
@@ -269,7 +279,7 @@ class Params(object):
 	def __init__(self):
 		"""Sets default values for the input parameters
 
-		syntpo  - synthetic networks path options, SyntPathOpts
+		syntpos: list(SyntPathOpts)  - synthetic networks path options, SyntPathOpts
 		runalgs  - execute algorithm or not
 		qmeasures: list(list(str))  - quality measures with their parameters to be evaluated
 			on the clustering results. None means do not evaluate.
@@ -302,7 +312,7 @@ class Params(object):
 		runtimeout: uint  - clustering algorithms execution timeout
 		evaltimeout: uint  - resulting clusterings evaluations timeout
 		"""
-		self.syntpo = None  # SyntPathOpts()
+		self.syntpos = []  # SyntPathOpts()
 		self.runalgs = False
 		self.qmeasures = None  # Evaluating quality measures with their parameters
 		self.qupdate = True
@@ -398,6 +408,10 @@ def parseParams(args):
 			# 	raise ValueError('Unexpected argument: ' + arg)
 			if arg.startswith('--generate'):
 				arg = '-g' + arg[len('--generate'):]
+			elif arg.startswith('--generate-mixed'):
+				arg = '-m' + arg[len('--generate-mixed'):]
+			elif arg.startswith('--generate-lreduct'):
+				arg = '-l' + arg[len('--generate-lreduct'):]
 			elif arg.startswith('--input'):
 				arg = '-i' + arg[len('--input'):]
 			elif arg.startswith('--apps'):
@@ -436,9 +450,18 @@ def parseParams(args):
 			else:
 				raise ValueError('Unexpected argument: ' + arg)
 
-		if arg[1] == 'g':
+		if arg[1] in 'gml':
 			# [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]
-			opts.syntpo = SyntPathOpts(_SYNTDIR)
+			policy = SyntPolicy.ordinary
+			syntdir = _SYNTDIR
+			if arg[1] == 'm':
+				policy = SyntPolicy.mixed
+				syntdir = _SYNTDIR_MIXED
+			else:
+				policy = SyntPolicy.lreduct
+				syntdir = _SYNTDIR_LREDUCT
+			syntpo = SyntPathOpts(policy, syntdir)
+			opts.syntpos.append(syntpo)
 			alen = len(arg)
 			if alen == 2:
 				continue
@@ -446,9 +469,9 @@ def parseParams(args):
 			ieflags = pos if pos != -1 else len(arg)  # End index of the prefix flags
 			for i in range(2, ieflags):
 				if arg[i] == 'o':
-					opts.syntpo.overwrite = True  # Forced generation (overwrite)
+					syntpo.overwrite = True  # Forced generation (overwrite)
 				elif arg[i] == 'a':
-					opts.syntpo.asym = True  # Generate asymmetric (directed) networks
+					syntpo.asym = True  # Generate asymmetric (directed) networks
 				else:
 					raise ValueError('Unexpected argument: ' + arg)
 			if pos != -1:
@@ -459,23 +482,23 @@ def parseParams(args):
 					nums = val[0].split(_GENSEPSHF, 1)
 					# Now [instances][shuffles][outpdir]
 					if nums[0]:
-						opts.syntpo.netins = int(nums[0])
+						syntpo.netins = int(nums[0])
 					else:
-						opts.syntpo.netins = 0  # Zero if omitted in case of shuffles are specified
+						syntpo.netins = 0  # Zero if omitted in case of shuffles are specified
 					# Parse shuffles
 					if len(nums) > 1:
-						opts.syntpo.shfnum = int(nums[1])
-					if opts.syntpo.netins < 0 or opts.syntpo.shfnum < 0:
+						syntpo.shfnum = int(nums[1])
+					if syntpo.netins < 0 or syntpo.shfnum < 0:
 						raise ValueError('Value is out of range:  netins: {netins} >= 1, shfnum: {shfnum} >= 0'
-							.format(netins=opts.syntpo.netins, shfnum=opts.syntpo.shfnum))
+							.format(netins=syntpo.netins, shfnum=syntpo.shfnum))
 				# Parse outpdir
 				if len(val) > 1:
 					if not val[1]:  # arg ended with '=' symbol
 						raise ValueError('Unexpected argument: ' + arg)
-					opts.syntpo.path = val[1]
-					opts.syntpo.path = unquote(opts.syntpo.path)
-					if not opts.syntpo.path.endswith('/'):
-						opts.syntpo.path += '/'
+					syntpo.path = val[1]
+					syntpo.path = unquote(syntpo.path)
+					if not syntpo.path.endswith('/'):
+						syntpo.path += '/'
 		elif arg[1] == 'i':
 			# [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>
 			pos = arg.find('=', 2)
@@ -605,12 +628,13 @@ def parseParams(args):
 
 
 # Networks processing ----------------------------------------------------------
-def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
+def generateNets(genbin, policy, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 , overwrite=False, seedfile=_SEEDFILE, gentimeout=3*60*60):  # 2-4 hours
 	"""Generate synthetic networks with ground-truth communities and save generation params.
 	Previously existed paths with the same name are backed up before being updated.
 
 	genbin  - the binary used to generate the data (full path or relative to the base benchmark dir)
+	policy: SyntPolicy  - synthetic networks generation policy
 	insnum  - the number of instances of each network to be generated, >= 1
 	asym  - generate asymmetric (specified by arcs, directed) instead of undirected networks
 	basedir  - base directory where data will be generated
@@ -625,6 +649,7 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 	seedsdir = 'seeds/'  # Contains network generation seeds per each network instance
 
 	# Store all instances of each network with generation parameters in the dedicated directory
+	assert isinstance(policy, SyntPolicy), 'Unexpected policy type: ' + type(policy).__name__
 	assert insnum >= 1, 'Number of the network instances to be generated must be positive'
 	assert ((basedir == '' or basedir[-1] == '/') and paramsdir[-1] == '/' and seedsdir[-1] == '/' and netsdir[-1] == '/'
 	 ), 'Directory name must have valid terminator'
@@ -651,15 +676,16 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 	rmaxK = 3  # Min ratio of the max degree relative to the avg degree
 	# 1K ** 0.618 -> 71,  100K -> 1.2K
 
+	def evalmuw(mut):
+		"""Evaluate LFR muw"""
+		assert isinstance(mut, Number), 'A number is expected'
+		return mut * 1.05  # 0.75
+
 	def evalmaxk(genopts):
 		"""Evaluate LFR maxk"""
 		# 0.618 is 1/golden_ratio; sqrt(n), but not less than rmaxK times of the average degree
 		# => average degree should be <= N/rmaxK
 		return int(max(genopts['N'] ** 0.618, genopts['k']*rmaxK))
-
-	def evalmuw(genopts):
-		"""Evaluate LFR muw"""
-		return genopts['mut'] * 0.75
 
 	def evalminc(genopts):
 		"""Evaluate LFR minc"""
@@ -669,18 +695,33 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 		"""Evaluate LFR maxc"""
 		return int(genopts['N'] / 3)
 
-	def evalon(genopts):
-		"""Evaluate LFR on"""
-		return int(genopts['N'] * genopts['mut']**2)  # The number of overlapping nodes
+	def evalon(genopts, mixed):
+		"""Evaluate LFR on
+
+		mixed: bool  - the number of overlapping nodes 'on' depends on the topology mixing
+		"""
+		if mixed:
+			return int(genopts['N'] * genopts['mut']**2)  # The number of overlapping nodes
+		return int(genopts['N'] ** 0.618)
 
 	# Template of the generating options files
 	# mut: external cluster links / total links
-	genopts = {'mut': 0.275, 'beta': 1.5, 't1': 1.75, 't2': 1.35, 'om': 2, 'cnl': 1}  # beta: 1.35, 1.2 ... 1.618;  t1: 1.65,
+	if policy == SyntPolicy.ordinary:
+		genopts = {'beta': 1.5, 't1': 1.75, 't2': 1.35, 'om': 2, 'cnl': 1}  # beta: 1.35, 1.2 ... 1.618;  t1: 1.65,
+	else:
+		genopts = {'beta': 1.5, 't1': 1.75, 't2': 1.35, 'om': 2, 'cnl': 1}  # beta: 1.35, 1.2 ... 1.618;  t1: 1.65,
 	# Defaults: beta: 1.5, t1: 2, t2: 1
 
 	# Generate options for the networks generation using chosen variations of params
-	varNmul = (1, 5, 20, 50)  # *N0 - sizes of the generating networks in thousands of nodes;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
-	vark = (5, 25, 75)  # Average node degree (density of the network links)
+	if policy == SyntPolicy.ordinary:
+		varNmul = (1, 5, 20, 50)  # *N0 - sizes of the generating networks in thousands of nodes;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
+		vark = (5, 25, 75)  # Average node degree (density of the network links)
+		varMut = (0.275,)
+	else:
+		varNmul = (10,)  # *N0 - sizes of the generating networks in thousands of nodes;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
+		vark = (20,)  # Average node degree (density of the network links)
+		varMut = tuple(0.05 * i for i in range(10)) if policy == SyntPolicy.mixed else (0.275,)
+
 	#varNmul = (1, 5)  # *N0 - sizes of the generating networks in thousands of nodes;  Note: 100K on max degree works more than 30 min; 50K -> 15 min
 	#vark = (5, 25)  # Average node degree (density of the network links)
 	assert vark[-1] <= round(varNmul[0] * 1000 / rmaxK), 'Avg vs max degree validation failed'
@@ -691,81 +732,87 @@ def generateNets(genbin, insnum, asym=False, basedir=_SYNTDIR, netsdir=_NETSDIR
 	# Note: AffinityMask.CORE_THREADS - set affinity in a way to maximize the CPU cache L1/2 for each process
 	# 1 - maximizes parallelization => overall execution speed
 	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1)
-	, memlimit=_VMLIMIT, name='gennets', webuiapp=_webuiapp) as _execpool:
+	, memlimit=_VMLIMIT, name='gennets_' + policy.name, webuiapp=_webuiapp) as _execpool:
 		bmname = os.path.split(genbin)[1]  # Benchmark name
 		genbin = os.path.relpath(genbin, basedir)  # Update path to the executable relative to the job workdir
 		# Copy benchmark seed to the syntnets seed
 		randseed = basedir + 'lastseed.txt'  # Random seed file name
 		shutil.copy2(seedfile, randseed)
+		namepref = '' if policy == SyntPolicy.ordinary else policy.name[0]
+		namesuf = '' if policy != SyntPolicy.lreduct else '_0'
 
 		netext = dflnetext(asym)  # Network file extension (should have the leading '.')
 		asymarg = ['-a', '1'] if asym else None  # Whether to generate directed (specified by arcs) or undirected (specified by edges) network
 		for nm in varNmul:
 			N = nm * N0
 			for k in vark:
-				netgenTimeout = max(nm * k / 1.5, 30)  # ~ up to 30 min (>= 30 sec) per a network instance (50K nodes on K=75 takes ~15-35 min)
-				name = 'K'.join((str(nm), str(k)))
-				ext = '.ngp'  # Network generation parameters
-				# Generate network parameters files if not exist
-				fnamex = name.join((paramsdirfull, ext))
-				if overwrite or not os.path.exists(fnamex):
-					print('Generating {} parameters file...'.format(fnamex))
-					with open(fnamex, 'w') as fout:
-						genopts.update({'N': N, 'k': k})
-						genopts.update({'maxk': evalmaxk(genopts), 'muw': evalmuw(genopts), 'minc': evalminc(genopts)
-							, 'maxc': evalmaxc(genopts), 'on': evalon(genopts), 'name': name})
-						for opt in viewitems(genopts):
-							fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
-				else:
-					assert os.path.isfile(fnamex), '{} should be a file'.format(fnamex)
-				# Recover the seed file is exists
-				netseed = name.join((seedsdirfull, '.ngs'))
-				if os.path.isfile(netseed):
-					shutil.copy2(netseed, randseed)
-					if _DEBUG_TRACE:
-						print('The seed {netseed} is retained (but inapplicable for the shuffles)'.format(netseed=netseed))
+				for mut in varMut:
+					netgenTimeout = max(nm * k / 1.5, 30)  # ~ up to 30 min (>= 30 sec) per a network instance (50K nodes on K=75 takes ~15-35 min)
+					name = 'K'.join((str(nm), str(k))).join((namepref, namesuf))
+					ext = '.ngp'  # Network generation parameters
+					# Generate network parameters files if not exist
+					fnamex = name.join((paramsdirfull, ext))
+					if overwrite or not os.path.exists(fnamex):
+						print('Generating {} parameters file...'.format(fnamex))
+						with open(fnamex, 'w') as fout:
+							genopts.update({'N': N, 'k': k, 'mut': mut, 'muw': evalmuw(mut)})
+							genopts.update({'maxk': evalmaxk(genopts), 'minc': evalminc(genopts), 'maxc': evalmaxc(genopts)
+								, 'on': evalon(genopts, policy == SyntPolicy.ordinary), 'name': name})
+							for opt in viewitems(genopts):
+								fout.write(''.join(('-', opt[0], ' ', str(opt[1]), '\n')))
+					else:
+						assert os.path.isfile(fnamex), '{} should be a file'.format(fnamex)
+					# Recover the seed file is exists
+					netseed = name.join((seedsdirfull, '.ngs'))
+					if os.path.isfile(netseed):
+						shutil.copy2(netseed, randseed)
+						if _DEBUG_TRACE:
+							print('The seed {netseed} is retained (but inapplicable for the shuffles)'.format(netseed=netseed))
 
-				# Generate networks with ground truth corresponding to the parameters
-				if os.path.isfile(fnamex):
-					netpath = name.join((netsdir, '/'))  # syntnets/networks/<netname>/  netname.*
-					netparams = name.join((paramsdir, ext))  # syntnets/params/<netname>.<ext>
-					xtimebin = os.path.relpath(UTILDIR + 'exectime', basedir)
-					jobseed = os.path.relpath(netseed, basedir)
-					# Generate required number of network instances
-					netpathfull = basedir + netpath
-					if not os.path.exists(netpathfull):
-						os.mkdir(netpathfull)
-					startdelay = 0.1  # Required to start execution of the LFR benchmark before copying the time_seed for the following process
-					netfile = netpath + name
-					if _DEBUG_TRACE:
-						print('Generating {netfile} as {name} by {netparams}'.format(netfile=netfile, name=name, netparams=netparams))
-					if insnum and overwrite or not os.path.exists(netfile.join((basedir, netext))):
-						args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, EXTRESCONS))  # Output .rcp in the current dir, basedir
-							, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
-						if asymarg:
-							args.extend(asymarg)
-						#Job(name, workdir, args, timeout=0, rsrtonto=False, onstart=None, ondone=None, tstart=None)
-						_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, rsrtonto=True
-							#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
-							, onstart=lambda job: shutil.copy2(randseed, netseed)  #pylint: disable=W0640;  Network generation seed
-							#, ondone=shuffle if shfnum > 0 else None
-							, startdelay=startdelay, category='generate_' + str(k), size=N))
-					for i in range(1, insnum):
-						namext = ''.join((name, SEPINST, str(i)))
-						netfile = netpath + namext
-						if overwrite or not os.path.exists(netfile.join((basedir, netext))):
-							args = [xtimebin, '-n=' + namext, ''.join(('-o=', bmname, EXTRESCONS))
+					# Generate networks with ground truth corresponding to the parameters
+					if os.path.isfile(fnamex):
+						netpath = name.join((netsdir, '/'))  # syntnets/networks/<netname>/  netname.*
+						netparams = name.join((paramsdir, ext))  # syntnets/params/<netname>.<ext>
+						xtimebin = os.path.relpath(UTILDIR + 'exectime', basedir)
+						jobseed = os.path.relpath(netseed, basedir)
+						# Generate required number of network instances
+						netpathfull = basedir + netpath
+						if not os.path.exists(netpathfull):
+							os.mkdir(netpathfull)
+						startdelay = 0.1  # Required to start execution of the LFR benchmark before copying the time_seed for the following process
+						netfile = netpath + name
+						if _DEBUG_TRACE:
+							print('Generating {netfile} as {name} by {netparams}'.format(netfile=netfile, name=name, netparams=netparams))
+						if insnum and overwrite or not os.path.exists(netfile.join((basedir, netext))):
+							args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, EXTRESCONS))  # Output .rcp in the current dir, basedir
 								, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
 							if asymarg:
 								args.extend(asymarg)
 							#Job(name, workdir, args, timeout=0, rsrtonto=False, onstart=None, ondone=None, tstart=None)
-							_execpool.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, rsrtonto=True
+							_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, rsrtonto=True
 								#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 								, onstart=lambda job: shutil.copy2(randseed, netseed)  #pylint: disable=W0640;  Network generation seed
 								#, ondone=shuffle if shfnum > 0 else None
 								, startdelay=startdelay, category='generate_' + str(k), size=N))
-				else:
-					print('ERROR, network parameters file "{}" does not exist'.format(fnamex), file=sys.stderr)
+						for i in range(1, insnum):
+							namext = ''.join((name, SEPINST, str(i)))
+							netfile = netpath + namext
+							if overwrite or not os.path.exists(netfile.join((basedir, netext))):
+								args = [xtimebin, '-n=' + namext, ''.join(('-o=', bmname, EXTRESCONS))
+									, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
+								if asymarg:
+									args.extend(asymarg)
+#								# Consider linkds reduction policy
+#								if policy == SyntPolicy.lreduct:
+#									pass
+								#Job(name, workdir, args, timeout=0, rsrtonto=False, onstart=None, ondone=None, tstart=None)
+								_execpool.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, rsrtonto=True
+									#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
+									, onstart=lambda job: shutil.copy2(randseed, netseed)  #pylint: disable=W0640;  Network generation seed
+									#, ondone=shuffle if shfnum > 0 else None
+									, startdelay=startdelay, category='generate_' + str(k), size=N))
+					else:
+						print('ERROR, network parameters file "{}" does not exist'.format(fnamex), file=sys.stderr)
 		print('Parameter files generation completed')
 		if gentimeout <= 0:
 			gentimeout = insnum * netgenTimeout
@@ -1957,10 +2004,10 @@ def benchmark(*args):
 	exectime = time.perf_counter()  # Benchmarking start time
 
 	opts = parseParams(args)
-	print('The benchmark is started, parsed params:\n\tsyntpo: "{}"\n\tconvnets: 0b{:b}'
+	print('The benchmark is started, parsed params:\n\tsyntpos: "{}"\n\tconvnets: 0b{:b}'
 		'\n\trunalgs: {}\n\talgorithms: {}\n\tquality measures: {}\n\tqupdate: {}\n\tqrevalue: {}\n\tdatas: {}'
 		'\n\tqaggopts: {}\n\twebui: {}\n\ttimeout: {} h {} m {:.4f} sec'
-	 .format(opts.syntpo, opts.convnets, opts.runalgs
+		.format('; '.join((str(sp) for sp in opts.syntpos)), opts.convnets, opts.runalgs
 		, ', '.join(opts.algorithms) if opts.algorithms else ''
 		, None if opts.qmeasures is None else ' '.join([qm[0] for qm in opts.qmeasures]), opts.qupdate, opts.qrevalue
 		, '; '.join([str(pathopts) for pathopts in opts.datas])  # Note: ';' because the internal separator is ','
@@ -2000,24 +2047,36 @@ def benchmark(*args):
 			seed = int(fseed.readline())
 
 	# Generate parameters for the synthetic networks and the networks instances if required
-	if opts.syntpo and opts.syntpo.netins >= 1:
-		# Note: on overwrite old instances are rewritten and shuffles are deleted making the backup
-		generateNets(genbin=benchpath, insnum=opts.syntpo.netins, asym=opts.syntpo.asym
-			, basedir=opts.syntpo.path, netsdir=_NETSDIR, overwrite=opts.syntpo.overwrite
-			, seedfile=opts.seedfile, gentimeout=3*60*60)  # 3 hours
+	if opts.syntpos:
+		for sp in opts.syntpos:
+			if not sp.netins:
+				assert sp.netins, 'Invalid number of the network instances is specified to be generated'
+				continue
+			# Note: on overwrite old instances are rewritten and shuffles are deleted making the backup
+			generateNets(genbin=benchpath, policy=sp.policy, insnum=sp.netins, asym=sp.asym
+				, basedir=sp.path, netsdir=_NETSDIR, overwrite=sp.overwrite
+				, seedfile=opts.seedfile, gentimeout=3*60*60)  # 3 hours
 
 	# Update opts.datasets with synthetic generated data: all subdirs of the synthetic networks dir
 	# Note: should be done only after the generation, because new directories can be created
-	if opts.syntpo or not opts.datas:
-		# Note: even if syntpo was no specified, use it as the default path
-		if opts.syntpo is None:
-			opts.syntpo = SyntPathOpts(_SYNTDIR)
+	if opts.syntpos or not opts.datas:
+		# Note: even if syntpo was no specified, use it as the default path only for the ordinary syntnets
+		if not opts.syntpos:
+			opts.syntpos.append(SyntPathOpts(SyntPolicy.ordinary, _SYNTDIR))
+			#opts.syntpos.append(SyntPathOpts(SyntPolicy.mixed, _SYNTDIR_MIXED))
+			#opts.syntpos.append(SyntPathOpts(SyntPolicy.lreduct, _SYNTDIR_LREDUCT))
 		#popts = copy.copy(super(SyntPathOpts, opts.syntpo))
 		#popts.path = _NETSDIR.join((popts.path, '*/'))  # Change meaning of the path from base dir to the target dirs
-		opts.syntpo.path = _NETSDIR.join((opts.syntpo.path, '*/'))  # Change meaning of the path from base dir to the target dirs
-		# Generated synthetic networks are processed before the manually specified other paths
-		opts.datas.insert(0, opts.syntpo)
-		opts.syntpo = None  # Delete syntpo to not occasionally use .path with changed meaning
+		synps = set()
+		for sp in opts.syntpos:
+			if sp.path in synps:
+				raise('Generating synthetic networks should have disrinct base directories')
+			synps.add(sp)
+			sp.path = _NETSDIR.join((sp.path, '*/'))  # Change meaning of the path from base dir to the target dirs
+			# Generated synthetic networks are processed before the manually specified other paths
+			opts.datas.insert(0, sp)
+		del opts.syntpo[:]  # Delete syntpo to not occasionally use .path with changed meaning
+		synps.clear()
 
 	# Shuffle datasets backing up and overwriting existing shuffles if the shuffling is required at all
 	shuffleNets(opts.datas, timeout1=7*60, shftimeout=45*60)
@@ -2082,11 +2141,11 @@ if __name__ == '__main__':
 		apps = fetchAppnames(benchapps)
 		qmapps = fetchAppnames(benchevals)
 		print('\n'.join(('Usage:',
-			'  {0} [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
+			'  {0} -h | [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
 			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
-			' [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[="qmapp [arg1 arg2 ...]"]]'
-			' [-s[p][*][[{{-,+}}]=<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...][{qsepgroup}<alg>...]]]'
-			' [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] [-w=<webui_addr>] | -h',
+			' [-a=[-]"app1 app2 ..."] [-r] [-q[="qmapp [arg1 arg2 ...]"]]'
+			' [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] [-w=<webui_addr>]'
+			' [-c[f][r]] [-s[p][*][[{{-,+}}]=<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...][{qsepgroup}<alg>...]]]',
 			'',
 			'Example:',
 			'  {0} -g=3{gensepshuf}5 -r -q -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
@@ -2103,11 +2162,18 @@ if __name__ == '__main__':
 			' of the required format in the <outpdir> (default: {syntdir}), shuffling (randomly reordering network links'
 			' and saving under another name) each dataset <shuffles_number> times (default: 0).'
 			' If <number> is omitted or set to 0 then ONLY shuffling of <outpdir>/{netsdir}/* is performed.'
-			' The generated networks are automatically added to the begin of the input datasets.',
-			'    o  - overwrite existing network instances (old data is backed up) instead of skipping generation',
+			' The generated networks are automatically added to the begin of the input datasets.', #'the previously existed networks are backed up.',
+			'    o  - overwrite existing network instances (old data is backed up) instead of skipping generation.'
+			' ATTENTION: Required if the ground-truth is essensial.',
 			'    a  - generate networks specified by arcs (directed) instead of edges (undirected)',
 			'NOTE: shuffled datasets have the following naming format:',
 			'\t<base_name>[(seppars)<param1>...][{sepinst}<instance_index>][{sepshf}<shuffle_index>].<net_extension>',
+			'  --generate-mixed, -m[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets'
+			' varying only the mixing parameter to evaluate robustness of the clustering algorithms (ability to recover structure of the noisy data).'
+			' See --generate for the parameters specification.',
+			'  --generate-lreduct, -l[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets'
+			' only reducing links to evaluate results stability of the clustering algorithms (absense of surges in response to smooth input updates).'
+			' See --generate for the parameters specification.',
 			'  --input, -i[f][a][{gensepshuf}<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories'
 			', which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension'
 			' (.ns{{e,a}}). Default: -i={syntdir}{netsdir}*/, which are subdirs of the synthetic networks dir without shuffling.',

@@ -97,6 +97,58 @@ except ImportError:
 	viewvalues = lambda dct: viewMethod(dct, 'values')()  #pylint: disable=W0611
 
 
+try:
+	from enum import IntEnum
+except ImportError:
+	# As a falback make a manual wrapper with the essential functionality
+	def IntEnum(clsname, names, module=__name__, start=1):  #pylint: disable=W0613
+		"""IntEnum-like class builder
+
+		Args:
+			clsname (str): class name
+			names (str|list|dict): enum members, optionally enumerated
+			module (str): class module
+			start (int, optional): stating value for the default enumeration
+
+		Returns:
+			Clsname: IntEnum-like class Clsname
+
+		>>> IntEnum('UiResFmt', 'json htm txt').htm.name
+		'htm'
+
+		>>> IntEnum('UiResFmt', 'json htm txt').txt.name
+		'txt'
+		"""
+
+		def valobj(clsname, name, val):
+			"""Build object with the specified class name, name and value attributes
+
+			Args:
+				clsname (str): name of the embracing class
+				name (str): object name
+				val: the value to be assigned
+
+			Returns:
+				required object of the type '<clsname>.<name>'
+			"""
+			# assert isinstance(clsname, str) and isinstance(name, str)
+			return type('.'.join((clsname, name)), (object,), {'name': name, 'value': val})()
+
+		dnames = {}  # Constructing members of the enum-like object
+		if names:
+			if isinstance(names, str):
+				names = [name.rstrip(',') for name in names.split()]
+			if not isinstance(names, dict) and (not isinstance(names, list) or isinstance(names[0], str)):
+				# {'name': name, 'value': i}
+				dnames = {name: valobj(clsname, name, i) for i, name in enumerate(names, start)}
+			else:
+				dnames = {name: valobj(clsname, name, i) for i, name in dict(names).items()}
+		cls = type(clsname, (object,), dnames)
+		# Consider some specific attributes of the enum
+		cls.__members__ = dnames
+		return cls
+
+
 def staticTrace(func, msg, marker=None, fout=sys.stdout):
 	"""Trace the message once independently on the number of calls for each marker
 

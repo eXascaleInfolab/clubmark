@@ -29,6 +29,7 @@ _REFLOAT = re.compile(r'[-+]?\d+\.?\d*([eE][-+]?\d+)?(?=\W)')  # Regular express
 _REINT = re.compile(r'[-+]?\d+(?=\W)')  # Regular expression to parse int
 SEPPARS = '='  # Network parameters separator, must be a char; = (former: !)
 SEPINST = '^'  # Network instances separator, must be a char
+SEPLRD = '@'  # Links reduction value separator, must be a char
 SEPSHF = '%'  # Network shuffles separator, must be a char; ~
 SEPPATHID = '#'  # Network path id separator (to distinguish files with the same name from different dirs in the results), must be a char
 SEPSUBTASK = '>'  # Sub-task separator ('>' or '/' looks intuitive)
@@ -274,9 +275,11 @@ def delPathSuffix(path, nameonly=False):
 
 	return  base of the path without suffixes
 
-	>>> delPathSuffix('1K10!k7^1%1#1')
+	>>> delPathSuffix('1K10=k7^1%1#1')
 	'1K10'
-	>>> delPathSuffix('1K10!k7^1%1#1', True)
+	>>> delPathSuffix('1K10@5=k7^1%1#1')
+	'1K10@5'
+	>>> delPathSuffix('1K10=k7^1%1#1', True)
 	'1K10'
 	>>> delPathSuffix("1K10^1%2#f1") == '1K10'
 	True
@@ -286,9 +289,9 @@ def delPathSuffix(path, nameonly=False):
 	True
 	>>> delPathSuffix('scp/mod/2K5%1', True) == 'scp/mod/2K5'
 	True
-	>>> delPathSuffix('1K10!k5#1') == '1K10'
+	>>> delPathSuffix('1K10=k5#1') == '1K10'
 	True
-	>>> delPathSuffix('1K10!k3') == '1K10'
+	>>> delPathSuffix('1K10=k3') == '1K10'
 	True
 	>>> delPathSuffix('2K5') == "2K5"
 	True
@@ -297,7 +300,7 @@ def delPathSuffix(path, nameonly=False):
 
 	#>>> delPathSuffix('2K5.dhrh^1%1.cnl', True) == '2K5.dhrh'
 	#True
-	#>>> delPathSuffix('scp/mod/1K10^1!k5#1.mod') == 'scp/mod/1K10'
+	#>>> delPathSuffix('scp/mod/1K10^1=k5#1.mod') == 'scp/mod/1K10'
 	#True
 	"""
 	path = path.rstrip('/')  # Allow dir name processing (at least for the path id extraction)
@@ -310,37 +313,52 @@ def delPathSuffix(path, nameonly=False):
 	# Find position of the separator symbol, considering that it can't be begin of the name
 	if len(pname) >= 2:
 		# Note: +1 compensates start from the symbol at index 1. Also a separator can't be the first symbol
-		poses = [pname[1:].rfind(c) + 1 for c in (SEPINST, SEPPATHID, SEPSHF)]  # Note: reverse direction to skip possible separator symbols in the name itself
-		## Consider possible extension of the filename
-		## Note: this handling is fine, but not reliable (part of the name of file extension can be handled as a shuffle index
-		#pos = pname[1:].rfind('.') + 1
-		#if pos and pos > max(poses):
-		#	poses.append(pos)
-		#	pos = pname[1:pos].rfind('.') + 1
-		#	if pos:
-		#		poses.append(pos)
+		poses = [pname[1:].rfind(c) + 1 for c in (SEPINST, SEPSHF, SEPPATHID)]  # , SEPLRD;  Note: reverse direction to skip possible separator symbols in the name itself
 		poses.append(pname[1:].find(SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is required
 		# Filter out non-existent results: -1 -> 0
-		poses = sorted(filter(lambda x: x >= 1, poses))
+		poses = sorted(filter(lambda x: x >= 1, poses), reverse=True)
 		#print('Initial poses: ', poses)
-		while poses:
-			pos = poses.pop(0)
-			pose = poses[0] if poses else len(pname)  # Index of the next separator or end of the name
-			# Note: parameters can be any, but another suffixes are strictly specified
-			# Validate the suffix in case it is an instance or shuffle suffix
-			if pname[pos] in (SEPINST, SEPPATHID, SEPSHF):
-				try:
-					int(pname[pos + 1:pose])
-				except ValueError as err:
-					print('WARNING, invalid suffix or separator "{}" represents part of the path name "{}"'
-						', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
-					continue  # Check following separator candidate
-			# Note: threat param separator as always valid
-			pname = pname[:pos]
-			#print('path: {}, pname: {}, pos: {}, poses: {}'.format(path, pname, pos, poses), file=sys.stderr)
-			break  # Required pos is found
+		if poses:
+			pname = pname[:poses[-1]]
 
 	return pname if not pdir else '/'.join((pdir, pname))
+
+
+class SemName(object):
+	"""Semantic name of the file"""
+	__slots__ = ('basepath', 'apars', 'insid', 'shid', 'pathid')  # , 'lnkrd'
+
+	def __init__(self, basepath='', apars='', insid='', shid='', pathid=''):  # , lnkrd=''
+		"""SemName initialization
+
+			basepath  - base path without suffixes, same as delPathSuffix(path, nameonly)
+			apars  - algorithm parameters with separators or empty string
+			insid  - instance id with separator or empty string
+			shid  - shuffle id with separator or empty string
+			pathid  - path id with separator or empty string
+		"""
+			# lsrd  - links reduction value with separato or empty string
+		self.basepath = basepath  # Note: includes links reduction value
+		# self.lnkrd = lnkrd
+		self.apars = apars
+		self.insid = insid
+		self.shid = shid
+		self.pathid = pathid
+
+	def __eq__(self, other):
+		"""Equality operator"""
+		if isinstance(other, SemName):
+			return all((self.__getattribute__(name) == other.__getattribute__(name) for name in self.__slots__))
+		return NotImplemented
+
+	def __ne__(self, other):
+		"""Inequality operator"""
+		return not self == other
+
+	def __str__(self):
+		"""String conversion"""
+		# return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
+		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
 
 
 def parseName(path, nameonly=False):
@@ -350,26 +368,25 @@ def parseName(path, nameonly=False):
 	path  - path to be processed WITHOUT the file extension
 	nameonly  - process path as name only component (do not split the basedir)
 
-	return
-		basepath  - base path without suffixes, same as delPathSuffix(path, nameonly)
-		apars  - algorithm parameters with separators or empty string
-		insid  - instance id with separator or empty string
-		shid  - shuffle id with separator or empty string
-		pathid  - path id with separator or empty string
+	return SemName  - semantic name
 
-	>>> parseName('1K10!k7^1%1#1')
-	('1K10', '!k7', '^1', '%1', '#1')
-	>>> parseName("1K10^1%2#1") == ('1K10', '', '^1', '%2', '#1')
+	>>> parseName('2K5@2^1', False) == SemName('2K5@2', '', '^1', '', '')
 	True
-	>>> parseName('2K5^1', False) == ('2K5', '', '^1', '', '')
+	>>> parseName('1K10=k7^1%1#1') == SemName('1K10', '=k7', '^1', '%1', '#1')
 	True
-	>>> parseName('scp/mod/2K5%1', True) == ('scp/mod/2K5', '', '', '%1', '')
+	>>> parseName('1K10@3=k7^1%1#1') == SemName('1K10@3', '=k7', '^1', '%1', '#1')
 	True
-	>>> parseName('1K10!k3') == ('1K10', '!k3', '', '', '')
+	>>> parseName("1K10^1%2#1") == SemName('1K10', '', '^1', '%2', '#1')
 	True
-	>>> parseName('2K5') == ("2K5", '', '', '', '')
+	>>> parseName('2K5^1', False) == SemName('2K5', '', '^1', '', '')
 	True
-	>>> parseName('2K5.dhrh^1') == ("2K5.dhrh", '', '^1', '', '')
+	>>> parseName('scp/mod/2K5%1', True) == SemName('scp/mod/2K5', '', '', '%1', '')
+	True
+	>>> parseName('1K10=k3') == SemName('1K10', '=k3', '', '', '')
+	True
+	>>> parseName('2K5') == SemName("2K5", '', '', '', '')
+	True
+	>>> parseName('2K5.dhrh^1') == SemName("2K5.dhrh", '', '^1', '', '')
 	True
 	"""
 	path = path.rstrip('/')  # Allow dir name processing (at least for the path id extraction)
@@ -380,6 +397,7 @@ def parseName(path, nameonly=False):
 		pdir = None
 		pname = path
 	basename = pname
+	# lnkrd = ''
 	insid = ''
 	apars = ''
 	shid = ''
@@ -387,17 +405,20 @@ def parseName(path, nameonly=False):
 	# Find position of the separator symbol, considering that it can't be begin of the name
 	if len(pname) >= 2:
 		# Note: +1 compensates start from the symbol at index 1. Also a separator can't be the first symbol
-		poses = [pname[1:].rfind(c) + 1 for c in (SEPINST, SEPSHF, SEPPATHID)]  # Note: reverse direction to skip possible separator symbols in the name itself
+		poses = [pname[1:].rfind(c) + 1 for c in (SEPINST, SEPSHF, SEPPATHID)]  # , SEPLRD;  Note: reverse direction to skip possible separator symbols in the name itself
 		poses.append(pname[1:].find(SEPPARS) + 1)  # Note: there can be a few parameters, position of the first one is required
-		# Filter out non-existent results: -1 -> 0
-		poses = sorted(filter(lambda x: x >= 1, poses))
+		# Filter out non-existent results: -1 + 1 -> 0
+		poses = sorted(filter(lambda x: x >= 1, poses), reverse=True)
 		#print('Initial poses: ', poses)
+		if poses:
+			basename = pname[:poses[-1]]
+		posend = len(pname)
 		while poses:
-			pos = poses.pop(0)
-			pose = poses[0] if poses else len(pname)  # Index of the next separator or end of the name
+			pos = poses.pop()
+			pose = posend if not poses else poses[-1]  # Index of the next separator or end of the name
 			# Note: parameters can be any, but another suffixes are strictly specified
 			# Validate the suffix in case it is an instance or shuffle suffix
-			if pname[pos] in (SEPINST, SEPSHF, SEPPATHID):
+			if pname[pos] in (SEPINST, SEPSHF, SEPPATHID):  # , SEPLRD
 				try:
 					int(pname[pos + 1:pose])
 				except ValueError as err:
@@ -405,9 +426,9 @@ def parseName(path, nameonly=False):
 						', exception: {}. Skipped.'.format(pname[pos], pname, err), file=sys.stderr)
 					continue  # Check following separator candidate
 			# Note: threat param separator as always valid
-			if basename is pname:
-				basename = pname[:pos]
 			val = pname[pos:pose]
+			# if pname[pos] == SEPLRD:
+			# 	lnkrd = val
 			if pname[pos] == SEPPARS:
 				apars = val
 			elif pname[pos] == SEPINST:
@@ -419,7 +440,7 @@ def parseName(path, nameonly=False):
 				pathid = val
 		#print('path: {}, pname: {}, pos: {}, poses: {}'.format(path, pname, pos, poses), file=sys.stderr)
 
-	return (basename if not pdir else '/'.join((pdir, basename)), apars, insid, shid, pathid)
+	return SemName(basename if not pdir else '/'.join((pdir, basename)), apars, insid, shid, pathid)  # , lnkrd
 
 
 class ItemsStatistic(object):

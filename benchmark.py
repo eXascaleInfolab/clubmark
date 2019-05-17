@@ -74,10 +74,10 @@ from math import sqrt
 from multiprocessing import cpu_count  # Returns the number of logical CPU units (HW treads) if defined
 
 import benchapps  # Required for the functions name mapping to/from the app names
-from benchapps import PYEXEC, EXTCLNODES, aggexec, reduceLevels  # , ALGSDIR
+from benchapps import PYEXEC, EXTCLSNDS, aggexec, reduceLevels  # , ALGSDIR
 from benchutils import IntEnum, viewitems, timeSeed, dirempty, tobackup, dhmsSec, syncedTime, \
-	secDhms, delPathSuffix, parseName, funcToAppName, PREFEXEC, SEPPARS, SEPINST, SEPSHF, SEPPATHID, \
-	SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER, ALEVSMAX, ALGLEVS
+	secDhms, delPathSuffix, parseName, funcToAppName, PREFEXEC, SEPPARS, SEPINST, SEPLRD, SEPSHF, \
+	SEPPATHID, SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER, ALEVSMAX, ALGLEVS
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
 from benchevals import aggEvals, RESDIR, CLSDIR, QMSDIR, EXTRESCONS, QMSRAFN, QMSINTRIN, QMSRUNS, \
@@ -103,6 +103,7 @@ _GENSEPSHF = '%'  # Shuffle number separator in the synthetic networks generatio
 _WPROCSMAX = max(cpu_count()-1, 1)  # Maximal number of the worker processes, should be >= 1
 assert _WPROCSMAX >= 1, 'Natural number is expected not exceeding the number of system cores'
 _VMLIMIT = 4096  # Set 4 TB or RAM to be automatically limited to the physical memory of the computer
+_HOST = None  # 'localhost';  Note: start without the WebUI by default
 _PORT = 8080  # Default port for the WebUI, Note: port 80 accessible only from the root in NIX
 _RUNTIMEOUT = 10*24*60*60  # Clustering execution timeout, 10 days
 _EVALTIMEOUT = 5*24*60*60  # Results evaluation timeout, 5 days
@@ -326,7 +327,7 @@ class Params(object):
 		self.qaggopts = None  # None means omit the aggregation
 		# self.aggrespaths = []  # Paths for the evaluated results aggregation (to be done for already existent evaluations)
 		# WebUI host and port
-		self.host = None
+		self.host = _HOST
 		self.port = _PORT
 		self.runtimeout = _RUNTIMEOUT
 		self.evaltimeout = _EVALTIMEOUT
@@ -452,14 +453,17 @@ def parseParams(args):
 
 		if arg[1] in 'gml':
 			# [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]
-			policy = SyntPolicy.ordinary
-			syntdir = _SYNTDIR
-			if arg[1] == 'm':
+			if arg[1] == 'g':
+				policy = SyntPolicy.ordinary
+				syntdir = _SYNTDIR
+			elif arg[1] == 'm':
 				policy = SyntPolicy.mixed
 				syntdir = _SYNTDIR_MIXED
-			else:
+			elif arg[1] == 'l':
 				policy = SyntPolicy.lreduct
 				syntdir = _SYNTDIR_LREDUCT
+			else:
+				raise('Unexpected argument for the SyntPolicy: ' + arg)
 			syntpo = SyntPathOpts(policy, syntdir)
 			opts.syntpos.append(syntpo)
 			alen = len(arg)
@@ -738,8 +742,8 @@ def generateNets(genbin, policy, insnum, asym=False, basedir=_SYNTDIR, netsdir=_
 		# Copy benchmark seed to the syntnets seed
 		randseed = basedir + 'lastseed.txt'  # Random seed file name
 		shutil.copy2(seedfile, randseed)
-		namepref = '' if policy == SyntPolicy.ordinary else policy.name[0]
-		namesuf = '' if policy != SyntPolicy.lreduct else '_0'
+		# namepref = '' if policy == SyntPolicy.ordinary else policy.name[0]
+		# namesuf = '' if policy != SyntPolicy.lreduct else '_0'
 
 		netext = dflnetext(asym)  # Network file extension (should have the leading '.')
 		asymarg = ['-a', '1'] if asym else None  # Whether to generate directed (specified by arcs) or undirected (specified by edges) network
@@ -748,7 +752,9 @@ def generateNets(genbin, policy, insnum, asym=False, basedir=_SYNTDIR, netsdir=_
 			for k in vark:
 				for mut in varMut:
 					netgenTimeout = max(nm * k / 1.5, 30)  # ~ up to 30 min (>= 30 sec) per a network instance (50K nodes on K=75 takes ~15-35 min)
-					name = 'K'.join((str(nm), str(k))).join((namepref, namesuf))
+					name = 'K'.join((str(nm), str(k))) #.join((namepref, namesuf))
+					if len(varMut) >= 2:
+						name += 'm{:02}'.format(int(mut*100))  # Omit '0.' prefix and show exactly 2 digits padded with 0: 0.05 -> m05
 					ext = '.ngp'  # Network generation parameters
 					# Generate network parameters files if not exist
 					fnamex = name.join((paramsdirfull, ext))
@@ -780,37 +786,95 @@ def generateNets(genbin, policy, insnum, asym=False, basedir=_SYNTDIR, netsdir=_
 						if not os.path.exists(netpathfull):
 							os.mkdir(netpathfull)
 						startdelay = 0.1  # Required to start execution of the LFR benchmark before copying the time_seed for the following process
-						netfile = netpath + name
-						if _DEBUG_TRACE:
-							print('Generating {netfile} as {name} by {netparams}'.format(netfile=netfile, name=name, netparams=netparams))
-						if insnum and overwrite or not os.path.exists(netfile.join((basedir, netext))):
-							args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, EXTRESCONS))  # Output .rcp in the current dir, basedir
+
+
+						def startgen(name, inst=0):
+							"""Start generation of the synthetic network instance
+
+							name: str  - base network name
+							inst: int  - instance index
+							"""
+							print('  Starting generation {}^{}'.format(name, inst, varMut))
+							assert isinstance(name, str) and isinstance(inst, int), ('Unexpected arguments type, name: {}, inst: {}'.
+								format(type(name).__name__, type(inst).__name__))
+							netname = name if not inst else ''.join((name, SEPINST, str(inst)))
+							netfile = netpath + netname
+							if not overwrite and os.path.exists(netfile.join((basedir, netext))):
+								return
+							print('  > Starting the generation job')
+							args = [xtimebin, '-n=' + netname, ''.join(('-o=', bmname, EXTRESCONS))  # Output .rcp in the current dir, basedir
 								, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
 							if asymarg:
 								args.extend(asymarg)
+							# Consider links reduction policy, which should produce multiple instances with reduced links
+							if policy == SyntPolicy.lreduct:
+								args = (PYEXEC, '-c',
+# Network instance generation with subsequent links reduction
+"""from __future__ import print_function  #, division  # Required for stderr output, must be the first import
+import subprocess
+import os
+from ..utils.remlinks import remlinks
+
+subprocess.check_call({args})  # Raises exception on failed call
+
+# Form the path and file name for the network with reduced links
+netfile = '{netfile}'
+path, netname = os.path.split(netfile)
+basepath, dirname = os.path.split(path)
+netname, ext = os.path.splitext(name)
+iinst = netname.rfind('{SEPINST}')  # Index of the instance suffix
+if iinst == -1:
+	iinst = len(netname)
+for i in range(1, 16, 2):  # 1 .. 15% with step 2
+	istr = str(i)
+	rlsuf = ''.join(('{SEPLRD}', istr, 'p'))
+	rlname = ''.join((netname[:iinst], rlsuf, netname[iinst:]))
+	# rldir = ''.join((dirname, rlsuf))
+	frlname = '/'.join((basepath, dirname + rlsuf, rlname))
+	# Produce file with the reduced links
+	remlinks((istr + '%', netfile, fullrdname + ext))
+	# Link the ground-truth with updated name
+	# Note: use hard link in case of origin deletion
+	os.link(os.path.splitext(netfile)[0] + '{EXTCLSNDS}', frlname + '{EXTCLSNDS}')
+""".format(args=args, netfile=netfile, SEPLRD=SEPLRD, SEPINST=SEPINST, EXTCLSNDS=EXTCLSNDS))  # Skip the shuffling if the respective file already exists
 							#Job(name, workdir, args, timeout=0, rsrtonto=False, onstart=None, ondone=None, tstart=None)
-							_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, rsrtonto=True
+							# , workdir=basedir
+							_execpool.execute(Job(name=netname, workdir=basedir, args=args, timeout=netgenTimeout, rsrtonto=True
 								#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
 								, onstart=lambda job: shutil.copy2(randseed, netseed)  #pylint: disable=W0640;  Network generation seed
 								#, ondone=shuffle if shfnum > 0 else None
 								, startdelay=startdelay, category='generate_' + str(k), size=N))
-						for i in range(1, insnum):
-							namext = ''.join((name, SEPINST, str(i)))
-							netfile = netpath + namext
-							if overwrite or not os.path.exists(netfile.join((basedir, netext))):
-								args = [xtimebin, '-n=' + namext, ''.join(('-o=', bmname, EXTRESCONS))
-									, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
-								if asymarg:
-									args.extend(asymarg)
-#								# Consider linkds reduction policy
-#								if policy == SyntPolicy.lreduct:
-#									pass
-								#Job(name, workdir, args, timeout=0, rsrtonto=False, onstart=None, ondone=None, tstart=None)
-								_execpool.execute(Job(name=namext, workdir=basedir, args=args, timeout=netgenTimeout, rsrtonto=True
-									#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
-									, onstart=lambda job: shutil.copy2(randseed, netseed)  #pylint: disable=W0640;  Network generation seed
-									#, ondone=shuffle if shfnum > 0 else None
-									, startdelay=startdelay, category='generate_' + str(k), size=N))
+
+
+						netfile = netpath + name
+						if _DEBUG_TRACE:
+							print('Generating {netfile} as {name} by {netparams}'.format(netfile=netfile, name=name, netparams=netparams))
+						# if insnum and overwrite or not os.path.exists(netfile.join((basedir, netext))):
+						# 	args = [xtimebin, '-n=' + name, ''.join(('-o=', bmname, EXTRESCONS))  # Output .rcp in the current dir, basedir
+						# 		, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
+						# 	if asymarg:
+						# 		args.extend(asymarg)
+						# 	#Job(name, workdir, args, timeout=0, rsrtonto=False, onstart=None, ondone=None, tstart=None)
+						# 	_execpool.execute(Job(name=name, workdir=basedir, args=args, timeout=netgenTimeout, rsrtonto=True
+						# 		#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
+						# 		, onstart=lambda job: shutil.copy2(randseed, netseed)  #pylint: disable=W0640;  Network generation seed
+						# 		#, ondone=shuffle if shfnum > 0 else None
+						# 		, startdelay=startdelay, category='generate_' + str(k), size=N))
+						for i in range(insnum):
+							startgen(name, i)
+							# nameinst = ''.join((name, SEPINST, str(i)))
+							# netfile = netpath + nameinst
+							# if overwrite or not os.path.exists(netfile.join((basedir, netext))):
+							# 	args = [xtimebin, '-n=' + nameinst, ''.join(('-o=', bmname, EXTRESCONS))
+							# 		, genbin, '-f', netparams, '-name', netfile, '-seed', jobseed]
+							# 	if asymarg:
+							# 		args.extend(asymarg)
+							# 	#Job(name, workdir, args, timeout=0, rsrtonto=False, onstart=None, ondone=None, tstart=None)
+							# 	_execpool.execute(Job(name=nameinst, workdir=basedir, args=args, timeout=netgenTimeout, rsrtonto=True
+							# 		#, onstart=lambda job: shutil.copy2(randseed, job.name.join((seedsdirfull, '.ngs')))  # Network generation seed
+							# 		, onstart=lambda job: shutil.copy2(randseed, netseed)  #pylint: disable=W0640;  Network generation seed
+							# 		#, ondone=shuffle if shfnum > 0 else None
+							# 		, startdelay=startdelay, category='generate_' + str(k), size=N))
 					else:
 						print('ERROR, network parameters file "{}" does not exist'.format(fnamex), file=sys.stderr)
 		print('Parameter files generation completed')
@@ -1103,15 +1167,15 @@ def updateNetInfos(netinfs, net, pathidsuf='', shfnum=0):
 	shfnum: uint  - the number of shuffles if specified excluding the origin
 	"""
 	assert not pathidsuf or pathidsuf.startswith(SEPPATHID), 'Ivalid pathidsuf: ' + pathidsuf
-	netnameps = parseName(os.path.splitext(os.path.split(net)[1])[0], True)
+	sname = parseName(os.path.splitext(os.path.split(net)[1])[0], True)
 	# Note: +1 to consider the origin
-	ntinf = netinfs.setdefault(netnameps[0] + pathidsuf, NetInfo(nshf=shfnum+1))
+	ntinf = netinfs.setdefault(sname.basepath + pathidsuf, NetInfo(nshf=shfnum+1))
 	# Evaluate the number of instances only if not specified explicitly
-	if netnameps[2]:
-		ntinf.nins = max(ntinf.nins, int(netnameps[2][len(SEPINST):]) + 1)  # Note: +1 to form total number from id
+	if sname.insid:
+		ntinf.nins = max(ntinf.nins, int(sname.insid[len(SEPINST):]) + 1)  # Note: +1 to form total number from id
 	# Evaluate the number of shuffles only if it is not specified explicitly (or specified as 0)
-	if not shfnum and netnameps[3]:
-		ntinf.nshf = max(ntinf.nshf, int(netnameps[3][len(SEPSHF):]) + 1)  # Note: +1 to form total number from id
+	if not shfnum and sname.shid:
+		ntinf.nshf = max(ntinf.nshf, int(sname.shid[len(SEPSHF):]) + 1)  # Note: +1 to form total number from id
 	# print('> updateNetInfos(), netinfs size: {}, net: {}, nins: {}, nshf: {}'.format(
 	# 	len(netinfs), net, ntinf.nins, ntinf.nshf))
 
@@ -1600,7 +1664,7 @@ def clnames(net, odir, alg, pathidsuf=''):
 	if ishf != -1:
 		clinstpath = clinstpath[:ishf]
 	clinstpath += pathidsuf  # Note: pathidsuf is applied only to the upper clusters dir to identify the source network
-	mrcl = ''.join((cbdir, clinstpath, '/', clname, EXTCLNODES))
+	mrcl = ''.join((cbdir, clinstpath, '/', clname, EXTCLSNDS))
 	# Take base network name (without the shuffle id)
 	if odir:
 		clname = '/'.join((clinstpath, clname))  # Use base name and instance id
@@ -1625,16 +1689,16 @@ def gtpath(net, idir):
 	return gfpath: str  - ground-truth clustering file path
 	"""
 	if not idir:
-		bname, _, inst, _, _ = parseName(os.path.splitext(net)[0])  # delPathSuffix(os.path.splitext(net)[0])
-		gfpath = ''.join((bname, inst, EXTCLNODES))
+		sname = parseName(os.path.splitext(net)[0])  # delPathSuffix(os.path.splitext(net)[0])
+		gfpath = ''.join((sname.basepath, sname.insid, EXTCLSNDS))
 		if os.path.isfile(gfpath):
 			return gfpath
 		print('WARNING, gtpath() idir parameter does not correspond to the actual input structure.'
 			' Checking the ground-truth availability in the upper dir.', file=sys.stderr)
 	path, name = os.path.split(net)
 	# Check the ground-truth file in the parent directory
-	bname, _, inst, _, _ = parseName(os.path.splitext(name)[0], True)  # delPathSuffix(os.path.splitext(name)[0], True)
-	gfpath = ''.join((os.path.split(path)[0], '/', bname, inst, EXTCLNODES))
+	sname = parseName(os.path.splitext(name)[0], True)  # delPathSuffix(os.path.splitext(name)[0], True)
+	gfpath = ''.join((os.path.split(path)[0], '/', sname.basepath, sname.insid, EXTCLSNDS))
 	if not os.path.isfile(gfpath):
 		raise RuntimeError('Invalid argument, the ground-truth clustering {}'
 			' does not exist for the network {}'.format(gfpath, net))
@@ -1696,7 +1760,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 			# Warn and use the persisted value if it is larger otherwise raise an error requiring a new storage
 			# since the dimensions should be permanent in the persisted storage
 			if vactual < vstored:
-				print('WARNING execXmeasures(), processing {} {} < {} persisted dimension size'  # The non-filled values will remain NaN
+				print('WARNING validateDim(), processing {} {} < {} persisted dimension size'  # The non-filled values will remain NaN
 					.format(vname, vactual, vstored))
 			else:
 				raise ValueError('Processing {} {} > {} persisted. A new dedicated storage is required'.format(vname, vactual, vstored))
@@ -1790,9 +1854,11 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					netname, netext = os.path.splitext(os.path.split(net)[1])
 					netext = netext.lower()
 					# Note: the input network name does not contain the paid id, which is added during the processing
-					netname, _aparams, inst, shuf, _pid  = parseName(netname, True)
-					iinst = 0 if not inst else int(inst[len(SEPINST):])  # Instance id
-					ishuf = 0 if not shuf else int(shuf[len(SEPSHF):])  # Shuffle id
+					#netname, _aparams, inst, shuf, _pid
+					sname = parseName(netname, True)
+					netname = sname.basepath
+					iinst = 0 if not sname.insid else int(sname.insid[len(SEPINST):])  # Instance id
+					ishuf = 0 if not sname.shid else int(sname.shid[len(SEPSHF):])  # Shuffle id
 					# Note: the execution is sequential here and the quality measure results are written to the storage
 					# from the ondone() callback executing in the main thread of the main process,
 					# so the storage does not require any locks
@@ -2070,12 +2136,12 @@ def benchmark(*args):
 		synps = set()
 		for sp in opts.syntpos:
 			if sp.path in synps:
-				raise('Generating synthetic networks should have disrinct base directories')
+				raise('Generating synthetic networks should have disrinct base directories: ' + sp.path)
 			synps.add(sp)
 			sp.path = _NETSDIR.join((sp.path, '*/'))  # Change meaning of the path from base dir to the target dirs
 			# Generated synthetic networks are processed before the manually specified other paths
 			opts.datas.insert(0, sp)
-		del opts.syntpo[:]  # Delete syntpo to not occasionally use .path with changed meaning
+		del opts.syntpos[:]  # Delete syntpo to not occasionally use .path with changed meaning
 		synps.clear()
 
 	# Shuffle datasets backing up and overwriting existing shuffles if the shuffling is required at all
@@ -2269,7 +2335,8 @@ if __name__ == '__main__':
 			# '  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
 			# ', which is useful to include external manual evaluations into the final summarized results',
 			# 'ATTENTION: <resval_path> should include the algorithm name and target measure.',
-			'  --webaddr, -w  - run WebUI on the specified <webui_addr> in the format <host>[:<port>], default port={port}.',
+			'  --webaddr, -w  - run WebUI on the specified <webui_addr> in the format <host>[:<port>],'
+			' disabled by default: host={host}, port={port}.',
 			'  --runtimeout  - global clustering algorithms execution timeout in the'
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {runtimeout}.',
 			'  --evaltimeout  - global clustering algorithms execution timeout in the'
@@ -2279,7 +2346,7 @@ if __name__ == '__main__':
 				, sepinst=SEPINST, seppars=SEPPARS, sepshf=SEPSHF, rsvpathsmb=(SEPPARS, SEPINST, SEPSHF, SEPPATHID)
 				, anppsnum=len(apps), apps=', '.join(apps), qmappsnum=len(qmapps), qmapps=', '.join(qmapps)
 				, algtimeout=secDhms(_TIMEOUT), seedfile=_SEEDFILE
-				, port=_PORT, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
+				, host=_HOST, port=_PORT, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
 	else:
 		if len(sys.argv) == 2 and sys.argv[1] == '--doc-tests':
 			# Doc tests execution

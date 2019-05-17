@@ -58,7 +58,7 @@ from algorithms.utils.parser_nsl import parseHeaderNslFile  #, asymnet
 
 # Note: currently the output level are limited only for the algorithms that may produce more than 10 levels
 assert ALEVSMAX >= 10, 'The number of levels limitation should be added to GANXiS and some others'
-EXTCLNODES = '.cnl'  # Clusters (Communities) Nodes Lists
+EXTCLSNDS = '.cnl'  # Clusters (Communities) Nodes Lists
 # reFirstDigits = re.compile(r'\d+')  # First digit regex
 _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
@@ -71,7 +71,7 @@ def aggexec(apps):
 
 	Expected format of the aggregating files:
 	# ExecTime(sec)	CPU_time(sec)	CPU_usr(sec)	CPU_kern(sec)	RSS_RAM_peak(Mb)	TaskName
-	0.550262	0.526599	0.513438	0.013161	2.086	syntmix/1K10/1K10^1!k7.1#1
+	0.550262	0.526599	0.513438	0.013161	2.086	syntmix/1K10/1K10^1=k7.1#1
 	...
 
 	apps  - apps were executed, whose resource consumption  should be aggregated
@@ -202,7 +202,7 @@ def prepareResDir(appname, taskname, odir, pathidsuf):
 	taskdir = taskname  # Relative task directory without the ending '/'
 	if odir:
 		nameparts = parseName(taskname, True)
-		taskdir = ''.join((nameparts[0], nameparts[2], '/', taskname))  # Use base name and instance id
+		taskdir = ''.join((nameparts.basepath, nameparts.insid, '/', taskname))  # Use base name and instance id
 	assert not pathidsuf or pathidsuf.startswith(SEPPATHID), 'Ivalid pathidsuf: ' + pathidsuf
 	taskpath = ''.join((RESDIR, appname, '/', CLSDIR, taskdir, pathidsuf))
 
@@ -556,8 +556,9 @@ def uniflevs(task):
 	# Create the unifying output dir
 	uniout = task.params.get('outpname')
 	if not uniout:
-		uniout, _apars, insid, shid, pathid = parseName(pouts[0], True)  # Parse name only without the path
-		uniout = ''.join((uniout, insid, shid, pathid))  # Note: alg params marker is intentionally omitted
+		#uniout, _apars, insid, shid, pathid
+		sname = parseName(pouts[0], True)  # Parse name only without the path
+		uniout = ''.join((sname.basepath, sname.insid, sname.shid, sname.pathid))  # , sname.lnkrd;  Note: alg params marker is intentionally omitted
 	assert uniout, 'Output directory name should be defined'
 	unidir = '/'.join((bpath if bpath else '.', uniout, ''))  # Note: ending '' to have the ending '/'
 	if os.path.exists(unidir):
@@ -611,7 +612,7 @@ def uniflevs(task):
 
 def fetchLevIdCnl(name):
 	"""Fetch level id of the hierarchy/scale from the output Cnl file name.
-	The format of the output file name: <outpfile_name>_<lev_num>.cnl
+	The format of the output file name: <outpfile_name>_<lev_num><EXTCLSNDS>
 
 	name: str  - level name
 
@@ -623,7 +624,7 @@ def fetchLevIdCnl(name):
 	iid += 1
 	iide = name.rfind('.', iid)  # Extension index
 	if iide == -1:
-		print('WARNING, Cnl files should be named with the .cnl extension:', name, file=sys.stderr)
+		print('WARNING, Cnl files should be named with the', EXTCLSNDS, 'extension:', name, file=sys.stderr)
 		iide = len(name)
 	return int(name[iid:iide])
 
@@ -742,7 +743,7 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout=0, seed=None, task=None
 	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathidsuf)), '-s=/etime_' + algname
 		# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
 		, pybin, './louvain_igraph.py', '-i' + ('nsa' if asym else 'nse')
-		, '-lo', ''.join((relpath(taskpath), '/', taskname, EXTCLNODES)), netfile)
+		, '-lo', ''.join((relpath(taskpath), '/', taskname, EXTCLSNDS)), netfile)
 	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, stdout=os.devnull
 		, ondone=limlevs, params={'taskpath': taskpath, 'fetchLevId': fetchLevIdCnl}
@@ -840,7 +841,7 @@ def execScp(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, path
 
 		# scp.py netname k [start_linksnum end_linksnum number_of_evaluations] [weight]
 		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ktaskname, pathidsuf)), '-s=/etime_' + algname
-			, pybin, './scp.py', netfile, kstr, steps, ''.join((reltaskpath, '/', ktaskname, EXTCLNODES)))
+			, pybin, './scp.py', netfile, kstr, steps, ''.join((reltaskpath, '/', ktaskname, EXTCLSNDS)))
 
 		#print('> Starting job {} with args: {}'.format('_'.join((ktaskname, algname, kstrex)), args + [kstr]))
 		execpool.execute(Job(name=SEPNAMEPART.join((algname, ktaskname)), workdir=workdir, args=args, timeout=timeout
@@ -886,14 +887,14 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout=0, seed=None, task=No
 	# Form name of the ground-truth file on base of the input network filename with the extension relpaced to '.cnl'
 	# Note: take base name if the instance of shuffle id components are present
 	originpbase = delPathSuffix(netfile)  # Note: netext is already split
-	if odir or not os.path.exists(originpbase + EXTCLNODES):
+	if odir or not os.path.exists(originpbase + EXTCLSNDS):
 		# Take file with the target name but in the upper dir
 		dirbase, namebase = os.path.split(originpbase)
 		dirbase = os.path.split(dirbase)[0]
 		if not dirbase:
 			dirbase = '..'
 		originpbase = '/'.join((dirbase, namebase))
-	gtfile = originpbase + EXTCLNODES
+	gtfile = originpbase + EXTCLSNDS
 	assert os.path.exists(gtfile), 'Ground-truth file should exist to apply randcommuns: ' + gtfile
 	# print('> Starting Randcommuns; odir: {}, asym: {}, netfile: {}, gtfile (exists: {}): {}'
 	# 	.format(odir, asym, netfile, os.path.exists(gtfile), gtfile))
@@ -1052,17 +1053,17 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout=0, seed=None, task
 	# (with the header but without the share value)
 	# Note: there is no sense to apply ndsmin for the per-level output since all nodes are guaranteed to be output
 	if opts.rlevout is not None:
-		args.append(''.join(('-cx', str(opts.rlevout).join(('l[:/', ']')), 's=', reltaskpath, EXTCLNODES)))
+		args.append(''.join(('-cx', str(opts.rlevout).join(('l[:/', ']')), 's=', reltaskpath, EXTCLSNDS)))
 	if opts.significance is not None:
 		# Output with the default significance policy
-		args.append(''.join(('-cx', 'ss=', reltaskpath, EXTCLNODES)))
+		args.append(''.join(('-cx', 'ss=', reltaskpath, EXTCLSNDS)))
 		# NOTE: output with the specific significance policy is commented as redundant
 		# # The significant clusters considering srweight are outputted into the dedicated file
 		# if opts.srweight is not None:
 		# 	srwstr = str(opts.srweight)
 		# 	ndsminstr = str(opts.ndsmin)
 		# 	args.append(''.join(('-cx', 's', opts.significance, '/', srwstr, '_', ndsminstr, 's='
-		# 		, reltaskpath, '-', srwstr, '-', ndsminstr, EXTCLNODES)))
+		# 		, reltaskpath, '-', srwstr, '-', ndsminstr, EXTCLSNDS)))
 	args.append(netfile)
 
 	# print(algname, 'called with args:', str(args), '\n\ttaskpath:', taskpath)
@@ -1382,7 +1383,7 @@ def execPscan(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pa
 		# ATTENTION: a single argument is k-clique size, specified later
 		# ./pscan -e 0.7 -o graph-e7.cnl -f NSE graph.nse
 		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', ctaskname, pathidsuf)), '-s=/etime_' + algname
-			, './pscan', '-e', prm, '-o', ''.join((taskpath, '/', ctaskname, EXTCLNODES))
+			, './pscan', '-e', prm, '-o', ''.join((taskpath, '/', ctaskname, EXTCLSNDS))
 			, '-f', 'NSA' if asym else 'NSE', netfile)
 
 		#print('> Starting job {} with args: {}'.format('_'.join((ctaskname, algname, prmex)), args + [prm]))
@@ -1436,7 +1437,7 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout=0, seed=None, task=N
 
 	# ./rgmc -a 2 -c tests/rgmc_2/email.nse.cnl -i e networks/email.nse.txt
 	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathidsuf)), '-s=/etime_' + algname
-		, './rgmc', '-a', str(alg), '-c', ''.join((taskpath, '/', taskname, EXTCLNODES))
+		, './rgmc', '-a', str(alg), '-c', ''.join((taskpath, '/', taskname, EXTCLSNDS))
 		, '-i', 'a' if asym else 'e', netfile)
 	execpool.execute(Job(name=SEPNAMEPART.join((algname, taskname)), workdir=workdir, args=args, timeout=timeout
 		#, ondone=postexec, stdout=os.devnull
@@ -1510,7 +1511,7 @@ def execScd(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, path
 		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskparname, pathidsuf)), '-s=/etime_' + algname
 			, './scd', '-n', '1' # Use a single threaded implementation
 			, '-a', astr
-			, '-o', ''.join((taskpath, '/', taskparname, EXTCLNODES)), '-f', netfile)
+			, '-o', ''.join((taskpath, '/', taskparname, EXTCLSNDS)), '-f', netfile)
 		execpool.execute(Job(name=SEPNAMEPART.join((algname, taskparname)), workdir=workdir, args=args, timeout=timeout
 			#, ondone=postexec, stdout=os.devnull, stdout=logfile
 			, task=task, category=algname, size=netsize, stdout=os.devnull, stderr=errfile))

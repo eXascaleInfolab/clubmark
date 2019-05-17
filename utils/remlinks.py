@@ -44,10 +44,16 @@ import random
 import numpy as np
 
 
-def outFile(filename, num=''):
-	"""Construct output file name from the input file name"""
+def outFile(filename, frac=''):
+	"""Construct output file name from the input file name
+	
+	filename: str  - base file name
+	frac: float|str  - fraction of the links to be reduced
+	
+	return str  - resulting file name
+	"""
 	name, ext = os.path.splitext(filename)  # Extract name and ext
-	return ''.join((name, '_rl', str(num), ext))
+	return ''.join((name, '_rl', str(frac), ext))
 
 
 def parseArgs(args):

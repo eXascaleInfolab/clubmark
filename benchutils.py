@@ -337,7 +337,7 @@ class SemName(object):
 			shid  - shuffle id with separator or empty string
 			pathid  - path id with separator or empty string
 		"""
-			# lsrd  - links reduction value with separato or empty string
+		# lsrd  - links reduction value with separato or empty string
 		self.basepath = basepath  # Note: includes links reduction value
 		# self.lnkrd = lnkrd
 		self.apars = apars

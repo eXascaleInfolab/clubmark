@@ -1,1 +1,1 @@
-__all__ = ['convert', 'mpepool', 'mpewui', 'parser_nvc']  # modules
+__all__ = ['convert', 'mpepool', 'mpewui', 'parser_nvc', 'remlinks']  # modules

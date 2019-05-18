@@ -2214,7 +2214,7 @@ if __name__ == '__main__':
 			' [-c[f][r]] [-s[p][*][[{{-,+}}]=<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...][{qsepgroup}<alg>...]]]',
 			'',
 			'Example:',
-			'  {0} -g=3{gensepshuf}5 -r -q -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
+			'  {0} -g=3{gensepshuf}5 -r -q="Xmeasures -fh -s" -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
 			'NOTE:',
 			'  - The benchmark should be executed exclusively from the current directory (./).',
 			'  - The expected format of input datasets (networks) is .ns<l> - network specified by'

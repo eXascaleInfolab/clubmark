@@ -1,8 +1,8 @@
 # Clubmark (former [PyCABeM](https://github.com/eXascaleInfolab/PyCABeM/tree/draft)) - Bench ![bench mark icon](images/benchmark-64.png) marking Framework for the Clustering Algorithms Evaluation
 
-`\brief` Benchmarking and real-time profiling of the \[overlapping\] clustering (community detection) algorithms, evaluating their quality using extrinsic (all existing accuracy measures applicable for overlapping clustering algorithms on large datasets: Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) family, Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information)(NMI) and [Omega Index](https://www.ncbi.nlm.nih.gov/pubmed/26764947) / fuzzy ARI family) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks))(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures considering overlaps/covers (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of a cluster and its super-clusters).  
-`\authors` (c) Artem Lutov <artem@exascale.info>  
-`\organizations` [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
+`\brief` Benchmarking and real-time profiling of the \[overlapping\] clustering (community detection) algorithms, evaluating their quality using extrinsic (all existing accuracy measures applicable for overlapping clustering algorithms on large datasets: Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) family, Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information)(NMI) and [Omega Index](https://www.ncbi.nlm.nih.gov/pubmed/26764947) / fuzzy ARI family) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks))(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures considering overlaps/covers (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of a cluster and its super-clusters).
+`\authors` (c) Artem Lutov <artem@exascale.info>
+`\organizations` [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)
 `\keywords` overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
 
 `\cite` [Clubmark: a Parallel Isolation Framework for Benchmarking and Profiling Clustering Algorithms on NUMA Architectures](https://github.com/eXascaleInfolab/clubmark/blob/master/docs/clubmark.pdf)
@@ -94,7 +94,7 @@ Ideally, the applications should be executed in parallel in a way to guarantee t
 - localize the CPU cache (the processes are not jumped between the CPUs and work with the hot cache);
 - are automatically terminated from the execution on more complex datasets if do not satisfy the execution constraints on lighter datasets.
 
-Before starting Clubmark development I found several open source frameworks for the "Community Detection Algorithms" evaluation but they do not fulfill the outlined constraints. The most comprehensive one is [Circulo](http://www.lab41.org/circulo-a-community-detection-evaluation-framework/) from [Lab41](https://github.com/Lab41/Circulo/tree/master/experiments), another one is called [CommunityEvaluation](https://github.com/rabbanyk/CommunityEvaluation).  
+Before starting Clubmark development I found several open source frameworks for the "Community Detection Algorithms" evaluation but they do not fulfill the outlined constraints. The most comprehensive one is [Circulo](http://www.lab41.org/circulo-a-community-detection-evaluation-framework/) from [Lab41](https://github.com/Lab41/Circulo/tree/master/experiments), another one is called [CommunityEvaluation](https://github.com/rabbanyk/CommunityEvaluation).
 Circulo is an excellent framework until you don't run evaluations on the large networks, don't need to specify per-algorithm time/memory constraints and in case the default pipeline is sufficient, which was not the case for me.
 
 
@@ -102,7 +102,7 @@ Circulo is an excellent framework until you don't run evaluations on the large n
 
 The benchmarking can be run either directly on the *Linux Ubuntu 16.04 x64* or via the [Docker](https://docs.docker.com/get-started/) container with the pre-installed environment on any platform. Anyway, the sources are required:
 ```sh
-$ git clone https://github.com/eXascaleInfolab/clubmark.git 
+$ git clone https://github.com/eXascaleInfolab/clubmark.git
 ```
 
 
@@ -113,7 +113,7 @@ However, the benchmark executes clustering algorithms and evaluation utilities b
 
 > [Windows 10+ x64 provides Ubuntu-compatible bash shell](https://www.howtogeek.com/249966/how-to-install-and-use-the-linux-bash-shell-on-windows-10/), which allows to install and execute terminal Ubuntu apps and execute the benchmarking like on Linux Ubuntu 16.04 x64.
 
-The subsequent steps are described for the *NIX* platforms including MaxOS.  
+The subsequent steps are described for the *NIX* platforms including MaxOS.
 To be sure that the operational system allows to work with lots of opened files and has adequate swapping policy, execute:
 ```sh
 $ . ./prepare_hostenv.sh
@@ -130,11 +130,11 @@ To setup `fs.file-max` permanently in the system add the following line to the `
 ```sh
 fs.file-max = 1048576
 ```
-and then reload it with `# sysctl -p`.  
+and then reload it with `# sysctl -p`.
 To setup the `ulimit` permanently add the following lines to the `/etc/security/limits.conf`:
 ```sh
 *               hard    nofile          524288
-*               soft    nofile          32768  
+*               soft    nofile          32768
 ```
 And then execute `ulimit -n 32768` to set this value for the current shell.
 
@@ -146,7 +146,7 @@ $ ulimit -n `ulimit -Hn`
 Reduce the system `swappiness` setting to `1..10` by `$ sudo sysctl -w vm.swappiness=5` or set it permanently in `/etc/sysctl.conf`:
 ```sh
 vm.swappiness = 5
-``` 
+```
 
 
 ### Deployment via Docker
@@ -199,9 +199,9 @@ which calls `./benchmark.py [<clubmark_args>]`, or open a shell in the benchmark
 $ docker run -it --entrypoint "" -u $UID -v `pwd`:/opt/clubmark luaxi/clubmark-env:v3.0-U16.04
 ```
 and call `./benchmark.py` with the required parameters there.
-> $UID might not be defined in the non-bash shell (sh, etc), then use `id -u $USER` instead.  
-`` `pwd` `` projects to `<CLUBMARK_REPOSITORY_PATH>`, which is the current directory and the working directory of the benchmarking.  
-`/opt/clubmark` or any other local directory denotes th e directory in the CONTAINER where the benchmarking results and traces are stored, which is mapped to the current host directory (`` `pwd` ``).  
+> $UID might not be defined in the non-bash shell (sh, etc), then use `id -u $USER` instead.
+`` `pwd` `` projects to `<CLUBMARK_REPOSITORY_PATH>`, which is the current directory and the working directory of the benchmarking.
+`/opt/clubmark` or any other local directory denotes th e directory in the CONTAINER where the benchmarking results and traces are stored, which is mapped to the current host directory (`` `pwd` ``).
 See also [Docker cheat sheet](https://coderwall.com/p/2es5jw/docker-cheat-sheet-with-examples).
 
 See the [Usage](#usage) section to learn more about the benchmark execution and results structure.
@@ -216,8 +216,8 @@ $ ./install_reqs.sh
 ```
 See [install_reqs.sh](install_reqs.sh) and [pyreqs.txt](pyreqs.txt) for the details about the installing packages.
 
-> The benchmarking framework can be executed under Python 2.7+/3.x and verified on CPython and [PyPy](http://pypy.org/) JIT.  
-Some executing algorithms support only Python2 / pypy, others both Python3 and Python2. The appropriate interpreter for each executable is automatically selected in the runtime. The recommended environment, which is installed by the script is both Python3 and pypy.  
+> The benchmarking framework can be executed under Python 2.7+/3.x and verified on CPython and [PyPy](http://pypy.org/) JIT.
+Some executing algorithms support only Python2 / pypy, others both Python3 and Python2. The appropriate interpreter for each executable is automatically selected in the runtime. The recommended environment, which is installed by the script is both Python3 and pypy.
 > See also dependencies of the [utilities](utils/README.md#requirements), which are installed automatically.
 
 
@@ -233,12 +233,12 @@ The benchmark executes specified applications on the specified datasets in inter
 <!-- #region BenchParams -->
 To see the possible input parameters, run the benchmark without the arguments or with `-h`: `$ ./benchmark.py`:
 ```sh
-$ ./benchmark.py 
+$ ./benchmark.py
 Usage:
   ./benchmark.py [-g[o][a]=[<number>][%<shuffles_number>][=<outpdir>] [-i[f][a][%<shuffles_number>]=<datasets_{dir,file}_wildcard> [-c[f][r]] [-a=[-]"app1 app2 ..."] [-r] [-q[="qmapp [arg1 arg2 ...]"]] [-s[p][*][[{-,+}]=<alg>[/<qmeasure1>,<qmeasure2>,...][:<net1>,<net2>,...][;<alg>...]]] [-t[{s,m,h}]=<timeout>] [-d=<seed_file>] [-w=<webui_addr>] | -h
 
 Example:
-  ./benchmark.py -g=3%5 -r -q -s -th=2.5 1> bench.log 2> bench.err
+  ./benchmark.py -w=0.0.0.0:8080 -g=3%5 -r -q="Xmeasures -fh -O -s" -s* -th=2.5 1> bench.log 2> bench.err
 NOTE:
   - The benchmark should be executed exclusively from the current directory (./).
   - The expected format of input datasets (networks) is .ns<l> - network specified by <links> (arcs / edges), a generalization of the .snap, .ncol and Edge/Arcs Graph formats.
@@ -309,7 +309,7 @@ Advanced parameters:
     *  - aggregate all available quality evaluations besides the one matching the seed
     -/+  - filter inclusion prefix: "-" to filter out specified data (exclude) and "+" (default) to filter by (include only such data).
     <qmeasure>  - quality measure in the format:  <appname>[:<qmetric>][+u], for example "Xmeasures:MF1h_w+u", where "+u" denotes representative clusters fetched from the multi-resolution clustering and represented in a single level.
-  - --quality-noupdate and --quality-revalue options are applied 
+  - --quality-noupdate and --quality-revalue options are applied
   --webaddr, -w  - run WebUI on the specified <webui_addr> in the format <host>[:<port>], default port=8080.
   --runtimeout  - global clustering algorithms execution timeout in the format [<days>d][<hours>h][<minutes>m<seconds>], default: 10d.
   --evaltimeout  - global clustering algorithms execution timeout in the format [<days>d][<hours>h][<minutes>m<seconds>], default: 5d.
@@ -320,7 +320,7 @@ Advanced parameters:
 > - not all clustering algorithms might support the seed.
 So, in case of shuffling, the original shuffles should be provided to reproduce exactly the same results for the deterministic algorithms.
 
-It is possible to have multiple input directories with similarly named files inside, which represent different instances / snapshots of the datasets. In such case, the results are produced per each snapshot, plus aggregated weighted average over all snapshots. This is useful to avoid occasional bias to the specific instance or to analyze evolving networks.  
+It is possible to have multiple input directories with similarly named files inside, which represent different instances / snapshots of the datasets. In such case, the results are produced per each snapshot, plus aggregated weighted average over all snapshots. This is useful to avoid occasional bias to the specific instance or to analyze evolving networks.
 If any application is crashed, the crash is logged and does not affect execution of the remaining applications. The benchmark can be terminated by the timeout or manually.
 *automatic extension / back up* of the already existent results to the timestamped .gzip archives on the benchmarking re-execution.
 *logging of traces (stdout) and errors (stderr)* (outputs of the executables and their runtime statistics) for each executable and for the benchmarking framework itself;
@@ -331,8 +331,8 @@ To speed up generation of the synthetic networks, run the benchmarking under the
 ```sh
 $ pypy ./benchmark.py -g=3%2=syntnets_i3_s4 -a="scp oslom2" -r -q -s -tm=90
 ```
-This command generates synthetic networks producing 3 instances of each network with 2 shuffles (random reordering of network nodes) of each instance yielding 3*2=6 synthetic networks of each type (for each set of the network generation parameters). The generated networks are stored in the specified `./syntnets_i3_s4/` directory.  
-`scp` and `oslom2` clustering algorithms are executed for each generated network, default quality measures are evaluated for these algorithms with subsequent aggregation of the results over all instances and shuffles of each network.  
+This command generates synthetic networks producing 3 instances of each network with 2 shuffles (random reordering of network nodes) of each instance yielding 3*2=6 synthetic networks of each type (for each set of the network generation parameters). The generated networks are stored in the specified `./syntnets_i3_s4/` directory.
+`scp` and `oslom2` clustering algorithms are executed for each generated network, default quality measures are evaluated for these algorithms with subsequent aggregation of the results over all instances and shuffles of each network.
 The timeout is set to 90 min for the following actions: networks generation and then for each network a) clustering and b) evaluation by each specified measure. The network here is each shuffle of each instance of each network type.
 
 
@@ -465,8 +465,8 @@ All the evaluations will be performed automatically, the algorithm should just f
 * [OvpNMI](https://github.com/eXascaleInfolab/OvpNMI)  - NMI evaluation for the overlapping clusters (communities) that is not compatible with the standard NMI value unlike GenConvNMI, but it is much faster than GenConvNMI.
 * DAOC - (former [HiReCS](https://github.com/eXascaleInfolab/hirecs) High Resolution Hierarchical Clustering with Stable State, which was totally redesigned).
 
-See also [eXascale Infolab](https://github.com/eXascaleInfolab) GitHub repository and [our website](http://exascale.info/) where you can find another projects and research papers related to Big Data processing!  
-**Note:** Please, [star this project](https://github.com/eXascaleInfolab/clubmark) if you use it. 
+See also [eXascale Infolab](https://github.com/eXascaleInfolab) GitHub repository and [our website](http://exascale.info/) where you can find another projects and research papers related to Big Data processing!
+**Note:** Please, [star this project](https://github.com/eXascaleInfolab/clubmark) if you use it.
 
 
 <!--

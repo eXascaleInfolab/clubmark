@@ -106,7 +106,7 @@ _SEPQARGS = '_'  # Separator for the quality measure arguments to be shown in th
 # Separetor for the quality measure from the processing file name.
 # It is used for the file names and should follow restrictions on the allowed symbols.
 _SEPQMS = ';'
-_SUFULEV = '+u'  # Unified levels suffix of the HDF5 dataset (actual for DAOC)
+_SUFULEV = '+s'  # Salient/significant/representative clusters, unified levels suffix of the HDF5 dataset (actual for DAOC)
 _PREFMETR = ':'  # Metric prefix in the HDF5 dataset name
 SATTRNINS = 'nins'  # HDF5 storage object attribute for the number of network instances
 SATTRNSHF = 'nshf'  # HDF5 storage object attribute for the number of network instance shuffles
@@ -810,6 +810,21 @@ def qmsaver(job):
 		return
 	save = job.params['save']
 	smeta = job.params['smeta']
+
+	def toFloat(val):
+		"""Convert to float and trace the error on fail
+
+		val: str  - float value in the str format
+
+		return float  - converted value
+		"""
+		try:
+			return float(val)
+		except ValueError as err:
+			print('ERROR, metric "{}" serialization discarded of the job "{}" because of the invalid value format: {}. {}'
+				.format(name, job.name, val, err), file=sys.stderr)
+
+
 	# xmeasures output is performed either in the last string with metrics separated with ':'
 	# from their values and {',', ';'} from each other, where Precision and Recall of F1_labels
 	# are parenthesized.
@@ -824,37 +839,41 @@ def qmsaver(job):
 		# Metric name is None (the same as binary name) if not specified explicitly
 		name = None if len(qmres) == 1 else qmres[0].split(None, 1)[0].rstrip(':')  # Omit ending ':' if any
 		val = qmres[-1]  # Note: index -1 corresponds to either 0 or 1
-		try:
-			# qsqueue.put(QEntry(smeta, {name: float(val)}))
-			# # , block=True, timeout=None if not timeout else max(0, timeout - (time.perf_counter() - job.tstart)))
-			# saveQuality(qsqueue, QEntry(smeta, {name: float(val)}))
-			# print('> Parsed data (single) from "{}", name: {}, val: {}; qmres: {}'.format(
-			# 	' '.join(('' if len(qmres) == 1 else qmres[0], qmres[-1])), name, val, qmres))
-			save(QEntry(smeta, {name: float(val)}))
-		except ValueError as err:
-			print('ERROR, metric "{}" serialization discarded of the job "{}" because of the invalid value format: {}. {}'
-				.format(name, job.name, val, err), file=sys.stderr)
+		# qsqueue.put(QEntry(smeta, {name: toFloat(val)}))
+		# # , block=True, timeout=None if not timeout else max(0, timeout - (time.perf_counter() - job.tstart)))
+		# saveQuality(qsqueue, QEntry(smeta, {name: toFloat(val)}))
+		# print('> Parsed data (single) from "{}", name: {}, val: {}; qmres: {}'.format(
+		# 	' '.join(('' if len(qmres) == 1 else qmres[0], qmres[-1])), name, val, qmres))
+		save(QEntry(smeta, {name: toFloat(val)}))
 		# except queue.Full as err:
 		# 	print('WARNING, results serialization discarded by the Job "{}" timeout'.format(job.name))
 		return
-	# Parse multiple names of the metrics and their values from the last string: <metric>: <value>{,;} ...
+	# Parse multiple names of the metrics and their values from the last string:  <metric>: <value>{,;} ...
 	# Note: index -1 corresponds to either 0 or 1
 	metrics = [qmres[-1]]
-	# Example of the parsing line: "F1_labels: <val> (Precision: <val>, ...)"
+	# Example of the parsing line: "[F1_labels]: ]<val> (Precision: <val>, ...)"
 	for sep in ',;(':
 		smet = []
 		for m in metrics:
 			smet.extend(m.split(sep))
 		metrics = smet
 	data = {}  # Serializing data
-	for mt in metrics:
-		name, val = mt.split(':', 1)
-		try:
-			data[name.lstrip()] = float(val.rstrip(' \t)'))
+	# Note: the first value may lack the preceeding name
+	mt0 = metrics[0].split(':', 1)
+	if len(mt0) >= 2:
+		name, val = mt0.split(':', 1)
+	else:
+		# Metric name is None (the same as binary name) if not specified explicitly
+		name = None if len(qmres) == 1 else qmres[0].split(None, 1)[0].rstrip(':')  # Omit ending ':' if any
+		val = mt0[0]
+	data[name.lstrip()] = toFloat(val.rstrip(' \t)'))
+	# print('> Parsed data from "{}", name: {}, val: {}'.format(mt, name.lstrip(), data[name.lstrip()]))
+	# Parse remained values
+	if len(metrics) >= 2:
+		for mt in metrics[1:]:
+			name, val = mt.split(':', 1)
+			data[name.lstrip()] = toFloat(val.rstrip(' \t)'))
 			# print('> Parsed data from "{}", name: {}, val: {}'.format(mt, name.lstrip(), data[name.lstrip()]))
-		except ValueError as err:
-			print('ERROR, metric "{}" serialization discarded of the job "{}" because of the invalid value format: {}. {}'
-				.format(name, job.name, val, err), file=sys.stderr)
 	if data:
 		# saveQuality(qsqueue, QEntry(smeta, data))
 		save(QEntry(smeta, data))
@@ -1312,6 +1331,7 @@ def aggeval(aggevals, nets, qaggopts, exclude, qmsname, revalue=False, maxins=0)
 	varshf = VarAcc()  # Variance over the instance shuffles
 	avgrshf = ValAcc()  # Average ration of the NAN shuffles (used to evaluate confidence of the results)
 	avgrun = ValAcc() # Average value of measure for multiple runs of the evaluation app
+	netsevs = None
 	for galg in viewvalues(qmeasures):
 		alg = os.path.split(galg.name)[1]
 		aflt = None if not aflts else aflts.get(alg)  # Algorithm aggregation filter
@@ -1415,7 +1435,7 @@ def aggeval(aggevals, nets, qaggopts, exclude, qmsname, revalue=False, maxins=0)
 				#if alg == 'Daoc' and net == '5K5' and msr == 'Xmeasures:MF1h_w':
 				#	print('> 5K5 qv:', qv)
 				netsevs.insert(net, qv)
-	if nets is not None:
+	if nets is not None and netsevs is not None:
 		nets.union(netsevs.kinds)  # Add keys (network kinds)
 
 
@@ -1456,7 +1476,7 @@ def aggEvals(qaggopts, exclude, seed, update=True, revalue=False, plot=False):
 	if seed is not None:
 		seedstr = str(seed)  # Note: only the seed(s) of the aggregating file(s) are meaningful
 		qmspath = ''.join((qmsdir, qmnbase, seedstr, qmnsuf))  # File name of the HDF5.storage
-		# TODO: Clarify why seedstr is already prefexed in qmspath 
+		# TODO: Clarify why seedstr is already prefexed in qmspath
 		print('qmspath: ', qmspath)
 		aggeval(aggevals, nets, qaggopts, exclude, qmspath, revalue, maxins=maxins)
 	else:

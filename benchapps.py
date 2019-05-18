@@ -933,9 +933,9 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout=0, seed=None, task=No
 # DAOC Options
 class DaocOpts(object):
 	"""DAOC execution options"""
-	__slots__ = ('gamma', 'reduction', 'gband', 'exclude', 'rlevout', 'significance', 'srweight', 'ndsmin')
+	__slots__ = ('gamma', 'reduction', 'gband', 'exclude', 'rlevout', 'significance')  # , 'srweight', 'ndsmin'
 
-	def __init__(self, gamma=-1, reduction=None, gband=None, exclude=None, rlevout=0.8, significance='sd', srweight=0.85, ndsmin=3):
+	def __init__(self, gamma=-1, reduction=None, gband=None, exclude=None, rlevout=0.8, significance='sd'):  # , srweight=0.85, ndsmin=3
 		"""DAOC execution options initialization
 
 		gamma  - resolution parameter, float:
@@ -957,38 +957,39 @@ class DaocOpts(object):
 		rlevout  - ratio (at least) of output levels shrinking starting from the widest (bottom) level,
 			applied only for the multi-level output, (0, 1]. Recommended (if used): 0.75 .. 0.9.
 		significance  - significant clusters output policy:
-			sd  - single (one any of) direct owner (default, maximizes recall)
+			sd  - single (one any of) direct owner (default, good recall, fastest)
 			ad  - all direct owners
 			sh  - single (one any of) direct upper hierarchy of owners (senseless being too mild)
 			ah  - all upper hierarchy of owners (maximizes precision)
 			''  - default policy for the significant clusters:
-				sd with default* srweight[=1-e^-2~=0.865] and minclsize[=3]
-		srweight  - weight step ratio for the significant clusters output to avoid output of the large clusters
-			that differ only a bit in weight, multiplier, (0, 1]. Recommended: 0.75 .. 0.9.
-		ndsmin  - min number of nodes in the non-root cluster to be eligible for the output.
-			NOTE: all nodes are guaranted to be outputted, so there is
-			no sence to apply this option for the per-level output
+				sd with default* srweight[=0.618 or 0.85] and minclsize[=3]
 
 		NOTE (*): default values of the parameters might vary in each particular version of the libdaoc
 		"""
+		# srweight  - weight step ratio for the significant clusters output to avoid output of the large clusters
+		# 	that differ only a bit in weight, multiplier, (0, 1]. Recommended: 0.75 .. 0.9.
+		# ndsmin  - min number of nodes in the non-root cluster to be eligible for the output.
+		# 	NOTE: all nodes are guaranted to be outputted, so there is
+		# 	no sence to apply this option for the per-level output
+
 		# Note the significance potentially can be more precise: 'ad%0.86/0.14~'
 		assert (isinstance(gamma, Number) and (reduction is None or reduction == ''
-				or (1 <= len(reduction) <= 2 and reduction[0] in 'ams' and (len(reduction) == 1 or reduction[1] == 'w')))
+				or (1 <= len(reduction) <= 2 and reduction[-1] in 'ams' and (len(reduction) == 1 or reduction[0] == 'w')))
 			and (gband is None or gband == '' or (isinstance(gband, str) and len(gband) >= 3 and gband[0] in 'rn'))
 			and (exclude is None or exclude == 'a')
 			and (rlevout is None or rlevout > 0) and (significance is None or significance in ('', 'sd', 'ad', 'sh', 'ah'))
-			and (srweight is None or 0 < srweight <= 1) and (ndsmin is None or ndsmin >= 0)
+			# and (srweight is None or 0 < srweight <= 1) and (ndsmin is None or ndsmin >= 0)
 			), ('Invalid input parameters:\n\tgamma: {}\n\treduction: {}\n\tgband: {}\n\texclude: {}'
-			',\n\trlevout: {}\n\tsignificance: {},\n\tsrweight: {},\n\tndsmin: {}'
-			.format(gamma, reduction, gband, exclude, rlevout, significance, srweight, ndsmin))
+			',\n\trlevout: {}\n\tsignificance: {}' #,\n\tsrweight: {},\n\tndsmin: {}'
+			.format(gamma, reduction, gband, exclude, rlevout, significance))  # , srweight, ndsmin
 		self.gamma = gamma
 		self.reduction = reduction
 		self.gband = gband
 		self.exclude = exclude
-		self.significance = significance
 		self.rlevout = rlevout
-		self.srweight = srweight
-		self.ndsmin = ndsmin
+		self.significance = significance
+		# self.srweight = srweight
+		# self.ndsmin = ndsmin
 
 
 	def __str__(self):

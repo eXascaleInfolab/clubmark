@@ -329,7 +329,7 @@ If any application is crashed, the crash is logged and does not affect execution
 ### Synthetic networks generation, clustering algorithms execution and evaluation
 To speed up generation of the synthetic networks, run the benchmarking under the PyPy:
 ```sh
-$ pypy ./benchmark.py -g=3%2=syntnets_i3_s4 -a="scp oslom2" -r -q -s -tm=90
+$ pypy ./benchmark.py -g=3%2=syntnets_i3_s4 -a="scp oslom2" -r -q="Xmeasures -fh -s" -s -tm=90
 ```
 This command generates synthetic networks producing 3 instances of each network with 2 shuffles (random reordering of network nodes) of each instance yielding 3*2=6 synthetic networks of each type (for each set of the network generation parameters). The generated networks are stored in the specified `./syntnets_i3_s4/` directory.
 `scp` and `oslom2` clustering algorithms are executed for each generated network, default quality measures are evaluated for these algorithms with subsequent aggregation of the results over all instances and shuffles of each network.

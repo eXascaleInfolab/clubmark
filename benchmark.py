@@ -754,7 +754,7 @@ def generateNets(genbin, policy, insnum, asym=False, basedir=_SYNTDIR, netsdir=_
 					netgenTimeout = max(nm * k / 1.5, 30)  # ~ up to 30 min (>= 30 sec) per a network instance (50K nodes on K=75 takes ~15-35 min)
 					name = 'K'.join((str(nm), str(k))) #.join((namepref, namesuf))
 					if len(varMut) >= 2:
-						name += 'm{:02}'.format(int(mut*100))  # Omit '0.' prefix and show exactly 2 digits padded with 0: 0.05 -> m05
+						name += 'm{:02}'.format(int(round(mut*100)))  # Omit '0.' prefix and show exactly 2 digits padded with 0: 0.05 -> m05
 					ext = '.ngp'  # Network generation parameters
 					# Generate network parameters files if not exist
 					fnamex = name.join((paramsdirfull, ext))
@@ -813,15 +813,17 @@ def generateNets(genbin, policy, insnum, asym=False, basedir=_SYNTDIR, netsdir=_
 """from __future__ import print_function  #, division  # Required for stderr output, must be the first import
 import subprocess
 import os
-from ..utils.remlinks import remlinks
+import sys
+
+sys.path.append('{benchdir}')
+from utils.remlinks import remlinks
 
 subprocess.check_call({args})  # Raises exception on failed call
 
 # Form the path and file name for the network with reduced links
-netfile = '{netfile}'
-path, netname = os.path.split(netfile)
+netfile = '{netfile}{netext}'
+path, netname = os.path.split('{netfile}')
 basepath, dirname = os.path.split(path)
-netname, ext = os.path.splitext(name)
 iinst = netname.rfind('{SEPINST}')  # Index of the instance suffix
 if iinst == -1:
 	iinst = len(netname)
@@ -829,14 +831,16 @@ for i in range(1, 16, 2):  # 1 .. 15% with step 2
 	istr = str(i)
 	rlsuf = ''.join(('{SEPLRD}', istr, 'p'))
 	rlname = ''.join((netname[:iinst], rlsuf, netname[iinst:]))
-	# rldir = ''.join((dirname, rlsuf))
 	frlname = '/'.join((basepath, dirname + rlsuf, rlname))
 	# Produce file with the reduced links
-	remlinks((istr + '%', netfile, fullrdname + ext))
-	# Link the ground-truth with updated name
-	# Note: use hard link in case of origin deletion
-	os.link(os.path.splitext(netfile)[0] + '{EXTCLSNDS}', frlname + '{EXTCLSNDS}')
-""".format(args=args, netfile=netfile, SEPLRD=SEPLRD, SEPINST=SEPINST, EXTCLSNDS=EXTCLSNDS))  # Skip the shuffling if the respective file already exists
+	try:
+		remlinks(istr + '%', netfile, frlname + '{netext}')
+		# Link the ground-truth with updated name
+		os.symlink(os.path.splitext(netfile)[0] + '{EXTCLSNDS}', frlname + '{EXTCLSNDS}')
+	except Exception as err:  #pylint: disable=W0703
+		print('ERROR on links redution making {{}}: {{}}, discarded. {{}}'
+			.format(frlname + '{netext}', err, traceback.format_exc(5)), file=sys.stderr)
+""".format(benchdir=os.getcwd(), args=args, netfile=netfile, netext=netext, SEPLRD=SEPLRD, SEPINST=SEPINST, EXTCLSNDS=EXTCLSNDS))  # Skip the shuffling if the respective file already exists
 							#Job(name, workdir, args, timeout=0, rsrtonto=False, onstart=None, ondone=None, tstart=None)
 							# , workdir=basedir
 							_execpool.execute(Job(name=netname, workdir=basedir, args=args, timeout=netgenTimeout, rsrtonto=True

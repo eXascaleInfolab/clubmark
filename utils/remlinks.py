@@ -68,7 +68,7 @@ def parseArgs(args):
 	"""
 	assert isinstance(args, (tuple, list)) and args, 'Input arguments must be specified'
 	if len(args) < 2:
-		raise ValueError('Unexpected number of arguments: {}' + len(args))
+		raise ValueError('Unexpected number of arguments: ' + str(len(args)))
 	linksNum = int(args[0]) if args[0][-1] != '%' else float(args[0][:-1]) / 100
 	if linksNum <= 0 or (isinstance(linksNum, float) and linksNum >= 1):
 		raise ValueError('linksNum is out of range: ' + str(linksNum))
@@ -131,12 +131,12 @@ def remlinks(*args):
 		random.seed()
 		# Note: the expected number of collisions is linksNum / linksCount, and the larger number of links the more precise this estimation
 		expcolis = max(linksNum * (1 + min(0.35, 1 / log10(linksNum))) / linksCount, 16)
-		omitls = np.unique(np.array([random.randint(0, linksCount-1) for _ in range(np.uint32(linksNum + expcolis + expcolis / linksCount))]
+		omitls = np.unique(np.array([random.randint(0, linksCount-1) for _ in range(np.uint32(linksNum + expcolis + 1.25 * expcolis / linksCount))]
 			, dtype=np.uint32))[:linksNum]  # Leaves unique links + sorts, take up to linksNum items
 		# Get keys by indexes to consider also directed network if requried
 		print('  linksCount: {}, unique omitls: {}'.format(linksCount, len(omitls)))
-		assert len(omitls) >= linksNum * 0.95, ('The number of generated removing link indices is too small'
-			', omitls num: {}, linksNum * 0.95: {}'.format(len(omitls), linksNum * 0.95))
+		assert len(omitls) >= linksNum * 0.9, ('The number of generated removing link indices is too small'
+			', omitls num: {}, linksNum: {}'.format(len(omitls), round(linksNum * 0.9)))
 		omitkeys = []
 		irem = omitls[0]
 		j = 1

@@ -38,6 +38,7 @@ except ImportError as err:
 		range = xrange
 	except NameError:
 		pass  # xrange is not defined in Python3, which is fine
+from math import log10
 import sys
 import os
 import random
@@ -46,14 +47,14 @@ import numpy as np
 
 def outFile(filename, frac=''):
 	"""Construct output file name from the input file name
-	
+
 	filename: str  - base file name
 	frac: float|str  - fraction of the links to be reduced
-	
+
 	return str  - resulting file name
 	"""
 	name, ext = os.path.splitext(filename)  # Extract name and ext
-	return ''.join((name, '_rl', str(frac), ext))
+	return ''.join((name, '_rl{:03}'.format(int(round(frac*1000))), ext))
 
 
 def parseArgs(args):
@@ -128,23 +129,14 @@ def remlinks(*args):
 			linksNum /= 2  # Links on both directions should be removed
 		# Generate links indices to be removed
 		random.seed()
-		omitls = np.array([random.randint(0, linksCount-1) for i in range(linksNum)], dtype=np.uint32)
-		omitls = np.unique(omitls)  # Leaves unique links + sorts
-		linksNum -= len(omitls)
-		# Extend omitls up to specified number of links
-		rmls = linksNum
-		linksNum = len(omitls)
-		while rmls:
-			reminder = np.array([random.randint(0, linksCount-1) for i in range(rmls)], dtype=np.uint32)
-			rmls = 0
-			insinds = np.searchsorted(omitls, reminder)
-			for i, ins in enumerate(insinds):
-				if ins < linksNum and reminder[i] == omitls[ins]:
-					rmls += 1  # This index is already selected
-					continue
-				np.insert(omitls, ins, reminder[i])
+		# Note: the expected number of collisions is linksNum / linksCount, and the larger number of links the more precise this estimation
+		expcolis = max(linksNum * (1 + min(0.35, 1 / log10(linksNum))) / linksCount, 16)
+		omitls = np.unique(np.array([random.randint(0, linksCount-1) for _ in range(np.uint32(linksNum + expcolis + expcolis / linksCount))]
+			, dtype=np.uint32))[:linksNum]  # Leaves unique links + sorts, take up to linksNum items
 		# Get keys by indexes to consider also directed network if requried
-		print('linksCount: {}, unique omitls: {}'.format(linksCount, len(omitls)))
+		print('  linksCount: {}, unique omitls: {}'.format(linksCount, len(omitls)))
+		assert len(omitls) >= linksNum * 0.95, ('The number of generated removing link indices is too small'
+			', omitls num: {}, linksNum * 0.95: {}'.format(len(omitls), linksNum * 0.95))
 		omitkeys = []
 		irem = omitls[0]
 		j = 1
@@ -164,11 +156,15 @@ def remlinks(*args):
 			if directed and netstat[key[1]] > 1:
 				omitkeys.append((key[1], key[0]))
 				netstat[key[1]] -= 1
-		print('{} {}directed links are going to be removed'.format(len(omitkeys), '' if directed else 'un'))
+		print('  {} {}directed links are going to be removed'.format(len(omitkeys), '' if directed else 'un'))
 		for key in omitkeys:
 			del network[key]
 		del omitkeys
 		# Copy all links excluding the omitting
+		# Create the output dir if required
+		outpath = os.path.split(outnet)[0]
+		if outpath and not os.path.exists(outpath):
+			os.makedirs(outpath)
 		with open(outnet, 'w') as fout:
 			print(''.join(('Forming output network: ', outnet, '...')))
 			# Fetch keys (ids) via the lookup

@@ -831,12 +831,13 @@ for i in range(1, 16, 2):  # 1 .. 15% with step 2
 	istr = str(i)
 	rlsuf = ''.join(('{SEPLRD}', istr, 'p'))
 	rlname = ''.join((netname[:iinst], rlsuf, netname[iinst:]))
-	frlname = '/'.join((basepath, dirname + rlsuf, rlname))
+	rlpath = '/'.join((basepath, dirname + rlsuf))
+	frlname = '/'.join((rlpath, rlname))
 	# Produce file with the reduced links
 	try:
 		remlinks(istr + '%', netfile, frlname + '{netext}')
 		# Link the ground-truth with updated name
-		os.symlink(os.path.splitext(netfile)[0] + '{EXTCLSNDS}', frlname + '{EXTCLSNDS}')
+		os.symlink(os.path.relpath(os.path.splitext(netfile)[0] + '{EXTCLSNDS}', rlpath), frlname + '{EXTCLSNDS}')
 	except Exception as err:  #pylint: disable=W0703
 		print('ERROR on links redution making {{}}: {{}}, discarded. {{}}'
 			.format(frlname + '{netext}', err, traceback.format_exc(5)), file=sys.stderr)

@@ -106,8 +106,8 @@ _SEPQARGS = '_'  # Separator for the quality measure arguments to be shown in th
 # Separetor for the quality measure from the processing file name.
 # It is used for the file names and should follow restrictions on the allowed symbols.
 _SEPQMS = ';'
-_SUFULEV = '+s'  # Salient/significant/representative clusters, unified levels suffix of the HDF5 dataset (actual for DAOC)
 _PREFMETR = ':'  # Metric prefix in the HDF5 dataset name
+SUFULEV = '+s'  # Salient/significant/representative clusters, unified levels suffix of the HDF5 dataset (actual for DAOC)
 SATTRNINS = 'nins'  # HDF5 storage object attribute for the number of network instances
 SATTRNSHF = 'nshf'  # HDF5 storage object attribute for the number of network instance shuffles
 SATTRNLEV = 'nlev'  # HDF5 storage object attribute for the number of clustering levels
@@ -294,6 +294,7 @@ class QualitySaver(object):
 	# Should not be too much to save them into the persistent store on the
 	# program termination or any external interruptions
 	QUEUE_SIZEMAX = max(128, cpu_count() * 2)  # At least 128 or twice the number of the logical CPUs in the system
+	ntail = -2  # Target tail lines in the job results, <= -1
 
 	# LATENCY = 1  # Latency in seconds
 
@@ -333,7 +334,7 @@ class QualitySaver(object):
 	# 					# (in case of multiple metrics are evaluated by the executing app)
 	# 					dsname = qm.smeta.measure if not metric else _PREFMETR.join((qm.smeta.measure, metric))
 	# 					if qm.smeta.ulev:
-	# 						dsname += _SUFULEV
+	# 						dsname += SUFULEV
 	# 					dsname += _EXTQDATASET
 	# 					# Open or create the required dataset
 	# 					qmgroup = syncstorage.value[qm.smeta.group]
@@ -362,7 +363,7 @@ class QualitySaver(object):
 	# 						qmdata[qm.smeta.iins][qm.smeta.ishf][qm.smeta.ilev][qm.smeta.irun] = mval
 	# 				except Exception as err:  #pylint: disable=W0703;  # queue.Empty as err:  # TypeError (HDF5), KeyError
 	# 					print('ERROR, saving of {} in {}{}{} failed: {}. {}'.format(mval, qm.smeta.measure,
-	# 						'' if not metric else _PREFMETR + metric, '' if not qm.smeta.ulev else _SUFULEV,
+	# 						'' if not metric else _PREFMETR + metric, '' if not qm.smeta.ulev else SUFULEV,
 	# 						err, traceback.format_exc(5)), file=sys.stderr)
 	# 				# alg = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
 	# 				# 	# Allocate chunks of 10 items starting with empty dataset and with possibility
@@ -525,6 +526,50 @@ class QualitySaver(object):
 		# self._active = Value('B', False, lock=False)
 		# self._persister = None
 
+	def dataset(self, smeta, metric):
+		"""Fetch dataset by the metadata and metric name
+
+		smeta: SMeta  - serialization meta data
+		metric: str|unicode  - metric name
+
+		return h5py.Dataset  - requested dataset, which is created if not existed
+		"""
+		# # Metric is str (or can be unicode in Python2)
+		# assert isinstance(smeta, SMeta), ( #and isinstance(metric, str), (
+		# 	'Unexpected type of the serialization meta data ({}) or metric name({}) '
+		# 	.format(type(smeta).__name__, type(metric).__name__))
+
+		# Construct dataset name based on the quality measure binary name and its metric name
+		# (in case of multiple metrics are evaluated by the executing app)
+		dsname = smeta.measure if not metric else _PREFMETR.join((smeta.measure, metric))
+		if smeta.ulev:
+			dsname += SUFULEV
+		#print('> dsname: {}, metric: {}, mval: {}; location: {}'.format(dsname, metric, mval, smeta))
+		dsname += _EXTQDATASET
+		# Open or create the required dataset
+		qmgroup = self.storage[smeta.group]
+		# qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(smeta.measure, 1)),
+		# 	# 32-bit floating number, checksum (fletcher32), "exact" used to require both shape and type to match exactly
+		# 	dtype='f4', exact=True, fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
+		qmdata = None
+		try:
+			# Note: the out of bound values are omitted in case of update
+			qmdata = qmgroup[dsname]
+		except KeyError:
+			# Such dataset does not exist, create it
+			nins = qmgroup.attrs[SATTRNINS]
+			nshf = qmgroup.attrs[SATTRNSHF]
+			nlev = 1 if smeta.ulev else qmgroup.parent.attrs[SATTRNLEV]
+			qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(smeta.measure, 1)),
+				# 32-bit floating number, checksum (fletcher32)
+				dtype='f4', fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
+			# NOTE: Numpy NA (not available) instead of NaN (not a number) might be preferable
+			# but it requires latest NumPy versions.
+			# https://www.numpy.org/NA-overview.html
+			# Numpy NAs (https://docs.scipy.org/doc/numpy-1.14.0/neps/missing-data.html):
+			# np.NA,  dtype='NA[f4]', dtype='NA', np.dtype('NA[f4,NaN]')
+		return qmdata
+
 	def __call__(self, qm):
 		"""Worker process function to save data to the persistent storage
 
@@ -534,49 +579,18 @@ class QualitySaver(object):
 		# Save data elements (entries)
 		for metric, mval in viewitems(qm.data):
 			try:
-				# Metric is  str (or can be unicode in Python2)
+				# Metric is str (or can be unicode in Python2)
 				assert isinstance(mval, float), 'Invalid data type, metric: {}, value: {}'.format(
 					type(metric).__name__, type(mval).__name__)
-				# Construct dataset name based on the quality measure binary name and its metric name
-				# (in case of multiple metrics are evaluated by the executing app)
-				dsname = qm.smeta.measure if not metric else _PREFMETR.join((qm.smeta.measure, metric))
-				if qm.smeta.ulev:
-					dsname += _SUFULEV
-				#print('> dsname: {}, metric: {}, mval: {}; location: {}'.format(dsname, metric, mval, qm.smeta))
-				dsname += _EXTQDATASET
-				# Open or create the required dataset
-				qmgroup = self.storage[qm.smeta.group]
-				# qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
-				# 	# 32-bit floating number, checksum (fletcher32), "exact" used to require both shape and type to match exactly
-				# 	dtype='f4', exact=True, fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
-				qmdata = None
-				try:
-					# Note: the out of bound values are omitted in case of update
-					qmdata = qmgroup[dsname]
-				except KeyError:
-					# Such dataset does not exist, create it
-					nins = qmgroup.attrs[SATTRNINS]
-					nshf = qmgroup.attrs[SATTRNSHF]
-					nlev = 1 if qm.smeta.ulev else qmgroup.parent.attrs[SATTRNLEV]
-					qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(qm.smeta.measure, 1)),
-						# 32-bit floating number, checksum (fletcher32)
-						dtype='f4', fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)
-					# NOTE: Numpy NA (not available) instead of NaN (not a number) might be preferable
-					# but it requires latest NumPy versions.
-					# https://www.numpy.org/NA-overview.html
-					# Numpy NAs (https://docs.scipy.org/doc/numpy-1.14.0/neps/missing-data.html):
-					# np.NA,  dtype='NA[f4]', dtype='NA', np.dtype('NA[f4,NaN]')
-
 				# Save data to the storage
 				# with syncstorage.get_lock():
 				# print('>> [{},{},{},{}]{}: {}'.format(qm.smeta.iins, qm.smeta.ishf, qm.smeta.ilev, qm.smeta.irun,
 				# 	'' if not qm.smeta.ulev else 'u', mval))
-				qmdata[qm.smeta.iins, qm.smeta.ishf, qm.smeta.ilev,
-					qm.smeta.irun] = mval
+				self.dataset(qm.smeta, metric)[qm.smeta.iins, qm.smeta.ishf, qm.smeta.ilev,qm.smeta.irun] = mval
 			except Exception as err:  #pylint: disable=W0703;  # queue.Empty as err:  # TypeError (HDF5), KeyError
 				print('ERROR, saving of {} into {}{}{}[{},{},{},{}] failed: {}. {}'.format(
 					mval, qm.smeta.measure, '' if not metric else _PREFMETR + metric,
-					'' if not qm.smeta.ulev else _SUFULEV, qm.smeta.iins, qm.smeta.ishf,
+					'' if not qm.smeta.ulev else SUFULEV, qm.smeta.iins, qm.smeta.ishf,
 					qm.smeta.ilev, qm.smeta.irun, err, traceback.format_exc(5)), file=sys.stderr)
 			# alg = apps.require_dataset('Pscan01'.encode(),shape=(0,),dtype=h5py.special_dtype(vlen=bytes),chunks=(10,),maxshape=(None,),fletcher32=True)
 			# 	# Allocate chunks of 10 items starting with empty dataset and with possibility
@@ -636,7 +650,6 @@ class QualitySaver(object):
 		# 			if self.storage.value is not None:
 		# 				self.storage.value.flush()  # Allow to reuse the instance in several context managers
 		# 	# Note: the exception (if any) is propagated if True is not returned here
-
 		if self.storage is not None:
 			self.storage.flush()  # Allow to reuse the instance in several context managers
 
@@ -731,10 +744,6 @@ def qmeasure(qmapp, workdir=UTILDIR):
 
 			return jobsnum: uint  - the number of started jobs
 			"""
-			if not revalue:
-				# TODO: implement early exit on qualsaver.valueExists(smeta, metrics),
-				# where metrics are provided by the quality measure app by it's qparams
-				staticTrace(qmsname, 'Omission of the existent results formation is not supported yet')
 			# qsqueue: Queue  - multiprocess queue of the quality results saver (persister)
 			assert execpool and callable(save) and isinstance(smeta, SMeta
 			) and isinstance(cfpath, str) and isinstance(inpfpath, str) and (seed is None or isinstance(seed, int)
@@ -783,12 +792,28 @@ def qmeasure(qmapp, workdir=UTILDIR):
 			# Note: use first the ground-truth or network file and then the clustering file to perform sync correctly
 			# for the xmeaseres (gecmi and onmi select the most reasonable direction automatically)
 			args += (relpath(inpfpath), relpath(cfpath))
-			# print('> Starting Xmeasures with the args: ', args)
-			# print('> Starting {} for: {}, {}'.format(qmsname, args[-2], args[-1]))
-			execpool.execute(Job(name=taskname, workdir=workdir, args=args, timeout=timeout,
+			job = Job(name=taskname, workdir=workdir, args=args, timeout=timeout,
 				ondone=qmsaver, params={'save': save, 'smeta': smeta},
 				# Note: poutlog indicates the output log file that should be formed from the PIPE output
-				task=task, category=measurep, size=clsize, stdout=PIPE, stderr=errfile, poutlog=logfile))
+				task=task, category=measurep, size=clsize, stdout=PIPE, stderr=errfile, poutlog=logfile)
+			# Run the evaluaiton only if the resulting file isnot exist
+			if not revalue and os.path.isfile(logfile):
+				# TODO: implement early exit on qualsaver.valueExists(smeta, metrics),
+				# where metrics are provided by the quality measure app by it's qparams
+				# Note: metric name is quality measure app dependant name, which can be fetched either calling the measure app or reading the resulting log
+				# save.dataset(qm.smeta, metric)[qm.smeta.iins, qm.smeta.ishf, qm.smeta.ilev,qm.smeta.irun]
+				try:
+					with open(logfile) as fres:
+						job.pipedout = ''.join(fres.readlines()[save.ntail:])  # We are interested only in the last 2ntail lines
+					qmsaver(job)
+				except Exception as err:  #pylint: disable=W0703
+					print('ERROR, quality measure saving is failed from the file {}: {}. Discarded. {}'.format(
+						logfile, err, traceback.format_exc(5)), file=sys.stderr)
+				finally:
+					return 0
+			# print('> Starting Xmeasures with the args: ', args)
+			# print('> Starting {} for: {}, {}'.format(qmsname, args[save.ntail], args[-1]))
+			execpool.execute(job)
 			return 1
 
 		executor.__name__ = qmsname
@@ -824,7 +849,6 @@ def qmsaver(job):
 			print('ERROR, metric "{}" serialization discarded of the job "{}" because of the invalid value format: {}. {}'
 				.format(name, job.name, val, err), file=sys.stderr)
 
-
 	# xmeasures output is performed either in the last string with metrics separated with ':'
 	# from their values and {',', ';'} from each other, where Precision and Recall of F1_labels
 	# are parenthesized.
@@ -833,7 +857,7 @@ def qmsaver(job):
 	#
 	# Define the number of strings in the output counting the number of words in the last string
 	# Identify index of the last non-empty line
-	qmres = job.pipedout.rstrip().splitlines()[-2:]  # Fetch last 2 non-empty lines as a list(str)
+	qmres = job.pipedout.rstrip().splitlines()[save.ntail:]  # Fetch last 2 non-empty lines as a list(str)
 	# print('Value line: {}, len: {}, sym1: {}'.format(qmres[-1], len(qmres[-1]), ord(qmres[-1][0])))
 	if len(qmres[-1].split(None, 1)) == 1:
 		# Metric name is None (the same as binary name) if not specified explicitly

@@ -68,6 +68,8 @@ realnets*/
 results*/
 syntnets*/
 test*/
-results_bench16
 *.komodoproject
 .vscode/
+
+# DAOC
+algorithms/daoc/

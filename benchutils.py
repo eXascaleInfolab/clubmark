@@ -150,7 +150,7 @@ except ImportError:
 		return cls
 
 
-def staticTrace(func, msg, marker=None, fout=sys.stdout):
+def staticTrace(func, msg, marker=None, trank=2, fout=sys.stdout):
 	"""Trace the message once independently on the number of calls for each marker
 
 	ATTENTION: If several functions share a marker then only a single trace will be issues for all of them.

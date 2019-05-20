@@ -81,7 +81,7 @@ from benchutils import IntEnum, viewitems, timeSeed, dirempty, tobackup, dhmsSec
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
 from benchevals import aggEvals, RESDIR, CLSDIR, QMSDIR, EXTRESCONS, QMSRAFN, QMSINTRIN, QMSRUNS, \
-	SATTRNINS, SATTRNSHF, SATTRNLEV, QualitySaver, NetInfo, SMeta
+	SATTRNINS, SATTRNSHF, SATTRNLEV, SUFULEV, QualitySaver, NetInfo, SMeta
 from utils.mpepool import AffinityMask, ExecPool, Job, Task, secondsToHms
 from utils.mpewui import WebUiApp  #, bottle
 from algorithms.utils.parser_nsl import asymnet, dflnetext
@@ -2329,13 +2329,13 @@ if __name__ == '__main__':
 			'  - summarize evaluation results of the specified algorithms on the specified networks'
 			' extending the existent quality measures storage considering the specified update policy. Especially useful to include extended'
 			' evaluations into the final summarized results.',
-			'    p  - plot the aggregated results to the <aggqms>.png',
+			# '    p  - plot the aggregated results to the <aggqms>.png',
 			'    *  - aggregate all available quality evaluations besides the one matching the seed',
 			'    -/+  - filter inclusion prefix: "-" to filter out specified data (exclude) and'
 			' "+" (default) to filter by (include only such data).',
-			'    <qmeasure>  - quality measure in the format:  <appname>[:<qmetric>][+u]'
-			', for example "Xmeasures:MF1h_w+u", where "+u" denotes representative clusters fetched'
-			' from the multi-resolution clustering and represented in a single level.',
+			'    <qmeasure>  - quality measure in the format:  <appname>[:<qmetric>][{sufulev}]'
+			', for example "Xmeasures:MF1h_w{sufulev}", where "{sufulev}" denotes salient/significant/representative'
+			' clusters fetched from the multi-resolution clustering and flattened (represented as a single level).',
 			'  - --quality-noupdate and --quality-revalue options are applied ',
 			# '  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
 			# ', which is useful to include external manual evaluations into the final summarized results',
@@ -2350,7 +2350,7 @@ if __name__ == '__main__':
 				, resdir=RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=SEPINST, seppars=SEPPARS, sepshf=SEPSHF, rsvpathsmb=(SEPPARS, SEPINST, SEPSHF, SEPPATHID)
 				, anppsnum=len(apps), apps=', '.join(apps), qmappsnum=len(qmapps), qmapps=', '.join(qmapps)
-				, algtimeout=secDhms(_TIMEOUT), seedfile=_SEEDFILE
+				, algtimeout=secDhms(_TIMEOUT), seedfile=_SEEDFILE, sufulev=SUFULEV
 				, host=_HOST, port=_PORT, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
 	else:
 		if len(sys.argv) == 2 and sys.argv[1] == '--doc-tests':

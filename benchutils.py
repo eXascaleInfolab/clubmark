@@ -150,14 +150,14 @@ except ImportError:
 		return cls
 
 
-def staticTrace(func, msg, marker=None, trank=2, fout=sys.stdout):
+def staticTrace(func, msg, marker=None, fout=sys.stdout):
 	"""Trace the message once independently on the number of calls for each marker
 
 	ATTENTION: If several functions share a marker then only a single trace will be issues for all of them.
 		So, typically, a marker should either include the function name or have the default value.
 
-	msg: str  - message to be prepended with the WARNING prefix and traced to the fout
 	func: str  - name of the function, which issued this message
+	msg: str  - message to be prepended with the WARNING prefix and traced to the fout
 	marker  - a marker for the unique tracing, only once a message with each marker is shown,
 		None value is automatically replaced with the value of func to have a single trace per each function
 	fout: file  - output file

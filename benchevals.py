@@ -428,7 +428,7 @@ class QualitySaver(object):
 			bcksftime = None
 			if update:
 				try:
-					fstorage = h5py.File(storage, mode='r', driver='core', libver='latest')
+					fstorage = h5py.File(storage, mode='r', driver='core', libver='latest')  # ATTENTION: 'latest' libver viewing is not fully supported after HDFView 2.7.1
 					ublocksize = fstorage.userblock_size
 					fstorage.close()
 				except OSError:
@@ -467,7 +467,7 @@ class QualitySaver(object):
 		# Create HFD5 storage if required
 		if not update:
 			# Create the storage, fail if exists ('w-' or 'x')
-			fstorage = h5py.File(storage, mode='w-', driver='core', libver='latest', userblock_size=ublocksize)
+			fstorage = h5py.File(storage, mode='w-', driver='core', libver='latest', userblock_size=ublocksize)  # ATTENTION: 'latest' libver viewing is not fully supported after HDFView 2.7.1
 			ubsize = fstorage.userblock_size  # Actual user block size of the storage
 			fstorage.close()
 			# Write the userblock
@@ -485,7 +485,7 @@ class QualitySaver(object):
 			# print('> HDF5 storage userblock created: ', seedstr, ublocksep, timestamp)
 		# Note: append mode is the default one; core driver is a memory-mapped file, block_size is default (64 Kb)
 		# Persistent storage object (file)
-		self.storage = h5py.File(storage, mode='a', driver='core', libver='latest', userblock_size=ublocksize)
+		self.storage = h5py.File(storage, mode='a', driver='core', libver='latest', userblock_size=ublocksize)  # ATTENTION: 'latest' libver viewing is not fully supported after HDFView 2.7.1
 		# Add attributes if required
 		dqrname = 'dims_qms_raw'
 		if self.storage.attrs.get(dqrname) is None or update:
@@ -620,7 +620,6 @@ class QualitySaver(object):
 		# 	with self.storage.get_lock():
 		# 		if self.storage.value is not None:
 		# 			self.storage.close()
-
 		if self.storage is not None:
 			self.storage.close()
 
@@ -1346,7 +1345,7 @@ def aggeval(aggevals, nets, qaggopts, exclude, qmsname, revalue=False, maxins=0)
 	# HDF5 Storage: qmeasures_<seed>.h5
 	# qmsdir = RESDIR + QMSDIR  # Quality measures directory
 	print('Opening for the aggregation', qmsname)
-	qmeasures = h5py.File(qmsname, mode='r', driver='core', libver='latest')
+	qmeasures = h5py.File(qmsname, mode='r', driver='core', libver='latest')  # ATTENTION: 'latest' libver viewing is not fully supported after HDFView 2.7.1
 	print('Aggregating', qmeasures.name)
 	avgres = ValAcc()  # Average resulting value over all instances
 	avgsd = ValAcc()  # Average standard deviation over all instances
@@ -1528,7 +1527,7 @@ def aggEvals(qaggopts, exclude, seed, update=True, revalue=False, plot=False):
 	if os.path.isfile(aggqpath):
 		tobackup(aggqpath, False, move=not update)  # Copy/move to the backup
 	try:
-		storage = h5py.File(aggqpath, mode='a', driver='core', libver='latest')
+		storage = h5py.File(aggqpath, mode='a', driver='core', libver='latest')  # ATTENTION: 'latest' libver viewing is not fully supported after HDFView 2.7.1
 	except OSError as err:
 		print('ERROR, HDF5 storage "{}" extension failed: {}'.format(aggqpath, err), file=sys.stderr)
 		raise

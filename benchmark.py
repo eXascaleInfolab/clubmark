@@ -76,8 +76,9 @@ from multiprocessing import cpu_count  # Returns the number of logical CPU units
 import benchapps  # Required for the functions name mapping to/from the app names
 from benchapps import PYEXEC, EXTCLSNDS, aggexec, reduceLevels  # , ALGSDIR
 from benchutils import IntEnum, viewitems, timeSeed, dirempty, tobackup, dhmsSec, syncedTime, \
-	secDhms, delPathSuffix, parseName, funcToAppName, PREFEXEC, SEPPARS, SEPINST, SEPLRD, SEPSHF, \
-	SEPPATHID, SEPSUBTASK, UTILDIR, TIMESTAMP_START_STR, TIMESTAMP_START_HEADER, ALEVSMAX, ALGLEVS
+	secDhms, delPathSuffix, parseName, funcToAppName, staticTrace, PREFEXEC, \
+	SEPPARS, SEPINST, SEPLRD, SEPSHF, SEPPATHID, SEPSUBTASK, UTILDIR, \
+	TIMESTAMP_START_STR, TIMESTAMP_START_HEADER, ALEVSMAX, ALGLEVS
 # PYEXEC - current Python interpreter
 import benchevals  # Required for the functions name mapping to/from the quality measures names
 from benchevals import aggEvals, RESDIR, CLSDIR, QMSDIR, EXTRESCONS, QMSRAFN, QMSINTRIN, QMSRUNS, \
@@ -1772,6 +1773,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 		if vstored is None:
 			# NOTE: the existing attribute is overwritten
 			group.attrs.create(vname, vactual, shape=(1,), dtype=vtype)
+			# staticTrace(validateDim.__name__, '  validateDim(), dataset attr "{}" created'.format(vname), '-'.join((validateDim.__name__, vname)))
 			return vactual  # The same as new vstored
 		return vstored  # >= vactual
 
@@ -1794,6 +1796,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 			# with qualsaver.storage:
 			for alg in algorithms:
 				group = qualsaver.storage.require_group(alg)  #pylint: disable=E1101
+				# print('  evalResults(), a group opened/created: ', group.name)
 				# alevs[alg] =
 				validateDim(ALGLEVS.get(alg, ALEVSMAX), group, SATTRNLEV)
 		except Exception as err:  #pylint: disable=W0703
@@ -1911,6 +1914,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 							except KeyError:  # This group is not exist yet
 								# Greate the group and fill its attributes
 								group = group.create_group(gname)
+								# print('  evalResults(), a group created: ', group.name)
 								# if not netinf.gvld:
 								# nins =
 								validateDim(netinf.nins, group, SATTRNINS)

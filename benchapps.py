@@ -933,9 +933,9 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout=0, seed=None, task=No
 # DAOC Options
 class DaocOpts(object):
 	"""DAOC execution options"""
-	__slots__ = ('gamma', 'reduction', 'gband', 'exclude', 'rlevout', 'significance')  # , 'srweight', 'ndsmin'
+	__slots__ = ('gamma', 'reduction', 'gband', 'exclude', 'rlevout', 'significance', 'densdrop')  # , 'srweight', 'ndsmin'
 
-	def __init__(self, gamma=-1, reduction=None, gband=None, exclude=None, rlevout=0.8, significance='sd'):  # , srweight=0.85, ndsmin=3
+	def __init__(self, gamma=-1, reduction=None, gband=None, exclude=None, rlevout=0.8, significance='sd', densdrop=None):  # , srweight=0.85, ndsmin=3
 		"""DAOC execution options initialization
 
 		gamma  - resolution parameter, float:
@@ -963,6 +963,7 @@ class DaocOpts(object):
 			ah  - all upper hierarchy of owners (maximizes precision)
 			''  - default policy for the significant clusters:
 				sd with default* srweight[=0.618 or 0.85] and minclsize[=3]
+		densdrop: bool  - apply bottom bounded linear density drop (b0.5)
 
 		NOTE (*): default values of the parameters might vary in each particular version of the libdaoc
 		"""
@@ -978,16 +979,18 @@ class DaocOpts(object):
 			and (gband is None or gband == '' or (isinstance(gband, str) and len(gband) >= 3 and gband[0] in 'rn'))
 			and (exclude is None or exclude == 'a')
 			and (rlevout is None or rlevout > 0) and (significance is None or significance in ('', 'sd', 'ad', 'sh', 'ah'))
+			and (densdrop is None or isinstance(densdrop, bool))
 			# and (srweight is None or 0 < srweight <= 1) and (ndsmin is None or ndsmin >= 0)
 			), ('Invalid input parameters:\n\tgamma: {}\n\treduction: {}\n\tgband: {}\n\texclude: {}'
-			',\n\trlevout: {}\n\tsignificance: {}' #,\n\tsrweight: {},\n\tndsmin: {}'
-			.format(gamma, reduction, gband, exclude, rlevout, significance))  # , srweight, ndsmin
+			',\n\trlevout: {}\n\tsignificance: {}\n\tdensdrop: {}' #,\n\tsrweight: {},\n\tndsmin: {}'
+			.format(gamma, reduction, gband, exclude, rlevout, significance, densdrop))  # , srweight, ndsmin
 		self.gamma = gamma
 		self.reduction = reduction
 		self.gband = gband
 		self.exclude = exclude
 		self.rlevout = rlevout
 		self.significance = significance
+		self.densdrop = densdrop
 		# self.srweight = srweight
 		# self.ndsmin = ndsmin
 
@@ -1057,8 +1060,11 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout=0, seed=None, task
 	if opts.rlevout is not None:
 		args.append(''.join(('-cx', str(opts.rlevout).join(('l[:/', ']')), 's=', reltaskpath, EXTCLSNDS)))
 	if opts.significance is not None:
+		ddrop = ''
+		if opts.densdrop:
+			ddrop = opts.significance + '%b.5/0.618034'
 		# Output with the default significance policy
-		args.append(''.join(('-c', 'Ss=', reltaskpath, EXTCLSNDS)))
+		args.append(''.join(('-c', 'S', ddrop, 's=', reltaskpath, EXTCLSNDS)))
 		# NOTE: output with the specific significance policy is commented as redundant
 		# # The significant clusters considering srweight are outputted into the dedicated file
 		# if opts.srweight is not None:
@@ -1080,6 +1086,14 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout=0, seed=None, task
 def execDaoc(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
 , workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1)):
 	"""DAOC with static gamma=1"""
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+
+
+# DAOC (using standard modularity as an optimization function, non-generalized)
+def execDaocD(execpool, netfile, asym, odir, timeout=0, seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, densdrop=True)):
+	"""DAOC with static gamma=1 and bottom bounded density drop output of significant/salient clusters"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
 

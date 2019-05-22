@@ -226,9 +226,9 @@ class NetInfo(object):
 
 class SMeta(object):
 	"""Serialization meta information (data cell location)"""
-	__slots__ = ('group', 'measure', 'ulev', 'iins', 'ishf', 'ilev', 'irun')
+	__slots__ = ('group', 'measure', 'ulev', 'iins', 'ishf', 'ilev', 'irun', 'ppeval')
 
-	def __init__(self, group, measure, ulev, iins, ishf, ilev=0, irun=0):
+	def __init__(self, group, measure, ulev, iins, ishf, ilev=0, irun=0, ppeval=False):
 		"""Serialization meta information (location in the storage)
 
 		group: str  - h5py.Group name where the target dataset is located: <algname>/<basenet><pathid>/
@@ -239,9 +239,10 @@ class SMeta(object):
 		pathidsuf: str  - network path id prepended with the path separator
 		ilev: uint  - index of the clustering level
 		irun: uint8  - run id (iteration)
+		ppeval: bool  - per-pair evaluation for the middle levels of the clustered networks
+			instead of the evaluation vs the ground-truth. Actual for the link reduced synthetic networks.
 		"""
 		# alg: str  - algorithm name, required to only to structure (order) the output results
-
 		assert isinstance(group, str) and isinstance(measure, str) and iins >= 0 and isinstance(
 			iins, int) and ishf >= 0 and isinstance(ishf, int) and ilev >= 0 and isinstance(
 			ilev, int) and irun >= 0 and isinstance(irun, int), (
@@ -255,6 +256,7 @@ class SMeta(object):
 		self.ishf = ishf
 		self.ilev = ilev
 		self.irun = irun
+		self.ppeval = ppeval
 
 	def __str__(self):
 		"""String conversion"""
@@ -265,8 +267,7 @@ class QEntry(object):
 	"""Quality evaluations etry to be saved to the persistent storage"""
 	__slots__ = ('smeta', 'data')
 
-	def __init__(self, smeta,
-		data):  #, appargs=None, level=0, instance=0, shuffle=0):
+	def __init__(self, smeta, data):  #, appargs=None, level=0, instance=0, shuffle=0):
 		"""Quality evaluations to be saved
 
 		smeta: SMeta  - serialization meta data
@@ -559,7 +560,7 @@ class QualitySaver(object):
 			# Such dataset does not exist, create it
 			nins = qmgroup.attrs[SATTRNINS]
 			nshf = qmgroup.attrs[SATTRNSHF]
-			nlev = 1 if smeta.ulev else qmgroup.parent.attrs[SATTRNLEV]
+			nlev = 1 if smeta.ulev or smeta.ppeval else qmgroup.parent.attrs[SATTRNLEV]
 			qmdata = qmgroup.create_dataset(dsname, shape=(nins, nshf, nlev, QMSRUNS.get(smeta.measure, 1)),
 				# 32-bit floating number, checksum (fletcher32)
 				dtype='f4', fletcher32=True, fillvalue=np.float32(np.nan), track_times=True)

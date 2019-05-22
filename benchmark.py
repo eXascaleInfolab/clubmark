@@ -124,26 +124,66 @@ _execpool = None
 # Data structures --------------------------------------------------------------
 class PathOpts(object):
 	"""Paths parameters"""
-	__slots__ = ('path', 'flat', 'asym', 'shfnum')
+	__slots__ = ('path', 'flat', 'asym', 'shfnum', 'ppeval')
 
-	def __init__(self, path, flat=False, asym=False, shfnum=None):
+	def __init__(self, path, flat=False, asym=False, shfnum=None, reshuffle=None, revalue=None, ppeval=None):
 		"""Sets default values for the input parameters
 
-		path  - path (directory or file), a wildcard is allowed
-		flat  - use flat derivatives or create the dedicated directory on shuffling
+		path: str|unicode  - path (directory or file), a wildcard is allowed
+		flat: bool  - use flat derivatives or create the dedicated directory on shuffling
 			to avoid flooding of the base directory.
 			NOTE: variance over the shuffles of each network instance is evaluated
 			only for the non-flat structure.
-		asym  - the network is asymmetric (specified by arcs rather than edges),
+		asym: bool  - the network is asymmetric (specified by arcs rather than edges),
 			which is considered only for the non-standard file extensions (not .nsL)
-		shfnum  - the number of shuffles of each network instance to be produced, >= 0;
+		shfnum: int  - the number of shuffles of each network instance to be produced, >= 0;
 			0 means do not produce any shuffles but process all existent
+		reshuffle: bool  - overwrite or skip shuffles generation if they already exist. The lacked instances are always generated anyway.
+		revalue: bool  - revaluate existing results for this path intead of omitting them
+		ppeval: bool  - per-pair evaluation for the middle levels of the clustered networks
+			instead of the evaluation vs the ground-truth. Actual for the link reduced synthetic networks.
 		"""
+		# Note: flat should not be used with ppeval
+		assert (shfnum is None or shfnum >= 0) and (not flat or not ppeval), (
+			'Invalid arguments, shfnum: {}, flat: {}, revalue: {}, ppeval: {}'.format(shfnum, flat, revalue, ppeval))
 		# assert isinstance(path, str)
 		self.path = path
 		self.flat = flat
 		self.asym = asym
 		self.shfnum = shfnum  # Number of shuffles for each network instance to be produced, >= 0
+		self._reshuffle = reshuffle
+		self._revalue = revalue
+		self.ppeval = ppeval
+
+	@property
+	def reshuffle(self):
+		"""Read property for the reshuffle attribute"""
+		return self._reshuffle
+
+	@reshuffle.setter
+	def reshuffle(self, val):
+		"""Write property for the reshuffle attribute
+
+		val: bool  - overwrite or skip the generation if the synthetic network instances
+			already exist
+			NOTE: the shuffling also respects this flag
+		"""
+		self._reshuffle = val
+		self._revalue = self._revalue and self._reshuffle
+
+	@property
+	def revalue(self):
+		"""Read property for the revalue attribute"""
+		return self._revalue
+
+	@revalue.setter
+	def revalue(self, val):
+		"""Write property for the revalue attribute
+
+		val: bool  - revaluate existing results for this path intead of omitting them
+		"""
+		self._revalue = val
+		self._revalue = self._revalue and self._reshuffle
 
 	def __str__(self):
 		"""String conversion"""
@@ -159,27 +199,44 @@ class SyntPathOpts(PathOpts):
 	"""Paths parameters for the synthetic networks"""
 	__slots__ = ('policy', 'netins', 'overwrite')
 
-	def __init__(self, policy, path, netins=3, overwrite=False, flat=False, asym=False, shfnum=0):
+	def __init__(self, policy, path, netins=3, overwrite=False, flat=False, asym=False, shfnum=0, ppeval=False):
 		"""Sets default values for the input parameters
 
-		path  - path (directory or file), a wildcard is allowed
+		path: str|unicode  - path (directory or file), a wildcard is allowed
 		policy: SyntPolicy  - policy for the synthetic networks generation
-		netins  - the number of network instances to generate, >= 0
-		overwrite  - overwrite or skip generation if the synthetic networks instances
-			already exist
-			NOTE: the shuffling is performed always anyway if it was specified
-		flat  - use flat derivatives or create the dedicated directory on shuffling
+		netins: int  - the number of network instances to generate, >= 0
+		overwrite: bool  - overwrite or skip the generation if the synthetic network instances
+			already exist. NOTE: the shuffling also respects this flag
+		flat: bool  - use flat derivatives or create the dedicated directory on shuffling
 			to avoid flooding of the base directory.
 			NOTE: variance over the shuffles of each network instance is evaluated
 			only for the non-flat structure.
-		asym  - the network is asymmetric (specified by arcs rather than edges)
-		shfnum  - the number of shuffles of each network instance to be produced, >= 0
+		asym: bool  - the network is asymmetric (specified by arcs rather than edges)
+		shfnum: int  - the number of shuffles of each network instance to be produced, >= 0
+		ppeval: bool  - per-pair evaluation for the middle levels of the clustered networks
+			instead of the evaluation vs the ground-truth. Actual for the link reduced synthetic networks.
 		"""
 		assert isinstance(policy, SyntPolicy), 'Unexpected policy type: ' + type(policy).__name__
-		super(SyntPathOpts, self).__init__(path, flat, asym, shfnum)
+		super(SyntPathOpts, self).__init__(path, flat=flat, asym=asym, shfnum=shfnum, overwrite=overwrite, ppeval=ppeval)
 		self.policy = policy
 		self.netins = netins
-		self.overwrite = overwrite
+		# self.overwrite = overwrite
+
+	@property
+	def overwrite(self):
+		"""Read property for the overwrite attribute"""
+		return super(SyntPathOpts, self).reshuffle
+
+	@overwrite.setter
+	def overwrite(self, val):
+		"""Write property for the overwrite attribute
+
+		val: bool  - overwrite or skip the generation if the synthetic network instances
+			already exist
+			NOTE: the shuffling also respects this flag
+		"""
+		super(SyntPathOpts, self).reshuffle = val
+		assert not val or super(SyntPathOpts, self).revalue, '.revalue should be synced whith the .overwrite'
 
 	def __str__(self):
 		"""String conversion"""
@@ -454,6 +511,8 @@ def parseParams(args):
 
 		if arg[1] in 'gml':
 			# [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]
+			ib = 2  # Begin index of the argument subparameters
+			ppeval = False
 			if arg[1] == 'g':
 				policy = SyntPolicy.ordinary
 				syntdir = _SYNTDIR
@@ -463,16 +522,18 @@ def parseParams(args):
 			elif arg[1] == 'l':
 				policy = SyntPolicy.lreduct
 				syntdir = _SYNTDIR_LREDUCT
+				if ib < len(arg) and arg[ib] == 'p':
+					ppeval = True
+					ib += 1
 			else:
 				raise('Unexpected argument for the SyntPolicy: ' + arg)
-			syntpo = SyntPathOpts(policy, syntdir)
+			syntpo = SyntPathOpts(policy, syntdir, ppeval=ppeval)
 			opts.syntpos.append(syntpo)
-			alen = len(arg)
-			if alen == 2:
+			if ib == len(arg):
 				continue
-			pos = arg.find('=', 2)
+			pos = arg.find('=', ib)
 			ieflags = pos if pos != -1 else len(arg)  # End index of the prefix flags
-			for i in range(2, ieflags):
+			for i in range(ib, ieflags):
 				if arg[i] == 'o':
 					syntpo.overwrite = True  # Forced generation (overwrite)
 				elif arg[i] == 'a':
@@ -507,17 +568,21 @@ def parseParams(args):
 		elif arg[1] == 'i':
 			# [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>
 			pos = arg.find('=', 2)
-			if pos == -1 or arg[2] not in 'fa=' + _GENSEPSHF or len(arg) == pos + 1:
+			if pos == -1 or arg[2] not in 'pfar=' + _GENSEPSHF or len(arg) == pos + 1:
 				raise ValueError('Unexpected argument: ' + arg)
 			# flat  - Use flat derivatives or generate the dedicated dir for the derivatives of this network(s)
 			# asym  - asymmetric (directed): None - not specified (symmetric is assumed), False - symmetric, True - asymmetric
 			# shfnum  - the number of shuffles
-			popt = PathOpts(unquote(arg[pos+1:]), flat=False, asym=False, shfnum=0)  # Remove quotes if exist
+			popt = PathOpts(unquote(arg[pos+1:]), flat=False, asym=False, shfnum=0, ppeval=False)  # Remove quotes if exist
 			for i in range(2, pos):
+				if arg[i] == 'p':
+					popt.ppeval = True
 				if arg[i] == 'f':
 					popt.flat = True
 				elif arg[i] == 'a':
 					popt.asym = True
+				elif arg[i] == 'r':
+					popt.reshuffle = True
 				elif arg[i] == _GENSEPSHF:
 					popt.shfnum = int(arg[i+1:pos])
 					if popt.shfnum < 0:
@@ -525,6 +590,8 @@ def parseParams(args):
 					break
 				else:
 					raise ValueError('Unexpected argument: ' + arg)
+				# Note: flat should not be used with ppeval
+				assert not popt.flat or not popt.ppeval, 'flat option should not be used with ppeval'
 				val = arg[3]
 			opts.datas.append(popt)
 		elif arg[1] == 'c':
@@ -829,7 +896,8 @@ iinst = netname.rfind('{SEPINST}')  # Index of the instance suffix
 if iinst == -1:
 	iinst = len(netname)
 for i in range(1, 16, 2):  # 1 .. 15% with step 2
-	istr = str(i)
+	# Use zero padding of number to have proper ordering of the filename for easier per-pair comparison
+	istr = '{{:02}}'.format(i)  # str(i)
 	rlsuf = ''.join(('{SEPLRD}', istr, 'p'))
 	rlname = ''.join((netname[:iinst], rlsuf, netname[iinst:]))
 	rlpath = '/'.join((basepath, dirname + rlsuf))
@@ -928,8 +996,12 @@ def shuffleNets(datas, timeout1=7*60, shftimeout=30*60):  # 7, 30 min
 	shufnets = 0  # The number of shuffled networks
 	# Note: afnstep = 1 because the processes are not cache-intensive, not None, because the workers are single-threaded
 	with ExecPool(_WPROCSMAX, afnmask=AffinityMask(1), memlimit=_VMLIMIT, name='shufnets') as _execpool:
-		def shuffle(job):
-			"""Shuffle network instance specified by the job"""
+		def shuffle(job, overwrite=False):
+			"""Shuffle network instance specified by the job
+
+			job: Job  - a network job
+			overwrite: bool  - overwrite existing shuffles or skip them
+			"""
 			#assert job.params, 'Job params should be defined'
 			if job.params['shfnum'] < 1:
 				return
@@ -982,15 +1054,16 @@ while True:
 	else:
 		break
 """.format(jobname=job.name, sepshf=SEPSHF, netext=job.params['netext'], shfnum=job.params['shfnum']
-			, overwrite=False))  # Skip the shuffling if the respective file already exists
+			, overwrite=overwrite))  # Skip the shuffling if the respective file already exists
 			job.name += '_shf'  # Update jobname to clearly associate it with the shuffling process
 			_execpool.execute(job)
 
-		def shuffleNet(netfile, shfnum):
+		def shuffleNet(netfile, shfnum, overwrite=False):
 			"""Shuffle specified network producing specified number of shuffles in the same directory
 
-			netfile  - the network instance to be shuffled
-			shfnum  - the number of shuffles to be done
+			netfile: str|unicode  - the network instance to be shuffled
+			shfnum: int  - the number of shuffles to be done
+			overwrite: bool  - overwrite existing shuffles or skip them
 
 			return
 				shfnum - number of shuffles to be produced or zero if the instance is a shuffle by itself
@@ -1009,7 +1082,7 @@ while True:
 			# Note: the shuffling might be scheduled even when the shuffles exist in case
 			# the origin network is traversed before its shuffles
 			shuffle(Job(name=name, workdir=path + '/', params={'netext': netext, 'shfnum': shfnum}
-				, timeout=timeout1*shfnum, category='shuffle', size=os.path.getsize(netfile)))
+				, timeout=timeout1*shfnum, category='shuffle', size=os.path.getsize(netfile)), overwrite=overwrite)
 			return shfnum  # The network is shuffled shfnum times
 
 		def prepareDir(dirpath, netfile, backup, bcksuffix=None):
@@ -1083,11 +1156,11 @@ while True:
 							if netname.find(SEPSHF) != -1:
 								continue
 							# Whether the shuffles will be modified and need to be backed up
-							backup = xpathExists(''.join((path, os.path.splitext(netname)[0]
+							backup = popt.reshuffle or xpathExists(''.join((path, os.path.splitext(netname)[0]
 								, '*', SEPSHF, str(popt.shfnum + 1), '*', dflext)))
 							# Backup existed dir (path, not just a name)
 							shuf0 = prepareDir(os.path.splitext(net)[0], net, backup, bcksuffix)
-							shfnum += shuffleNet(shuf0, popt.shfnum)
+							shfnum += shuffleNet(shuf0, popt.shfnum, popt.reshuffle)
 					else:
 						# Backup the whole dir of network instances with possible shuffles,
 						# which are going to be shuffled
@@ -1104,7 +1177,7 @@ while True:
 							# 	, '*', SEPSHF, str(popt.shfnum + 1), '*', dflext)))
 							# if backup and notbacked:
 							# 	tobackup(path, False, bcksuffix, move=False)  # Copy to the backup
-							shfnum += shuffleNet(net, popt.shfnum)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
+							shfnum += shuffleNet(net, popt.shfnum, popt.reshuffle)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
 				else:
 					# Skip shuffles and their direct backing up
 					# Note: previous shuffles are backed up from their origin instance
@@ -1116,16 +1189,16 @@ while True:
 					basename = os.path.splitext(netname)[0]
 					if not popt.flat:
 						# Whether the shuffles will be modified and need to be backed up
-						backup = xpathExists(''.join((dirpath, '/', basename
+						backup = popt.reshuffle or xpathExists(''.join((dirpath, '/', basename
 							, '*', SEPSHF, str(popt.shfnum + 1), '*', dflext)))
 						shuf0 = prepareDir(dirpath, path, backup, bcksuffix)
-						shfnum += shuffleNet(shuf0, popt.shfnum)
+						shfnum += shuffleNet(shuf0, popt.shfnum, popt.reshuffle)
 					else:
 						# Backup existing flat shuffles if any (expanding the base path), which will be updated the subsequent shuffling
 						# Whether the shuffles will be modified and need to be backed up
-						if xpathExists('*'.join((dirpath, SEPSHF + str(popt.shfnum + 1), dflext))):
+						if popt.reshuffle or xpathExists('*'.join((dirpath, SEPSHF + str(popt.shfnum + 1), dflext))):
 							tobackup(os.path.split(path)[0], True, bcksuffix, move=False)  # Copy to the backup
-						shfnum += shuffleNet(path, popt.shfnum)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
+						shfnum += shuffleNet(path, popt.shfnum, popt.reshuffle)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
 				shufnets += 1
 
 		if shftimeout <= 0:
@@ -1337,6 +1410,11 @@ def processNetworks(datas, handler, xargs={}, dflextfn=dflnetext, tasks=None, fp
 
 	for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
 		xargs['asym'] = popt.asym
+		if 'netreval' in xargs:
+			xargs['netreval'] = popt.revalue
+		if 'ppnets' in xargs:
+			xargs['ppnets'] = None if not popt.ppeval else dict()
+
 		# Resolve wildcards
 		pcuropt = copy.copy(popt)  # Path options for the resolved .path wildcard
 		# Note: each path (wildcard) here is associated with distinct set(s) of instances and shuffles ids
@@ -1825,19 +1903,25 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 			# Perform quality evaluations
 			with ExecPool(_WPROCSMAX, afnmask=afn, memlimit=_VMLIMIT
 			, name='runqms_' + str(afn.afnstep) + ('f' if afn.first else 'a'), webuiapp=_webuiapp) as _execpool:
-				def runapp(net, asym, netshf, pathidsuf='', tasks=None, netinf=None):
+				def runapp(net, asym, netshf, pathidsuf='', tasks=None, netinf=None, netreval=False, ppnets=None):
 					"""Execute algorithms on the specified network counting number of ran jobs
 
-					net  - network to be processed
-					asym  - whether the network is asymmetric (directed), considered only for the non-standard network file extensions
-					netshf  - whether this network is a shuffle in the non-flat dir structure
-					pathidsuf  - path id of the net to distinguish nets with the same name located in different dirs
+					net: str  - network to be processed
+					asym: bool  - whether the network is asymmetric (directed), considered only for the non-standard network file extensions
+					netshf: bool  - whether this network is a shuffle in the non-flat dir structure
+					pathidsuf: str  - path id of the net to distinguish nets with the same name located in different dirs
 					tasks: list(Task)  - tasks associated with the running algorithms on the specified network
 					netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
+					netreval: bool  - reevaluate the network even if the results are already exist (local policy flag in addition to the global one)
+					ppnets: dict(shufid, list(str))|None  - dict mapping shufid to the list of the per-pair evaluating networks
+						or their shuffles in the order of evaluation. Note: the size of each list is typically small, ~= 10 items
 
 					return
 						jobsnum  - the number of scheduled jobs, typically 1
 					"""
+					# ppeval: bool  - per-pair evaluation for the middle levels of the clustered networks
+					# 	instead of the evaluation vs the ground-truth. Actual for the link reduced synthetic networks
+
 					# Note: netinf is mandatory for this callback
 					assert isinstance(netinf, NetInfo), 'Ivalid argument: ' + type(netinf)
 					# Scheduled tasks: qmeasure / basenet for each net
@@ -1872,41 +1956,82 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					# so the storage does not require any locks
 					# with qualsaver.storage:
 					for alg in algorithms:
-						# # Open or create the target group with the attributes (instances and shuffles)
-						# # and fill its and NetIfo attributes.
-						# group = None
-						# try:
-						# 	# Form network name with path id
-						# 	gname = ''.join(('/', alg, '/', delPathSuffix(netname, True) + pathidsuf))
-						# 	try:
-						# 		group = qualsaver.storage.value[gname]
-						# 	except KeyError:  # The group is not exist
-						# 		group = qualsaver.storage.value.create_group(gname)
-						# 		# Flushing is required to be able to use the created group from the another process
-						# 		qualsaver.storage.value.flush()
-						# 		# TODO: In multi-process implementation the storage should be reloaded from other
-						# 		# processes after the creation of any new groups or datasets
-						# 	# Validate network HDF5 group attributes (instances and shuffles) if required
-						# 	# and fill the group attributes if they we empty
-						# 	if not netinf.gvld:
-						# 		# nins =
-						# 		validateDim(netinf.nins, group, SATTRNINS'nins')
-						# 		# nshf =
-						# 		validateDim(netinf.nshf, group, SATTRNSHF)
-						# 		netinf.gvld = True
-						# except Exception as err:  #pylint: disable=W0703
-						# 	print('ERROR, quality evaluation of "{}" is interrupted by the exception: {}, call stack:'
-						# 		.format(netname + pathidsuf, err), file=sys.stderr)
-						# 	traceback.print_exc(5)
-						# 	return jobsnum
-
 						# Fetch max level number for the algorithm
 						group = qualsaver.storage[alg]
 						# Note: int() is required for the subsequent round()
 						nlev = int(group.attrs[SATTRNLEV])  # The maximal (declared) number of clustering levels
-
-						# Validate network HDF5 group attributes (instances and shuffles) if required
+						# Form filenames of the processing clusterings and
+						# validate network HDF5 group attributes (instances and shuffles) if required
+						cfnames = None
+						uclfname = None
+						ppcl = None  # Per-pair clustering name from the past iteration
+						ppucl = None  # Per-pair clustering name from the past iteration for the unified levels
 						try:
+							cfnames, uclfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
+							#print('> cfnames num: {}, uclfname: {}, iinst: {}'.format(len(cfnames), uclfname, iinst))
+							# Note: the datasets can be created/opened only after the evaluating quality measure specify
+							# the processing measures (names) to form the target dataset name.
+							if ppnets is not None:
+								if len(cfnames) >= 2:
+									# Fetch only the middle level for the per-pair evaluations
+									cfnames = [cfnames[len(cfnames) // 2]]
+								# Form ordered list of the per-pair networks
+								sname = None  # Semantically parced name
+								if not ppnets:
+									# Form list of ppnets if required
+									ppath, ppname = os.path.split(net)
+									sname = parseName(ppname, True)
+									if netshf:
+										# sname = parseName(ppname, True)
+										# # Note: pathid is considered only in the file names
+										# ppname = ''.join(sname.basepath, sname.apars, sname.insid, sname.pathid)  # Should  we consider pathid here?
+										ppath = os.path.split(ppath)[0]
+									dirname = os.path.split(ppath)[1]
+
+									# Form path of the base network
+									# basepath = ppath  # A path of the base network
+									isep = dirname.rfind(SEPLRD)
+									if isep != -1:
+										# basepath = basepath[:isep - len(dirname)]  # Excluding the suffix statring with the SEPLRD symbol
+										# Form the -ppath wildcard for the non-base networks
+										# ppath = SEPLRD.join((basepath, '*'))  # [0-9]*p  # Note: reg expr are not supported, only the wildcards
+										#
+										# Exclude the suffix statring with the SEPLRD symbol
+										ppath = SEPLRD.join((ppath[:isep - len(dirname)], '*'))  # [0-9]*p  # Note: reg expr are not supported, only the wildcards
+										#
+										# # Refine path of the base network
+										# # Base dir name
+										# dirname = dirname[:isep]
+										# if netshf:
+										# 	basepath += '/' + dirname
+									else:
+										# Form the pppath wildcard for the non-base network
+										ppath += SEPLRD + '*'
+										# # Refine path of the base network
+										# if netshf:
+										# 	basepath += '/' + dirname
+
+									# Aggregate ppnetwork paths
+									cpnets = []  # Ppnets for the current shuffle
+									for pp in glob.iglob(ppath):
+										# Refine path of the network
+										dirname = os.path.split(ppath)[1]
+										if netshf:
+											pp += '/' + dirname
+										cpnets.append('/'.join((pp, ''.join((dirname , sname.apars, sname.insid, sname.shid, sname.pathid)))))
+									cpnets.sort()
+									ppnets[sname.shid] = cpnets
+								ppnet = net  # Per-pair comparison network
+								if sname is None:
+									sname = parseName(net, False)
+								if sname.shid:
+									cpnets = ppnets[sname.shid]
+									ppnet = cpnets[cpnets.index(cfnames[0]) - 1]
+								ppcls, ppucl = clnames(ppnet, netshf, alg=alg, pathidsuf=pathidsuf)
+								ppcl = ppcls[len(ppcls) // 2]
+							else:
+								# Sort the clustering file names to form their clustering level ids in the same order
+								cfnames.sort()
 							# Form network name with path id
 							gname = delPathSuffix(netname, True) + pathidsuf
 							try:
@@ -1940,15 +2065,16 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 							try:
 								# Whether the input path is a network or a clustering
 								ifpath = net if eq in QMSINTRIN else gfpath
-								cfnames, uclfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
-								#print('> cfnames num: {}, uclfname: {}, iinst: {}'.format(len(cfnames), uclfname, iinst))
-								# Note: the datasets can be created/opened only after the evaluating quality measure specify
-								# the processing measures (names) to form the target dataset name.
-								# Sort the clustering file names to form their clustering level ids in the same order
-								if len(cfnames) >= 2:
-									cfnames.sort()
+								ifupath = ifpath
+								if ppnets:
+									if eq in QMSINTRIN:
+										raise ValueError('Per-pair evaluations on the clusterings are available only for the extrinsic measures, net: {}, qm: {}'
+											.format(net, qm))
+									ifpath = ppcl
+									ifupath = ppucl
+									assert len(cfnames) == 1, 'A single target clustering is required for the per-pair evaluation with the previous one'
 								runs = QMSRUNS.get(qm[0], 1)  # The number of quality measure runs (subsequent evaluations)
-								for inpcls, ulev in ((cfnames, False), (None if uclfname is None else [uclfname], True)):
+								for inpcls, ulev, inp0 in ((cfnames, False, ifpath), (None if uclfname is None else [uclfname], True, ifupath)):
 									if not inpcls:
 										continue
 									# ATTENTION: Each network instance might have distinct number of levels,
@@ -1961,6 +2087,12 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									# assert len(iclevs) == len(inpcls), 'Unexpected size of iclevs: {} != {}'.format(
 									# 	len(iclevs), len(inpcls))
 									nicl = len(iclevs)  # The number of reduced levels
+									# Fetch only the middle level for the per-pair evaluations
+									if ppnets and nicl >= 2:
+										nicl = nicl // 2  # Fetch a level from the middle
+										iclevs = (iclevs[nicl],)
+										inpcls = (inpcls[nicl],)
+										nicl = 1
 									for ifc, fcl in enumerate(inpcls):
 										# Consider if the actual number of levels is larger than the declared number,
 										# which should never happen in theory but if it happens than skip such levels
@@ -1975,13 +2107,13 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 												# + 0.5 to take a middle of the missed range, for example index 5(-1) / 10
 												# for a single value; + 0.50001 to guarantee correct rounding after the multiplication
 												# in case of cnlev == nlev and prevent index = -1
-												ilev=0 if ulev else iclevs[ifc], irun=irun)
+												ilev=0 if ulev or ppnets else iclevs[ifc], irun=irun, ppeval=bool(ppnets))
 											# print('>> Formed metadata for {}/{}: {},{},{},{}'.format(
 											# 	os.path.split(net)[1], os.path.split(fcl)[1],
 											# 	smeta.iins, smeta.ishf, smeta.ilev, smeta.irun))
 											#assert task, 'Job tasks is expected to be specified'
-											jobsnum += eq(_execpool, qualsaver, smeta, qm[1:], cfpath=fcl, inpfpath=ifpath,
-												asym=asym, timeout=timeout, seed=seed, task=task, revalue=revalue)
+											jobsnum += eq(_execpool, qualsaver, smeta, qm[1:], cfpath=fcl, inpfpath=inp0,
+												asym=asym, timeout=timeout, seed=seed, task=task, revalue=revalue or netreval)
 							except Exception as err:  #pylint: disable=W0703
 								errexectime = time.perf_counter() - exectime
 								print('ERROR, "{}" is interrupted by the exception processing {}/{}:'
@@ -1995,20 +2127,23 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 				def runner(net, netshf, xargs, tasks=None, netinf=None):
 					"""Network runner helper
 
-					net  - network file name
-					netshf  - whether this network is a shuffle in the non-flat dir structure
-					xargs  - extra custom parameters
+					net: str  - network file name
+					netshf: bool  - whether this network is a shuffle in the non-flat dir structure
+					xargs: dict()  - extra custom parameters
 					tasks: list(Task)  - tasks associated with the running algorithms on the specified network
 					netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
 					"""
-					tnum = runapp(net, xargs['asym'], netshf, xargs['pathidsuf'], tasks, netinf)
+					tnum = runapp(net, xargs['asym'], netshf=netshf, pathidsuf=xargs['pathidsuf'], tasks=tasks
+						, netinf=netinf, netreval=xargs['netreval'], ppnets=xargs['ppnets'])
 					xargs['jobsnum'] += tnum
 					xargs['netcount'] += tnum != 0
 
 				xargs = {'asym': False,  # Asymmetric network
 						'pathidsuf': '',  # Network path id prepended with the path separator, used to deduplicate the network name shortcut
 						'jobsnum': 0,  # Number of the processing network jobs (can be several per each instance if shuffles exist)
-						'netcount': 0}  # Number of processing network instances (includes multiple shuffles)
+						'netcount': 0,  # Number of processing network instances (includes multiple shuffles)
+						'netreval': False,  # Reevaluate the network even if the results alreadt exist from some previous benchmark executoin
+						'ppnets': None}  # Mapping of shuffle ids to the per-pair evaluation network shuffles/base net to evaluate middle levels of their clusterings
 				ctasks = [Task(qme[0][0]) for qme in cqmes]  # Current tasks
 				# tasks.extend(ctasks)
 				assert ctasks, 'Root tasks shoult be formed'
@@ -2216,8 +2351,8 @@ if __name__ == '__main__':
 		apps = fetchAppnames(benchapps)
 		qmapps = fetchAppnames(benchevals)
 		print('\n'.join(('Usage:',
-			'  {0} -h | [-g[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
-			' [-i[f][a][{gensepshuf}<shuffles_number>]=<datasets_{{dir,file}}_wildcard>'
+			'  {0} -h | [-{{g,m,l[p]}}[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]'
+			' [-i[{{p,f}}][a][r][{gensepshuf}<shuffles_number>]=<dataset_{{dir|file}}_wildcard>'
 			' [-a=[-]"app1 app2 ..."] [-r] [-q[="qmapp [arg1 arg2 ...]"]]'
 			' [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] [-w=<webui_addr>]'
 			' [-c[f][r]] [-s[p][*][[{{-,+}}]=<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...][{qsepgroup}<alg>...]]]',
@@ -2246,17 +2381,21 @@ if __name__ == '__main__':
 			'  --generate-mixed, -m[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets'
 			' varying only the mixing parameter to evaluate robustness of the clustering algorithms (ability to recover structure of the noisy data).'
 			' See --generate for the parameters specification.',
-			'  --generate-lreduct, -l[o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets'
+			'  --generate-lreduct, -l[p][o][a]=[<number>][{gensepshuf}<shuffles_number>][=<outpdir>]  - generate <number> synthetic datasets'
 			' only reducing links to evaluate results stability of the clustering algorithms (absense of surges in response to smooth input updates).'
 			' See --generate for the parameters specification.',
-			'  --input, -i[f][a][{gensepshuf}<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories'
+			'    p  - apply per-pair evaluation for the middle levels of the clustered networks instead of the evaluation vs the ground-truth',
+			'  --input, -i[{{p,f}}][a][r][{gensepshuf}<shuffles_number>]=<datasets_dir>  - input dataset(s), wildcards of files or directories'
 			', which are shuffled <shuffles_number> times. Directories should contain datasets of the respective extension'
 			' (.ns{{e,a}}). Default: -i={syntdir}{netsdir}*/, which are subdirs of the synthetic networks dir without shuffling.',
+			'    p  - apply per-pair evaluation for the middle levels of the clustered networks instead of the evaluation vs the ground-truth.'
+			' Actual for the stability and sensitivity evalaution in the links reducted synthetic networks.',
 			'    f  - make flat derivatives on shuffling instead of generating the dedicated directory (having the file base name)'
 			' for each input network, might cause flooding of the base directory. Existed shuffles are backed up.',
 			'    NOTE: variance over the shuffles of each network instance is evaluated only for the non-flat structure.',
 			'    a  - the dataset is specified by arcs (asymmetric, directed links) instead of edges (undirected links)'
 			', considered only for not .ns{{a,e}} extensions.',
+			'    r  - force reshullfing to overwrite existing shuffles instead of their extension. Typically, should not be used.',
 			'NOTE:',
 			'  - The following symbols in the path name have specific semantic and processed respectively: {rsvpathsmb}.',
 			'  - Paths may contain wildcards: *, ?, +.',

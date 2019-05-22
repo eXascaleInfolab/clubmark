@@ -23,6 +23,7 @@ enum34>=1.1 ;python_version<"3.4"
 
 # Algorithms requirements:
 ## louvain_igraph.py:
+# Note: it also requires libxml2-dev and zlib1g-dev, see install_reqs.sh
 python-igraph>=0.7
 
 # Evaluations & Utils requirements

@@ -2015,8 +2015,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 						try:
 							cfnames, uclfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
 							# Sort the clustering file names to form their clustering level ids in the same order
-							if len(cfnames) >= 2:
-								cfnames.sort()
+							cfnames.sort()
 							#print('> cfnames num: {}, uclfname: {}, iinst: {}'.format(len(cfnames), uclfname, iinst))
 							# Note: the datasets can be created/opened only after the evaluating quality measure specify
 							# the processing measures (names) to form the target dataset name.
@@ -2061,6 +2060,8 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									#print('  > net: {}\n\tcpnets: {}'.format(net, cpnets))
 									ppnet = ppnetByNet(net, netshf, cpnets, sname=sname, netext=netext)
 								ppcls, ppucl = clnames(ppnet, netshf, alg=alg, pathidsuf=pathidsuf)
+								# Sort the clustering file names to form their clustering level ids in the same order
+								ppcls.sort()
 								ppcl = ppcls[len(ppcls) // 2]
 
 							# Form network name with path id

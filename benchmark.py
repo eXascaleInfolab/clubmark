@@ -216,7 +216,8 @@ class SyntPathOpts(PathOpts):
 			instead of the evaluation vs the ground-truth. Actual for the link reduced synthetic networks.
 		"""
 		assert isinstance(policy, SyntPolicy), 'Unexpected policy type: ' + type(policy).__name__
-		super(SyntPathOpts, self).__init__(path, flat=flat, asym=asym, shfnum=shfnum, overwrite=overwrite, ppeval=ppeval)
+		super(SyntPathOpts, self).__init__(path, flat=flat, asym=asym, shfnum=shfnum
+			, reshuffle=overwrite, revalue=overwrite, ppeval=ppeval)
 		self.policy = policy
 		self.netins = netins
 		# self.overwrite = overwrite

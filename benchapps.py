@@ -556,9 +556,9 @@ def uniflevs(task):
 	# Create the unifying output dir
 	uniout = task.params.get('outpname')
 	if not uniout:
-		#uniout, _apars, insid, shid, pathid
+		#uniout, _apars, insid, shfid, pathid
 		sname = parseName(pouts[0], True)  # Parse name only without the path
-		uniout = ''.join((sname.basepath, sname.insid, sname.shid, sname.pathid))  # , sname.lnkrd;  Note: alg params marker is intentionally omitted
+		uniout = ''.join((sname.basepath, sname.insid, sname.shfid, sname.pathid))  # , sname.lnkrd;  Note: alg params marker is intentionally omitted
 	assert uniout, 'Output directory name should be defined'
 	unidir = '/'.join((bpath if bpath else '.', uniout, ''))  # Note: ending '' to have the ending '/'
 	if os.path.exists(unidir):

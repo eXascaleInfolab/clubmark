@@ -124,7 +124,7 @@ _execpool = None
 # Data structures --------------------------------------------------------------
 class PathOpts(object):
 	"""Paths parameters"""
-	__slots__ = ('path', 'flat', 'asym', 'shfnum', 'ppeval')
+	__slots__ = ('path', 'flat', 'asym', 'shfnum', '_reshuffle', '_revalue', 'ppeval')
 
 	def __init__(self, path, flat=False, asym=False, shfnum=None, reshuffle=None, revalue=None, ppeval=None):
 		"""Sets default values for the input parameters
@@ -152,7 +152,7 @@ class PathOpts(object):
 		self.asym = asym
 		self.shfnum = shfnum  # Number of shuffles for each network instance to be produced, >= 0
 		self._reshuffle = reshuffle
-		self._revalue = revalue
+		self._revalue = revalue or reshuffle
 		self.ppeval = ppeval
 
 	@property
@@ -169,7 +169,7 @@ class PathOpts(object):
 			NOTE: the shuffling also respects this flag
 		"""
 		self._reshuffle = val
-		self._revalue = self._revalue and self._reshuffle
+		self._revalue = self._revalue or val
 
 	@property
 	def revalue(self):
@@ -182,8 +182,7 @@ class PathOpts(object):
 
 		val: bool  - revaluate existing results for this path intead of omitting them
 		"""
-		self._revalue = val
-		self._revalue = self._revalue and self._reshuffle
+		self._revalue = val or self.reshuffle
 
 	def __str__(self):
 		"""String conversion"""
@@ -197,7 +196,7 @@ SyntPolicy = IntEnum('SyntPolicy', 'ordinary mixed lreduct')  # JOB_INFO, TASK_I
 
 class SyntPathOpts(PathOpts):
 	"""Paths parameters for the synthetic networks"""
-	__slots__ = ('policy', 'netins', 'overwrite')
+	__slots__ = ('policy', 'netins')
 
 	def __init__(self, policy, path, netins=3, overwrite=False, flat=False, asym=False, shfnum=0, ppeval=False):
 		"""Sets default values for the input parameters
@@ -224,19 +223,21 @@ class SyntPathOpts(PathOpts):
 
 	@property
 	def overwrite(self):
+	#def overwrite(self):
 		"""Read property for the overwrite attribute"""
-		return super(SyntPathOpts, self).reshuffle
+		return self.reshuffle
 
 	@overwrite.setter
 	def overwrite(self, val):
+	# def setOverwrite(self, val):
 		"""Write property for the overwrite attribute
 
 		val: bool  - overwrite or skip the generation if the synthetic network instances
 			already exist
 			NOTE: the shuffling also respects this flag
 		"""
-		super(SyntPathOpts, self).reshuffle = val
-		assert not val or super(SyntPathOpts, self).revalue, '.revalue should be synced whith the .overwrite'
+		self.reshuffle = val
+		assert not val or self.revalue(), '.revalue should be synced whith the .overwrite'
 
 	def __str__(self):
 		"""String conversion"""
@@ -458,14 +459,34 @@ def parseParams(args):
 		print(TIMESTAMP_START_HEADER, file=sys.stderr)
 		# Process long args
 		if arg[1] == '-':
-			# if arg.startswith('--std'):
+			# Exclusive long options
+			if arg.startswith('--quality-noupdate'):
+				opts.qupdate = False
+				continue
+			elif arg.startswith('--quality-revalue'):
+				opts.qrevalue = True
+				continue
+			elif arg.startswith('--runtimeout'):
+				nend = len('--runtimeout')
+				if len(arg) <= nend + 1 or arg[nend] != '=':
+					raise ValueError('Unexpected argument: ' + arg)
+				opts.runtimeout = dhmsSec(arg[nend+1:])
+				continue
+			elif arg.startswith('--evaltimeout'):
+				nend = len('--evaltimeout')
+				if len(arg) <= nend + 1 or arg[nend] != '=':
+					raise ValueError('Unexpected argument: ' + arg)
+				opts.evaltimeout = dhmsSec(arg[nend+1:])
+				continue
+			# Normal options
+			# eif arg.startswith('--std'):
 			# 	if arg == '--stderr-stamp':  # or arg == '--stdout-stamp':
 			# 		#if len(args) == 1:
 			# 		#	raise  ValueError('More input arguments are expected besides: ' + arg)
 			# 		print(TIMESTAMP_START_HEADER, file=sys.stderr if arg == '--stderr-stamp' else sys.stdout)
 			# 		continue
 			# 	raise ValueError('Unexpected argument: ' + arg)
-			if arg.startswith('--generate'):
+			elif arg.startswith('--generate'):
 				arg = '-g' + arg[len('--generate'):]
 			elif arg.startswith('--generate-mixed'):
 				arg = '-m' + arg[len('--generate-mixed'):]
@@ -489,23 +510,6 @@ def parseParams(args):
 				arg = '-s' + arg[len('--summary'):]
 			elif arg.startswith('--webaddr'):
 				arg = '-w' + arg[len('--webaddr'):]
-			# Exclusive long options
-			elif arg.startswith('--quality-noupdate'):
-				opts.qupdate = False
-			elif arg.startswith('--quality-revalue'):
-				opts.qrevalue = True
-			elif arg.startswith('--runtimeout'):
-				nend = len('--runtimeout')
-				if len(arg) <= nend + 1 or arg[nend] != '=':
-					raise ValueError('Unexpected argument: ' + arg)
-				opts.runtimeout = dhmsSec(arg[nend+1:])
-				continue
-			elif arg.startswith('--evaltimeout'):
-				nend = len('--evaltimeout')
-				if len(arg) <= nend + 1 or arg[nend] != '=':
-					raise ValueError('Unexpected argument: ' + arg)
-				opts.evaltimeout = dhmsSec(arg[nend+1:])
-				continue
 			else:
 				raise ValueError('Unexpected argument: ' + arg)
 
@@ -577,7 +581,7 @@ def parseParams(args):
 			for i in range(2, pos):
 				if arg[i] == 'p':
 					popt.ppeval = True
-				if arg[i] == 'f':
+				elif arg[i] == 'f':
 					popt.flat = True
 				elif arg[i] == 'a':
 					popt.asym = True
@@ -1158,12 +1162,14 @@ while True:
 							# Whether the shuffles will be modified and need to be backed up
 							backup = popt.reshuffle or xpathExists(''.join((path, os.path.splitext(netname)[0]
 								, '*', SEPSHF, str(popt.shfnum + 1), '*', dflext)))
+							popt.revalue = backup
 							# Backup existed dir (path, not just a name)
 							shuf0 = prepareDir(os.path.splitext(net)[0], net, backup, bcksuffix)
 							shfnum += shuffleNet(shuf0, popt.shfnum, popt.reshuffle)
 					else:
 						# Backup the whole dir of network instances with possible shuffles,
 						# which are going to be shuffled
+						popt.revalue = True
 						tobackup(path, False, bcksuffix, move=False)  # Copy to the backup
 						# Note: the folder containing the network instance originating the shuffling should not be deleted
 						# notbacked = True
@@ -1191,12 +1197,14 @@ while True:
 						# Whether the shuffles will be modified and need to be backed up
 						backup = popt.reshuffle or xpathExists(''.join((dirpath, '/', basename
 							, '*', SEPSHF, str(popt.shfnum + 1), '*', dflext)))
+						popt.revalue = backup
 						shuf0 = prepareDir(dirpath, path, backup, bcksuffix)
 						shfnum += shuffleNet(shuf0, popt.shfnum, popt.reshuffle)
 					else:
 						# Backup existing flat shuffles if any (expanding the base path), which will be updated the subsequent shuffling
 						# Whether the shuffles will be modified and need to be backed up
 						if popt.reshuffle or xpathExists('*'.join((dirpath, SEPSHF + str(popt.shfnum + 1), dflext))):
+							popt.revalue = True
 							tobackup(os.path.split(path)[0], True, bcksuffix, move=False)  # Copy to the backup
 						shfnum += shuffleNet(path, popt.shfnum, popt.reshuffle)  # Note: shuffleNet() skips of the existing shuffles and performs their reduction
 				shufnets += 1
@@ -1253,8 +1261,8 @@ def updateNetInfos(netinfs, net, pathidsuf='', shfnum=0):
 	if sname.insid:
 		ntinf.nins = max(ntinf.nins, int(sname.insid[len(SEPINST):]) + 1)  # Note: +1 to form total number from id
 	# Evaluate the number of shuffles only if it is not specified explicitly (or specified as 0)
-	if not shfnum and sname.shid:
-		ntinf.nshf = max(ntinf.nshf, int(sname.shid[len(SEPSHF):]) + 1)  # Note: +1 to form total number from id
+	if not shfnum and sname.shfid:
+		ntinf.nshf = max(ntinf.nshf, int(sname.shfid[len(SEPSHF):]) + 1)  # Note: +1 to form total number from id
 	# print('> updateNetInfos(), netinfs size: {}, net: {}, nins: {}, nshf: {}'.format(
 	# 	len(netinfs), net, ntinf.nins, ntinf.nshf))
 
@@ -1511,7 +1519,7 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 			xargs  - extra custom parameters
 			"""
 			xargs['netsnum'] += 1
-			convertNet(net, xargs.overwrite, xargs.resdub, xargs.timeout1)
+			convertNet(net, xargs['overwrite'], xargs['resdub'], xargs['timeout1'])
 
 		xargs = {'overwrite': overwrite, 'resdub': resdub, 'timeout1': timeout1, 'netsnum': 0}  # Number of converted networks
 		for popt in datas:  # (path, flat=False, asym=False, shfnum=0)
@@ -1855,6 +1863,44 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 			return vactual  # The same as new vstored
 		return vstored  # >= vactual
 
+	def ppnetByNet(net, netshf, cpnets, sname=None, netext=None):
+		"""Find complementary per pair evaluation network
+
+		net: str  - full file name of the input network
+		netshf: bool  - whether this network is a shuffle (not necessary has the shfid suffix) in the non-flat dir structure
+		cpnets: list(str)  - list of link reduced nets having the same shuffling suffix
+		sname: SemName  - seman
+
+		return str  - ppnet for the net
+		"""
+		ppnet = net
+		netname = None
+		if not (sname and netext):
+			netname, netext = os.path.splitext(os.path.split(net)[1])
+			netext = netext.lower()
+			# Note: the input network name does not contain the paid id, which is added during the processing
+			#netname, _aparams, inst, shuf, _pid
+			if not sname:
+				sname = parseName(netname, True)
+		try:
+			icpn = cpnets.index(net)
+			if icpn >= 1:
+				ppnet = cpnets[icpn - 1]
+			else:  # icpn == 0:
+				# Consrtuct the non-reduced network name
+				ppath, dirname = os.path.split(os.path.split(net)[0])
+				# Remove the reduction suffix from dirname
+				dirname = dirname[:dirname.rfind(SEPLRD)]
+				if netshf:
+					ppath = ''.join((os.path.split(ppath)[0], '/', dirname, '/', dirname, sname.insid))
+				else:
+					ppath = '/'.join((ppath, dirname))
+				ppnet = ''.join((ppath, '/', dirname, sname.insid, sname.shfid, sname.pathid, netext))
+				print('  > net: {}\n\tppnet: {}'.format(net, ppnet))
+		except ValueError:
+			pass  # ppnet = net
+		return ppnet
+
 	stime = time.perf_counter()  # Procedure start time; ATTENTION: .perf_counter() should not be used, because it does not consider "sleep" time
 	print('Starting quality evaluations...')
 
@@ -1908,7 +1954,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 
 					net: str  - network to be processed
 					asym: bool  - whether the network is asymmetric (directed), considered only for the non-standard network file extensions
-					netshf: bool  - whether this network is a shuffle in the non-flat dir structure
+					netshf: bool  - whether this network is a shuffle (not necessary has the shfid suffix) in the non-flat dir structure
 					pathidsuf: str  - path id of the net to distinguish nets with the same name located in different dirs
 					tasks: list(Task)  - tasks associated with the running algorithms on the specified network
 					netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
@@ -1950,7 +1996,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					sname = parseName(netname, True)
 					netname = sname.basepath
 					iinst = 0 if not sname.insid else int(sname.insid[len(SEPINST):])  # Instance id
-					ishuf = 0 if not sname.shid else int(sname.shid[len(SEPSHF):])  # Shuffle id
+					ishuf = 0 if not sname.shfid else int(sname.shfid[len(SEPSHF):])  # Shuffle id
 					# Note: the execution is sequential here and the quality measure results are written to the storage
 					# from the ondone() callback executing in the main thread of the main process,
 					# so the storage does not require any locks
@@ -1975,65 +2021,52 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								if len(cfnames) >= 2:
 									# Fetch only the middle level for the per-pair evaluations
 									cfnames = [cfnames[len(cfnames) // 2]]
+								ppnet = net  # Per-pair comparison network
 								# Form ordered list of the per-pair networks
-								sname = None  # Semantically parced name
-								if not ppnets:
-									# Form list of ppnets if required
-									ppath, ppname = os.path.split(net)
-									sname = parseName(ppname, True)
+								# Idetify the target cpnets
+								# cpnets = None if not sname.shfid else ppnets.get(sname.shfid, [])  # Ppnets for the current shuffle
+								cpnets = ppnets.get(sname.shfid, [])  # Ppnets for the current shuffle
+								if ppnets and cpnets:
+									ppnet = ppnetByNet(net, netshf, cpnets, sname=sname, netext=netext)
+								# elif cpnets is not None:
+								else:
+									ppath = os.path.split(net)[0]
 									if netshf:
-										# sname = parseName(ppname, True)
-										# # Note: pathid is considered only in the file names
-										# ppname = ''.join(sname.basepath, sname.apars, sname.insid, sname.pathid)  # Should  we consider pathid here?
 										ppath = os.path.split(ppath)[0]
 									dirname = os.path.split(ppath)[1]
 
-									# Form path of the base network
-									# basepath = ppath  # A path of the base network
+									# Form the link reduce networks wildcard
 									isep = dirname.rfind(SEPLRD)
 									if isep != -1:
-										# basepath = basepath[:isep - len(dirname)]  # Excluding the suffix statring with the SEPLRD symbol
-										# Form the -ppath wildcard for the non-base networks
-										# ppath = SEPLRD.join((basepath, '*'))  # [0-9]*p  # Note: reg expr are not supported, only the wildcards
-										#
 										# Exclude the suffix statring with the SEPLRD symbol
-										ppath = SEPLRD.join((ppath[:isep - len(dirname)], '*'))  # [0-9]*p  # Note: reg expr are not supported, only the wildcards
-										#
-										# # Refine path of the base network
-										# # Base dir name
-										# dirname = dirname[:isep]
-										# if netshf:
-										# 	basepath += '/' + dirname
+										# ppath = SEPLRD.join((ppath[:isep - len(dirname)], '*'))  # [0-9]*p  # Note: reg expr are not supported, only the wildcards
+										ppath = ppath[:isep - len(dirname) + 1] + '*'  # [0-9]*p  # Note: reg expr are not supported, only the wildcards
 									else:
 										# Form the pppath wildcard for the non-base network
 										ppath += SEPLRD + '*'
-										# # Refine path of the base network
-										# if netshf:
-										# 	basepath += '/' + dirname
 
 									# Aggregate ppnetwork paths
-									cpnets = []  # Ppnets for the current shuffle
 									for pp in glob.iglob(ppath):
 										# Refine path of the network
-										dirname = os.path.split(ppath)[1]
+										dirname = os.path.split(pp)[1]
 										if netshf:
-											pp += '/' + dirname
-										cpnets.append('/'.join((pp, ''.join((dirname , sname.apars, sname.insid, sname.shid, sname.pathid)))))
+											pp = ''.join((pp, '/', dirname, sname.insid))
+										cpnets.append(''.join((pp, '/', dirname, sname.insid, sname.shfid, sname.pathid, netext)))
 									cpnets.sort()
-									ppnets[sname.shid] = cpnets
-								ppnet = net  # Per-pair comparison network
-								if sname is None:
-									sname = parseName(net, False)
-								if sname.shid:
-									cpnets = ppnets[sname.shid]
-									ppnet = cpnets[cpnets.index(cfnames[0]) - 1]
+									ppnets[sname.shfid] = cpnets
+									# if sname.shfid:
+									print('  > net: {}\n\tcpnets: {}'.format(net, cpnets))
+									ppnet = ppnetByNet(net, netshf, cpnets, sname=sname, netext=netext)
 								ppcls, ppucl = clnames(ppnet, netshf, alg=alg, pathidsuf=pathidsuf)
 								ppcl = ppcls[len(ppcls) // 2]
+								# print('  > ppnet: {} (shfid: {}), ppucl: {}, ppcl: {}'.format(ppnet, sname.shfid, ppucl, ppcl))
+								print('  >> gfpath: {}\n\tppcl: {}\n\tppucl: {}'.format(gfpath, ppcl, ppucl))
 							else:
 								# Sort the clustering file names to form their clustering level ids in the same order
 								cfnames.sort()
 							# Form network name with path id
-							gname = delPathSuffix(netname, True) + pathidsuf
+							# gname = delPathSuffix(netname, True) + pathidsuf
+							gname = netname + pathidsuf
 							try:
 								group = group[gname]
 							except KeyError:  # This group is not exist yet

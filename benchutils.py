@@ -326,15 +326,15 @@ def delPathSuffix(path, nameonly=False):
 
 class SemName(object):
 	"""Semantic name of the file"""
-	__slots__ = ('basepath', 'apars', 'insid', 'shid', 'pathid')  # , 'lnkrd'
+	__slots__ = ('basepath', 'apars', 'insid', 'shfid', 'pathid')  # , 'lnkrd'
 
-	def __init__(self, basepath='', apars='', insid='', shid='', pathid=''):  # , lnkrd=''
+	def __init__(self, basepath='', apars='', insid='', shfid='', pathid=''):  # , lnkrd=''
 		"""SemName initialization
 
 			basepath  - base path without suffixes, same as delPathSuffix(path, nameonly)
 			apars  - algorithm parameters with separators or empty string
 			insid  - instance id with separator or empty string
-			shid  - shuffle id with separator or empty string
+			shfid  - shuffle id with separator or empty string
 			pathid  - path id with separator or empty string
 		"""
 		# lsrd  - links reduction value with separato or empty string
@@ -342,7 +342,7 @@ class SemName(object):
 		# self.lnkrd = lnkrd
 		self.apars = apars
 		self.insid = insid
-		self.shid = shid
+		self.shfid = shfid
 		self.pathid = pathid
 
 	def __eq__(self, other):
@@ -380,7 +380,7 @@ def parseName(path, nameonly=False):
 	True
 	>>> parseName('2K5^1', False) == SemName('2K5', '', '^1', '', '')
 	True
-	>>> parseName('scp/mod/2K5%1', True) == SemName('scp/mod/2K5', '', '', '%1', '')
+	>>> parseName('scp/mod/2K5/2K5%1', True) == SemName('scp/mod/2K5/2K5', '', '', '%1', '')
 	True
 	>>> parseName('1K10=k3') == SemName('1K10', '=k3', '', '', '')
 	True
@@ -400,7 +400,7 @@ def parseName(path, nameonly=False):
 	# lnkrd = ''
 	insid = ''
 	apars = ''
-	shid = ''
+	shfid = ''
 	pathid = ''
 	# Find position of the separator symbol, considering that it can't be begin of the name
 	if len(pname) >= 2:
@@ -434,13 +434,13 @@ def parseName(path, nameonly=False):
 			elif pname[pos] == SEPINST:
 				insid = val
 			elif pname[pos] == SEPSHF:
-				shid = val
+				shfid = val
 			else:
 				assert pname[pos] == SEPPATHID, 'pathid separator is expected instead of: {}'.format(val)
 				pathid = val
 		#print('path: {}, pname: {}, pos: {}, poses: {}'.format(path, pname, pos, poses), file=sys.stderr)
 
-	return SemName(basename if not pdir else '/'.join((pdir, basename)), apars, insid, shid, pathid)  # , lnkrd
+	return SemName(basename if not pdir else '/'.join((pdir, basename)), apars, insid, shfid, pathid)  # , lnkrd
 
 
 class ItemsStatistic(object):

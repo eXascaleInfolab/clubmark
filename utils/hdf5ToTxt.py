@@ -78,9 +78,14 @@ def dataprinter(name, obj, fout, sep):
 				fout.write('#\t{}: {}\n'.format(key, val))
 		else:
 			fout.write('\n')
+		# Consider compound objects
 		if obj.dtype.names:
-			fout.write('# {}\n'.format(h for h in obj.dtype.names))
-		print('{}\n'.format(obj[:]), file=fout)
+			fout.write('#{}\n'.format('\t'.join('{: >7}'.format(h) for h in obj.dtype.names)))
+			for i in range(obj.len()):
+				fout.write(' {}\n'.format('\t'.join('{: >7.5}'.format(v) for v in obj[i])))
+			fout.write('\n')
+		else:
+			print('{}\n'.format(obj[:]), file=fout)
 		# # np.empy(obj.shape, dtype=obj.dtype)
 		# ndims = len(obj.shape)
 		# if ndims >= 2:  # inst(row), shuf(col), lev, qmsrun

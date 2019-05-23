@@ -1896,7 +1896,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 				else:
 					ppath = '/'.join((ppath, dirname))
 				ppnet = ''.join((ppath, '/', dirname, sname.insid, sname.shfid, sname.pathid, netext))
-				print('  > net: {}\n\tppnet: {}'.format(net, ppnet))
+				#print('  > net: {}\n\tppnet: {}'.format(net, ppnet))
 		except ValueError:
 			pass  # ppnet = net
 		return ppnet
@@ -2014,6 +2014,9 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 						ppucl = None  # Per-pair clustering name from the past iteration for the unified levels
 						try:
 							cfnames, uclfname = clnames(net, netshf, alg=alg, pathidsuf=pathidsuf)
+							# Sort the clustering file names to form their clustering level ids in the same order
+							if len(cfnames) >= 2:
+								cfnames.sort()
 							#print('> cfnames num: {}, uclfname: {}, iinst: {}'.format(len(cfnames), uclfname, iinst))
 							# Note: the datasets can be created/opened only after the evaluating quality measure specify
 							# the processing measures (names) to form the target dataset name.
@@ -2055,15 +2058,11 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									cpnets.sort()
 									ppnets[sname.shfid] = cpnets
 									# if sname.shfid:
-									print('  > net: {}\n\tcpnets: {}'.format(net, cpnets))
+									#print('  > net: {}\n\tcpnets: {}'.format(net, cpnets))
 									ppnet = ppnetByNet(net, netshf, cpnets, sname=sname, netext=netext)
 								ppcls, ppucl = clnames(ppnet, netshf, alg=alg, pathidsuf=pathidsuf)
 								ppcl = ppcls[len(ppcls) // 2]
-								# print('  > ppnet: {} (shfid: {}), ppucl: {}, ppcl: {}'.format(ppnet, sname.shfid, ppucl, ppcl))
-								print('  >> gfpath: {}\n\tppcl: {}\n\tppucl: {}'.format(gfpath, ppcl, ppucl))
-							else:
-								# Sort the clustering file names to form their clustering level ids in the same order
-								cfnames.sort()
+
 							# Form network name with path id
 							# gname = delPathSuffix(netname, True) + pathidsuf
 							gname = netname + pathidsuf
@@ -2126,6 +2125,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 										iclevs = (iclevs[nicl],)
 										inpcls = (inpcls[nicl],)
 										nicl = 1
+									#print('  >> net: {}\n\tinpcls: {}\n\tinp0: {}'.format(net, inpcls, inp0))
 									for ifc, fcl in enumerate(inpcls):
 										# Consider if the actual number of levels is larger than the declared number,
 										# which should never happen in theory but if it happens than skip such levels

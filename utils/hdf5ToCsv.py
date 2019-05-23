@@ -54,9 +54,15 @@ def parseArgs(params=None):
 	return args  - parsed arguments
 	"""
 	parser = argparse.ArgumentParser(description='HDF5 dataset conversion to CSV/SSV.'
+		' The resulting files are outbutted next to the input files as <inpfile>.txt.'
 		, formatter_class=argparse.ArgumentDefaultsHelpFormatter)  # Adds default values to the help
 	parser.add_argument('datas', metavar='DATSET', nargs='+', help='HDF5 datasets')
-	parser.add_argument('-s', '--separator', dest='sep', default=' ', help='values separator in the resulting file')
+	parser.add_argument('-s', '--separator', dest='sep', default=' '
+		, help=argparse.SUPPRESS  # Note: not implemented yet
+		#, help='values separator in the resulting file'
+		)
+	parser.add_argument('-o', '--overwrite', action='store_true'
+		, help='overwrite existent output files instead of omitting them')
 	args = parser.parse_args(params)
 
 	return args
@@ -64,9 +70,10 @@ def parseArgs(params=None):
 
 def dataprinter(name, obj, fout, sep):
 	if isinstance(obj, h5py.Dataset):
-		fout.write('# {}'.format(obj.name))
+		fout.write('# {}; shape({}): {}'.format(obj.name, len(obj.shape)
+			, ', '.join((str(dim) for dim in obj.shape))))
 		if obj.attrs:
-			fout.write(', shape: {}, atributes:\n'.format(obj.shape))
+			fout.write('; attributes({}):\n'.format(len(obj.attrs)))
 			for key, val in viewitems(obj.attrs):
 				fout.write('#\t{}: {}\n'.format(key, val))
 		else:
@@ -115,7 +122,9 @@ def hdf5ToCsv(args):
 
 	args.datas: list(str)  - HDF5 datasets
 	args.sep: str  - values separator
+	args.overwrite: bool  - overwrite existent output files instead of skipping them
 	"""
+	outpext = '.txt' if not args.sep.startswith(',') else '.csv'  # Default output extension
 	for inpfile in args.datas:
 		ublock = None
 		try:
@@ -127,12 +136,26 @@ def hdf5ToCsv(args):
 		except OSError:
 			print('WARNING, can not open the file {}.'.format(inpfile, file=sys.stderr))
 		with h5py.File(inpfile, mode='r', driver='core', libver='latest') as fstore:
-			outfname = os.path.splitext(inpfile)[0] + ('.txt' if args.sep != ',' else '.csv')
-			with open(outfname, 'w') as fout:
-				fout.write('# Converted from: ')
-				fout.write(os.path.split(inpfile)[1])
-				fout.write('\n# Userblock: ')
-				fout.write(ublock.rstrip('\0'))
+			inpname, inpext = os.path.splitext(inpfile)
+			# Prevent overwriting of the input files
+			if inpext == outpext:
+				inpname += inpext
+			outname = inpname + outpext
+			if os.path.isfile(outname):
+				if args.overwrite:
+					print('WARNING, overwriting the existent', outname)
+				else:
+					print('WARNING, omitting overwriting of the existent', outname)
+					continue
+			with open(inpname + outpext, 'w') as fout:
+				fout.write('# Converted from {}\n'.format(os.path.split(inpfile)[1]))
+				if ublock:
+					fout.write('#\tUserblock: {}\n'.format(ublock))
+				if fstore.attrs:
+					fout.write('#\tAttributes({}):  '.format(len(fstore.attrs)))
+					for key, val in viewitems(fstore.attrs):
+						fout.write('{}: {}; '.format(key, val))
+					fout.write('\n')
 				fout.write('\n')
 				fstore.visititems(partial(dataprinter, fout=fout, sep=args.sep))
 				# outpdatas(fstore, fout, args.sep)

@@ -429,7 +429,7 @@ class QualitySaver(object):
 			bcksftime = None
 			if update:
 				try:
-					fstorage = h5py.File(storage, mode='r', driver='core', libver='latest')  # ATTENTION: 'latest' libver viewing is not fully supported after HDFView 2.7.1
+					fstorage = h5py.File(storage, mode='r')  # ATTENTION: 'latest' libver viewing is not fully supported after HDFView 2.7.1
 					ublocksize = fstorage.userblock_size
 					fstorage.close()
 				except OSError:
@@ -468,7 +468,7 @@ class QualitySaver(object):
 		# Create HFD5 storage if required
 		if not update:
 			# Create the storage, fail if exists ('w-' or 'x')
-			fstorage = h5py.File(storage, mode='w-', driver='core', libver='latest', userblock_size=ublocksize)  # ATTENTION: 'latest' libver viewing is not fully supported after HDFView 2.7.1
+			fstorage = h5py.File(storage, mode='w-', userblock_size=ublocksize)  # ATTENTION: 'latest' libver viewing is not fully supported after HDFView 2.7.1
 			ubsize = fstorage.userblock_size  # Actual user block size of the storage
 			fstorage.close()
 			# Write the userblock

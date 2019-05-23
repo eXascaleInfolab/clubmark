@@ -132,7 +132,7 @@ def hdf5ToCsv(args):
 				fout.write('# Converted from: ')
 				fout.write(os.path.split(inpfile)[1])
 				fout.write('\n# Userblock: ')
-				fout.write(ublock.decode().rstrip('\0'))
+				fout.write(ublock.rstrip('\0'))
 				fout.write('\n')
 				fstore.visititems(partial(dataprinter, fout=fout, sep=args.sep))
 				# outpdatas(fstore, fout, args.sep)

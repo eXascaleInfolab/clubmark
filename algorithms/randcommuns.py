@@ -102,7 +102,7 @@ def parseParams(args):
 			prm.outdir = '.'
 	if not prm.randseed:
 		try:
-			prm.randseed = ''.join([str(ord(c)) for c in os.urandom(8)])
+			prm.randseed = ''.join(str(ord(c)) for c in os.urandom(8))
 		except NotImplementedError:
 			prm.randseed = str(rand.random())
 		prm.outpseed = True
@@ -168,7 +168,7 @@ def randcommuns(*args):
 					nodes.append(ind)
 
 			# Use original labels of the nodes
-			clusters.append([graph.vs[ind]['name'] for ind in nodes])  #pylint: disable=E1136
+			clusters.append(graph.vs[ind]['name'] for ind in nodes)  #pylint: disable=E1136
 		# Output resulting clusters
 		with open('/'.join((prm.outdir, ''.join((prm.outname, '_', str(prm.outnum), prm.outext)))), 'w') as fout:
 			for cl in clusters:

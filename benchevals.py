@@ -180,7 +180,7 @@ _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 #
 # 	def __str__(self):
 # 		"""String conversion"""
-# 		return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
+# 		return ', '.join(': '.join((name, str(val))) for name, val in viewitems(self.__dict__))
 
 # class NetParams(object):
 # 	__slots__ = ('asym', 'pathidsuf')
@@ -198,7 +198,7 @@ _DEBUG_TRACE = False  # Trace start / stop and other events to stderr
 
 # 	def __str__(self):
 # 		"""String conversion"""
-# 		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
+# 		return ', '.join(': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__)
 
 
 class NetInfo(object):
@@ -221,7 +221,7 @@ class NetInfo(object):
 
 	def __str__(self):
 		"""String conversion"""
-		return ', '.join([': '.join((name, str(self.__getattribute__(name))))for name in self.__slots__])
+		return ', '.join(': '.join((name, str(self.__getattribute__(name))))for name in self.__slots__)
 
 
 class SMeta(object):
@@ -260,7 +260,7 @@ class SMeta(object):
 
 	def __str__(self):
 		"""String conversion"""
-		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
+		return ', '.join(': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__)
 
 
 class QEntry(object):
@@ -285,7 +285,7 @@ class QEntry(object):
 
 	def __str__(self):
 		"""String conversion"""
-		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
+		return ', '.join(': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__)
 
 
 class QualitySaver(object):
@@ -493,7 +493,7 @@ class QualitySaver(object):
 			# Describe dataset dimensions
 			# Note: the dimension is implicitly omitted in the visualizing table if its size equals to 1
 			dims_qms_raw = ('inst', 'shuf', 'levl', 'mrun')
-			dqrlen = max((len(s) for s in dims_qms_raw)) + 1
+			dqrlen = max(len(s) for s in dims_qms_raw) + 1
 			dqrtype = 'a' + str(dqrlen)  # Zero terminated bytes, fixed length
 			# NOTE: the existing attribute is overwritten
 			self.storage.attrs.create(dqrname, data=np.array(dims_qms_raw, dtype=dqrtype))
@@ -1198,7 +1198,7 @@ class ValAcc(object):
 
 	def __str__(self):
 		"""String conversion"""
-		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
+		return ', '.join(': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__)
 
 
 class VarAcc(ValAcc):
@@ -1241,8 +1241,8 @@ class VarAcc(ValAcc):
 
 	def __str__(self):
 		"""String conversion"""
-		return ', '.join([': '.join((name, str(self.__getattribute__(name))))
-			for name in itertools.chain(super(VarAcc, self).__slots__, self.__slots__)])
+		return ', '.join(': '.join((name, str(self.__getattribute__(name))))
+			for name in itertools.chain(super(VarAcc, self).__slots__, self.__slots__))
 
 
 class NamedList(object):

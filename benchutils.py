@@ -348,7 +348,7 @@ class SemName(object):
 	def __eq__(self, other):
 		"""Equality operator"""
 		if isinstance(other, SemName):
-			return all((self.__getattribute__(name) == other.__getattribute__(name) for name in self.__slots__))
+			return all(self.__getattribute__(name) == other.__getattribute__(name) for name in self.__slots__)
 		return NotImplemented
 
 	def __ne__(self, other):
@@ -357,8 +357,8 @@ class SemName(object):
 
 	def __str__(self):
 		"""String conversion"""
-		# return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
-		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
+		# return ', '.join(': '.join((name, str(val))) for name, val in viewitems(self.__dict__))
+		return ', '.join(': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__)
 
 
 def parseName(path, nameonly=False):

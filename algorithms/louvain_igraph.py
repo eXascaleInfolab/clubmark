@@ -79,9 +79,9 @@ def louvain(args):
 			with open('{}_{}{}'.format(args.outpfile, i, args.outpext), 'w') as fout:
 				for cl in lev:
 					if named:
-						fout.write(' '.join([graph.vs[nid]['name'] for nid in cl]))
+						fout.write(' '.join(graph.vs[nid]['name'] for nid in cl))
 					else:
-						fout.write(' '.join([str(nid) for nid in cl]))
+						fout.write(' '.join(str(nid) for nid in cl))
 					fout.write('\n')
 		else:
 			# Merge all hier levels excluding identical communities, use idNums comparison (len, sum, sum2)
@@ -107,9 +107,9 @@ def louvain(args):
 		with open(args.outpfile + args.outpext, 'w') as fout:
 			for cl in communs:
 				if named:
-					fout.write(' '.join([graph.vs[nid]['name'] for nid in cl]))
+					fout.write(' '.join(graph.vs[nid]['name'] for nid in cl))
 				else:
-					fout.write(' '.join([str(nid) for nid in cl]))
+					fout.write(' '.join(str(nid) for nid in cl))
 				fout.write('\n')
 	print('The hierarchy has been successfully outputted')
 

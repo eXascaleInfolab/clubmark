@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 :Description: Implementation of the NSL (Network Specified By <Links>(Edges / Args)) parser
-	NSL format is a generalizaiton of NCOL, SNAP and  and Edge/Arcs Graph formats.
+	NSL format is a generalizaiton of NCOL, SNAP and Edge/Arcs Graph formats.
 :Authors: Artem Lutov <luart@ya.ru>
 :Organizations: eXascale lab <http://exascale.info/>, ScienceWise <http://sciencewise.info/>,
 	Lumais <http://www.lumais.com/>
@@ -144,11 +144,10 @@ def parseHeaderNsl(network, directed=None):
 def loadNsl(network, directed=None):
 	"""Load the graph from NSL(nse, nsa) file
 
-	network  - file name of the input network
-	directed  - whether the input network is directed
-		None  - define automatically by the file extension
+	network: str  - file name of the input network
+	directed: bool  - whether the input network is directed, None means define automatically by the file extension
 
-	return Graph  - loaded graph
+	return igraph.Graph  - loaded graph
 	"""
 	if Graph is None:
 		raise ImportError('ERROR, the igraph.Graph is required to be imported')

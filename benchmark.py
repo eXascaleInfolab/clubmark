@@ -186,8 +186,8 @@ class PathOpts(object):
 
 	def __str__(self):
 		"""String conversion"""
-		# return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
-		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
+		# return ', '.join(': '.join((name, str(val))) for name, val in viewitems(self.__dict__))
+		return ', '.join(': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__)
 
 
 SyntPolicy = IntEnum('SyntPolicy', 'ordinary mixed lreduct')  # JOB_INFO, TASK_INFO
@@ -242,8 +242,8 @@ class SyntPathOpts(PathOpts):
 
 	def __str__(self):
 		"""String conversion"""
-		return ', '.join([': '.join((name, str(self.__getattribute__(name))))
-			for name in itertools.chain(super(SyntPathOpts, self).__slots__, self.__slots__)])
+		return ', '.join(': '.join((name, str(self.__getattribute__(name))))
+			for name in itertools.chain(super(SyntPathOpts, self).__slots__, self.__slots__))
 
 
 class QAggMeta(object):
@@ -264,8 +264,8 @@ class QAggMeta(object):
 
 	def __str__(self):
 		"""String conversion"""
-		# return ', '.join([': '.join((name, str(val))) for name, val in viewitems(self.__dict__)])
-		return ', '.join([': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__])
+		# return ', '.join(': '.join((name, str(val))) for name, val in viewitems(self.__dict__))
+		return ', '.join(': '.join((name, str(self.__getattribute__(name)))) for name in self.__slots__)
 
 
 class QAggOpt(object):
@@ -1541,8 +1541,8 @@ def convertNets(datas, overwrite=False, resdub=False, timeout1=7*60, convtimeout
 def fetchAppnames(appsmodule):
 	"""Get names of the executable applications from the module
 
-	appsmodule  - module that implements execution of the apps
-	return  - list of the apps names
+	appsmodule: module  - module that implements execution of the apps
+	return: list(str)  - list of the apps names
 	"""
 	return [funcToAppName(func) for func in dir(appsmodule) if func.startswith(PREFEXEC)]
 
@@ -1566,7 +1566,7 @@ def clarifyApps(appnames, appsmodule, namefn=None):
 		appnames.extend(fetchAppnames(appsmodule))  # alg.lower() for alg in fetchAppnames()
 	# Fetch app functions (executors) from the module
 	appfns = [getattr(appsmodule, PREFEXEC + name, None) for name in (
-		appnames if namefn is None else [namefn(an) for an in appnames])]
+		appnames if namefn is None else (namefn(an) for an in appnames))]
 	# Ensure that all specified appnames correspond to the functions
 	invalapps = []  # Indexes of the applications having the invalid name (without the respective executor)
 	for i in range(len(appfns)):
@@ -1574,7 +1574,7 @@ def clarifyApps(appnames, appsmodule, namefn=None):
 			invalapps.append(i)
 	if invalapps:
 		print('WARNING, the specified appnames are omitted as not existent: '
-			, ' '.join([appnames[ia] for ia in invalapps]), file=sys.stderr)
+			, ' '.join(appnames[ia] for ia in invalapps), file=sys.stderr)
 		while invalapps:
 			i = invalapps.pop()
 			del appnames[i]
@@ -1935,7 +1935,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 		# Compute quality measures grouping them into batches with the same affinity
 		# starting with the measures having the affinity step = 1
 		# Sort qmeasures with their executables having affinity step = 1 in the end for the pop()
-		qmeas = sorted(zip(qmeasures, exeqms, [QMSRAFN.get(eq) for eq in exeqms]),
+		qmeas = sorted(zip(qmeasures, exeqms, (QMSRAFN.get(eq) for eq in exeqms)),
 			key=lambda qmea: 1 if qmea[2] is None else qmea[2].afnstep, reverse=True)
 		cqmes = []  # Currently processing qmes having the same affinity mask
 		# tasks = []  # All tasks
@@ -1960,7 +1960,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 					tasks: list(Task)  - tasks associated with the running algorithms on the specified network
 					netinf: NetInfo  - network meta information (the number of network instances and shuffles, etc.)
 					netreval: bool  - reevaluate the network even if the results are already exist (local policy flag in addition to the global one)
-					ppnets: dict(shufid, list(str))|None  - dict mapping shufid to the list of the per-pair evaluating networks
+					ppnets: dict(<algname>shufid, list(str))|None  - dict mapping <alg>shufid to the list of the per-pair evaluating networks
 						or their shuffles in the order of evaluation. Note: the size of each list is typically small, ~= 10 items
 
 					return
@@ -2028,7 +2028,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								# Form ordered list of the per-pair networks
 								# Idetify the target cpnets
 								# cpnets = None if not sname.shfid else ppnets.get(sname.shfid, [])  # Ppnets for the current shuffle
-								cpnets = ppnets.get(sname.shfid, [])  # Ppnets for the current shuffle
+								cpnets = ppnets.get(alg + sname.shfid, [])  # Ppnets for the current shuffle
 								if ppnets and cpnets:
 									ppnet = ppnetByNet(net, netshf, cpnets, sname=sname, netext=netext)
 								# elif cpnets is not None:
@@ -2056,7 +2056,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 											pp = ''.join((pp, '/', dirname, sname.insid))
 										cpnets.append(''.join((pp, '/', dirname, sname.insid, sname.shfid, sname.pathid, netext)))
 									cpnets.sort()
-									ppnets[sname.shfid] = cpnets
+									ppnets[alg + sname.shfid] = cpnets
 									# if sname.shfid:
 									#print('  > net: {}\n\tcpnets: {}'.format(net, cpnets))
 									ppnet = ppnetByNet(net, netshf, cpnets, sname=sname, netext=netext)
@@ -2252,10 +2252,10 @@ def benchmark(*args):
 	print('The benchmark is started, parsed params:\n\tsyntpos: "{}"\n\tconvnets: 0b{:b}'
 		'\n\trunalgs: {}\n\talgorithms: {}\n\tquality measures: {}\n\tqupdate: {}\n\tqrevalue: {}\n\tdatas: {}'
 		'\n\tqaggopts: {}\n\twebui: {}\n\ttimeout: {} h {} m {:.4f} sec'
-		.format('; '.join((str(sp) for sp in opts.syntpos)), opts.convnets, opts.runalgs
+		.format('; '.join(str(sp) for sp in opts.syntpos), opts.convnets, opts.runalgs
 		, ', '.join(opts.algorithms) if opts.algorithms else ''
-		, None if opts.qmeasures is None else ' '.join([qm[0] for qm in opts.qmeasures]), opts.qupdate, opts.qrevalue
-		, '; '.join([str(pathopts) for pathopts in opts.datas])  # Note: ';' because the internal separator is ','
+		, None if opts.qmeasures is None else ' '.join(qm[0] for qm in opts.qmeasures), opts.qupdate, opts.qrevalue
+		, '; '.join(str(pathopts) for pathopts in opts.datas)  # Note: ';' because the internal separator is ','
 		, '-' if opts.qaggopts is None else '; '.join(opts.qaggopts)  # Note: ';' because the internal separator is ','
 		# , ', '.join(opts.aggrespaths) if opts.aggrespaths else ''
 		, None if opts.host is None else '{}:{}'.format(opts.host, opts.port)
@@ -2504,9 +2504,8 @@ if __name__ == '__main__':
 			'    f  - force the conversion even when the data is already exist',
 			'    r  - resolve (remove) duplicated links on conversion (recommended to be used)',
 			'  --summary, -s[p][*][[{{-,+}}]=<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...][{qsepgroup}<alg>...]]'
-			'  - summarize evaluation results of the specified algorithms on the specified networks'
-			' extending the existent quality measures storage considering the specified update policy. Especially useful to include extended'
-			' evaluations into the final summarized results.',
+			'  - summarize evaluation of the specified algorithms on the specified networks extending the existent quality measures storage'
+			' considering the specified update policy. Usefed to extend the final unified and summarized results with the iterative evaluations.',
 			# '    p  - plot the aggregated results to the <aggqms>.png',
 			'    *  - aggregate all available quality evaluations besides the one matching the seed',
 			'    -/+  - filter inclusion prefix: "-" to filter out specified data (exclude) and'

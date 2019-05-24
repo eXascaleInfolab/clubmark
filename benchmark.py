@@ -2058,7 +2058,7 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 									cpnets.sort()
 									ppnets[alg + sname.shfid] = cpnets
 									# if sname.shfid:
-									#print('  > net: {}\n\tcpnets: {}'.format(net, cpnets))
+									#print('  > alg: {}, net: {}\n\tcpnets: {}'.format(alg, net, cpnets))
 									ppnet = ppnetByNet(net, netshf, cpnets, sname=sname, netext=netext)
 								ppcls, ppucl = clnames(ppnet, netshf, alg=alg, pathidsuf=pathidsuf)
 								# Sort the clustering file names to form their clustering level ids in the same order
@@ -2081,10 +2081,11 @@ def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exect
 								validateDim(netinf.nshf, group, SATTRNSHF)
 								# netinf.gvld = True
 						except Exception as err:  #pylint: disable=W0703
-							print('ERROR, quality evaluation of "{}" is interrupted by the exception: {}, call stack:'
-								.format(netname + pathidsuf, err), file=sys.stderr)
+							print('ERROR, quality evaluation of "{}" is interrupted for "{}" by the exception: {}, call stack:'
+								.format(netname + pathidsuf, alg, err), file=sys.stderr)
 							traceback.print_exc(5)
-							return jobsnum
+							# return jobsnum
+							continue
 
 						for i, (qm, eq) in enumerate(cqmes):
 							# Append algortihm-indicating subtask: QMeasure / BaseNet / Alg

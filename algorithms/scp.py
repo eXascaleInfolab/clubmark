@@ -70,9 +70,10 @@ class Net(object):
 	def _intsetedge(self, src, dst, val):
 		# Override this for symmetrical/two-way linked ones
 		if val==0:
-			if src in self._nodes:
-				del self._nodes[src][dst]
-				if len(self._nodes[src])==0:
+			slinks = self._nodes.get(src)
+			if slinks is not None and dst in slinks:
+				del slinks[dst]
+				if not slinks:
 					#delete isolated node
 					del self._nodes[src]
 		else:
@@ -281,7 +282,7 @@ def loadNet_edg(input, mutualEdges=False, splitterChar=None, symmetricNet=True):
 					else:
 						newNet[fields[0]][fields[1]]=float(fields[2])
 	except Exception:
-		print('Input data parcing failed on the line: ' + line)
+		print('Input data parcing failed on the line: ' + line, file=sys.stderr)
 		raise
 
 	return newNet, linksnum

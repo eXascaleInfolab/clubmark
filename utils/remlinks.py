@@ -87,31 +87,41 @@ def remlinks(*args):
 	with open(inpnet, 'r') as finp:
 		print(''.join(('Reading input network: ', inpnet, '...')))
 		network = {}
+		isheader = True
+		header = []
 		weighted = False
 		netstat = {}  # Number of links for the node
-		for line in finp:
-			# Check for the leadig spaces
-			i = 0
-			lnlen = len(line)
-			while(i < lnlen and line[i].isspace()):
-				i += 1
-			# Skip comments
-			if i == lnlen or line[i] == '#':
-				continue
-			# Skip leading spaces
-			if i != 0:
-				line = line[i:]
-			# Parse the line
-			line = line.split()
-			sid = int(line[0])
-			did = int(line[1])
-			if len(line) > 2:
-				network[(sid, did)] = float(line[2])
-				weighted = True
-			else:
-				network[(sid, did)] = 1
-			count = netstat.get(sid, 0) + 1
-			netstat[sid] = count
+		try:
+			for line in finp:
+				# Check for the leadig spaces
+				i = 0
+				lnlen = len(line)
+				while(i < lnlen and line[i].isspace()):
+					i += 1
+				# Skip comments except the header section
+				if i == lnlen or line[i] == '#':
+					if isheader:
+						header.append(line)
+					continue
+				isheader = False
+				# Skip leading spaces
+				if i != 0:
+					line = line[i:]
+				# Parse the line
+				line = line.split()
+				sid = int(line[0])
+				did = int(line[1])
+				if len(line) > 2:
+					# Note: float() conversion can be taken to insure correct values
+					# and reduce the amount of recured RAM
+					network[(sid, did)] = line[2]
+					weighted = True
+				else:
+					network[(sid, did)] = '1'
+				count = netstat.get(sid, 0) + 1
+				netstat[sid] = count
+		except ValueError as err:
+			print('ERROR, the weight value is invalid in the line: {}. {}'.format(line, err))
 		# Remove specified number of lines
 		linksCount = len(network)
 		if isinstance(linksNum, float):
@@ -121,6 +131,7 @@ def remlinks(*args):
 			', less than 50% is expected.'.format(linksNum, linksCount))
 
 		# Check whether the network directed or not
+		# Note: we assume that the network links are specified either by edges or by bidirected symmetric arcs
 		directed = True
 		sid, did = next(iter(network))
 		if network.get((did, sid)) is None:
@@ -167,12 +178,38 @@ def remlinks(*args):
 			os.makedirs(outpath)
 		with open(outnet, 'w') as fout:
 			print(''.join(('Forming output network: ', outnet, '...')))
+			# Output the header if any correcting the number of nodes
+			update = True  # Update the header
+			for ln in header:
+				if update:
+					# Update the number of edges/arcs, the number of nodes remains permanent
+					ll = ln.lower()
+					iend = len(ll)  # End index in the line
+					# Replace values of the specified header markers
+					hmark = 'edges:' if not directed else 'arcs:'
+					ihm = ll.find(hmark)
+					if ihm:
+						ihm += len(hmark)
+						while ihm < iend and ll[ihm].isspace():
+							ihm += 1
+						ihme = ihm + 1
+						# Find the ending index of the value
+						while ihme < iend and not ll[ihme].isspace() and ll[ihme] != ',':
+							ihme += 1
+						if ihme < iend and ll[ihme] == ',':
+							ihme += 1
+						# Replace the fragment [ihm:ihme] with the updated value in the original line
+						if ihme <= iend:
+							ln = ''.join((ln[:ihm], str(len(network)) + ',', ln[ihme:]))
+					update = False
+				fout.write(ln)
 			# Fetch keys (ids) via the lookup
 			for key, val in viewitems(network):
 				if weighted:
-					fout.write('{} {} {:.6f}\n'.format(key[0], key[1], val))
+					# Note: the input values like 0.3 are represented ugly without the precision specification in case of float values
+					fout.write('{}\t{}\t{}\n'.format(key[0], key[1], val))  # Note: :.6 ~ :.6g, .6f should no be used because it might zeroize lightweight links
 				else:
-					fout.write('{} {}\n'.format(key[0], key[1]))
+					fout.write('{}\t{}\n'.format(key[0], key[1]))
 
 
 if __name__ == '__main__':

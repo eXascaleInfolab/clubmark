@@ -103,11 +103,14 @@ _TIMEOUT = 36 * 60*60  # Default execution timeout for each algorithm for a sing
 _GENSEPSHF = '%'  # Shuffle number separator in the synthetic networks generation parameters
 _WPROCSMAX = max(cpu_count()-1, 1)  # Maximal number of the worker processes, should be >= 1
 assert _WPROCSMAX >= 1, 'Natural number is expected not exceeding the number of system cores'
-_VMLIMIT = 4096  # Set 4 TB or RAM to be automatically limited to the physical memory of the computer
+_VMLIMIT = 4096  # Set 4 TB, it is automatically decreased to the physical memory of the computer
 _HOST = None  # 'localhost';  Note: start without the WebUI by default
 _PORT = 8080  # Default port for the WebUI, Note: port 80 accessible only from the root in NIX
 _RUNTIMEOUT = 10*24*60*60  # Clustering execution timeout, 10 days
 _EVALTIMEOUT = 5*24*60*60  # Results evaluation timeout, 5 days
+# Set memory limit per an algorithm equal to half of the available RAM because
+# some of them (Scp and Java-based) consume huge amount of memory
+_MEMLIM = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / (1024**3 * 2.)  # RAM (physical memory) size in GB
 _QSEPGROUP=';'  # Quality aggregation options group separator
 _QSEPMSR='/'  # Quality aggregation option separator for measures section
 _QSEPNET=':'  # Quality aggregation option separator for networks section
@@ -371,6 +374,7 @@ class Params(object):
 		host: str  - WebUI host, None to disable WebUI
 		port: int  - WebUI port
 		runtimeout: uint  - clustering algorithms execution timeout
+		memlim: ufloat  - max amount of memory in GB allowed for each executing application, half of RAM by default
 		evaltimeout: uint  - resulting clusterings evaluations timeout
 		"""
 		self.syntpos = []  # SyntPathOpts()
@@ -391,6 +395,7 @@ class Params(object):
 		self.port = _PORT
 		self.runtimeout = _RUNTIMEOUT
 		self.evaltimeout = _EVALTIMEOUT
+		self.memlim = _MEMLIM
 
 
 def unquote(text):
@@ -478,6 +483,14 @@ def parseParams(args):
 				if len(arg) <= nend + 1 or arg[nend] != '=':
 					raise ValueError('Unexpected argument: ' + arg)
 				opts.evaltimeout = dhmsSec(arg[nend+1:])
+				continue
+			elif arg.startswith('--memlimit'):
+				nend = len('--memlimit')
+				if len(arg) <= nend + 1 or arg[nend] != '=':
+					raise ValueError('Unexpected argument: ' + arg)
+				opts.memlim = float(arg[nend+1:])
+				if opts.memlim < 0:
+					raise ValueError('Non-negative memlim value is expected: ' + arg)
 				continue
 			# Normal options
 			# eif arg.startswith('--std'):
@@ -1583,7 +1596,7 @@ def clarifyApps(appnames, appsmodule, namefn=None):
 	return appfns
 
 
-def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=10*24*60*60, memlim=0.):  # 10 days
+def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=_RUNTIMEOUT, memlim=0.):  # 10 days
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
@@ -1603,9 +1616,10 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 		# return netnames
 		return
 	assert isinstance(algorithms, list) and appsmodule and isinstance(datas[0], PathOpts
-		) and exectime + 0 >= 0 and timeout + 0 >= 0, ('Invalid input arguments, algorithms type: {}'
-		', appsmodule type: {} datas type: {}, exectime: {}, timeout: {}'.format(type(algorithms).__name__
-		, type(appsmodule).__name__, type(datas).__name__, exectime, timeout))
+		) and exectime + 0 >= 0 and timeout + 0 >= 0 and memlim + 0 >= 0, (
+		'Invalid input arguments, algorithms type: {}, appsmodule type: {} datas type: {}'
+		', exectime: {}, timeout: {}, memlim: {}'.format(type(algorithms).__name__
+		, type(appsmodule).__name__, type(datas).__name__, exectime, timeout, memlim))
 	assert isinstance(seed, int) and seed >= 0, 'Seed value is invalid'
 
 	stime = time.perf_counter()  # Procedure start time; ATTENTION: .perf_counter() should not be used, because it does not consider "sleep" time
@@ -1802,7 +1816,7 @@ def gtpath(net, idir):
 
 
 def evalResults(qmsmodule, qmeasures, appsmodule, algorithms, datas, seed, exectime, timeout  #pylint: disable=W0613
-, evaltimeout=14*24*60*60, update=True, revalue=False):  #pylint: disable=W0613;  # , netnames=None
+, evaltimeout=_EVALTIMEOUT, update=True, revalue=False):  #pylint: disable=W0613;  # , netnames=None
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
 	qmsmodule: module  - module with quality measures definitions to be run; sys.modules[__name__]
@@ -2336,18 +2350,18 @@ def benchmark(*args):
 			, resdub=opts.convnets & 0b100, timeout1=7*60, convtimeout=45*60)  # 45 min
 
 	# Run the opts.algorithms and measure their resource consumption
+	# Note: memory limit constraint is applied only for the executing clustering algorithms
 	if opts.runalgs:
 		runApps(appsmodule=benchapps, algorithms=opts.algorithms, datas=opts.datas
 			, seed=seed, exectime=exectime, timeout=opts.timeout, runtimeout=opts.runtimeout
-			# Set memory limit per an algorithm equal to half of the available RAM because
-			# some of them (Scp and Java-based) consume huge amount of memory
-			, memlim=os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / (1024.**3 * 2))  # RAM (physical memory) size in GB
+			, memlim=opts.memlim)  # RAM (physical memory) size in GB
 
 	# Evaluate results
 	if opts.qmeasures is not None:
 		evalResults(qmsmodule=benchevals, qmeasures=opts.qmeasures, appsmodule=benchapps
 			, algorithms=opts.algorithms, datas=opts.datas, seed=seed, exectime=exectime
-			, timeout=opts.timeout, evaltimeout=opts.evaltimeout, update=opts.qupdate, revalue=opts.qrevalue)
+			, timeout=opts.timeout, evaltimeout=opts.evaltimeout
+			, update=opts.qupdate, revalue=opts.qrevalue)
 			# , netnames=netnames
 
 	if opts.qaggopts is not None:
@@ -2519,7 +2533,7 @@ if __name__ == '__main__':
 			'    <qmeasure>  - quality measure in the format:  <appname>[:<qmetric>][{sufulev}]'
 			', for example "Xmeasures:MF1h_w{sufulev}", where "{sufulev}" denotes salient/significant/representative'
 			' clusters fetched from the multi-resolution clustering and flattened (represented as a single level).',
-			'  - --quality-noupdate and --quality-revalue options are applied ',
+			# ' quality-noupdate and quality-revalue options are applied ',
 			# '  --summary, -s=<resval_path>  - aggregate and summarize specified evaluations extending the benchmarking results'
 			# ', which is useful to include external manual evaluations into the final summarized results',
 			# 'ATTENTION: <resval_path> should include the algorithm name and target measure.',
@@ -2529,12 +2543,15 @@ if __name__ == '__main__':
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {runtimeout}.',
 			'  --evaltimeout  - global clustering algorithms execution timeout in the'
 			' format [<days>d][<hours>h][<minutes>m<seconds>], default: {evaltimeout}.',
+			'  --memlimit  - max amount of memory in GB allowed for each executing application,'
+			' positive floating point value, 0 - unlimited, default: {memlim:.6}.',
+			'NOTE: applications violating the specified resource consumption constraints are terminated.'
 			)).format(sys.argv[0], gensepshuf=_GENSEPSHF, qsepmsr=_QSEPMSR, qsepnet=_QSEPNET, qsepgroup=_QSEPGROUP
 				, resdir=RESDIR, syntdir=_SYNTDIR, netsdir=_NETSDIR
 				, sepinst=SEPINST, seppars=SEPPARS, sepshf=SEPSHF, rsvpathsmb=(SEPPARS, SEPINST, SEPSHF, SEPPATHID)
 				, anppsnum=len(apps), apps=', '.join(apps), qmappsnum=len(qmapps), qmapps=', '.join(qmapps)
 				, algtimeout=secDhms(_TIMEOUT), seedfile=_SEEDFILE, sufulev=SUFULEV
-				, host=_HOST, port=_PORT, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT)))
+				, host=_HOST, port=_PORT, runtimeout=secDhms(_RUNTIMEOUT), evaltimeout=secDhms(_EVALTIMEOUT), memlim=_MEMLIM))
 	else:
 		if len(sys.argv) == 2 and sys.argv[1] == '--doc-tests':
 			# Doc tests execution

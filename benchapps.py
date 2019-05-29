@@ -1089,7 +1089,7 @@ def execDaoc(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, tas
 , workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1)):
 	"""DAOC with static gamma=1"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
@@ -1097,7 +1097,7 @@ def execDaocD(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, ta
 , workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, densdrop=True)):
 	"""DAOC with static gamma=1 and bottom bounded density drop output of significant/salient clusters"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
@@ -1105,7 +1105,7 @@ def execDaocB(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, ta
 , workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, gband='r0.005')):
 	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as a ratio of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
@@ -1113,7 +1113,7 @@ def execDaocB1(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, t
 , workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, gband='r0.01')):
 	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as 1% of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
@@ -1121,7 +1121,7 @@ def execDaocB5(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, t
 , workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, gband='r0.05')):
 	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as 1% of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
@@ -1129,7 +1129,7 @@ def execDaocB10(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, 
 , workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, gband='r0.05')):
 	"""DAOC with the static gamma=1 and a band for the mutual maximal gain taken as 1% of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
@@ -1137,7 +1137,7 @@ def execDaocR(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, ta
 , workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, reduction='m')):
 	"""DAOC with the static gamma=1 and a medium reduction policy of the insignificant links"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
@@ -1145,7 +1145,7 @@ def execDaocRw(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, t
 , workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, reduction='wm')):
 	"""DAOC with the static gamma=1 and a medium reduction policy of the insignificant links"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
@@ -1154,7 +1154,7 @@ def execDaocX(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, ta
 	"""DAOC with the static gamma=1 and exclusion of the aggregating hashing being
 	used for the fast match of the fully mutual mcands"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
@@ -1164,7 +1164,7 @@ def execDaocRB1(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, 
 	"""DAOC with the static gamma=1, medium reduction policy and a band for the
 	mutual maximal gain taken as 1% of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
@@ -1174,7 +1174,7 @@ def execDaocRB5(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, 
 	"""DAOC with the static gamma=1, medium reduction policy and a band for the
 	mutual maximal gain taken as 1% of MMG"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
@@ -1183,7 +1183,7 @@ def execDaocRB1X(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None,
 	"""DAOC with the static gamma=1, a medium reduction policy, an MMG band
 	and exclusion of the aggregting hashing application"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generalized modularity)
@@ -1191,7 +1191,7 @@ def execDaocA(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, ta
 , workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=-1)):
 	"""DAOC with an automatic dynamic gamma"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocA'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # DAOC (using automatic adjusting of the resolution parameter, generalized modularity)
@@ -1199,7 +1199,7 @@ def execDaocAR(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, t
 , workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=-1, reduction='m')):  # Note: '' values mean use default
 	"""DAOC with an automatic dynamic gamma, a medium reduction policy and an MMG band"""
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'DaocAR'
-	return daocGamma(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, opts)
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 
 # Ganxis (SLPA)
@@ -1446,14 +1446,14 @@ def rgmcAlg(algname, execpool, netfile, asym, odir, timeout=0, memlim=0., seed=N
 @metainfo(levsmax=1)  # Note: rgmcAlg parameters are not easily adjustable, see the executor
 def execCggcRg(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  #pylint: disable=C0111
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggcRg'
-	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, alg=2)
+	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, alg=2)
 
 
 # CGGCi_RG (rgmc -a 3)
 @metainfo(levsmax=1)  # Note: rgmcAlg parameters are not easily adjustable, see the executor
 def execCggciRg(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  #pylint: disable=C0111
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'CggciRg'
-	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, seed, task, pathidsuf, workdir, alg=3)
+	return rgmcAlg(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, alg=3)
 
 
 # SCD

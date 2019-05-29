@@ -1583,7 +1583,7 @@ def clarifyApps(appnames, appsmodule, namefn=None):
 	return appfns
 
 
-def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=10*24*60*60):  # 10 days
+def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=10*24*60*60, memlim=0.):  # 10 days
 	"""Run specified applications (clustering algorithms) on the specified datasets
 
 	appsmodule  - module with algorithms definitions to be run; sys.modules[__name__]
@@ -1593,7 +1593,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 	seed  - benchmark seed, natural number
 	exectime  - elapsed time since the benchmarking started
 	timeout  - timeout per each algorithm execution
-	runtimeout  - timeout for all algorithms execution, >= 0, 0 means unlimited time
+	runtimeout: uint32  - timeout for all algorithms execution, >= 0, 0 means unlimited time
+	memlim: ufloat32  - max amount of memory in GB allowed for the app execution, 0 - unlimited
 	"""
 	# return  netnames: iterable(str) or None  - network names with path id and without the base directory
 	# netnames = None  # Network names with path id and without the base directory
@@ -1638,7 +1639,8 @@ def runApps(appsmodule, algorithms, datas, seed, exectime, timeout, runtimeout=1
 			for ia, ealg in enumerate(execalgs):
 				try:
 					jobsnum += ealg(_execpool, net, asym=asymnet(netext, asym), odir=netshf
-						, timeout=timeout, seed=seed, task=None if not tasks else tasks[ia], pathidsuf=pathidsuf)
+						, timeout=timeout, memlim=memlim, seed=seed
+						, task=None if not tasks else tasks[ia], pathidsuf=pathidsuf)
 				except Exception as err:  #pylint: disable=W0703
 					errexectime = time.perf_counter() - exectime
 					print('ERROR, "{}" is interrupted by the exception: {} on {:.4f} sec ({} h {} m {:.4f} s), call stack:'
@@ -2336,7 +2338,10 @@ def benchmark(*args):
 	# Run the opts.algorithms and measure their resource consumption
 	if opts.runalgs:
 		runApps(appsmodule=benchapps, algorithms=opts.algorithms, datas=opts.datas
-			, seed=seed, exectime=exectime, timeout=opts.timeout, runtimeout=opts.runtimeout)
+			, seed=seed, exectime=exectime, timeout=opts.timeout, runtimeout=opts.runtimeout
+			# Set memory limit per an algorithm equal to half of the available RAM because
+			# some of them (Scp and Java-based) consume huge amount of memory
+			, memlim=os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / (1024.**3 * 2))  # RAM (physical memory) size in GB
 
 	# Evaluate results
 	if opts.qmeasures is not None:

@@ -1528,6 +1528,7 @@ def aggEvals(qaggopts, exclude, seed, update=True, revalue=False, plot=False):
 	if os.path.isfile(aggqpath):
 		tobackup(aggqpath, False, move=not update)  # Copy/move to the backup
 	try:
+		# mode 'a'  - Read/write if exists, create otherwise (default)
 		storage = h5py.File(aggqpath, mode='a', driver='core', libver='latest')  # ATTENTION: 'latest' libver viewing is not fully supported after HDFView 2.7.1
 	except OSError as err:
 		print('ERROR, HDF5 storage "{}" extension failed: {}'.format(aggqpath, err), file=sys.stderr)
@@ -1580,6 +1581,9 @@ def aggEvals(qaggopts, exclude, seed, update=True, revalue=False, plot=False):
 				aggdata.attrs['nets'] = ' '.join(dnets)
 			# Fill missed values
 			if dsupdates[dsname]:
+				# Resize the dataset if required
+				if len(aevs) > aggdata.len():
+					aggdata.resize(len(aevs), 0)
 				for i, qv in enumerate(aevs.values):
 					iu = imap.get(i, i)  # Updated index
 					# if revalue or iu != i:

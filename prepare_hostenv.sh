@@ -18,8 +18,8 @@ MAX_SWAP=5
 
 if [ `cat /proc/sys/fs/file-max` -lt $MAX_FILES ]
 then
+	echo "Setting s.file-max to $MAX_FILES..."
 	sudo sysctl -w fs.file-max=$MAX_FILES
-	echo "fs.file-max set to $MAX_FILES"
 fi
 
 # Max number of the opened files by the process
@@ -36,8 +36,8 @@ fi
 
 if [ `cat /proc/sys/vm/swappiness` -gt $MAX_SWAP ]
 then
+	echo "Setting vm.swappiness to $MAX_SWAP..."
 	sudo sysctl -w vm.swappiness=$MAX_SWAP
-	echo "vm.swappiness set to $MAX_SWAP"
 fi
 
 # Note: to set these parameters permanently, add them to the /etc/sysctl.conf

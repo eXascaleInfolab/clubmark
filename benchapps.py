@@ -767,6 +767,129 @@ def execLouvainIg(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None
 	return execnum
 
 
+def fastConsBase(algname, execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  # , selfexec=False  - whether to call self recursively
+	"""Execute Fast Consensus using the networkx and igraph libraries
+	Note: Louvain produces not stable results => multiple executions are desirable.
+
+	Mandatory arguments:
+	algname: str  - underlying clusterig algorithm
+	execpool: ExecPool  - execution pool of worker processes
+	netfile: str  - the input network to be clustered
+	asym: bool  - whether the input network is asymmetric (directed, specified by arcs)
+	odir: bool  - whether to output results to the dedicated dir named by the instance name,
+		which is actual for the shuffles with non-flat structure
+
+	Optiononal arguments:
+	timeout: ufloat32  - processing (clustering) timeout of the input file, 0 means infinity
+	memlim: ufloat32  - max amount of memory in GB allowed for the algorithm execution, 0 - unlimited
+	seed: uint64  - random seed, uint64_t
+	task: Task  - owner task
+	pathidsuf: str  - network path id prepended with the path separator
+	workdir: str  - relative working directory of the app, actual when the app contains libs
+
+	returns  - the number of executions or None
+	"""
+	# Note: .. + 0 >= 0 to be sure that type is arithmetic, otherwise it is always true for the str
+	assert algname in ('FcLouv', 'FcLpm', 'FcCnm', 'FcImap') and  execpool and netfile and (
+		asym is None or isinstance(asym, bool)) and timeout + 0 >= 0 and (
+		memlim + 0 >= 0 and task is None or isinstance(task, Task)) and (seed is None or isinstance(seed, int)), (
+		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tmemlim: {}'
+		.format(execpool, netfile, asym, timeout, memlim))
+
+	# Evaluate relative network size considering whether the network is directed (asymmetric)
+	netsize = os.path.getsize(netfile)
+	if not asym:
+		netsize *= 2
+	# Fetch the task name and chose correct network filename
+	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network; , netext
+	assert taskname, 'The network name should exists'
+	#if tasknum:
+	#	taskname = '_'.join((taskname, str(tasknum)))
+
+	# ATTENTION: for the correct execution algname must be always the same as func name without the prefix "exec"
+	alg = None  # Algorithm name parameter: louvain, lpm, cnm, infomap
+	if algname == 'FcCnm':
+		alg = 'cnm'
+	elif algname == 'FcImap':
+		alg = 'infomap'
+	elif algname == 'FcLouv':
+		alg = 'louvain'
+	elif algname == 'FcLpm':
+		alg = 'lpm'
+	else:
+		raise ValueError('Algorithm name mapping is not defined: {} <- {}'.format(alg, algname))
+
+	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
+	pybin = PyBin.bestof(pypy=False, v3=True)
+
+	# def relpath(path, basedir=workdir):
+	# 	"""Relative path to the specified basedir"""
+	# 	return os.path.relpath(path, basedir)
+
+	# Note: without './' relpath args do not work properly for the binaries located in the current dir
+	relpath = lambda path: './' + os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	# Evaluate relative paths
+	xtimebin = relpath(UTILDIR + 'exectime')
+	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
+	netfile = relpath(netfile)
+
+	# Create subtask to monitor execution for each clique size
+	taskbasex = delPathSuffix(taskname, True)
+	tasksuf = taskname[len(taskbasex):]
+	aggtname = taskname + pathidsuf
+	task = Task(aggtname if task is None else SEPSUBTASK.join((task.name, tasksuf))
+		, task=task, onfinish=uniflevs, params={'outpname': aggtname, 'fetchLevId': fetchLevIdCnl})
+
+	# Run for range of delta
+	dmin = 0.02
+	dmax = 0.1
+	dnum = 10
+	for delta in (dmin + (dmax - dmin) / (dnum - 1) * i for i in range(dnum)):
+		# A single argument is k-clique size
+		dstr = str(delta)
+		dstrex = 'd{:.2}'.format(delta)
+		# Embed params into the task name
+		dtaskname = ''.join((taskbasex, SEPPARS, dstrex, tasksuf))
+		# Backup prepared the resulting dir and back up the previous results if exist
+		taskpath = prepareResDir(algname, dtaskname, odir, pathidsuf)
+		errfile = taskpath + EXTERR
+		logfile = taskpath + EXTLOG
+		# Evaluate relative paths dependent of the alg params
+		reltaskpath = relpath(taskpath)
+
+		# scp.py netname k [start_linksnum end_linksnum number_of_evaluations] [weight]
+		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', dtaskname, pathidsuf)), '-s=/etime_' + algname
+			# p: 5-20
+			, pybin, './fast_consensus.py', '-f', netfile, '-a', alg, '-p', '5', '--outp-parts', '1', '-d', dstr, '-w', '1', '-o', reltaskpath)
+
+		#print('> Starting job {} with args: {}'.format('_'.join((ktaskname, algname, kstrex)), args + [kstr]))
+		execpool.execute(Job(name=SEPNAMEPART.join((algname, dtaskname)), workdir=workdir, args=args, timeout=timeout
+			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
+			# Note: increasing clique size k causes ~(k ** pratio) increased consumption of both memory and time (up to k ^ 2),
+			# so it is better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
+			, task=task, category='_'.join((algname, dstrex))
+			, size=netsize, ondone=subuniflevs, params=taskpath # {'taskpath': taskpath} # , 'aparams': kstrex
+			#, memlim=64  # Limit max memory consumption to 64 GB
+			, memlim=memlim, stdout=logfile, stderr=errfile))
+
+	return dnum
+
+
+def execFcLouv(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  # , selfexec=False  - whether to call self recursively
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'FcLouv'
+	return fastConsBase(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir)
+
+
+def execFcLpm(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  # , selfexec=False  - whether to call self recursively
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'FcLpm'
+	return fastConsBase(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir)
+
+
+def execFcImap(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  # , selfexec=False  - whether to call self recursively
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'FcImap'
+	return fastConsBase(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir)
+
+
 # SCP (Sequential algorithm for fast clique percolation)
 # Note: it is desirable to have a dedicated task for each type of networks or even for each network for this algorithm
 def execScp(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  #pylint: disable=W0613

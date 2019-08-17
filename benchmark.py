@@ -2414,6 +2414,8 @@ if __name__ == '__main__':
 			'',
 			'Example:',
 			'  {0} -g=3{gensepshuf}5 -r -q="Xmeasures -fh -s" -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
+			'  {0} -w=127.0.0.1:8080 -i{gensepshuf}3=syntnets/networks/* -r -a="CggcRg LouvainIg" -q="Xmeasures -fh -s" -s'
+			' -th=2.5 --runtimeout=6h --evaltimeout=1h 1> {resdir}bench.log 2> {resdir}bench.err',
 			'NOTE:',
 			'  - The benchmark should be executed exclusively from the current directory (./).',
 			'  - The expected format of input datasets (networks) is .ns<l> - network specified by'

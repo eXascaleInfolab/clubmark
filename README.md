@@ -1,8 +1,8 @@
 # Clubmark (former [PyCABeM](https://github.com/eXascaleInfolab/PyCABeM/tree/draft)) - Bench ![bench mark icon](images/benchmark-64.png) marking Framework for the Clustering Algorithms Evaluation
 
-`\brief` Benchmarking and real-time profiling of the \[overlapping\] clustering (community detection) algorithms, evaluating their quality using extrinsic (all existing accuracy measures applicable for overlapping clustering algorithms on large datasets: Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) family, Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information)(NMI) and [Omega Index](https://www.ncbi.nlm.nih.gov/pubmed/26764947) / fuzzy ARI family) and intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks))(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures considering overlaps/covers (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of a cluster and its super-clusters).
-`\authors` (c) Artem Lutov <artem@exascale.info>
-`\organizations` [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)
+`\brief` Benchmarking and real-time profiling of the \[overlapping\] clustering algorithms working on graphs specified by pairwise relations (community detection algorithms). The quality evaluation is performed using extrinsic (all existing accuracy measures applicable for overlapping clustering algorithms on large datasets: Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) family, Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information)(NMI) and [Omega Index](https://www.ncbi.nlm.nih.gov/pubmed/26764947) / fuzzy ARI family) and some intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks))(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures considering overlaps/covers (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of a cluster and its super-clusters).  
+`\authors` (c) Artem Lutov <artem@exascale.info>  
+`\organizations` [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
 `\keywords` overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
 
 `\cite` [Clubmark: a Parallel Isolation Framework for Benchmarking and Profiling Clustering Algorithms on NUMA Architectures](https://github.com/eXascaleInfolab/clubmark/blob/master/docs/clubmark.pdf)
@@ -50,11 +50,11 @@ On Linux Ubuntu 16.04 LTS x64:
     - `1>> ...` output execution log (`stdout` tracing) to the `./bench.log`
     - `2>> ...` output execution log (`stderr` tracing) to the `./bench.err`
 
-To run the benchmark on other [POSIX-compatible] platfroms / operating systems, either the [docker container](#deployment-via-docker) of the default environment should be used, or all clustering algorithms and evaluating measures should be recompiled for the target platform.
+To run the benchmark on other [POSIX-compatible] platfroms / operating systems, either the [docker container](#deployment-via-docker) for the default environment should be used, or all clustering algorithms and evaluating measures should be recompiled for the target platform.
 
 ## Overview
 
-The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks, graphs), measures execution statistics and evaluates quality (including accuracy) of the results using specified measures. Clubmark is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation. The generic functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multiprocess execution pool and load balancer.
+The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks - graphs specified by the pairwise relations), measures execution statistics and evaluates quality (including accuracy) of the results using specified measures. Clubmark is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation. The generic functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multiprocess execution pool and load balancer.
 
 Generic properties:
 - Data preprocessing (synthetic networks generation, shuffling, etc.);
@@ -366,9 +366,11 @@ Results aggregation is performed with automatic identification of the target clu
   * `<qmeasures>/`  - raw and aggregated evaluated measures in the HDF5 storages
   - `*.log`  - `stdout` of the executed algorithm, logs
   - `*.err`  - `stderr` of the executed algorithm and benchmarking routings, errors
--  ./utils/  - evaluation measures and other related utilities
-   - `./exectime`  - a lightweight resource consumption [profiler](https://bitbucket.org/lumais/exectime/)
--  ./views/  - web UI view templates and html pages
+- ./utils/  - evaluation measures and other related utilities
+   - `exectime`  - a lightweight resource consumption [profiler](https://bitbucket.org/lumais/exectime/)
+   - `remlinks.py`  - randomly removes specified percent of the network links retaining at least a link per a node. Used to produce perturbed datasets for the clustering algorithms stability evaluation
+   - `hdf5ToTxt.py`  - **converts the final aggregated results from HDF5 to text format**, applied manually
+- ./views/  - web UI view templates and html pages
 
 Example of the `<entity>.rcp` format:
 ```sh

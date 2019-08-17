@@ -8,7 +8,6 @@
 :Organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>
 :Date: 2015-11
 """
-
 from __future__ import print_function, division  # Required for stderr output, must be the first import
 import sys
 import os
@@ -43,6 +42,9 @@ PREFEXEC = 'exec'  # Prefix of the executing application / algorithm
 ALEVSMAX = 10  # Use 10 scale levels as in Ganxis by default
 ALGLEVS = {}  # Max number of levels for the algorithm if does not correspond to the ALEVSMAX, dict(str: uint16)
 _STATIC_TRACE = set()  # A set of markers for the static tracing (once per multiple calls)
+
+assert ALEVSMAX >= 1
+
 
 # Consider Python2
 if not hasattr(glob, 'escape'):

@@ -28,7 +28,6 @@
 	ScienceWise <http://sciencewise.info/>
 :Date: 2015-07
 """
-
 from __future__ import print_function, division  # Required for stderr output, must be the first import
 # Required to efficiently traverse items of dictionaries in both Python 2 and 3
 try:
@@ -796,15 +795,16 @@ def fastConsBase(algname, execpool, netfile, asym, odir, timeout=0, memlim=0., s
 		'Invalid input parameters:\n\texecpool: {},\n\tnet: {},\n\tasym: {},\n\ttimeout: {},\n\tmemlim: {}'
 		.format(execpool, netfile, asym, timeout, memlim))
 
+	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
+	pybin = PyBin.bestof(pypy=False, v3=True)
+
 	# Evaluate relative network size considering whether the network is directed (asymmetric)
 	netsize = os.path.getsize(netfile)
 	if not asym:
 		netsize *= 2
 	# Fetch the task name and chose correct network filename
-	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Base name of the network; , netext
+	taskname = os.path.splitext(os.path.split(netfile)[1])[0]  # Remove the base path and separate extension;  , netext
 	assert taskname, 'The network name should exists'
-	#if tasknum:
-	#	taskname = '_'.join((taskname, str(tasknum)))
 
 	# ATTENTION: for the correct execution algname must be always the same as func name without the prefix "exec"
 	alg = None  # Algorithm name parameter: louvain, lpm, cnm, infomap
@@ -818,75 +818,117 @@ def fastConsBase(algname, execpool, netfile, asym, odir, timeout=0, memlim=0., s
 		alg = 'lpm'
 	else:
 		raise ValueError('Algorithm name mapping is not defined: {} <- {}'.format(alg, algname))
+	# Backup prepared the resulting dir and back up the previous results if exist
+	taskpath = prepareResDir(algname, taskname, odir, pathidsuf)
+	errfile = taskpath + EXTERR
+	# logfile = taskpath + EXTLOG
 
-	# Note: igraph-python is a Cython wrapper around C igraph lib. Calls are much faster on CPython than on PyPy
-	pybin = PyBin.bestof(pypy=False, v3=True)
-
-	# def relpath(path, basedir=workdir):
-	# 	"""Relative path to the specified basedir"""
-	# 	return os.path.relpath(path, basedir)
-
-	# Note: without './' relpath args do not work properly for the binaries located in the current dir
 	relpath = lambda path: './' + os.path.relpath(path, workdir)  # Relative path to the specified basedir
 	# Evaluate relative paths
 	xtimebin = relpath(UTILDIR + 'exectime')
 	xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
 	netfile = relpath(netfile)
-
-	# Create subtask to monitor execution for each clique size
-	taskbasex = delPathSuffix(taskname, True)
-	tasksuf = taskname[len(taskbasex):]
-	aggtname = taskname + pathidsuf
-	task = Task(aggtname if task is None else SEPSUBTASK.join((task.name, tasksuf))
-		, task=task, onfinish=uniflevs, params={'outpname': aggtname, 'fetchLevId': fetchLevIdCnl})
+	taskpath = relpath(taskpath)
 
 	# Run for range of delta
-	dmin = 0.02
+	delta = 0.02  # dmin
 	dmax = 0.1
-	dnum = 10
-	for delta in (dmin + (dmax - dmin) / (dnum - 1) * i for i in range(dnum)):
-		# A single argument is k-clique size
-		dstr = str(delta)
-		dstrex = 'd{:.2}'.format(delta)
+	steps = ALEVSMAX  # The number of steps (similarity thresholds). Use 10 scale levels as in Ganxis.
+	if steps >= 2:
+		dd = (dmax - delta) / (steps - 1)
+		# print('>> steps: {}, da: {:.2f}'.format(steps, da))
+	else:
+		delta = (delta + dmax) / 2.
+		dd = dmax - delta
+	while delta <= dmax:
+	# for delta in (dmin + (0 if steps <= 1 else (dmax - dmin) / (steps - 1) * i) for i in range(steps)):
+		# Note: the number of digits should be at lest one larger that the margin values to not overwrite the file on rounding
+		dstr = '{:.3f}'.format(delta)  # Alg params as string
 		# Embed params into the task name
-		dtaskname = ''.join((taskbasex, SEPPARS, dstrex, tasksuf))
-		# Backup prepared the resulting dir and back up the previous results if exist
-		taskpath = prepareResDir(algname, dtaskname, odir, pathidsuf)
-		errfile = taskpath + EXTERR
-		logfile = taskpath + EXTLOG
-		# Evaluate relative paths dependent of the alg params
-		reltaskpath = relpath(taskpath)
-
-		# scp.py netname k [start_linksnum end_linksnum number_of_evaluations] [weight]
-		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', dtaskname, pathidsuf)), '-s=/etime_' + algname
+		taskparname = delPathSuffix(taskname, True)
+		tasksuf = taskname[len(taskparname):]
+		taskparname = ''.join((taskparname, SEPPARS, 'a', dstr, tasksuf))  # Current task
+		# ./fast_consensus.py -f <inpnet> -p 5 --outp-parts 1 -a louvain -o <outpdir>
+		args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskparname, pathidsuf)), '-s=/etime_' + algname
+			, pybin, './fast_consensus.py', '-f', netfile, '-a', alg
 			# p: 5-20
-			, pybin, './fast_consensus.py', '-f', netfile, '-a', alg, '-p', '5', '--outp-parts', '1', '-d', dstr, '-w', '1', '-o', reltaskpath)
+			, '-p', '5', '--outp-parts', '1', '-d', dstr, '-w', '1', '-o', taskpath)
+		execpool.execute(Job(name=SEPNAMEPART.join((algname, taskparname)), workdir=workdir, args=args, timeout=timeout
+			#, ondone=postexec, stdout=os.devnull, stdout=logfile
+			, task=task, category=algname, size=netsize, memlim=memlim, stdout=os.devnull, stderr=errfile))
+		delta += dd
+	return steps
+	#
+	# # Note: without './' relpath args do not work properly for the binaries located in the current dir
+	# relpath = lambda path: './' + os.path.relpath(path, workdir)  # Relative path to the specified basedir
+	# # Evaluate relative paths
+	# xtimebin = relpath(UTILDIR + 'exectime')
+	# xtimeres = relpath(''.join((RESDIR, algname, '/', algname, EXTRESCONS)))
+	# netfile = relpath(netfile)
+	#
+	# # Create subtask to monitor execution for each clique size
+	# taskbasex = delPathSuffix(taskname, True)
+	# tasksuf = taskname[len(taskbasex):]
+	# aggtname = taskname + pathidsuf
+	# task = Task(aggtname if task is None else SEPSUBTASK.join((task.name, tasksuf))
+	# 	, task=task, onfinish=uniflevs, params={'outpname': aggtname, 'fetchLevId': fetchLevIdCnl})
+	#
+	# # Run for range of delta
+	# dmin = 0.02
+	# dmax = 0.1
+	# dnum = 10
+	# for delta in (dmin + (dmax - dmin) / (dnum - 1) * i for i in range(dnum)):
+	# 	# A single argument is k-clique size
+	# 	dstr = str(delta)
+	# 	dstrex = 'd{:.2}'.format(delta)
+	# 	# Embed params into the task name
+	# 	dtaskname = ''.join((taskbasex, SEPPARS, dstrex, tasksuf))
+	# 	# Backup prepared the resulting dir and back up the previous results if exist
+	# 	taskpath = prepareResDir(algname, dtaskname, odir, pathidsuf)
+	# 	errfile = taskpath + EXTERR
+	# 	logfile = taskpath + EXTLOG
+	# 	# Evaluate relative paths dependent of the alg params
+	# 	reltaskpath = relpath(taskpath)
+	#
+	# 	# scp.py netname k [start_linksnum end_linksnum number_of_evaluations] [weight]
+	# 	args = (xtimebin, '-o=' + xtimeres, ''.join(('-n=', dtaskname, pathidsuf)), '-s=/etime_' + algname
+	# 		# p: 5-20
+	# 		, pybin, './fast_consensus.py', '-f', netfile, '-a', alg, '-p', '5', '-d', dstr, '-w', '1', '-o', reltaskpath)
+	#
+	# 	#print('> Starting job {} with args: {}'.format('_'.join((ktaskname, algname, kstrex)), args + [kstr]))
+	# 	execpool.execute(Job(name=SEPNAMEPART.join((algname, dtaskname)), workdir=workdir, args=args, timeout=timeout
+	# 		# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
+	# 		# Note: increasing clique size k causes ~(k ** pratio) increased consumption of both memory and time (up to k ^ 2),
+	# 		# so it is better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
+	# 		, task=task, category='_'.join((algname, dstrex))
+	# 		, size=netsize, ondone=subuniflevs, params=taskpath # {'taskpath': taskpath} # , 'aparams': kstrex
+	# 		#, memlim=64  # Limit max memory consumption to 64 GB
+	# 		, memlim=memlim, stdout=logfile, stderr=errfile))
+	#
+	# return dnum
 
-		#print('> Starting job {} with args: {}'.format('_'.join((ktaskname, algname, kstrex)), args + [kstr]))
-		execpool.execute(Job(name=SEPNAMEPART.join((algname, dtaskname)), workdir=workdir, args=args, timeout=timeout
-			# , ondone=tidy, params=taskpath  # Do not delete dirs with empty results to explicitly see what networks are clustered having empty results
-			# Note: increasing clique size k causes ~(k ** pratio) increased consumption of both memory and time (up to k ^ 2),
-			# so it is better to use the same category with boosted size for the much more efficient filtering comparing to the distinct categories
-			, task=task, category='_'.join((algname, dstrex))
-			, size=netsize, ondone=subuniflevs, params=taskpath # {'taskpath': taskpath} # , 'aparams': kstrex
-			#, memlim=64  # Limit max memory consumption to 64 GB
-			, memlim=memlim, stdout=logfile, stderr=errfile))
 
-	return dnum
+# # The slowest, too slow
+# def execFcCnm(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  # , selfexec=False  - whether to call self recursively
+# 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'FcImap'
+# 	return fastConsBase(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir)
 
 
+# Not too fast
+def execFcImap(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  # , selfexec=False  - whether to call self recursively
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'FcImap'
+	return fastConsBase(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir)
+
+
+# Not too fast
 def execFcLouv(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  # , selfexec=False  - whether to call self recursively
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'FcLouv'
 	return fastConsBase(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir)
 
 
+# The fastest
 def execFcLpm(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  # , selfexec=False  - whether to call self recursively
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'FcLpm'
-	return fastConsBase(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir)
-
-
-def execFcImap(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  # , selfexec=False  - whether to call self recursively
-	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'FcImap'
 	return fastConsBase(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir)
 
 
@@ -1492,8 +1534,9 @@ def execPscan(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, ta
 		eps = (eps + epsMax) / 2.
 		deps = epsMax - eps
 	while eps <= epsMax:
+		# Note: the number of digits should be at lest one larger that the margin values to not overwrite the file on rounding
 		#prm = '{:3g}'.format(eps)  # Alg params (eps) as string
-		prm = '{:.2f}'.format(eps)  # Alg params (eps) as string
+		prm = '{:.3f}'.format(eps)  # Alg params (eps) as string
 		# prmex = 'e' + prm
 		# Embed params into the task name
 		taskbasex = delPathSuffix(taskname, True)
@@ -1514,7 +1557,6 @@ def execPscan(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, ta
 			 #, category='_'.join((algname, prmex))
 			, task=task, category=algname, size=netsize, memlim=memlim, stdout=os.devnull, stderr=errfile))
 		eps += deps
-
 	return steps
 
 
@@ -1622,7 +1664,8 @@ def execScd(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task
 		alfa = (alfa + amax) / 2.
 		da = amax - alfa
 	while alfa <= amax:
-		astr = '{:.2f}'.format(alfa)  # Alg params (alpha) as string
+		# Note: the number of digits should be at lest one larger that the margin values to not overwrite the file on rounding
+		astr = '{:.3f}'.format(alfa)  # Alg params (alpha) as string
 		# Embed params into the task name
 		taskparname = delPathSuffix(taskname, True)
 		tasksuf = taskname[len(taskparname):]
@@ -1636,7 +1679,7 @@ def execScd(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task
 			#, ondone=postexec, stdout=os.devnull, stdout=logfile
 			, task=task, category=algname, size=netsize, memlim=memlim, stdout=os.devnull, stderr=errfile))
 		alfa += da
-	return 1
+	return steps
 
 
 if __name__ == '__main__':

@@ -54,14 +54,11 @@ def group_to_partition(partition):
     Returns a nested list of communities [[comm1], [comm2], ...... [comm_n]]
     '''
     part_dict = {}
-
     for index, value in partition.items():
-
         if value in part_dict:
             part_dict[value].append(index)
         else:
             part_dict[value] = [index]
-
 
     return part_dict.values()
 
@@ -205,9 +202,9 @@ def fast_consensus(G,  algorithm='louvain', n_p=20, thresh=0.2, delta=0.02, proc
             mapping = []
             inv_map = []
             for _ in range(n_p):
-                order = list(range(N))
+                order = list(graph.nodes())
                 random.shuffle(order)
-                maps = dict(zip(range(N), order))
+                maps = dict(zip(graph.nodes(), order))
 
                 mapping.append(maps)
                 inv_map.append({v: k for k, v in maps.items()})
@@ -308,9 +305,6 @@ if __name__ == "__main__":
 
     G = nx.read_edgelist(args.inpfile, nodetype=int, data=(('weight',float),))
     output, placeholder_nds = fast_consensus(G, algorithm=args.alg, n_p=args.parts, thresh=args.tau, delta=args.delta, procs=args.procs)
-
-    if not os.path.exists('out_partitions'):
-        os.makedirs('out_partitions')
 
     if(args.alg == 'louvain'):
         for i in range(len(output)):

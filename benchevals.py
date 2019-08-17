@@ -37,7 +37,6 @@
 :Organizations: eXascale Infolab <http://exascale.info/>, Lumais <http://www.lumais.com/>, ScienceWise <http://sciencewise.info/>
 :Date: 2015-12
 """
-
 from __future__ import print_function, division  # Required for stderr output, must be the first import
 import os
 # import shutil

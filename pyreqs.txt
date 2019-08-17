@@ -26,6 +26,11 @@ enum34>=1.1 ;python_version<"3.4"
 # Note: it also requires libxml2-dev and zlib1g-dev, see install_reqs.sh
 python-igraph>=0.7
 
+## fast_consensus.py:
+# Note: it also requires python-igraph>=0.7, numpy>=1.11
+networkx>=2.0
+python-louvain>=0.13
+
 # Evaluations & Utils requirements
 # Note: numpy interactions are slow on pypy
 #numpy>=1.11  # Already listed

@@ -9,8 +9,7 @@ import multiprocessing as mp
 import networkx as nx
 import numpy as np
 import igraph as ig
-import community as cm
-# from networkx.algorithms import community as cm
+import community as cm  # python-louvain
 
 
 def check_consensus_graph(G, n_p, delta):
@@ -283,11 +282,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Fast consensus clustering algorithm.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    nparts = 20
     parser.add_argument('-f', '--network-file', dest='inpfile', type=str, nargs='?', help='file with edgelist')
     parser.add_argument('-a', '--algorithm', dest='alg', type=str, nargs='?', default='louvain' , help='underlying clustering algorithm: {}'.format(', '.join(algorithms)))
-    parser.add_argument('-p', '--partitions', dest='parts', type=int, nargs='?', default=nparts, help='number of input partitions for the algorithm')
-    parser.add_argument('--outp-parts', dest='outp_parts', type=int, nargs='?', default=None, help='number of partitions to be outputted, <= input partitions')
+    parser.add_argument('-p', '--partitions', dest='parts', type=int, nargs='?', default=20, help='number of input partitions for the algorithm')
+    parser.add_argument('--outp-parts', dest='outp_parts', type=int, nargs='?', default=1, help='number of partitions to be outputted, <= input partitions')
     parser.add_argument('-t', '--tau', dest='tau', type=float, nargs='?', help='used for filtering weak edges')
     parser.add_argument('-d', '--delta', dest='delta', type=float,  nargs='?', default=0.02, help='convergence parameter. Converges when less than delta proportion of the edges are with wt = 1')
     parser.add_argument('-w', '--worker-procs', dest='procs', type=int, default=mp.cpu_count(), help='number of parallel worker processes for the clustering')

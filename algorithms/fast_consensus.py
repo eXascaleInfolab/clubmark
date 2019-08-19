@@ -282,14 +282,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Fast consensus clustering algorithm.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    parser.add_argument('-f', '--network-file', dest='inpfile', type=str, nargs='?', help='file with edgelist')
-    parser.add_argument('-a', '--algorithm', dest='alg', type=str, nargs='?', default='louvain' , help='underlying clustering algorithm: {}'.format(', '.join(algorithms)))
-    parser.add_argument('-p', '--partitions', dest='parts', type=int, nargs='?', default=20, help='number of input partitions for the algorithm')
-    parser.add_argument('--outp-parts', dest='outp_parts', type=int, nargs='?', default=1, help='number of partitions to be outputted, <= input partitions')
-    parser.add_argument('-t', '--tau', dest='tau', type=float, nargs='?', help='used for filtering weak edges')
-    parser.add_argument('-d', '--delta', dest='delta', type=float,  nargs='?', default=0.02, help='convergence parameter. Converges when less than delta proportion of the edges are with wt = 1')
+    parser.add_argument('-f', '--network-file', dest='inpfile', type=str, required=True, help='file with edgelist')
+    parser.add_argument('-a', '--algorithm', dest='alg', type=str, default='louvain' , help='underlying clustering algorithm: {}. Note: CNM is slow'.format(', '.join(algorithms)))
+    parser.add_argument('-p', '--partitions', dest='parts', type=int, default=20, help='number of input partitions for the algorithm')
+    parser.add_argument('--outp-parts', dest='outp_parts', type=int, default=1, help='number of partitions to be outputted, <= input partitions')
+    parser.add_argument('-t', '--tau', dest='tau', type=float, help='used for filtering weak edges')
+    parser.add_argument('-d', '--delta', dest='delta', type=float, default=0.02, help='convergence parameter. Converges when less than delta proportion of the edges are with wt = 1')
     parser.add_argument('-w', '--worker-procs', dest='procs', type=int, default=mp.cpu_count(), help='number of parallel worker processes for the clustering')
-    parser.add_argument('-o', '--output-dir', dest='outdir', type=str, nargs='?', default='out_partitions', help='output directory')
+    parser.add_argument('-o', '--output-dir', dest='outdir', type=str, default='out_partitions', help='output directory')
 
     args = parser.parse_args()
 

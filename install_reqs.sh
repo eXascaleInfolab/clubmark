@@ -6,6 +6,9 @@
 #
 # \author Artem V L <luart@ya.ru>
 
+# Repository for the latest pypy
+sudo add-apt-repository -y ppa:pypy/ppa
+
 # Update packages information
 sudo apt-get -y update
 # Get errorcode of the last operation and terminate if the update failed
@@ -26,9 +29,12 @@ fi
 # "openjdk-8-jre" (java) is required for GaNXIS
 # "libboost-program-options1.58.0" for RGMC
 # "libtbb2" for gecmi (NMI ovp multi-resolution evaluation)
+#
+# Pypy related requirements to compile the benchmark:
+# libhdf5-serial-dev  (contains hdf5.h but it can not be found during the compilation)
 sudo apt-get install -y \
 	hwloc \
-	python3 python3-pip pypy \
+	python3 python3-pip pypy-dev pypy3-dev \
 	libxml2-dev zlib1g-dev \
 	openjdk-8-jre \
 	libboost-program-options1.58.0 \

@@ -908,13 +908,13 @@ def fastConsBase(algname, execpool, netfile, asym, odir, timeout=0, memlim=0., s
 	# return dnum
 
 
-# # The slowest, too slow
+# # Extremely slow
 # def execFcCnm(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  # , selfexec=False  - whether to call self recursively
 # 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'FcImap'
 # 	return fastConsBase(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir)
 
 
-# Not too fast
+# Even more slower
 def execFcImap(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  # , selfexec=False  - whether to call self recursively
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'FcImap'
 	return fastConsBase(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir)
@@ -926,7 +926,7 @@ def execFcLouv(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, t
 	return fastConsBase(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir)
 
 
-# The fastest
+# Slower
 def execFcLpm(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf='', workdir=ALGSDIR):  # , selfexec=False  - whether to call self recursively
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'FcLpm'
 	return fastConsBase(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir)

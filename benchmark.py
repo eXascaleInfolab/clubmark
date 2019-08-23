@@ -880,7 +880,7 @@ def generateNets(genbin, policy, insnum, asym=False, basedir=_SYNTDIR, netsdir=_
 							name: str  - base network name
 							inst: int  - instance index
 							"""
-							print('  Starting generation {}^{}'.format(name, inst, varMut))
+							print('  Starting generation {}^{}'.format(name, inst))
 							assert isinstance(name, str) and isinstance(inst, int), ('Unexpected arguments type, name: {}, inst: {}'.
 								format(type(name).__name__, type(inst).__name__))
 							netname = name if not inst else ''.join((name, SEPINST, str(inst)))
@@ -1807,10 +1807,16 @@ def gtpath(net, idir):
 	path, name = os.path.split(net)
 	# Check the ground-truth file in the parent directory
 	sname = parseName(os.path.splitext(name)[0], True)  # delPathSuffix(os.path.splitext(name)[0], True)
-	gfpath = ''.join((os.path.split(path)[0], '/', sname.basepath, sname.insid, EXTCLSNDS))
+	netname = ''.join((sname.basepath, sname.insid, EXTCLSNDS)) 
+	basepath = os.path.split(path)[0]
+	gfpath = '/'.join((basepath, netname))
 	if not os.path.isfile(gfpath):
-		raise RuntimeError('Invalid argument, the ground-truth clustering {}'
-			' does not exist for the network {}'.format(gfpath, net))
+		# Check also in the parent directory to consider the networks processed by the directory wildcard,
+		# which was preliminary created from the network files above
+		gfpath = '/'.join((os.path.split(basepath)[0], '/', netname))
+		if not os.path.isfile(gfpath):
+			raise RuntimeError('Invalid argument, the ground-truth clustering {}'
+				' does not exist for the network {}'.format(gfpath, net))
 	return gfpath
 
 
@@ -2412,10 +2418,12 @@ if __name__ == '__main__':
 			' [-t[{{s,m,h}}]=<timeout>] [-d=<seed_file>] [-w=<webui_addr>]'
 			' [-c[f][r]] [-s[p][*][[{{-,+}}]=<alg>[{qsepmsr}<qmeasure1>,<qmeasure2>,...][{qsepnet}<net1>,<net2>,...][{qsepgroup}<alg>...]]]',
 			'',
-			'Example:',
+			'Examples:',
 			'  {0} -g=3{gensepshuf}5 -r -q="Xmeasures -fh -s" -th=2.5 1> {resdir}bench.log 2> {resdir}bench.err',
 			'  {0} -w=127.0.0.1:8080 -i{gensepshuf}3=syntnets/networks/* -r -a="CggcRg LouvainIg" -q="Xmeasures -fh -s" -s'
 			' -th=2.5 --runtimeout=6h --evaltimeout=1h 1> {resdir}bench.log 2> {resdir}bench.err',
+			' python3 {0} -w=0.0.0.0:8080 -ip%3=syntnets_lreduct/networks/* -r -a="Daoc Louvain Scd" -q="Xmeasures -fh -s" -s'
+			' -t=48h --runtimeout=200h 1>> {resdir}bench.log 2>> {resdir}results/bench.err'
 			'NOTE:',
 			'  - The benchmark should be executed exclusively from the current directory (./).',
 			'  - The expected format of input datasets (networks) is .ns<l> - network specified by'

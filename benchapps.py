@@ -1100,30 +1100,31 @@ def execRandcommuns(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=No
 # DAOC Options
 class DaocOpts(object):
 	"""DAOC execution options"""
-	__slots__ = ('gamma', 'reduction', 'gband', 'exclude', 'rlevout', 'significance', 'densdrop')  # , 'srweight', 'ndsmin'
+	__slots__ = ('gamma', 'rgamma', 'reduction', 'gband', 'exclude', 'rlevout', 'significance', 'densdrop', 'clszmin')  # , 'srweight', 'ndsmin'
 
-	def __init__(self, gamma=-1, reduction=None, gband=None, exclude=None, rlevout=0.8, significance='sd', densdrop=None):  # , srweight=0.85, ndsmin=3
+	def __init__(self, gamma=-1, rgamma='', reduction=None, gband=None, exclude=None, rlevout=0.8, significance='sd', densdrop=None, clszmin=None):  # , srweight=0.85, ndsmin=3
 		"""DAOC execution options initialization
 
-		gamma  - resolution parameter, float:
+		gamma: float  - resolution parameter, float:
 			> 0 - static manual gamma for all clusters (1 is the default manual value for the standard modularity)
 			-1  - dynamic automatic identification for each cluster
-		reduction  - items links reduction policy on clustering, [w][X] or None (disabled),'
+		rgamma: str  - gammaa ratio value or range for the non-linear gamma variation on hierarchy building
+		reduction: str  - items links reduction policy on clustering, [w][X] or None (disabled),'
 		' where w means use links weights instead of the optimization function, X:
 			a  - ACCURATE
 			m  - MEAN (recommended)
 			s  - SEVERE
 			'' - default reduction policy (-m)
-		gband  - band of the mutual maximal gain for the imprecise fast clustering, default: None (disabled)
+		gband: str  - band of the mutual maximal gain for the imprecise fast clustering, default: None (disabled)
 			r<float>  - ratio of the maximal modularity gain, recommended: [0.001 .. ] 0.005
 			n<float>  - normalized value by the total weight of the network, recommended: 0.05
 			''  - default* gband value: r0.005
-		exclude  - exclude application of the features:
+		exclude: str  - exclude application of the features:
 			a  - aagregating hashing being used for the fast matching of the fully mutual mcands
 				(extremely profitable to apply it in semantic networks or converted attributed graphs)
-		rlevout  - ratio (at least) of output levels shrinking starting from the widest (bottom) level,
+		rlevout: float  - ratio (at least) of output levels shrinking starting from the widest (bottom) level,
 			applied only for the multi-level output, (0, 1]. Recommended (if used): 0.75 .. 0.9.
-		significance  - significant clusters output policy:
+		significance: str  - significant clusters output policy:
 			sd  - single (one any of) direct owner (default, good recall, fastest)
 			ad  - all direct owners
 			sh  - single (one any of) direct upper hierarchy of owners (senseless being too mild)
@@ -1131,6 +1132,7 @@ class DaocOpts(object):
 			''  - default policy for the significant clusters:
 				sd with default* srweight[=0.618 or 0.85] and minclsize[=3]
 		densdrop: bool  - apply bottom bounded linear density drop (b0.5)
+		clszmin: str  - min cluster size in nodes: {<nodes_min>,pg,r2,r3,l2}
 
 		NOTE (*): default values of the parameters might vary in each particular version of the libdaoc
 		"""
@@ -1143,21 +1145,25 @@ class DaocOpts(object):
 		# Note the significance potentially can be more precise: 'ad%0.86/0.14~'
 		assert (isinstance(gamma, Number) and (reduction is None or reduction == ''
 				or (1 <= len(reduction) <= 2 and reduction[-1] in 'ams' and (len(reduction) == 1 or reduction[0] == 'w')))
+			and isinstance(rgamma, str)
 			and (gband is None or gband == '' or (isinstance(gband, str) and len(gband) >= 3 and gband[0] in 'rn'))
 			and (exclude is None or exclude == 'a')
 			and (rlevout is None or rlevout > 0) and (significance is None or significance in ('', 'sd', 'ad', 'sh', 'ah'))
 			and (densdrop is None or isinstance(densdrop, bool))
+			and (clszmin is None or (isinstance(clszmin, str) and clszmin in ('pg','r2','r3','l2') or float(clszmin) > 0))
 			# and (srweight is None or 0 < srweight <= 1) and (ndsmin is None or ndsmin >= 0)
-			), ('Invalid input parameters:\n\tgamma: {}\n\treduction: {}\n\tgband: {}\n\texclude: {}'
-			',\n\trlevout: {}\n\tsignificance: {}\n\tdensdrop: {}' #,\n\tsrweight: {},\n\tndsmin: {}'
-			.format(gamma, reduction, gband, exclude, rlevout, significance, densdrop))  # , srweight, ndsmin
+			), ('Invalid input parameters:\n\tgamma: {}\n\trgamma:{}\n\treduction: {}\n\tgband: {}\n\texclude: {}'
+			',\n\trlevout: {}\n\tsignificance: {}\n\tdensdrop: {}\n\tclszmin: {}' #,\n\tsrweight: {},\n\tndsmin: {}'
+			.format(gamma, rgamma, reduction, gband, exclude, rlevout, significance, densdrop, clszmin))  # , srweight, ndsmin
 		self.gamma = gamma
+		self.rgamma = rgamma
 		self.reduction = reduction
 		self.gband = gband
 		self.exclude = exclude
 		self.rlevout = rlevout
 		self.significance = significance
 		self.densdrop = densdrop
+		self.clszmin = clszmin
 		# self.srweight = srweight
 		# self.ndsmin = ndsmin
 
@@ -1211,8 +1217,8 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout=0, memlim=0., seed
 	# ./daoc -w -g=1 -te -cxl[:/0.8]s=../../results/Daoc/karate.cnl ../../realnets/karate.nse.txt
 	args = [xtimebin, '-o=' + xtimeres, ''.join(('-n=', taskname, pathidsuf)), '-s=/etime_' + algname
 		, './daoc', '-t'  # Trace timing
-		, '-g=' + str(opts.gamma)  # Resolution parameter = 1 (standard modularity)
-		, '-n' + ('a' if asym else 'e'), '-bpeu=0']  # Accomplish with the root level shrinking maximizing non-negative global gain
+		, ''.join(('-g', opts.rgamma, '=', str(opts.gamma)))  # Resolution parameter = 1 (standard modularity)
+		, '-n' + ('a' if asym else 'e'), '-bpu']  # Accomplish with the root level shrinking maximizing non-negative global gain
 	if opts.reduction is not None:
 		args.append('-r' + opts.reduction)
 	if opts.gband is not None:
@@ -1229,7 +1235,7 @@ def daocGamma(algname, execpool, netfile, asym, odir, timeout=0, memlim=0., seed
 	if opts.significance is not None:
 		ddrop = ''
 		if opts.densdrop:
-			ddrop = opts.significance + '%b.5/0.618034'
+			ddrop = opts.significance + '%be/g' + ('' if opts.clszmin is None else '_' + opts.clszmin)
 		# Output with the default significance policy
 		args.append(''.join(('-c', 'S', ddrop, 's=', reltaskpath, EXTCLSNDS)))
 		# NOTE: output with the specific significance policy is commented as redundant
@@ -1256,6 +1262,33 @@ def execDaoc(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, tas
 	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
 	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
+# DAOC (using standard modularity as an optimization function, non-generalized, with variable gamma on the fixed ratio)
+def execDaocRf(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, rgamma='r')):
+	"""DAOC with static gamma=1"""
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
+
+# DAOC (using standard modularity as an optimization function, non-generalized, with variable gamma on the fixed ratio and bounded size of clusters)
+def execDaocRfD_r3(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, rgamma='r', densdrop=True, clszmin='r3')):
+	"""DAOC with static gamma=1"""
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
+
+# DAOC (using standard modularity as an optimization function, non-generalized, with variable gamma on the variable ratio)
+def execDaocRv(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, rgamma='r:')):
+	"""DAOC with static gamma=1"""
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
+
+# DAOC (using standard modularity as an optimization function, non-generalized, with variable gamma on the ariable ratio and bounded size of clusters)
+def execDaocRvD_r3(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf=''
+, workdir=ALGSDIR+'daoc/', opts=DaocOpts(gamma=1, rgamma='r:', densdrop=True, clszmin='r3')):
+	"""DAOC with static gamma=1"""
+	algname = funcToAppName(inspect.currentframe().f_code.co_name)  # 'Daoc'
+	return daocGamma(algname, execpool, netfile, asym, odir, timeout, memlim, seed, task, pathidsuf, workdir, opts)
 
 # DAOC (using standard modularity as an optimization function, non-generalized)
 def execDaocD(execpool, netfile, asym, odir, timeout=0, memlim=0., seed=None, task=None, pathidsuf=''

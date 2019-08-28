@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
 """
 :Description: List of the clustering algorithms to be executed by the benchmark and accessory routines.
 

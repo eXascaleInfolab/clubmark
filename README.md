@@ -2,6 +2,9 @@
 
 `\brief` Benchmarking and real-time profiling of the \[overlapping\] clustering algorithms working on graphs specified by pairwise relations (community detection algorithms). The quality evaluation is performed using extrinsic (all existing accuracy measures applicable for overlapping clustering algorithms on large datasets: Mean [F1 Score](https://en.wikipedia.org/wiki/F1_score) family, Normalized [Mutual Information](https://en.wikipedia.org/wiki/Mutual_information)(NMI) and [Omega Index](https://www.ncbi.nlm.nih.gov/pubmed/26764947) / fuzzy ARI family) and some intrinsic ([Modularity](https://en.wikipedia.org/wiki/Modularity_(networks))(Q) and [Conductance](https://en.wikipedia.org/wiki/Conductance_(graph))(f)) measures considering overlaps/covers (shared node membership by multiple clusters \[on the same resolution level\]) and multiple resolutions (the same node can be a full member of a cluster and its super-clusters).  
 `\authors` (c) Artem Lutov <artem@exascale.info>  
+`\license` Apache 2.0, optional commercial support and relicensing are provided by the request (write me)  
+  > The evaluating clustering algorithms (located in `algorithms/`) have own, possibly proprietary licenses, they are a) not a part of and b) not covered by the terms of the Clubmark framework.
+
 `\organizations` [eXascale Infolab](http://exascale.info/), [Lumais](http://www.lumais.com/), [ScienceWise](http://sciencewise.info/)  
 `\keywords` overlapping clustering benchmarking, community detection benchmarking, algorithms benchmarking framework.
 
@@ -56,7 +59,7 @@ To run the benchmark on other [POSIX-compatible] platfroms / operating systems, 
 
 ## Overview
 
-The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks - graphs specified by the pairwise relations), measures execution statistics and evaluates quality (including accuracy) of the results using specified measures. Clubmark is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation. The generic functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multiprocess execution pool and load balancer.
+The benchmark executes specified applications (clustering algorithms) on the specified or generated input datasets (networks - graphs specified by the pairwise relations), measures execution statistics and evaluates quality (including accuracy) of the results using specified measures. Clubmark is a general-purpose modular benchmarking framework specialized for the clustering (community detection) algorithms evaluation. The generic functionality is based on [PyExPool](https://github.com/eXascaleInfolab/PyExPool) multiprocess execution pool and load balancer. <!-- (the only another open-source load balancer I'm aware about, which has sufficient features to power Clubmark is [Slurm Workload Manager](https://slurm.schedmd.com/overview.html)). -->
 
 Generic properties:
 - Data preprocessing (synthetic networks generation, shuffling, etc.);

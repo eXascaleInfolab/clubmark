@@ -314,7 +314,7 @@ if __name__ == "__main__":
         args.outdir += '/'
     ofbase = args.outdir + os.path.splitext(os.path.split(args.inpfile)[1])[0]
 
-    oftpl = '{{}}_d{:.2}_{{:0{}d}}.cnl'.format(args.delta, int(math.ceil(math.log10(len(output)))))
+    oftpl = '{{}}_d{:.2}_p{:02}_t{:.2}_{{:0{}d}}.cnl'.format(args.delta, args.parts, args.tau, int(math.ceil(math.log10(len(output)))))
     for i, partition in enumerate(output):
         if i >= args.outp_parts:
             break

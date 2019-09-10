@@ -24,7 +24,7 @@ enum34>=1.1 ;python_version<"3.4"
 # Algorithms requirements:
 ## louvain_igraph.py:
 # Note: it also requires libxml2-dev and zlib1g-dev, see install_reqs.sh
-python-igraph>=0.7
+python-igraph>=0.7  # $ pypy3 -m pip install --user -U git+https://github.com/igraph/python-igraph.git
 
 ## fast_consensus.py:
 # Note: it also requires python-igraph>=0.7, numpy>=1.11

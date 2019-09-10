@@ -32,6 +32,7 @@ fi
 #
 # Pypy related requirements to compile the benchmark:
 # libhdf5-serial-dev  (contains hdf5.h but it can not be found during the compilation)
+# libtool flex  (required for python-igraph undo pypy)
 sudo apt-get install -y \
 	hwloc \
 	python3 python3-pip pypy-dev pypy3-dev \
@@ -40,7 +41,7 @@ sudo apt-get install -y \
 	libboost-program-options1.58.0 \
 	libtbb2
 
-# Check and set locale if required
+# Check and set locale if required. Note: "" = ''
 if [ "$LC_ALL" = '' ]
 then
 	export LC_ALL="en_US.UTF-8"
@@ -53,3 +54,10 @@ sudo pip3 install --upgrade pip
 # Install Python dependencies
 # louvain_igraph.py:  python-igraph ...
 sudo pip3 install -r pyreqs.txt
+
+wget https://bootstrap.pypa.io/get-pip.py
+for PYX in (pypy pypy3); do
+	$PYX ./get-pip.py --user
+	$PYX -m pip install -U --user numpy # python-igraph networkx  ## scipy
+done
+rm ./get-pip.py

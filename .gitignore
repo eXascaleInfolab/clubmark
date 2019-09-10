@@ -70,6 +70,5 @@ syntnets*/
 test*/
 *.komodoproject
 .vscode/
-
-# DAOC
-algorithms/daoc/
+# Past versions of DAOC
+algorithms/daoc_*/

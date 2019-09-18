@@ -23,7 +23,7 @@ Consensus/Ensemble  | + 	    | 		| 			  | + 	   | 			  | 		  | +        |
 
 ## Origins
 
-* DAOC (former and fully redesigned [HiReCS](http://www.lumais.com/hirecs));
+* [DAOC](https://github.com/eXascaleInfolab/daoc) (former and fully redesigned [HiReCS](http://www.lumais.com/hirecs));
 * [SCP](http://www.lce.hut.fi/~mtkivela/kclique.html) ([Sequential algorithm for fast clique percolation](http://www.lce.hut.fi/research/mm/complex/software/)), paper: [A sequential algorithm for fast clique percolation](https://arxiv.org/abs/0805.1449);
 * Louvain ([original](https://sites.google.com/site/findcommunities/) and [igraph](http://igraph.org/python/doc/igraph.Graph-class.html#community_multilevel) implementations), paper: [Fast unfolding of communities in large networks](https://arxiv.org/abs/0803.0476);
 * [Oslom2](http://www.oslom.org/software.htm), paper: [Finding Statistically Significant Communities in Networks](https://arxiv.org/abs/1012.2363);

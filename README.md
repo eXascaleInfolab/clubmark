@@ -440,6 +440,7 @@ Expected structure of the input real-world networks with generating shuffles:
         <netname>%<shufid>.nse
 ```
 
+
 ## Benchmark Extension
 To add custom apps / algorithms to be benchmarked just add corresponding function for "myalgorithm" app to `benchapps.py`:
 

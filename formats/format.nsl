@@ -1,6 +1,7 @@
 # (c) Network Specified by Links List format (NSL)
 #
-# \description The input Network (graph) is Specified by Links (Edges/Arcs).
+# \description The input Network (graph) is Specified by Links (Edges/Arcs),
+# a generalization of NCOL format.
 # Each line of the file defines edge of arc with optional weight.
 #
 # \Author: Artem Lutov <artem@exascale.info>

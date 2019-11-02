@@ -32,18 +32,20 @@ def check_consensus_graph(G, n_p, delta):
     return True
 
 
-def nx_to_igraph(Gnx):
+def nx_to_igraph(Gnx, G=None):
     '''
-    Function takes in a network Graph, Gnx and returns the equivalent
-    igraph graph g
+    Function takes in a network Graph, Gnx, copies to it weights from G and
+    returns the equivalent igraph graph g
     '''
     # g = ig.Graph(n=Gnx.number_of_nodes())
     # # graph.vs["name"] = Gnx.nodes()
     # g.add_edges(sorted(Gnx.edges()))
     g = ig.Graph(sorted(Gnx.edges()))
-    g.es['weight'] = 1.0
-    for edge in Gnx.edges():
-        g[edge[0], edge[1]] = Gnx[edge[0]][edge[1]]['weight']
+    if G is not None:
+        for es, ed in Gnx.edges():
+            g[es, ed] = G[es][ed]['weight']
+    else:
+        g.es['weight'] = 1.0
     return g
 
 
@@ -102,12 +104,12 @@ def fast_consensus(G,  algorithm='louvain', n_p=20, thresh=0.2, delta=0.02, proc
         placeholder_nds  - whether placeholder nodes are used by the igraph, which happens for
             the non-contiguous node range or node ids not starting from 0
     """
+    for u,v in G.edges():
+        G[u][v].setdefault('weight', 1.0)  # Set weights if have not been initialized
     graph = G.copy()
     L = G.number_of_edges()
     N = G.number_of_nodes()
 
-    for u,v in graph.edges():
-        graph[u][v]['weight'] = 1.0
 
     while(True):
         if (algorithm == 'louvain'):
@@ -160,9 +162,9 @@ def fast_consensus(G,  algorithm='louvain', n_p=20, thresh=0.2, delta=0.02, proc
                 nextgraph[u][v]['weight'] = 0.0
 
             if algorithm == 'infomap':
-                communities = [{frozenset(c) for c in nx_to_igraph(graph).community_infomap().as_cover()} for _ in range(n_p)]
+                communities = [{frozenset(c) for c in nx_to_igraph(graph, G).community_infomap().as_cover()} for _ in range(n_p)]
             if algorithm == 'lpm':
-                communities = [{frozenset(c) for c in nx_to_igraph(graph).community_label_propagation().as_cover()} for _ in range(n_p)]
+                communities = [{frozenset(c) for c in nx_to_igraph(graph, G).community_label_propagation().as_cover()} for _ in range(n_p)]
 
             for node, nbr in graph.edges():
                 for i in range(n_p):
@@ -208,7 +210,7 @@ def fast_consensus(G,  algorithm='louvain', n_p=20, thresh=0.2, delta=0.02, proc
                 mapping.append(maps)
                 inv_map.append({v: k for k, v in maps.items()})
                 G_c = nx.relabel_nodes(graph, mapping = maps, copy = True)
-                G_igraph = nx_to_igraph(G_c)
+                G_igraph = nx_to_igraph(G_c, G)
 
                 communities.append(G_igraph.community_fastgreedy(weights = 'weight').as_clustering())
             for i in range(n_p):
@@ -260,12 +262,12 @@ def fast_consensus(G,  algorithm='louvain', n_p=20, thresh=0.2, delta=0.02, proc
             mapping.append(maps)
             inv_map.append({v: k for k, v in maps.items()})
             G_c = nx.relabel_nodes(graph, mapping=maps, copy=True)
-            G_igraph = nx_to_igraph(G_c)
+            G_igraph = nx_to_igraph(G_c, G)
             if len(G_igraph.vs) != graph.number_of_nodes():
                 placeholder_nds = True
             communities.append(G_igraph.community_fastgreedy(weights = 'weight').as_clustering())
     else:
-        ig_graph = nx_to_igraph(graph)
+        ig_graph = nx_to_igraph(graph, G)
         if len(ig_graph.vs) != graph.number_of_nodes():
             placeholder_nds = True
         if algorithm == 'infomap':
@@ -282,13 +284,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Fast consensus clustering algorithm.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+    nparts = 10  # 20; Default number of partitions
     parser.add_argument('-f', '--network-file', dest='inpfile', type=str, required=True, help='file with edgelist')
     parser.add_argument('-a', '--algorithm', dest='alg', type=str, default='louvain' , help='underlying clustering algorithm: {}. Note: CNM is slow'.format(', '.join(algorithms)))
-    parser.add_argument('-p', '--partitions', dest='parts', type=int, default=20, help='number of input partitions for the algorithm')
+    parser.add_argument('-p', '--partitions', dest='parts', type=int, default=nparts, help='number of input partitions for the algorithm')
     parser.add_argument('--outp-parts', dest='outp_parts', type=int, default=1, help='number of partitions to be outputted, <= input partitions')
     parser.add_argument('-t', '--tau', dest='tau', type=float, help='used for filtering weak edges')
     parser.add_argument('-d', '--delta', dest='delta', type=float, default=0.02, help='convergence parameter. Converges when less than delta proportion of the edges are with wt = 1')
-    parser.add_argument('-w', '--worker-procs', dest='procs', type=int, default=mp.cpu_count(), help='number of parallel worker processes for the clustering')
+    parser.add_argument('-w', '--worker-procs', dest='procs', type=int, default=nparts, help='number of parallel worker processes for the clustering,'
+        ' it is automatically decreased to min(input_partitions, cpu_num)')
     parser.add_argument('-o', '--output-dir', dest='outdir', type=str, default='out_partitions', help='output directory')
 
     args = parser.parse_args()
@@ -298,6 +302,11 @@ if __name__ == "__main__":
         args.tau = default_tau.get(args.alg, 0.2)
     if args.outp_parts is None:
        args.outp_parts = args.parts
+
+    if args.procs is None:
+        args.procs = mp.cpu_count()
+    if args.procs > args.parts:
+        args.procs = args.parts
 
     validate_arguments(args, algorithms)
 
